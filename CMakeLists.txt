@@ -12,11 +12,30 @@ set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 # (__std_find_last_not_ch_pos_1, etc.) absent from libcpmt.lib (static CRT).
 add_compile_definitions(_USE_STD_VECTOR_ALGORITHMS=0)
 
-# -- Dependencies (S0.1 scope: spdlog + json; others added per stage) ----------
+# -- Dependencies --------------------------------------------------------------
 
 find_package(spdlog CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
+find_package(unofficial-sqlite3 CONFIG REQUIRED)
+find_package(efsw CONFIG REQUIRED)
 find_package(Catch2 CONFIG REQUIRED)
+
+# -- Core library (shared between main exe and tests) --------------------------
+
+add_library(locus_core STATIC
+    src/workspace.cpp
+    src/database.cpp
+    src/file_watcher.cpp
+)
+
+target_include_directories(locus_core PUBLIC src)
+
+target_link_libraries(locus_core PUBLIC
+    spdlog::spdlog
+    nlohmann_json::nlohmann_json
+    unofficial::sqlite3::sqlite3
+    efsw::efsw
+)
 
 # -- Main executable -----------------------------------------------------------
 
@@ -25,8 +44,7 @@ add_executable(locus
 )
 
 target_link_libraries(locus PRIVATE
-    spdlog::spdlog
-    nlohmann_json::nlohmann_json
+    locus_core
 )
 
 # -- Tests ---------------------------------------------------------------------
