@@ -95,8 +95,11 @@ It can run terminal commands (build, test, execute). User controls each step.
 
 ### 2. Knowledge Search Engine
 A locally downloaded copy of Wikipedia, documentation sets, or research papers.
-Ask natural-language questions; the AI searches the index and retrieves relevant passages
-without loading the entire dataset into context.
+Ask natural-language questions; the AI searches the index — using both keyword and
+semantic (meaning-based) search — and retrieves relevant passages without loading
+the entire dataset into context.
+Supports Kiwix `.zim` archives natively: Wikipedia stays as a single compressed file,
+no extraction needed.
 
 ### 3. Document Organizer
 A folder of personal documents (PDFs, notes, reports). Find, summarize, cross-reference,
@@ -108,10 +111,16 @@ connections, expand thoughts, and organize material.
 
 ---
 
+### 5. Remote Assistant
+Locus Core runs as a background process on the PC. Any frontend — desktop, browser,
+or mobile — can connect to it over the local network. Use the assistant from your
+phone or tablet while your PC is running, without sending anything to the cloud.
+
+---
+
 ## Non-Goals (v1)
 
 - Full automated "build me an app" pipeline (future)
 - Multi-agent orchestration (future)
-- Cloud sync or collaboration features
-- Mobile support
+- Cloud sync or data leaving the machine
 - Voice interface
