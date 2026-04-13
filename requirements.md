@@ -225,7 +225,6 @@ The user is presented with a compaction dialog and chooses the strategy.
 - [ ] Multiple workspaces open simultaneously (tabbed)
 - [ ] Session history persistence and search
 - [ ] Workspace templates (code project, wiki, notebook)
-- [ ] Lightweight embedding model for semantic search (runs locally)
 - [ ] Export session as markdown report
 - [ ] Plugin system for community tools
 - [ ] Automated coding pipeline (plan → code → test → fix loop), user-supervised
