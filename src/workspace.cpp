@@ -1,6 +1,7 @@
 #include "workspace.h"
 #include "database.h"
 #include "file_watcher.h"
+#include "indexer.h"
 
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
@@ -35,6 +36,10 @@ Workspace::Workspace(const fs::path& root)
     spdlog::info("Starting file watcher on {}", root_.string());
     watcher_ = std::make_unique<FileWatcher>(root_, config_.exclude_patterns);
     watcher_->start();
+
+    spdlog::info("Building workspace index");
+    indexer_ = std::make_unique<Indexer>(*db_, root_, config_);
+    indexer_->build_initial();
 
     spdlog::info("Workspace opened: {}", root_.string());
 }

@@ -38,8 +38,8 @@ data into context, and keeps the user in full transparent control of every step.
 
 ## Current Stage
 
-**M0 — CLI Prototype, S0.3 next.** S0.1 (project setup) and S0.2 (workspace foundation)
-are complete and verified. See [roadmap.md](roadmap.md) for full status.
+**M0 — CLI Prototype, S0.4 next.** S0.1 (project setup), S0.2 (workspace foundation),
+and S0.3 (FTS5 index) are complete and verified. See [roadmap.md](roadmap.md) for full status.
 
 ---
 
@@ -156,6 +156,11 @@ itself during development. What Locus indexes is exactly what is visible here.
 
 This protocol means every stage is validated before the next begins.
 No accumulated debt, no "we'll debug it later."
+
+**After every completed stage/task — mandatory bookkeeping:**
+1. Update `roadmap.md`: mark completed tasks `[x]`, add ✔ to the stage header
+2. Update `CLAUDE.md` "Current Stage" line to reflect the new state
+3. Do this immediately after verification passes, before moving on
 
 ---
 

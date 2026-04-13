@@ -1,5 +1,6 @@
 #include "workspace.h"
 #include "file_watcher.h"
+#include "indexer.h"
 
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
@@ -119,17 +120,22 @@ int main(int argc, char* argv[])
             spdlog::info("LOCUS.md loaded ({} bytes)", ws.locus_md().size());
         }
 
-        // Drain a quick batch of watcher events (demo / smoke test)
+        // Drain file watcher events and run incremental index updates
         std::this_thread::sleep_for(std::chrono::milliseconds(300));
         std::vector<locus::FileEvent> events;
         size_t n = ws.file_watcher().drain(events);
         if (n > 0) {
-            spdlog::info("File watcher: drained {} initial events", n);
+            spdlog::info("File watcher: drained {} events, updating index", n);
+            ws.indexer().process_events(events);
         }
 
-        spdlog::info("S0.2 complete - workspace foundation operational");
+        auto& st = ws.indexer().stats();
+        spdlog::info("Index stats: {} files ({} text, {} binary), {} symbols, {} headings",
+                     st.files_total, st.files_indexed, st.files_binary,
+                     st.symbols_total, st.headings_total);
 
-        // TODO(S0.3): build FTS5 index
+        spdlog::info("S0.3 complete - FTS5 index operational");
+
         // TODO(S0.4): IndexQuery API
         // TODO(S0.5): LLM client
         // TODO(S0.6): Tool system

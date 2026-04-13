@@ -49,9 +49,20 @@ void Database::exec(const char* sql)
     }
 }
 
+sqlite3_stmt* Database::prepare(const char* sql)
+{
+    spdlog::trace("SQL prepare: {}", sql);
+    sqlite3_stmt* stmt = nullptr;
+    int rc = sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::string err = sqlite3_errmsg(db_);
+        throw std::runtime_error("SQL prepare error: " + err + " | query: " + sql);
+    }
+    return stmt;
+}
+
 void Database::create_schema()
 {
-    // S0.2: files table only. FTS5, symbols, headings added in S0.3.
     exec(R"(
         CREATE TABLE IF NOT EXISTS files (
             id          INTEGER PRIMARY KEY,
@@ -65,6 +76,43 @@ void Database::create_schema()
             indexed_at  INTEGER
         )
     )");
+
+    // FTS5 full-text search over file contents
+    exec(R"(
+        CREATE VIRTUAL TABLE IF NOT EXISTS files_fts USING fts5(
+            path UNINDEXED,
+            content,
+            tokenize='porter unicode61'
+        )
+    )");
+
+    // Code symbols extracted by Tree-sitter
+    exec(R"(
+        CREATE TABLE IF NOT EXISTS symbols (
+            id          INTEGER PRIMARY KEY,
+            file_id     INTEGER REFERENCES files(id),
+            kind        TEXT,
+            name        TEXT NOT NULL,
+            line_start  INTEGER,
+            line_end    INTEGER,
+            signature   TEXT,
+            parent_name TEXT
+        )
+    )");
+    exec("CREATE INDEX IF NOT EXISTS symbols_name ON symbols(name)");
+    exec("CREATE INDEX IF NOT EXISTS symbols_file ON symbols(file_id)");
+
+    // Document headings / outline
+    exec(R"(
+        CREATE TABLE IF NOT EXISTS headings (
+            id          INTEGER PRIMARY KEY,
+            file_id     INTEGER REFERENCES files(id),
+            level       INTEGER,
+            text        TEXT,
+            line_number INTEGER
+        )
+    )");
+    exec("CREATE INDEX IF NOT EXISTS headings_file ON headings(file_id)");
 
     spdlog::trace("Database schema initialised");
 }

@@ -37,7 +37,16 @@
       "Bash('/c/Program Files/Microsoft Visual Studio/18/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe' --build . --config Debug --target RUN_TESTS)",
       "Bash(d:/Projects/AICodeAss/build/debug/tests/Debug/locus_tests.exe)",
       "Bash(ctest -C Debug --output-on-failure)",
-      "Bash(d:/Projects/AICodeAss/build/debug/Debug/locus.exe \"d:/Projects/AICodeAss\" -verbose)"
+      "Bash(d:/Projects/AICodeAss/build/debug/Debug/locus.exe \"d:/Projects/AICodeAss\" -verbose)",
+      "Bash(vcpkg search:*)",
+      "Bash(cmake --preset)",
+      "Bash(cmake -B build/debug -G \"Visual Studio 18 2026\" -A x64 -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-windows-static -DVCPKG_OVERLAY_TRIPLETS=cmake/triplets -DCMAKE_BUILD_TYPE=Debug)",
+      "Bash(cmake --build build --config Debug)",
+      "Bash(ls d:/Projects/AICodeAss/build*)",
+      "Bash(ls d:/Projects/AICodeAss/out*)",
+      "Bash(ctest --output-on-failure -C Debug)",
+      "Bash(cat d:/Projects/AICodeAss/build/debug/vcpkg_installed/vcpkg/info/sqlite3_*.list)",
+      "Bash(build/debug/Debug/locus.exe \"d:/Projects/AICodeAss\" -verbose)"
     ]
   }
 }

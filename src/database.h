@@ -25,6 +25,9 @@ public:
     // Execute a SQL statement that returns no rows.
     void exec(const char* sql);
 
+    // Prepare a statement. Caller owns the returned handle.
+    sqlite3_stmt* prepare(const char* sql);
+
 private:
     void create_schema();
 
