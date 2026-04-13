@@ -280,7 +280,7 @@ User picks a strategy:
 
 ## Open Questions
 
-- HTTP server library for C++: Crow vs cpp-httplib vs Drogon (see tech-candidates.md)
+- HTTP server library for C++: Crow — decided (see tech-stack.md)
 - Desktop UI framework: ImGui + DX11 — deferred until after CLI prototype
 - Remote access: LAN only vs internet tunneling (Tailscale/ngrok)? LAN first.
 - Mobile: native app vs PWA (Progressive Web App)? Likely PWA first — reuses web frontend.

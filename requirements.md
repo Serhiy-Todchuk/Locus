@@ -43,12 +43,18 @@ A frontend can be closed and reopened without interrupting a session in the Core
 A plain markdown file in the workspace root that the user writes and maintains.
 Injected verbatim into the system prompt on **every** LLM request for this workspace.
 This is the user's persistent context layer — workspace purpose, conventions, constraints.
+Same concept as `CLAUDE.md` for Claude Code, or `.cursorrules` for Cursor.
+
+**Ownership boundary — hard rule:**
+- `LOCUS.md` — **user territory.** Created and edited by the user only. Locus reads it, never writes it.
+- `.locus/` folder — **app territory.** Created and managed by Locus only. User should not manually edit files inside it.
 
 - [ ] If `LOCUS.md` exists in workspace root, read it and prepend to system prompt
 - [ ] LOCUS.md is exempt from all compaction — never trimmed, never summarized
 - [ ] Token count of LOCUS.md shown in UI (so user knows the per-request overhead)
 - [ ] If LOCUS.md exceeds a configurable token limit, warn the user (default: 500 tokens)
-- [ ] Locus never modifies LOCUS.md automatically — it is always user-authored
+- [ ] Locus never writes or modifies `LOCUS.md` under any circumstance
+- [ ] The LLM agent cannot write to `LOCUS.md` even in read-write workspaces
 - [ ] Changes to LOCUS.md on disk take effect on the next LLM request (no restart needed)
 
 Example LOCUS.md contents:

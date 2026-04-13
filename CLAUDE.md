@@ -54,16 +54,19 @@ data into context, and keeps the user in full transparent control of every step.
 | Build system | **CMake + vcpkg** | Standard C++ toolchain |
 | Index database | **SQLite + FTS5** | Zero config, fast, native C API |
 | Code parser | **Tree-sitter** | C library, polyglot, battle-tested |
-| File watcher | **ReadDirectoryChangesW** | Win32 native, zero dependency |
+| File watcher | **efsw** | Cross-platform wrapper (Win32/inotify/FSEvents), future-portable |
 | HTTP / LLM client | **cpr + SSE parsing** | Clean C++ libcurl wrapper, streaming |
 | LLM backend (v1) | **LM Studio** | OpenAI-compatible REST at localhost:1234 |
 | Test model | **Gemma 4 26B A4B** | Modern mid-range consumer GPU model |
 | Core deployment | **System tray daemon** | Headless always-on process, frontends attach via API |
 | Frontend API | **Crow (WebSocket + HTTP)** | Any frontend, any language, including remote |
-| File watcher | **ReadDirectoryChangesW** | Win32 native, zero dependency |
+| File watcher | **efsw** | Cross-platform wrapper (Win32/inotify/FSEvents), future-portable |
 | HTTP / LLM client | **cpr + SSE parsing** | Clean C++ libcurl wrapper, streaming |
 | ZIM reader | **libzim** | Kiwix/Wikipedia native format |
 | VS Code integration | **Thin shim, v1.5** | ~200 lines TS sends context over local socket |
+| Logging | **spdlog** | File sink + stderr, structured levels |
+| Threading | **std::thread + std::mutex/queue** | Explicit, no framework |
+| Tests | **Catch2** | Unit tests from day one, separate CMake target |
 | License | **MIT** | Maximum permissive, community-friendly |
 
 ## Open Decisions
@@ -78,6 +81,7 @@ data into context, and keeps the user in full transparent control of every step.
 
 | File | When to read |
 |---|---|
+| [roadmap.md](roadmap.md) | Full roadmap — milestones, stages, tasks. Current status of build. |
 | [test-workspaces.md](test-workspaces.md) | Three concrete test cases — read when scoping features |
 | [vision.md](vision.md) | Understanding the *why* behind any design decision |
 | [DIFFERENTIATORS.md](DIFFERENTIATORS.md) | Who this is for, what makes it different |
@@ -85,7 +89,7 @@ data into context, and keeps the user in full transparent control of every step.
 | [architecture/overview.md](architecture/overview.md) | System component map, data flow, context strategy |
 | [architecture/tool-protocol.md](architecture/tool-protocol.md) | ITool interface, approval flow, adding tools |
 | [architecture/workspace-index.md](architecture/workspace-index.md) | Index subsystem: schema, update strategy, query API |
-| [architecture/tech-candidates.md](architecture/tech-candidates.md) | Tech stack options and rationale |
+| [architecture/tech-stack.md](architecture/tech-stack.md) | Tech stack — decided choices and future frontend options |
 | [naming.md](naming.md) | Historical — name decision rationale |
 
 ---

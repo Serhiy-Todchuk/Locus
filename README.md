@@ -12,6 +12,7 @@
 | Document | Description |
 |---|---|
 | [CLAUDE.md](CLAUDE.md) | Working guide for Claude Code (AI assistant context) |
+| [roadmap.md](roadmap.md) | Full implementation roadmap: milestones → stages → tasks |
 | [test-workspaces.md](test-workspaces.md) | Three test workspaces: Locus itself, Wikipedia/Kiwix, personal docs |
 | [vision.md](vision.md) | Why this exists — goals, philosophy, target user |
 | [DIFFERENTIATORS.md](DIFFERENTIATORS.md) | Who this is for vs existing tools |
@@ -19,7 +20,7 @@
 | [architecture/overview.md](architecture/overview.md) | High-level system design, context strategy |
 | [architecture/tool-protocol.md](architecture/tool-protocol.md) | ITool interface and approval flow |
 | [architecture/workspace-index.md](architecture/workspace-index.md) | The workspace indexing subsystem design |
-| [architecture/tech-candidates.md](architecture/tech-candidates.md) | Technology stack decisions and rationale |
+| [architecture/tech-stack.md](architecture/tech-stack.md) | Technology stack — decided choices and future frontend options |
 | [naming.md](naming.md) | Name decision rationale |
 
 ## One-Line Summary
