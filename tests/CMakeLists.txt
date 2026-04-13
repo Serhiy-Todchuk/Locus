@@ -1,10 +1,11 @@
 add_executable(locus_tests
     test_placeholder.cpp
+    test_workspace.cpp
 )
 
 target_link_libraries(locus_tests PRIVATE
     Catch2::Catch2WithMain
-    spdlog::spdlog
+    locus_core
 )
 
 include(Catch)

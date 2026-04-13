@@ -47,14 +47,14 @@ Proves: agent loop, LLM streaming, tool system, workspace index, LOCUS.md inject
 - [x] `.gitignore` (build/, .locus/, *.db, *.onnx)
 - [x] spdlog initialised: stderr sink for CLI, rotating file sink in `.locus/locus.log`
 
-### S0.2 — Workspace Foundation
-- [ ] `Workspace` class: open a folder, validate path, create `.locus/` if absent
-- [ ] `.locus/config.json` read/write (nlohmann/json): access mode, type, exclude patterns
-- [ ] `LOCUS.md` reader: read from workspace root, expose as `std::string`, never write
-- [ ] SQLite database open/create at `.locus/index.db`; WAL mode enabled
-- [ ] `files` table schema (path, size, modified_at, ext, is_binary, language, indexed_at)
-- [ ] efsw watcher: start watching workspace root, post `FileEvent` to `std::queue` with `std::mutex`
-- [ ] Debounce: ignore repeat events for same path within 200ms
+### S0.2 — Workspace Foundation ✔
+- [x] `Workspace` class: open a folder, validate path, create `.locus/` if absent
+- [x] `.locus/config.json` read/write (nlohmann/json): access mode, type, exclude patterns
+- [x] `LOCUS.md` reader: read from workspace root, expose as `std::string`, never write
+- [x] SQLite database open/create at `.locus/index.db`; WAL mode enabled
+- [x] `files` table schema (path, size, modified_at, ext, is_binary, language, indexed_at)
+- [x] efsw watcher: start watching workspace root, post `FileEvent` to `std::queue` with `std::mutex`
+- [x] Debounce: ignore repeat events for same path within 200ms
 
 ### S0.3 — FTS5 Index
 - [ ] `files_fts` virtual table (FTS5, porter+unicode61 tokenizer)
