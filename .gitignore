@@ -1,0 +1,8 @@
+build/
+out/
+.vs/
+.locus/
+*.db
+*.onnx
+*.user
+CMakeUserPresets.json
