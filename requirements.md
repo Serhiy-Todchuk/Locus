@@ -21,6 +21,12 @@ what line/character the cursor is at. The agent can see and reference this conte
 like a colleague looking at the same screen. The user can toggle it on/off per message.
 This is distinct from the workspace index: the index is the map, edit context is the spotlight.
 
+### Core / Frontend Split
+Locus Core is a headless background process (system tray). It holds all state: workspace index,
+active sessions, LLM connections. Frontends are display+input clients that connect via
+WebSocket + HTTP REST. Multiple frontends can connect to one Core instance simultaneously.
+A frontend can be closed and reopened without interrupting a session in the Core.
+
 ---
 
 ## Functional Requirements
@@ -159,6 +165,29 @@ The user is presented with a compaction dialog and chooses the strategy.
 - [ ] Default system prompt optimized for token efficiency and tool use
 - [ ] Per-workspace system prompt override
 - [ ] System prompt includes workspace context: type, access mode, available tools
+
+### F12 — Core Daemon / Tray App
+- [ ] Core runs as a system tray background process (no visible window on startup)
+- [ ] Tray icon shows state: idle / indexing / active session / error
+- [ ] Tray right-click menu: open frontend, open settings, quit
+- [ ] Core persists across frontend open/close — sessions survive UI restarts
+- [ ] Core starts on system login (configurable)
+- [ ] Single instance enforced — second launch attaches to running Core instead
+
+### F13 — Frontend API
+- [ ] Core exposes a WebSocket server for streaming and bidirectional communication
+- [ ] Core exposes HTTP REST endpoints for stateless operations
+- [ ] Multiple frontends can connect simultaneously to the same Core instance
+- [ ] All frontends see the same session state and tool approval requests
+- [ ] Protocol is versioned — frontend/core version mismatch reported gracefully
+
+### F14 — Remote Access
+- [ ] Local connections (127.0.0.1) require no authentication
+- [ ] LAN/remote connections require a bearer token (generated per Core instance)
+- [ ] Token is displayed in tray settings; user copies it to the remote client
+- [ ] Core binds to a configurable port (default: localhost only; user opt-in for LAN)
+- [ ] Remote access over HTTPS with self-signed certificate (trust-on-first-use)
+- [ ] No data ever routed through external servers — direct LAN connection only
 
 ---
 

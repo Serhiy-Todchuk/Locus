@@ -196,28 +196,119 @@ LM Studio exposes an OpenAI-compatible REST API at `http://localhost:1234/v1`.
 
 ---
 
-## 8. Embedding / Semantic Search (Deferred — v2)
+## 8. Embedding / Semantic Search
 
-- When needed: run a small embedding model via LM Studio embedding API
-- Or: onnxruntime (has both C++ and Rust bindings) for in-process inference
-- sqlite-vec extension for vector storage alongside FTS5
+In-process embedding via ONNX Runtime (no external server dependency).
+Vector storage via sqlite-vec (C extension, same .db file as FTS5).
 
-**Defer to v2.**
+- **ONNX Runtime C++ API** — official, well-maintained, Apache 2.0
+- **Default model**: `all-MiniLM-L6-v2` — 22MB, 384-dim, good quality, fast on CPU
+- **Upgrade model**: `nomic-embed-text-v1.5` — 280MB, 768-dim, better for long documents
+- **sqlite-vec** — virtual table extension, cosine similarity, exact + approximate KNN
+
+Semantic search is opt-in per workspace (disabled by default).
+See [workspace-index.md](workspace-index.md) for full chunking and hybrid search design.
+
+**Decision: ONNX Runtime + sqlite-vec. Not deferred — designed in from the start.**
 
 ---
 
-## Summary Table (Two Stack Options)
+## 9. API Server (Core ↔ Frontend)
 
-| Layer | C++ Stack | Rust/Tauri Stack |
+Core is a daemon. Frontends attach via API. HTTP server library needed.
+
+### Crow
+- Lightweight C++ microframework (similar to Flask), header-only option
+- **Built-in WebSocket support** — critical for streaming LLM output + tool approval
+- HTTP REST support
+- Active maintenance, MIT license
+- vcpkg available
+
+### cpp-httplib
+- Truly header-only (single .h file), no build complexity
+- HTTP + SSE support
+- WebSocket support via separate lib (needs glue code)
+- Good for simpler cases, less ideal when WebSocket is first-class
+
+### Drogon
+- Full async HTTP/WebSocket framework, high performance
+- More complex setup, heavier
+- Overkill for a local API server
+
+### Boost.Beast
+- Part of Boost — HTTP + WebSocket, full control
+- Most verbose / complex to use
+- No additional dependency if Boost is already in the project
+
+**Recommendation: Crow.** WebSocket first-class, clean API, right weight for this use case.
+
+---
+
+## 10. ZIM File Support (Kiwix/Wikipedia)
+
+Wikipedia from Kiwix is a `.zim` archive — a single compressed file containing all articles.
+Native ZIM support avoids extracting millions of files to disk.
+
+### libzim
+- Official C++ library from the Kiwix project
+- MIT licensed
+- Random access to articles by title, URL, or iteration
+- C++ API: `zim::Archive`, `zim::Entry`, `zim::Item`
+- vcpkg: `libzim` package available
+- Used by Kiwix itself — battle-tested on full Wikipedia
+
+```cpp
+zim::Archive archive("wikipedia.zim");
+auto entry = archive.getEntryByPath("A/Article_Title");
+auto item  = entry.getItem();
+std::string html = item.getData().data();  // article HTML
+```
+
+**Decision: libzim. No alternative needed — it is the standard.**
+
+---
+
+## 11. Document Text Extraction
+
+### PDF — pdfium
+- Google's PDF rendering engine (used in Chrome), C API
+- Very complete: handles complex layouts, embedded fonts, encryption detection
+- Large dependency (~30MB library)
+- vcpkg: `pdfium` package
+
+### PDF — poppler  
+- Lighter alternative, LGPL licensed
+- Good text extraction, widely used on Linux
+- Smaller than pdfium
+- vcpkg: `poppler` package
+
+### DOCX / XLSX — ZIP + XML parsing
+- `.docx` is a ZIP archive containing `word/document.xml`
+- `.xlsx` is a ZIP archive containing `xl/sharedStrings.xml` + sheet XMLs
+- Parse with `miniz` (ZIP, C, header-only) + `pugixml` (XML, C++, header-only)
+- Zero heavy dependencies — both are tiny and fast
+
+**Decisions: pdfium for PDF (quality matters), miniz+pugixml for DOCX/XLSX.**
+
+---
+
+## Summary Table (Decided: C++20 Stack)
+
+| Layer | Choice | Notes |
 |---|---|---|
-| App shell | CMake binary + DX11 | Tauri (Rust + WebView2) |
-| Backend language | C++20 | Rust (stable) |
-| UI framework | Dear ImGui | HTML/CSS/JS (Svelte) in WebView2 |
-| Database | SQLite C API + FTS5 | rusqlite + FTS5 |
-| Code parser | Tree-sitter (C lib) | tree-sitter crate |
-| File watcher | ReadDirectoryChangesW | notify crate |
-| LLM client | cpr + SSE parsing | async-openai / reqwest |
-| Package manager | vcpkg | Cargo |
-| Embedding (v2) | onnxruntime C++ | ort crate (onnxruntime) |
-
-Both stacks are viable. Choose based on language comfort and UI goals.
+| Language | C++20 | User's native language |
+| Build | CMake + vcpkg | Standard C++ toolchain |
+| Core deployment | System tray daemon | Headless, always-on |
+| API server | **Crow** | WebSocket + HTTP REST, frontend-agnostic |
+| First frontend | Dear ImGui + DX11 | Deferred until after CLI prototype |
+| Future frontends | Tauri/web, mobile, browser | All speak the same Core API |
+| Database | SQLite C API + FTS5 | Keyword search |
+| Vector store | sqlite-vec | Semantic search, same .db file |
+| Embeddings | ONNX Runtime C++ | In-process, no server dependency |
+| Code parser | Tree-sitter (C lib) | 100+ languages |
+| File watcher | ReadDirectoryChangesW | Win32 native (behind interface) |
+| LLM client | cpr + SSE parsing | LM Studio OpenAI-compat API |
+| ZIM reader | libzim | Kiwix/Wikipedia native format |
+| PDF extraction | pdfium | Chrome's PDF engine, C API |
+| DOCX/XLSX | miniz + pugixml | ZIP + XML, header-only |
+| JSON | nlohmann/json | Header-only |

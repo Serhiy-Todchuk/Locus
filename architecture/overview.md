@@ -1,180 +1,286 @@
 # Architecture Overview
 
 > Status: Architecture phase. Core decisions made. CLI prototype is next milestone.
-> Language: C++20. Deployment: standalone app. VS Code editor context: thin shim at v1.5.
+> Language: C++20. Core is a headless daemon; frontends attach via API.
 
 ---
 
-## High-Level Components
+## Deployment Model
+
+Locus Core runs as a **system tray background process** — always on, no visible window.
+Frontends connect via one of two paths:
+
+- **C++ direct** — in-process virtual interface, zero overhead. For the ImGui frontend only.
+- **WebSocket + HTTP** — network API, language-agnostic. For all other frontends.
+
+Both paths are symmetric: the same `IFrontend` / `ILocusCore` concepts apply to both.
+The WebSocket server is an adapter that implements `IFrontend` over the wire.
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                        UI Layer                             │
-│  (Desktop app / VS Code extension / CLI / Web UI)           │
-│  - Chat interface                                           │
-│  - Tool call approval panel                                 │
-│  - Context window indicator                                 │
-│  - Workspace file browser                                   │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-┌──────────────────────────▼──────────────────────────────────┐
-│                    Agent Core                               │
-│  - Conversation manager (message history, context trimming) │
-│  - Tool dispatcher (route tool calls → tool implementations)│
-│  - Approval gate (pause on tool calls, await user input)    │
-│  - System prompt builder (workspace context injection)      │
-└──────┬──────────────┬──────────────┬────────────────────────┘
-       │              │              │
-┌──────▼──────┐ ┌─────▼──────┐ ┌────▼────────────────────────┐
-│  LLM Client │ │  Tool Set  │ │   Workspace Engine           │
-│             │ │            │ │                              │
-│  LM Studio  │ │  - Files   │ │  - File Watcher              │
-│  (OpenAI-   │ │  - Search  │ │  - Index Builder             │
-│  compatible │ │  - Terminal│ │  - Index Query API           │
-│  REST API)  │ │  - Web     │ │  - Config Manager            │
-│             │ │  - Index   │ │                              │
-└─────────────┘ └────────────┘ └──────────────────────────────┘
+┌──────────────────┐     ┌───────────────────────────────────────────────┐
+│  ImGui / DX11    │     │        Tauri/Web · Mobile · Browser           │
+│  (C++, v1)       │     │            (any language, any device)          │
+│                  │     │                                                │
+│  implements      │     │  connect via WebSocket + HTTP REST             │
+│  IFrontend       │     │  local or LAN (token auth for remote)          │
+└────────┬─────────┘     └──────────────────────┬────────────────────────┘
+         │                                       │
+         │  C++ virtual calls                    │  WebSocket + HTTP
+         │  (same process, zero overhead)        │  (Crow server, JSON)
+         │                                       │
+┌────────▼───────────────────────────────────────▼────────────────────────┐
+│                              Locus Core                                  │
+│                       (C++20, system tray daemon)                        │
+│                                                                          │
+│   ILocusCore  ◄──── frontends call in via this interface                 │
+│   IFrontend   ◄──── Core calls back on each registered frontend          │
+│                                                                          │
+│  ┌──────────────────────────────────────────────────────────────────┐   │
+│  │  Frontend Registry                                                │   │
+│  │  - ImGui frontend registered directly (IFrontend* ptr)           │   │
+│  │  - WebSocket adapter registered once (fans out to N remote)      │   │
+│  │  - All registered frontends receive the same events              │   │
+│  └───────────────────────────┬──────────────────────────────────────┘   │
+│                              │                                           │
+│  ┌───────────────────────────▼──────────────────────────────────────┐   │
+│  │                        Agent Core                                 │   │
+│  │  - Conversation manager (history, context, compaction)           │   │
+│  │  - Tool dispatcher + approval gate                               │   │
+│  │  - System prompt builder (LOCUS.md + workspace context)          │   │
+│  └──────┬───────────────┬──────────────┬─────────────────────────── ┘   │
+│         │               │              │                                 │
+│  ┌──────▼──────┐  ┌─────▼──────┐  ┌───▼─────────────────────────────┐  │
+│  │ LLM Client  │  │  Tool Set  │  │      Workspace Engine            │  │
+│  │  LM Studio  │  │ (ITool API)│  │  File Watcher (ReadDirChangesW)  │  │
+│  │  OpenAI-    │  │ - Files    │  │  FTS5 Index     (SQLite)         │  │
+│  │  compat.    │  │ - Search   │  │  Vector Index   (sqlite-vec)     │  │
+│  │  REST API   │  │ - Terminal │  │  ONNX Embeddings                 │  │
+│  └─────────────┘  │ - Web      │  │  ZIM Reader     (libzim)         │  │
+│                   └────────────┘  │  Doc Extractors (pdfium/pugixml) │  │
+│                                   └─────────────────────────────────-┘  │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## Key Subsystems
 
-### 1. Workspace Engine
+### 1. Frontend Interface Layer
+
+Two connection paths, one symmetric design.
+
+#### C++ Direct Interface (ImGui frontend)
+
+```cpp
+// Core calls these on every registered frontend (ImGui implements this directly)
+class IFrontend {
+public:
+    virtual void on_token(std::string_view token) = 0;
+    virtual void on_tool_call_pending(const ToolCall& call) = 0;
+    virtual void on_tool_result(const std::string& call_id,
+                                const std::string& display) = 0;
+    virtual void on_message_complete() = 0;
+    virtual void on_context_meter(int used_tokens, int limit) = 0;
+    virtual void on_index_progress(const IndexProgress& p) = 0;
+    virtual void on_compaction_needed(const std::string& session_id,
+                                      int used_pct) = 0;
+};
+
+// Frontends call these into the Core (ImGui calls these directly)
+class ILocusCore {
+public:
+    virtual void register_frontend(IFrontend* fe) = 0;
+    virtual void unregister_frontend(IFrontend* fe) = 0;
+
+    virtual void send_message(const SendMessageParams& p) = 0;
+    virtual void tool_decision(const std::string& call_id,
+                               ToolDecision decision,
+                               const nlohmann::json& modified_args = {}) = 0;
+    virtual void set_edit_context(const EditContext& ctx) = 0;
+    virtual void compact_context(const std::string& session_id,
+                                 CompactionStrategy strategy) = 0;
+
+    virtual WorkspaceInfo open_workspace(const std::string& path) = 0;
+    virtual SessionInfo   create_session(const std::string& workspace_id) = 0;
+    virtual IndexStatus   get_index_status(const std::string& workspace_id) = 0;
+};
+```
+
+ImGui lives in the same process as Core. It gets an `ILocusCore*` at startup,
+registers itself as an `IFrontend`, and calls/receives everything with zero overhead.
+
+#### WebSocket + HTTP (all other frontends)
+
+The `WebSocketAdapter` implements `IFrontend` and registers with Core like any other frontend.
+It translates Core callbacks into JSON WebSocket messages and routes incoming messages
+to `ILocusCore` calls. Remote frontends (Tauri, mobile, browser) never know they are
+talking through an adapter — they see the same logical interface over the wire.
+
+**WebSocket** — streaming and bidirectional:
+- LLM token streaming, tool approval flow, index progress, compaction events
+
+**HTTP REST** — stateless operations:
+- Workspace open/list/config, session management, settings
+
+**Authentication**:
+- `127.0.0.1` connections: no auth
+- LAN/remote: bearer token shown in tray settings, copied to remote client
+- HTTPS: self-signed cert, trust-on-first-use
+
+### 2. Workspace Engine
 The heart of the system. Responsible for:
-- Watching the workspace folder for changes
-- Maintaining the index database (updated algorithmically, never by LLM)
-- Exposing a fast query API that the agent's tools call
+- Watching the workspace folder for changes (`ReadDirectoryChangesW` on Windows)
+- FTS5 keyword index (SQLite + FTS5)
+- Vector semantic index (sqlite-vec + ONNX in-process embeddings)
+- ZIM archive support via libzim (for Kiwix/Wikipedia workspaces)
+- Document text extraction (PDF via pdfium, DOCX via ZIP+XML)
 - Managing the `.locus/` directory inside each workspace
 
 See: [workspace-index.md](workspace-index.md)
 
-### 2. Agent Core
+### 3. Agent Core
 Orchestrates the conversation loop:
 - Builds the prompt: `[system base] + [LOCUS.md] + [workspace metadata] + [history] + [user message]`
-- Sends to LLM, receives streaming response
+- Sends to LLM, streams response back to connected frontends via API Server
 - Detects tool calls in the response
-- Pauses at each tool call → presents to user for approval
-- Executes approved tool calls → injects results → continues
-- Manages context window (trims old messages, summarizes if needed)
+- Pauses at each tool call → sends `tool_call_pending` to frontends via WebSocket
+- Waits for approval from any connected frontend
+- Executes approved tools → injects result → resumes LLM generation
+- Manages context window (compaction, pinning, summarization)
 
-### 3. Tool Set
-Each tool is a discrete, testable unit with:
-- Name and description (fed to LLM in system prompt)
-- Input schema (JSON Schema)
-- Implementation (actual code)
-- User-facing display (what the user sees in the approval panel)
+### 4. Tool Set (ITool interface)
+See: [tool-protocol.md](tool-protocol.md)
 
-Initial tools:
-- `read_file(path, offset?, length?)` — paginated file reading
-- `write_file(path, content)` — write/overwrite a file
-- `create_file(path, content)` — create new file
-- `delete_file(path)` — delete (requires explicit user approval)
-- `list_directory(path, depth?)` — list dir tree
-- `search_text(query, path?, filetype?)` — full-text search via index
-- `search_code(query, language?)` — code-aware search via index
-- `query_index(query)` — natural-language query over index metadata
-- `run_command(command, cwd?)` — terminal execution
-- `web_search(query)` — optional, can be disabled
+Initial tools: `read_file`, `write_file`, `create_file`, `delete_file`,
+`list_directory`, `search_hybrid`, `search_text`, `search_symbols`,
+`get_file_outline`, `run_command`, `web_search`
 
-### 4. LLM Client
-Thin abstraction over the LLM backend:
-- Currently: LM Studio OpenAI-compatible REST API
-- Streaming support
-- Context length enforcement
-- Retry / error handling
-- Future: swap in other backends
+### 5. LLM Client
+- Currently: LM Studio OpenAI-compatible REST API (localhost:1234)
+- SSE streaming, tool call parsing, context length enforcement
+- Abstracted behind an interface — swap backends without touching Agent Core
 
-### 5. UI Layer
-First target: desktop app (Tauri or native C++)
-- Chat panel (streaming output)
-- Tool approval panel (shows pending tool call, approve/modify/reject)
-- Context meter (tokens used / available)
-- Workspace panel (file tree, index status)
-- Settings (model endpoint, workspace config)
+---
+
+## Frontend Contract
+
+A frontend has exactly two responsibilities regardless of connection type:
+1. **Display** — render what Core sends (tokens, tool calls, index status)
+2. **Input** — send what the user does (messages, approvals, edit context)
+
+Core handles all logic. Frontends are display + input only.
+
+```
+Frontend responsibilities:          Core responsibilities:
+  - Render streaming text             - Run the LLM
+  - Show tool approval dialog         - Execute tools
+  - Show context meter                - Manage conversation history
+  - Send user messages                - Build system prompts
+  - Send edit context                 - Maintain workspace index
+  - Approve/reject tool calls         - Handle compaction
+```
+
+| Frontend | Connection | Overhead |
+|---|---|---|
+| ImGui/DX11 (C++) | `IFrontend` / `ILocusCore` direct | Zero — same process, virtual calls |
+| Tauri/web | WebSocket + HTTP (via `WebSocketAdapter`) | Minimal — local loopback |
+| Mobile app | WebSocket + HTTP over LAN | Network RTT only |
+| Browser | WebSocket + HTTP over LAN | Network RTT only |
+
+All frontends, regardless of connection type, see the same events and share the same session.
+A Rust+Tauri window and an ImGui window can be open simultaneously on the same session.
+
+---
+
+## WebSocket Message Protocol (sketch)
+
+```
+// Frontend → Core
+{ "type": "send_message",      "session_id": "...", "content": "...", "edit_context": {...} }
+{ "type": "tool_decision",     "call_id": "...",    "decision": "approve"|"reject"|"modify", "args": {...} }
+{ "type": "set_edit_context",  "file": "...",       "line": 42, "col": 0, "selection": "..." }
+{ "type": "compact_context",   "session_id": "...", "strategy": "A"|"B"|"C"|"D" }
+
+// Core → Frontend
+{ "type": "token",             "content": "..." }
+{ "type": "tool_call_pending", "call_id": "...", "tool": "...", "args": {...}, "preview": "..." }
+{ "type": "tool_result",       "call_id": "...", "display": "..." }
+{ "type": "message_complete" }
+{ "type": "context_meter",     "used": 4200, "limit": 8192 }
+{ "type": "index_progress",    "workspace": "...", "fts": [1200,5000], "vec": [300,5000] }
+{ "type": "compaction_needed", "session_id": "...", "used_pct": 82 }
+```
 
 ---
 
 ## Data Flow: A Single Turn
 
 ```
-User types message
-       │
-       ▼
-Agent Core builds prompt
-  [system prompt + workspace context + history + user message]
-       │
-       ▼
-LLM Client streams response
-       │
-       ├─── Text chunk → stream to UI
-       │
-       └─── Tool call detected
-                  │
-                  ▼
-            Approval Gate
-            User sees: tool name + args
-            User: Approve / Modify / Reject
-                  │
-                  ▼ (approved)
-            Tool Implementation runs
-                  │
-                  ▼
-            Result injected into context
-                  │
-                  ▼
-            Continue LLM generation
+User types message in frontend
+           │
+           ▼  (WebSocket: send_message)
+     API Server → Agent Core
+           │
+           ▼
+    Build prompt: LOCUS.md + workspace ctx + history + message
+           │
+           ▼
+      LLM Client streams response
+           │
+           ├── text token → API Server → all frontends  (type: token)
+           │
+           └── tool call detected
+                      │
+                      ▼  (WebSocket: tool_call_pending)
+               All frontends show approval dialog
+                      │
+                      ▼  (WebSocket: tool_decision from any frontend)
+               Tool executes
+                      │
+                      ▼  (WebSocket: tool_result)
+               Result injected into context
+                      │
+                      ▼
+               LLM generation resumes
 ```
 
 ---
 
 ## Context Management Strategy
 
-This is critical for local LLMs with limited context windows (e.g. 8k–32k tokens).
+### Preventive (keep the window lean)
+1. **Never pre-load** files — tools fetch only what's needed
+2. **Paginate** file reads — agent requests chunks, not full files
+3. **Summarize** tool results before injecting — digest + offer full on demand
+4. **Workspace context injection** — only relevant metadata, not everything
+5. **User-controlled pinning** — pinned items survive all compaction
 
-### Preventive principles (keep the window lean)
-1. **Never pre-load** files into context. Use tools to fetch only what's needed.
-2. **Paginate** large file reads — agent requests chunks, not full files.
-3. **Summarize** tool results before injecting — return a digest + offer full result on demand.
-4. **Workspace context injection** — only inject relevant workspace metadata, not everything.
-5. **User-controlled pinning** — user pins specific files/snippets that survive any compaction.
+### Compaction (user-controlled, never silent)
+At configurable threshold (default 80%) a compaction event is sent to all frontends.
+User picks a strategy:
 
-### When the window fills up — compaction (user-controlled)
-**Rule: never silently truncate.** The user decides what gets dropped or summarized.
-
-At a configurable threshold (default 80% full), or on user request, a compaction dialog
-presents four strategies. The user picks one, reviews the result, then approves:
-
-| Strategy | How | LLM needed | Notes |
-|---|---|---|---|
-| **A — LLM Summary** | LLM condenses history into a digest | Yes | User reviews before applying |
-| **B — Drop tool results** | Strip verbose tool output, keep conversation turns | No | Biggest wins, minimal information loss |
-| **C — Drop oldest turns** | User selects N turns to remove, sees preview | No | Predictable, surgical |
-| **D — Save & restart** | Save full session to `.locus/sessions/`, fresh context | Optional | LLM can draft the briefing for new session |
-
-Pinned items are always excluded from compaction and kept verbatim.
-Manual compaction can be triggered by the user at any time.
-Per-workspace config stores the default pre-selected strategy.
+| Strategy | How | LLM needed |
+|---|---|---|
+| **A — LLM Summary** | LLM condenses history to a digest (user reviews) | Yes |
+| **B — Drop tool results** | Strip verbose tool output, keep turns | No |
+| **C — Drop oldest turns** | User selects N turns, sees preview | No |
+| **D — Save & restart** | Save session to `.locus/sessions/`, fresh context | Optional |
 
 ---
 
-## Workspace Index Design
+## Build Sequence
 
-See: [workspace-index.md](workspace-index.md)
-
----
-
-## Build Sequence (Decided)
-
-1. **CLI prototype (C++20)** — No UI. Agent core + index + LLM client. Proves the hard parts.
-2. **Desktop app (C++20)** — Full standalone app. UI framework TBD after prototype (ImGui likely).
-3. **VS Code shim (v1.5)** — ~200 lines TypeScript. Sends active file/cursor/selection to running app via local socket.
-4. **VS Code extension (future)** — Full embedded UI inside VS Code, if desired later.
+1. **CLI prototype (C++20)** — no UI, no API server. Agent core + index + LLM client.
+   Validates architecture before any UI work. Tool approval via y/n prompts.
+2. **API Server + ImGui frontend (C++20)** — add tray daemon + WebSocket server + first real UI.
+3. **VS Code shim (v1.5)** — ~200 lines TypeScript, connects to Core API, sends edit context.
+4. **Additional frontends (future)** — Tauri/web, mobile app — all speak the same API.
 
 ---
 
 ## Open Questions
 
-- Desktop UI framework: Dear ImGui + DX11 vs Sciter vs WinUI3 — deferred until CLI prototype done
-- Embedding model for semantic search: deferred to v2
-- VS Code shim protocol: local TCP socket vs named pipe vs HTTP — decide at v1.5
+- HTTP server library for C++: Crow vs cpp-httplib vs Drogon (see tech-candidates.md)
+- Desktop UI framework: ImGui + DX11 — deferred until after CLI prototype
+- Remote access: LAN only vs internet tunneling (Tailscale/ngrok)? LAN first.
+- Mobile: native app vs PWA (Progressive Web App)? Likely PWA first — reuses web frontend.

@@ -58,6 +58,11 @@ data into context, and keeps the user in full transparent control of every step.
 | HTTP / LLM client | **cpr + SSE parsing** | Clean C++ libcurl wrapper, streaming |
 | LLM backend (v1) | **LM Studio** | OpenAI-compatible REST at localhost:1234 |
 | Test model | **Gemma 4 26B A4B** | Modern mid-range consumer GPU model |
+| Core deployment | **System tray daemon** | Headless always-on process, frontends attach via API |
+| Frontend API | **Crow (WebSocket + HTTP)** | Any frontend, any language, including remote |
+| File watcher | **ReadDirectoryChangesW** | Win32 native, zero dependency |
+| HTTP / LLM client | **cpr + SSE parsing** | Clean C++ libcurl wrapper, streaming |
+| ZIM reader | **libzim** | Kiwix/Wikipedia native format |
 | VS Code integration | **Thin shim, v1.5** | ~200 lines TS sends context over local socket |
 | License | **MIT** | Maximum permissive, community-friendly |
 
