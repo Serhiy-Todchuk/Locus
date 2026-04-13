@@ -25,7 +25,7 @@ Every feature implemented can be immediately exercised on its own codebase.
 ### Expected LOCUS.md
 ```markdown
 This is the Locus project — a C++20 local LLM agent assistant.
-Build: CMake + vcpkg, MSVC 2022, Windows 11.
+Build: CMake + vcpkg, MSVC (VS 2026), Windows 11.
 Key architecture docs: CLAUDE.md (start here), architecture/ folder.
 Index database: SQLite + FTS5 + sqlite-vec. UI: TBD (ImGui likely).
 Do not modify CLAUDE.md or any .md files under architecture/ without explicit instruction.

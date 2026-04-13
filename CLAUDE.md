@@ -38,7 +38,8 @@ data into context, and keeps the user in full transparent control of every step.
 
 ## Current Stage
 
-**Architecture** — no code yet. Key decisions made. Next: design CLI prototype scope.
+**M0 — CLI Prototype, S0.3 next.** S0.1 (project setup) and S0.2 (workspace foundation)
+are complete and verified. See [roadmap.md](roadmap.md) for full status.
 
 ---
 
@@ -52,16 +53,16 @@ data into context, and keeps the user in full transparent control of every step.
 | Build sequence | **CLI prototype → desktop UI** | Validate hard parts before committing to UI |
 | Core language | **C++20** | User's native language, zero runtime overhead |
 | Build system | **CMake + vcpkg** | Standard C++ toolchain |
+| Compiler | **MSVC 19.50 (VS 2026)** | Generator: `Visual Studio 18 2026` |
 | Index database | **SQLite + FTS5** | Zero config, fast, native C API |
 | Code parser | **Tree-sitter** | C library, polyglot, battle-tested |
-| File watcher | **efsw** | Cross-platform wrapper (Win32/inotify/FSEvents), future-portable |
+| File watcher | **efsw** | Cross-platform wrapper (Win32/inotify/FSEvents) |
 | HTTP / LLM client | **cpr + SSE parsing** | Clean C++ libcurl wrapper, streaming |
 | LLM backend (v1) | **LM Studio** | OpenAI-compatible REST at localhost:1234 |
 | Test model | **Gemma 4 26B A4B** | Modern mid-range consumer GPU model |
 | Core deployment | **System tray daemon** | Headless always-on process, frontends attach via API |
 | Frontend API | **Crow (WebSocket + HTTP)** | Any frontend, any language, including remote |
-| File watcher | **efsw** | Cross-platform wrapper (Win32/inotify/FSEvents), future-portable |
-| HTTP / LLM client | **cpr + SSE parsing** | Clean C++ libcurl wrapper, streaming |
+| Desktop UI (v1) | **Dear ImGui + DX11** | Immediate mode, native, user's home territory |
 | ZIM reader | **libzim** | Kiwix/Wikipedia native format |
 | VS Code integration | **Thin shim, v1.5** | ~200 lines TS sends context over local socket |
 | Logging | **spdlog** | File sink + stderr, structured levels |
@@ -69,11 +70,40 @@ data into context, and keeps the user in full transparent control of every step.
 | Tests | **Catch2** | Unit tests from day one, separate CMake target |
 | License | **MIT** | Maximum permissive, community-friendly |
 
-## Open Decisions
+---
 
-| Decision | Status |
-|---|---|
-| Desktop UI framework | Deferred — decide after CLI prototype proves out |
+## Coding Conventions
+
+Established patterns — follow these for consistency across the codebase.
+
+**Namespace**: All project code lives in `namespace locus`.
+
+**File layout**: `src/name.h` (header) + `src/name.cpp` (implementation). No `include/` directory —
+headers and sources live together in `src/`.
+
+**CMake structure**: Core code is a static library (`locus_core`). Both the main executable (`locus`)
+and the test executable (`locus_tests`) link against it. New `.cpp` files go into `locus_core`'s
+source list in the root `CMakeLists.txt`.
+
+**Class style**: RAII wrappers for external resources (SQLite, efsw). Rule of five — delete
+copy ops, no move unless needed. Use `std::unique_ptr` for owned subsystem pointers.
+
+**Error handling**: `std::runtime_error` for fatal init failures (bad path, DB open fail).
+Logged warnings for recoverable issues (missing LOCUS.md, unparseable config).
+
+**Logging**: `spdlog::info` for stage transitions and lifecycle. `spdlog::trace` for SQL queries,
+file events, and diagnostic detail (visible under `-verbose`). `spdlog::warn`/`error` for problems.
+
+**Naming**: `snake_case` for files, functions, variables. `PascalCase` for classes and structs.
+`snake_case` for struct members. Constants: `k_name` or `constexpr`.
+
+**Tests**: Catch2. One `test_<topic>.cpp` per subsystem. Tag tests with stage: `[s0.2]`, `[s0.3]`.
+Test names use ASCII only (no Unicode — CTest mangles it on Windows).
+
+**Static CRT**: vcpkg triplet `x64-windows-static` with custom overlay at `cmake/triplets/`
+that adds `-D_USE_STD_VECTOR_ALGORITHMS=0` to work around missing SIMD intrinsics in `libcpmt.lib`.
+This flag must be set both in the triplet (for vcpkg deps) and in `CMakeLists.txt`
+(for project code).
 
 ---
 
@@ -90,7 +120,6 @@ data into context, and keeps the user in full transparent control of every step.
 | [architecture/tool-protocol.md](architecture/tool-protocol.md) | ITool interface, approval flow, adding tools |
 | [architecture/workspace-index.md](architecture/workspace-index.md) | Index subsystem: schema, update strategy, query API |
 | [architecture/tech-stack.md](architecture/tech-stack.md) | Tech stack — decided choices and future frontend options |
-| [naming.md](naming.md) | Historical — name decision rationale |
 
 ---
 
@@ -112,13 +141,13 @@ itself during development. What Locus indexes is exactly what is visible here.
 
 **After every completed stage:**
 1. Build the project
-2. Run `locus.exe <workspace_path> -verbose` — the `-verbose` flag enables extended debug logging
+2. Run `locus.exe <workspace_path> -verbose`
 3. Exercise the stage's features
 4. Quit locus.exe
 5. Read `.locus/locus.log` — verify expected behavior, catch errors
 6. Fix issues before moving to the next stage
 
-**The `-verbose` flag** must be implemented in S0.8 (CLI frontend). When set:
+**`-verbose` flag** (implemented in S0.1):
 - spdlog level drops to `trace` (vs default `info`)
 - All SQL queries logged
 - Every tool call logged with full args and result

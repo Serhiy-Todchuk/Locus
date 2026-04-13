@@ -5,7 +5,7 @@
 
 ## Project Status
 
-**Stage: Pre-planning / Architecture**
+**Stage: M0 — CLI Prototype** (S0.1 and S0.2 complete, S0.3 next)
 
 ## Documentation Index
 
@@ -21,7 +21,6 @@
 | [architecture/tool-protocol.md](architecture/tool-protocol.md) | ITool interface and approval flow |
 | [architecture/workspace-index.md](architecture/workspace-index.md) | The workspace indexing subsystem design |
 | [architecture/tech-stack.md](architecture/tech-stack.md) | Technology stack — decided choices and future frontend options |
-| [naming.md](naming.md) | Name decision rationale |
 
 ## One-Line Summary
 

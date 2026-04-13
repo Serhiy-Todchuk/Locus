@@ -282,6 +282,4 @@ Semantic search is **opt-in per workspace** (disabled by default) because:
 ## Open Questions
 
 - How to handle symlinks and network mounts? (skip by default, configurable)
-- Binary/media files: filename + metadata only (no text, no embedding)
-- PDF text extraction library for C++: `pdfium` (Chrome's PDF engine, C API) or `poppler`
 - Language detection for natural language text: `cld3` (Google, C++) or heuristic by extension
