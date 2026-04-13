@@ -38,8 +38,8 @@ data into context, and keeps the user in full transparent control of every step.
 
 ## Current Stage
 
-**M0 — CLI Prototype, S0.4 next.** S0.1 (project setup), S0.2 (workspace foundation),
-and S0.3 (FTS5 index) are complete and verified. See [roadmap.md](roadmap.md) for full status.
+**M0 — CLI Prototype, S0.5 next.** S0.1 (project setup), S0.2 (workspace foundation),
+S0.3 (FTS5 index), and S0.4 (Index Query API) are complete and verified. See [roadmap.md](roadmap.md) for full status.
 
 ---
 

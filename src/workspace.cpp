@@ -1,6 +1,7 @@
 #include "workspace.h"
 #include "database.h"
 #include "file_watcher.h"
+#include "index_query.h"
 #include "indexer.h"
 
 #include <nlohmann/json.hpp>
@@ -40,6 +41,8 @@ Workspace::Workspace(const fs::path& root)
     spdlog::info("Building workspace index");
     indexer_ = std::make_unique<Indexer>(*db_, root_, config_);
     indexer_->build_initial();
+
+    query_ = std::make_unique<IndexQuery>(*db_);
 
     spdlog::info("Workspace opened: {}", root_.string());
 }

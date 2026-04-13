@@ -68,13 +68,13 @@ Proves: agent loop, LLM streaming, tool system, workspace index, LOCUS.md inject
 - [x] Incremental updater: on `FileEvent`, re-index only changed file (delete old rows, re-insert)
 - [x] Catch2 tests: FTS5 query returns correct files, symbol lookup finds functions by name
 
-### S0.4 — Index Query API
-- [ ] `IndexQuery` class wrapping SQLite prepared statements
-- [ ] `search_text(query, options)` → FTS5 BM25, returns `vector<SearchResult>{path, line, snippet, score}`
-- [ ] `search_symbols(name, kind?, language?)` → symbol table lookup with prefix match
-- [ ] `get_file_outline(path)` → headings + symbols for one file, no file read
-- [ ] `list_directory(path, depth)` → directory tree with file metadata from `files` table
-- [ ] All queries return in < 100ms on a 10k-file workspace (Catch2 perf test)
+### S0.4 — Index Query API ✔
+- [x] `IndexQuery` class wrapping SQLite prepared statements
+- [x] `search_text(query, options)` → FTS5 BM25, returns `vector<SearchResult>{path, line, snippet, score}`
+- [x] `search_symbols(name, kind?, language?)` → symbol table lookup with prefix match
+- [x] `get_file_outline(path)` → headings + symbols for one file, no file read
+- [x] `list_directory(path, depth)` → directory tree with file metadata from `files` table
+- [x] All queries return in < 100ms on a 10k-file workspace (Catch2 perf test)
 
 ### S0.5 — LLM Client
 - [ ] `ILLMClient` interface: `stream_completion(messages, tools, callback)`

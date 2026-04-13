@@ -46,7 +46,9 @@
       "Bash(ls d:/Projects/AICodeAss/out*)",
       "Bash(ctest --output-on-failure -C Debug)",
       "Bash(cat d:/Projects/AICodeAss/build/debug/vcpkg_installed/vcpkg/info/sqlite3_*.list)",
-      "Bash(build/debug/Debug/locus.exe \"d:/Projects/AICodeAss\" -verbose)"
+      "Bash(build/debug/Debug/locus.exe \"d:/Projects/AICodeAss\" -verbose)",
+      "Bash(cmake --build build --config Release)",
+      "Bash(ctest --output-on-failure -C Debug -R \"s0.4\")"
     ]
   }
 }

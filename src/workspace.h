@@ -10,6 +10,7 @@ namespace fs = std::filesystem;
 
 class Database;
 class FileWatcher;
+class IndexQuery;
 class Indexer;
 
 struct WorkspaceConfig {
@@ -53,6 +54,7 @@ public:
     Database& database() { return *db_; }
     FileWatcher& file_watcher() { return *watcher_; }
     Indexer& indexer() { return *indexer_; }
+    IndexQuery& query() { return *query_; }
 
 private:
     void load_config();
@@ -65,6 +67,7 @@ private:
     std::unique_ptr<Database> db_;
     std::unique_ptr<FileWatcher> watcher_;
     std::unique_ptr<Indexer> indexer_;
+    std::unique_ptr<IndexQuery> query_;
 };
 
 } // namespace locus

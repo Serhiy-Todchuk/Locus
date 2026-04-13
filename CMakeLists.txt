@@ -151,6 +151,7 @@ add_library(locus_core STATIC
     src/database.cpp
     src/file_watcher.cpp
     src/indexer.cpp
+    src/index_query.cpp
 )
 
 target_include_directories(locus_core PUBLIC src)
