@@ -153,7 +153,7 @@ See: [tool-protocol.md](tool-protocol.md)
 
 Initial tools: `read_file`, `write_file`, `create_file`, `delete_file`,
 `list_directory`, `search_hybrid`, `search_text`, `search_symbols`,
-`get_file_outline`, `run_command`, `web_search`
+`get_file_outline`, `run_command`, `web_search`, `web_fetch`, `web_read`
 
 ### 5. LLM Client
 - Currently: LM Studio OpenAI-compatible REST API (localhost:1234)

@@ -68,6 +68,8 @@ and S0.3 (FTS5 index) are complete and verified. See [roadmap.md](roadmap.md) fo
 | Logging | **spdlog** | File sink + stderr, structured levels |
 | Threading | **std::thread + std::mutex/queue** | Explicit, no framework |
 | Tests | **Catch2** | Unit tests from day one, separate CMake target |
+| HTML parser | **gumbo-parser** | Google's C HTML5 parser, handles malformed HTML |
+| Web search API | **Brave Search (default)** | Clean JSON API, free tier, configurable |
 | License | **MIT** | Maximum permissive, community-friendly |
 
 ---
@@ -120,6 +122,7 @@ This flag must be set both in the triplet (for vcpkg deps) and in `CMakeLists.tx
 | [architecture/tool-protocol.md](architecture/tool-protocol.md) | ITool interface, approval flow, adding tools |
 | [architecture/workspace-index.md](architecture/workspace-index.md) | Index subsystem: schema, update strategy, query API |
 | [architecture/tech-stack.md](architecture/tech-stack.md) | Tech stack — decided choices and future frontend options |
+| [architecture/web-retrieval.md](architecture/web-retrieval.md) | Web RAG: fetch → index → search pipeline, token budget strategy |
 
 ---
 
