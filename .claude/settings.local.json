@@ -1,0 +1,43 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(where vcpkg:*)",
+      "Bash(cmake --version)",
+      "Bash(ninja --version)",
+      "Read(//c//**)",
+      "Read(//d//**)",
+      "Bash(find /c /d -name \"vcpkg.exe\" -maxdepth 4)",
+      "Read(//c/Program Files/Microsoft Visual Studio/**)",
+      "Read(//c/Program Files \\(x86\\)/Microsoft Visual Studio/**)",
+      "Bash(git --version)",
+      "Bash(cl)",
+      "Bash(git clone:*)",
+      "Bash(C:/vcpkg/bootstrap-vcpkg.bat -disableMetrics)",
+      "Bash(cmake --preset windows-msvc-debug)",
+      "Bash(cmake --build build/debug --config Debug)",
+      "Bash(cmake --preset windows-msvc-release)",
+      "Bash(cmake --build build/release --config Release)",
+      "Bash(\"C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/dumpbin.exe\" /exports \"C:/Windows/System32/msvcp140.dll\")",
+      "Bash(cmd.exe /c \"C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/dumpbin.exe /exports C:/Windows/System32/msvcp140.dll 2>&1\")",
+      "Bash(cmd.exe /c '\"C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/dumpbin.exe\" /headers \"D:/Projects/AICodeAss/build/release/vcpkg_installed/x64-windows-static/lib/Catch2.lib\" 2>&1 | findstr \"linker version\\\\|machine\\\\|14\\\\.\"')",
+      "Bash(grep -v \"\\\\.pdb$\")",
+      "Bash(rm -rf \"C:/vcpkg/installed\")",
+      "Bash(rm -rf \"C:/vcpkg/packages\")",
+      "Bash(echo '#include <string>:*)",
+      "Bash(powershell.exe -Command \"& 'C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Auxiliary/Build/vcvars64.bat' | Out-Null; cl /MT /std:c++20 /EHsc /D_DISABLE_STL_VECTOR_ALGORITHMS /Fe'D:/tmp_test.exe' 'D:/tmp_test.cpp'\")",
+      "Bash(xxd)",
+      "Bash(\"/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/Tools/VsDevCmd.bat\")",
+      "Bash(cmake --help)",
+      "Bash(cmake --build d:/Projects/AICodeAss/build/debug --config Debug)",
+      "Bash(\"/c/Program Files/Microsoft Visual Studio/18/Community/Common7/Tools/VsDevCmd.bat\")",
+      "Bash(\"/c/Program Files/Microsoft Visual Studio/18/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe\" --version)",
+      "Bash(\"/c/Program Files/Microsoft Visual Studio/18/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe\" --help)",
+      "Bash('/c/Program Files/Microsoft Visual Studio/18/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe' --preset windows-msvc-debug)",
+      "Bash('/c/Program Files/Microsoft Visual Studio/18/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe' --build d:/Projects/AICodeAss/build/debug --config Debug)",
+      "Bash('/c/Program Files/Microsoft Visual Studio/18/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe' --build . --config Debug --target RUN_TESTS)",
+      "Bash(d:/Projects/AICodeAss/build/debug/tests/Debug/locus_tests.exe)",
+      "Bash(ctest -C Debug --output-on-failure)",
+      "Bash(d:/Projects/AICodeAss/build/debug/Debug/locus.exe \"d:/Projects/AICodeAss\" -verbose)"
+    ]
+  }
+}

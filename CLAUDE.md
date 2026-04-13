@@ -105,6 +105,31 @@ data into context, and keeps the user in full transparent control of every step.
 
 ---
 
+## Development & Testing Protocol
+
+**Test workspace**: `d:\Projects\AICodeAss\` — this folder IS WS1. Locus always runs against
+itself during development. What Locus indexes is exactly what is visible here.
+
+**After every completed stage:**
+1. Build the project
+2. Run `locus.exe <workspace_path> -verbose` — the `-verbose` flag enables extended debug logging
+3. Exercise the stage's features
+4. Quit locus.exe
+5. Read `.locus/locus.log` — verify expected behavior, catch errors
+6. Fix issues before moving to the next stage
+
+**The `-verbose` flag** must be implemented in S0.8 (CLI frontend). When set:
+- spdlog level drops to `trace` (vs default `info`)
+- All SQL queries logged
+- Every tool call logged with full args and result
+- LLM token stream logged
+- Index update events logged
+
+This protocol means every stage is validated before the next begins.
+No accumulated debt, no "we'll debug it later."
+
+---
+
 ## Token Efficiency Notes
 
 When working on this project's own code:

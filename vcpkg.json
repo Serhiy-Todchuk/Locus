@@ -1,0 +1,13 @@
+{
+    "name": "locus",
+    "version": "0.1.0",
+    "dependencies": [
+        "spdlog",
+        "catch2",
+        "nlohmann-json",
+        "cpr",
+        "sqlite3",
+        "efsw",
+        "tree-sitter"
+    ]
+}

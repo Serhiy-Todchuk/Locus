@@ -5,6 +5,21 @@ Three levels: **Milestone → Stage → Task**
 Milestones are major shippable states. Stages are coherent units of work within a milestone.
 Tasks are concrete implementation items — specific enough to start coding without further design.
 
+## Testing Protocol
+
+**Test workspace**: `d:\Projects\AICodeAss\` (WS1 — the Locus project itself).
+Locus always runs against its own folder during development. What is indexed is what is visible.
+
+**After every stage is complete:**
+1. Build
+2. Run: `locus.exe d:\Projects\AICodeAss -verbose`
+3. Exercise the stage's features
+4. Quit → read `.locus\locus.log`
+5. Fix anything unexpected before moving to the next stage
+
+`-verbose` drops spdlog to `trace` level: SQL queries, tool args/results, LLM stream, index events.
+Default (`info`) logs only errors, warnings, and stage transitions.
+
 ---
 
 ## Overview
@@ -24,13 +39,13 @@ Tasks are concrete implementation items — specific enough to start coding with
 with tool approval via `y/n` prompts. No UI. No daemon. No API server.
 Proves: agent loop, LLM streaming, tool system, workspace index, LOCUS.md injection.
 
-### S0.1 — Project Setup
-- [ ] CMake project skeleton: `src/`, `tests/`, `tools/`, `cmake/`
-- [ ] `vcpkg.json` manifest with initial deps: `spdlog`, `catch2`, `nlohmann-json`, `cpr`, `sqlite3`, `efsw`, `tree-sitter`
-- [ ] `CMakeLists.txt`: main target + `locus_tests` Catch2 target wired up
-- [ ] MIT `LICENSE` file
-- [ ] `.gitignore` (build/, .locus/, *.db, *.onnx)
-- [ ] spdlog initialised: stderr sink for CLI, rotating file sink in `.locus/locus.log`
+### S0.1 — Project Setup ✔
+- [x] CMake project skeleton: `src/`, `tests/`, `tools/`, `cmake/`
+- [x] `vcpkg.json` manifest with initial deps: `spdlog`, `catch2`, `nlohmann-json`, `cpr`, `sqlite3`, `efsw`, `tree-sitter`
+- [x] `CMakeLists.txt`: main target + `locus_tests` Catch2 target wired up
+- [x] MIT `LICENSE` file
+- [x] `.gitignore` (build/, .locus/, *.db, *.onnx)
+- [x] spdlog initialised: stderr sink for CLI, rotating file sink in `.locus/locus.log`
 
 ### S0.2 — Workspace Foundation
 - [ ] `Workspace` class: open a folder, validate path, create `.locus/` if absent
@@ -106,7 +121,10 @@ Proves: agent loop, LLM streaming, tool system, workspace index, LOCUS.md inject
   - `on_tool_result()` → print result display text
   - `on_message_complete()` → print `\n---`
   - `on_context_meter()` → print `[ctx: 3200/8192]` in prompt
-- [ ] `main.cpp`: parse args (workspace path, `--endpoint`, `--model`), init workspace + agent, REPL loop
+- [ ] `main.cpp`: parse args — `<workspace_path>` (required), `--endpoint`, `--model`, `-verbose`
+- [ ] `-verbose` flag: set spdlog level to `trace`; logs SQL queries, tool call args/results, LLM token stream, index events
+- [ ] Default log level (`info`): logs errors, warnings, stage transitions only
+- [ ] Log file always written to `.locus/locus.log` (rotating, max 10MB × 3 files)
 - [ ] Graceful Ctrl+C shutdown (flush log, close SQLite)
 
 ### S0.9 — M0 Validation
