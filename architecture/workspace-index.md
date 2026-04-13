@@ -243,6 +243,15 @@ Full content is fetched only via `read_file` when the agent decides it's necessa
 
 ---
 
+## Workspace File Ownership
+
+| Path | Owner | Rule |
+|---|---|---|
+| `LOCUS.md` (workspace root) | **User** | User creates and edits. Locus only reads. LLM cannot write it. |
+| `.locus/` (entire folder) | **Locus app** | Created and managed by Locus. User should not edit contents manually. |
+
+---
+
 ## Index Config (per workspace, stored in `.locus/config.json`)
 
 ```json
