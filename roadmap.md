@@ -56,17 +56,17 @@ Proves: agent loop, LLM streaming, tool system, workspace index, LOCUS.md inject
 - [x] efsw watcher: start watching workspace root, post `FileEvent` to `std::queue` with `std::mutex`
 - [x] Debounce: ignore repeat events for same path within 200ms
 
-### S0.3 — FTS5 Index
-- [ ] `files_fts` virtual table (FTS5, porter+unicode61 tokenizer)
-- [ ] `symbols` table + index on `name`, `file_id`
-- [ ] `headings` table + index on `file_id`
-- [ ] Initial workspace traversal: walk all files respecting exclude patterns + max_file_size_kb
-- [ ] Plain text ingestion: read content, insert into FTS5
-- [ ] Tree-sitter integration: detect language by extension, load grammar, parse AST
-- [ ] Symbol extractor: walk Tree-sitter AST → extract function/class/method/struct nodes → insert into `symbols`
-- [ ] Heading extractor: Markdown `#` lines, HTML `<h1>`–`<h6>` → insert into `headings`
-- [ ] Incremental updater: on `FileEvent`, re-index only changed file (delete old rows, re-insert)
-- [ ] Catch2 tests: FTS5 query returns correct files, symbol lookup finds functions by name
+### S0.3 — FTS5 Index ✔
+- [x] `files_fts` virtual table (FTS5, porter+unicode61 tokenizer)
+- [x] `symbols` table + index on `name`, `file_id`
+- [x] `headings` table + index on `file_id`
+- [x] Initial workspace traversal: walk all files respecting exclude patterns + max_file_size_kb
+- [x] Plain text ingestion: read content, insert into FTS5
+- [x] Tree-sitter integration: detect language by extension, load grammar, parse AST
+- [x] Symbol extractor: walk Tree-sitter AST → extract function/class/method/struct nodes → insert into `symbols`
+- [x] Heading extractor: Markdown `#` lines, HTML `<h1>`–`<h6>` → insert into `headings`
+- [x] Incremental updater: on `FileEvent`, re-index only changed file (delete old rows, re-insert)
+- [x] Catch2 tests: FTS5 query returns correct files, symbol lookup finds functions by name
 
 ### S0.4 — Index Query API
 - [ ] `IndexQuery` class wrapping SQLite prepared statements

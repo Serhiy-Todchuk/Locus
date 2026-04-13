@@ -1,6 +1,7 @@
 add_executable(locus_tests
     test_placeholder.cpp
     test_workspace.cpp
+    test_indexer.cpp
 )
 
 target_link_libraries(locus_tests PRIVATE

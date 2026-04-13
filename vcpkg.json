@@ -6,7 +6,10 @@
         "catch2",
         "nlohmann-json",
         "cpr",
-        "sqlite3",
+        {
+            "name": "sqlite3",
+            "features": ["fts5"]
+        },
         "efsw",
         "tree-sitter"
     ]
