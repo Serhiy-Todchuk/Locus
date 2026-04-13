@@ -154,11 +154,16 @@ The user is presented with a compaction dialog and chooses the strategy.
   - VS Code + standalone hybrid: extension sends context over IPC
   - Standalone only: user explicitly attaches a file region via UI gesture
 
-### F9 — Web Search (Optional Tool)
-- [ ] Agent can request a web search
-- [ ] User approves before the search executes
-- [ ] Results returned as summarized snippets, not raw HTML dumps
-- [ ] Can be disabled per workspace (offline-only mode)
+### F9 — Web Retrieval / RAG (Optional)
+- [ ] `web_search` tool: query a search API, return titles + URLs + snippets (~50 tokens)
+- [ ] `web_fetch` tool: download URL → extract text (gumbo-parser) → index in `web_fts` → return outline only (~30 tokens)
+- [ ] `web_read` tool: read a section of a fetched page by heading or line range
+- [ ] Full web pages never enter LLM context — agent queries indexed content via existing search tools
+- [ ] `search_text` / `search_hybrid` extended with optional `sources` param to include web content
+- [ ] User approves every search query and every URL fetch (approval: always)
+- [ ] Web cache: per-session scoping, configurable TTL and size cap
+- [ ] Search API is configurable: Brave Search (default), SearXNG (self-hosted), or custom endpoint
+- [ ] Can be disabled per workspace (`web.enabled`, default false)
 
 ### F10 — LLM Backend
 - [ ] Connect to local LLM via LM Studio API (OpenAI-compatible REST)

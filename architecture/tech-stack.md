@@ -227,6 +227,30 @@ No lock-free structures unless profiling shows a bottleneck.
 
 ---
 
+## 16. Web Retrieval (RAG)
+
+**HTML parser: gumbo-parser** (Google, Apache 2.0, vcpkg: `gumbo`)
+
+- Pure C HTML5 parser — handles malformed real-world HTML correctly
+- Produces a DOM tree; Locus walks it to extract visible text, skip script/style/nav
+- Tiny footprint, no dependencies beyond libc
+- Used for: converting fetched web pages to clean plain text for FTS5 indexing
+
+**Search API: configurable, Brave Search default**
+
+- Brave Search API: clean JSON REST, free tier (2,000 queries/month)
+- Alternative: SearXNG (self-hosted metasearch, no API key, no limits)
+- API endpoint is configurable — any provider returning the expected JSON shape works
+- HTTP calls via cpr (already a dependency)
+
+**Architecture**: fetched web pages are indexed in separate FTS5 tables (`web_fts`),
+not injected into LLM context. The agent queries web content through the same
+search tools used for local files. Full pages never enter context — only ranked snippets.
+
+See [web-retrieval.md](web-retrieval.md) for the full pipeline design.
+
+---
+
 ## Full Stack at a Glance
 
 | Layer | Choice | vcpkg package |
@@ -242,6 +266,8 @@ No lock-free structures unless profiling shows a bottleneck.
 | Code parser | Tree-sitter | `tree-sitter` |
 | File watcher | efsw | `efsw` |
 | LLM HTTP client | cpr | `cpr` |
+| HTML parser | gumbo-parser | `gumbo` |
+| Web search API | Brave Search (configurable) | — |
 | ZIM reader | libzim | `libzim` |
 | PDF extraction | pdfium | `pdfium` |
 | DOCX/XLSX | miniz + pugixml | `miniz`, `pugixml` |

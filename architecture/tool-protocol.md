@@ -104,7 +104,9 @@ public:
 | `search_symbols` | auto | Find code symbols by name/kind |
 | `get_file_outline` | auto | File structure (headings, symbols) without full content |
 | `run_command` | always | Execute a terminal command in workspace dir |
-| `web_search` | always | Web search (can be disabled per workspace) |
+| `web_search` | always | Search the web, return titles + URLs + snippets |
+| `web_fetch` | always | Fetch URL, extract text, index in web_fts, return outline |
+| `web_read` | auto | Read a section of a fetched web page by heading or line range |
 
 `auto` tools (read-only, non-destructive) execute without pausing for approval.
 `always` tools pause and show the approval dialog before running.

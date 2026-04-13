@@ -192,12 +192,17 @@ Full chat UI, tool approval panels, compaction dialog. VS1 (Locus project) fully
 - [ ] Settings panel: endpoint URL, model, temperature, context limit, compaction threshold, exclude patterns
 - [ ] Workspace config saved to `.locus/config.json` on change
 
-### S1.8 — Crow API Server (Local Only)
-- [ ] Crow server starts on Core init, binds to `127.0.0.1:PORT` (default 7700)
-- [ ] `WebSocketAdapter : IFrontend` registered with `FrontendRegistry`; fans WS messages to remote clients
-- [ ] WebSocket: handle all message types from protocol sketch in overview.md
-- [ ] HTTP REST: `GET /workspaces`, `POST /workspaces/open`, `GET /sessions`, `GET /status`
-- [ ] Protocol version header on all responses; mismatch → `426 Upgrade Required`
+### S1.8 — Web Retrieval (RAG)
+- [ ] `gumbo` vcpkg dependency added; HTML → plain text extractor (skip script/style/nav/footer)
+- [ ] `web_pages`, `web_fts`, `web_headings` tables in index.db schema
+- [ ] `WebSearchTool`: call configurable search API (Brave default), return titles + URLs + snippets
+- [ ] `WebFetchTool`: HTTP GET via cpr → gumbo extract → store in web_fts → return outline only
+- [ ] `WebReadTool`: read a section of a fetched page by heading or line range (like `read_file` for web)
+- [ ] `search_text` extended: optional `sources` param to include web_fts alongside files_fts
+- [ ] Web cache: per-session scoping, TTL eviction, configurable size cap (default 50 MB)
+- [ ] Web config in `.locus/config.json`: enabled, provider, api_key, api_url, cache settings
+- [ ] Per-workspace toggle: `web.enabled` (default false)
+- [ ] Catch2 tests: HTML extraction, web_fts indexing, cache eviction
 
 ---
 
@@ -252,7 +257,14 @@ Wikipedia (WS2) and personal documents (WS3) work end-to-end.
 
 **Goal**: Core accessible over LAN. VS Code sends editor context. Browser frontend works.
 
-### S3.1 — Remote Access
+### S3.1 — Crow API Server
+- [ ] Crow server starts on Core init, binds to `127.0.0.1:PORT` (default 7700)
+- [ ] `WebSocketAdapter : IFrontend` registered with `FrontendRegistry`; fans WS messages to remote clients
+- [ ] WebSocket: handle all message types from protocol sketch in overview.md
+- [ ] HTTP REST: `GET /workspaces`, `POST /workspaces/open`, `GET /sessions`, `GET /status`
+- [ ] Protocol version header on all responses; mismatch → `426 Upgrade Required`
+
+### S3.2 — Remote Access
 - [ ] Crow: optional bind to `0.0.0.0:PORT` (off by default; toggle in settings)
 - [ ] Bearer token: generate random 32-byte token on first run, store in `.locus/auth.token`
 - [ ] Token display: shown in settings panel with copy button; used by remote clients
@@ -261,7 +273,7 @@ Wikipedia (WS2) and personal documents (WS3) work end-to-end.
 - [ ] Trust-on-first-use: remote client shows cert fingerprint, user confirms once
 - [ ] Tray icon tooltip: show active remote connections count
 
-### S3.2 — VS Code Shim
+### S3.3 — VS Code Shim
 - [ ] TypeScript VS Code extension project: `package.json`, `tsconfig.json`, `src/extension.ts`
 - [ ] On `vscode.window.onDidChangeTextEditorSelection`: build `EditContext`, POST to Core `/edit-context`
 - [ ] On `vscode.workspace.onDidChangeTextDocument`: throttle, update context
@@ -269,7 +281,7 @@ Wikipedia (WS2) and personal documents (WS3) work end-to-end.
 - [ ] Status bar item: `$(locus-icon) Locus: Connected` / `Disconnected`; click to open settings
 - [ ] Activation: on workspace open; deactivation: clean up on VS Code close
 
-### S3.3 — Web / Browser Frontend
+### S3.4 — Web / Browser Frontend
 - [ ] Single HTML file + inline CSS + vanilla JS (no build step, no framework)
 - [ ] WebSocket client: connect to Core, handle all message types
 - [ ] Chat UI: streaming token append, tool approval buttons, context meter bar
