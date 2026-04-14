@@ -41,13 +41,15 @@ struct CliArgs {
     std::string workspace_path;
     std::string endpoint = "http://127.0.0.1:1234";
     std::string model;   // empty = server default
+    int         context  = 8192;
     bool        verbose  = false;
+    bool        reindex  = false;
 };
 
 static CliArgs parse_args(int argc, char* argv[])
 {
     if (argc < 2) {
-        std::cerr << "Usage: locus <workspace_path> [--endpoint URL] [--model NAME] [-verbose]\n";
+        std::cerr << "Usage: locus <workspace_path> [--endpoint URL] [--model NAME] [--context N] [-verbose] [-reindex]\n";
         std::exit(1);
     }
 
@@ -58,10 +60,14 @@ static CliArgs parse_args(int argc, char* argv[])
         std::string a = argv[i];
         if (a == "-verbose") {
             args.verbose = true;
+        } else if (a == "-reindex") {
+            args.reindex = true;
         } else if (a == "--endpoint" && i + 1 < argc) {
             args.endpoint = argv[++i];
         } else if (a == "--model" && i + 1 < argc) {
             args.model = argv[++i];
+        } else if (a == "--context" && i + 1 < argc) {
+            args.context = std::stoi(argv[++i]);
         }
     }
 
@@ -137,6 +143,19 @@ int main(int argc, char* argv[])
     if (args.verbose)
         spdlog::trace("Verbose logging active");
 
+    // -reindex: delete existing index.db to force a full rebuild.
+    if (args.reindex) {
+        auto db_path = locus_dir / "index.db";
+        if (fs::exists(db_path)) {
+            fs::remove(db_path);
+            spdlog::info("Reindex: deleted existing index.db");
+        }
+        // Also remove WAL/SHM files if present.
+        std::error_code rm_ec;
+        fs::remove(locus_dir / "index.db-wal", rm_ec);
+        fs::remove(locus_dir / "index.db-shm", rm_ec);
+    }
+
     try {
         // Open workspace: config, DB, file watcher, index.
         locus::Workspace ws(workspace_path);
@@ -160,8 +179,9 @@ int main(int argc, char* argv[])
 
         // LLM client.
         locus::LLMConfig llm_cfg;
-        llm_cfg.base_url = args.endpoint;
-        llm_cfg.model    = args.model;
+        llm_cfg.base_url      = args.endpoint;
+        llm_cfg.model         = args.model;
+        llm_cfg.context_limit = args.context;
         auto llm = locus::create_llm_client(llm_cfg);
 
         // Tool system.

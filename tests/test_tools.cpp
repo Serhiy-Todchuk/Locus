@@ -5,6 +5,8 @@
 #include "tool.h"
 #include "tool_registry.h"
 #include "tools.h"
+#include "workspace.h"
+#include "index_query.h"
 
 #include <filesystem>
 #include <fstream>
@@ -313,6 +315,56 @@ TEST_CASE("RunCommandTool: timeout kills process", "[s0.6]")
 }
 
 #endif
+
+// -- ListDirectoryTool tests ------------------------------------------------
+
+TEST_CASE("ListDirectoryTool: returns indexed files at root with '.'", "[s0.6][s0.8]")
+{
+    auto tmp = fs::temp_directory_path() / "locus_test_listdir_tool";
+    std::error_code ec;
+    fs::remove_all(tmp, ec);
+    fs::create_directories(tmp);
+    write_test_file(tmp, "readme.md", "# Hello");
+    write_test_file(tmp, "main.cpp", "int main() {}");
+    fs::create_directories(tmp / "src");
+    write_test_file(tmp / "src", "util.cpp", "void util() {}");
+
+    {
+        // Build a real index so ListDirectoryTool has data to query.
+        locus::Workspace ws(tmp);
+        locus::WorkspaceContext ws_ctx{tmp, &ws.query()};
+
+        locus::ListDirectoryTool tool;
+
+        // With "." (what LLMs typically send)
+        locus::ToolCall call_dot{"c1", "list_directory", {{"path", "."}}};
+        auto result_dot = tool.execute(call_dot, ws_ctx);
+        REQUIRE(result_dot.success);
+        REQUIRE_THAT(result_dot.content, ContainsSubstring("readme.md"));
+        REQUIRE_THAT(result_dot.content, ContainsSubstring("main.cpp"));
+        REQUIRE_THAT(result_dot.content, ContainsSubstring("src"));
+
+        // With empty path
+        locus::ToolCall call_empty{"c2", "list_directory", {{"path", ""}}};
+        auto result_empty = tool.execute(call_empty, ws_ctx);
+        REQUIRE(result_empty.success);
+        REQUIRE_THAT(result_empty.content, ContainsSubstring("readme.md"));
+
+        // With no path arg at all (default)
+        locus::ToolCall call_default{"c3", "list_directory", nlohmann::json::object()};
+        auto result_default = tool.execute(call_default, ws_ctx);
+        REQUIRE(result_default.success);
+        REQUIRE_THAT(result_default.content, ContainsSubstring("readme.md"));
+
+        // Subdirectory listing
+        locus::ToolCall call_src{"c4", "list_directory", {{"path", "src"}}};
+        auto result_src = tool.execute(call_src, ws_ctx);
+        REQUIRE(result_src.success);
+        REQUIRE_THAT(result_src.content, ContainsSubstring("util.cpp"));
+    }
+    // Workspace (and file watcher) destroyed before cleanup.
+    fs::remove_all(tmp, ec);
+}
 
 // -- Approval policy checks -------------------------------------------------
 

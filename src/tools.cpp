@@ -240,10 +240,11 @@ ToolResult DeleteFileTool::execute(const ToolCall& call, const WorkspaceContext&
 
 ToolResult ListDirectoryTool::execute(const ToolCall& call, const WorkspaceContext& ws)
 {
-    std::string path = call.args.value("path", ".");
+    std::string path = call.args.value("path", "");
     int depth = call.args.value("depth", 0);
 
-    if (path.empty()) path = ".";
+    // Normalize: "." means root, same as empty.
+    if (path == "." || path == "./") path.clear();
 
     if (!ws.index)
         return error_result("Error: workspace index not available");
@@ -251,7 +252,8 @@ ToolResult ListDirectoryTool::execute(const ToolCall& call, const WorkspaceConte
     auto entries = ws.index->list_directory(path, depth);
 
     std::ostringstream content;
-    content << "[" << path << "] " << entries.size() << " entries\n";
+    std::string display_path = path.empty() ? "." : path;
+    content << "[" << display_path << "] " << entries.size() << " entries\n";
     for (auto& e : entries) {
         if (e.is_directory) {
             content << "  " << e.path << "/\n";
@@ -266,7 +268,7 @@ ToolResult ListDirectoryTool::execute(const ToolCall& call, const WorkspaceConte
     }
 
     std::string result = content.str();
-    spdlog::trace("list_directory: {} ({} entries)", path, entries.size());
+    spdlog::trace("list_directory: {} ({} entries)", display_path, entries.size());
     return {true, result, result};
 }
 
