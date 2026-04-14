@@ -109,10 +109,37 @@ This flag must be set both in the triplet (for vcpkg deps) and in `CMakeLists.tx
 
 ---
 
+## Code Map
+
+Source is in `src/`, tests in `tests/`, architecture docs in `architecture/`.
+Core is a static lib (`locus_core`). Both `locus` (exe) and `locus_tests` link it.
+
+| File | What it owns | Key types |
+|---|---|---|
+| `src/workspace.h/cpp` | Opens a folder, owns DB + watcher + indexer + query. One per folder. | `Workspace`, `WorkspaceConfig` |
+| `src/database.h/cpp` | RAII SQLite wrapper. WAL mode. Schema creation. | `Database` |
+| `src/file_watcher.h/cpp` | efsw wrapper. Debounced `FileEvent` queue. | `FileWatcher`, `FileEvent` |
+| `src/indexer.h/cpp` | Initial traversal + incremental updates. Tree-sitter parsing. | `Indexer`, `Indexer::Stats` |
+| `src/index_query.h/cpp` | Read-only queries: FTS5 search, symbol lookup, outlines, dir listing. | `IndexQuery`, `SearchResult`, `SymbolResult`, `OutlineEntry`, `FileEntry` |
+| `src/llm_client.h/cpp` | SSE streaming to OpenAI-compatible endpoints. Token estimation. | `ILLMClient`, `ChatMessage`, `ToolCallRequest`, `LLMConfig`, `StreamCallbacks` |
+| `src/sse_parser.h/cpp` | Low-level SSE `data:` line parser. | `SseParser` |
+| `src/tool.h` | Tool system interfaces (no .cpp — pure abstract + structs). | `ITool`, `IToolRegistry`, `ToolParam`, `ToolResult`, `ToolCall`, `WorkspaceContext` |
+| `src/tool_registry.h/cpp` | Concrete registry. Schema JSON builder. ToolCall parser. | `ToolRegistry` |
+| `src/tools.h/cpp` | All 9 built-in tools + `register_builtin_tools()` factory. | `ReadFileTool`, `WriteFileTool`, `CreateFileTool`, `DeleteFileTool`, `ListDirectoryTool`, `SearchTextTool`, `SearchSymbolsTool`, `GetFileOutlineTool`, `RunCommandTool` |
+| `src/glob_match.h` | Header-only glob pattern matching for exclude patterns. | `glob_match()` |
+| `src/main.cpp` | CLI entry point. Arg parsing, logging init, smoke tests. | `CliArgs` |
+
+**Test files** follow `tests/test_<topic>.cpp` — one per subsystem, tagged by stage.
+
+**Data flow**: `main` → `Workspace` (owns `Database`, `FileWatcher`, `Indexer`, `IndexQuery`) → tools query via `WorkspaceContext{root, &IndexQuery}`. LLM client is separate — agent core (S0.7) will bridge them.
+
+---
+
 ## Document Map
 
 | File | When to read |
 |---|---|
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Code style, build/run/test instructions for humans |
 | [roadmap.md](roadmap.md) | Full roadmap — milestones, stages, tasks. Current status of build. |
 | [test-workspaces.md](test-workspaces.md) | Three concrete test cases — read when scoping features |
 | [vision.md](vision.md) | Understanding the *why* behind any design decision |

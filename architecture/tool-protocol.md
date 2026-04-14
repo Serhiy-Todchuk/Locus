@@ -36,6 +36,7 @@ struct ToolResult {
 
 // The LLM's request to invoke a tool (parsed from model output)
 struct ToolCall {
+    std::string      id;         // from LLM response (e.g. "call_abc123")
     std::string      tool_name;
     nlohmann::json   args;       // validated against the tool's parameter schema
 };
@@ -85,7 +86,7 @@ public:
 
     // Builds the JSON schema block injected into the LLM system prompt
     // Format: OpenAI function-calling schema (compatible with LM Studio)
-    virtual std::string build_schema_json() const = 0;
+    virtual nlohmann::json build_schema_json() const = 0;
 };
 ```
 

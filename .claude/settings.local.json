@@ -56,7 +56,10 @@
       "Bash(ctest -C Debug --output-on-failure -R \"s0.6\")",
       "Bash(d:/Projects/AICodeAss/build/debug/tests/Debug/locus_tests.exe \"[s0.6]\" --reporter compact)",
       "Bash(cmake --build build/debug --config Debug --target locus_tests)",
-      "Bash(cmake --build build/debug --config Debug --target locus)"
+      "Bash(cmake --build build/debug --config Debug --target locus)",
+      "Bash(grep -E \"\\\\.\\(h|cpp\\)$\")",
+      "Bash(grep -E \"^\\(class|struct\\) [A-Z]\" src/*.h)",
+      "Bash(grep -E \"constexpr|const.*=\" src/*.h)"
     ]
   }
 }
