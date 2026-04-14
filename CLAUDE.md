@@ -131,7 +131,7 @@ Core is a static lib (`locus_core`). Both `locus` (exe) and `locus_tests` link i
 | `src/conversation.h/cpp` | Conversation history with JSON serialization and compaction. | `ConversationHistory` |
 | `src/system_prompt.h/cpp` | Assembles system prompt from base + LOCUS.md + metadata + tools. | `SystemPromptBuilder`, `WorkspaceMetadata` |
 | `src/agent_core.h/cpp` | Agent loop: LLM → stream → tool calls → approval → execute → resume. | `AgentCore` |
-| `src/cli_frontend.h/cpp` | Terminal frontend: token streaming, y/n/e tool approval, context meter, compaction prompts. | `CliFrontend` |
+| `src/frontends/cli_frontend.h/cpp` | Terminal frontend: token streaming, y/n/e tool approval, context meter, compaction prompts. | `CliFrontend` |
 | `src/main.cpp` | CLI entry point. Arg parsing, logging init, REPL loop, Ctrl+C handler. | `CliArgs` |
 
 **Test files** follow `tests/test_<topic>.cpp` — one per subsystem, tagged by stage.

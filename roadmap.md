@@ -257,10 +257,10 @@ Wikipedia (WS2) and personal documents (WS3) work end-to-end.
 
 **Goal**: Core accessible over LAN. VS Code sends editor context. Browser frontend works.
 
-### S3.1 — Crow API Server
+### S3.1 — CrowServer Frontend
+- [ ] `CrowFrontend : IFrontend` in `src/frontends/crow/` — registers with Core, serves external clients
 - [ ] Crow server starts on Core init, binds to `127.0.0.1:PORT` (default 7700)
-- [ ] `WebSocketAdapter : IFrontend` registered with `FrontendRegistry`; fans WS messages to remote clients
-- [ ] WebSocket: handle all message types from protocol sketch in overview.md
+- [ ] WebSocket: translates Core callbacks → JSON messages, routes incoming → `ILocusCore` calls
 - [ ] HTTP REST: `GET /workspaces`, `POST /workspaces/open`, `GET /sessions`, `GET /status`
 - [ ] Protocol version header on all responses; mismatch → `426 Upgrade Required`
 
@@ -283,7 +283,7 @@ Wikipedia (WS2) and personal documents (WS3) work end-to-end.
 
 ### S3.4 — Web / Browser Frontend
 - [ ] Single HTML file + inline CSS + vanilla JS (no build step, no framework)
-- [ ] WebSocket client: connect to Core, handle all message types
+- [ ] WebSocket client: connect to CrowServer, handle all message types
 - [ ] Chat UI: streaming token append, tool approval buttons, context meter bar
 - [ ] Served by Crow as a static file at `GET /`
 - [ ] PWA: `manifest.json` (name, icon, `display: standalone`)
@@ -301,8 +301,7 @@ Items from requirements Nice-to-Have — not scheduled yet:
 - Automated coding pipeline (plan → code → test → fix loop, user-supervised)
 - Online model backends (Claude, OpenAI, Gemini)
 - Full VS Code extension (embedded UI panel, not just shim)
-- Tauri frontend
-- Native mobile app
+- Native mobile app (CrowServer client)
 - Plugin system for community tools
 - Line-level diff viewer for AI-proposed file changes (wxStyledTextCtrl, dtl library)
 - Voice chat

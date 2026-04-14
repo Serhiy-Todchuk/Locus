@@ -5,7 +5,7 @@
 #include "tool_registry.h"
 #include "tools.h"
 #include "agent_core.h"
-#include "cli_frontend.h"
+#include "frontends/cli_frontend.h"
 
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
