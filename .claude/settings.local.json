@@ -48,7 +48,11 @@
       "Bash(cat d:/Projects/AICodeAss/build/debug/vcpkg_installed/vcpkg/info/sqlite3_*.list)",
       "Bash(build/debug/Debug/locus.exe \"d:/Projects/AICodeAss\" -verbose)",
       "Bash(cmake --build build --config Release)",
-      "Bash(ctest --output-on-failure -C Debug -R \"s0.4\")"
+      "Bash(ctest --output-on-failure -C Debug -R \"s0.4\")",
+      "Bash(ctest --test-dir . -C Debug -R \"s0.5\" --output-on-failure)",
+      "Bash(ctest --test-dir . -C Debug --output-on-failure)",
+      "Bash(./tests/Debug/locus_tests.exe \"[s0.5]\")",
+      "Bash(./build/debug/Debug/locus.exe \"d:/Projects/AICodeAss\" -verbose)"
     ]
   }
 }

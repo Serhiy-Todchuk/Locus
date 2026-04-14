@@ -1,6 +1,7 @@
 #include "workspace.h"
 #include "file_watcher.h"
 #include "indexer.h"
+#include "llm_client.h"
 
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
@@ -21,7 +22,9 @@ namespace fs = std::filesystem;
 
 struct CliArgs {
     std::string workspace_path;
-    bool        verbose = false;
+    std::string endpoint = "http://127.0.0.1:1234";
+    std::string model;   // empty = server default
+    bool        verbose  = false;
 };
 
 static CliArgs parse_args(int argc, char* argv[])
@@ -38,8 +41,11 @@ static CliArgs parse_args(int argc, char* argv[])
         std::string a = argv[i];
         if (a == "-verbose") {
             args.verbose = true;
+        } else if (a == "--endpoint" && i + 1 < argc) {
+            args.endpoint = argv[++i];
+        } else if (a == "--model" && i + 1 < argc) {
+            args.model = argv[++i];
         }
-        // --endpoint and --model are parsed in later stages (S0.5)
     }
 
     return args;
@@ -136,8 +142,46 @@ int main(int argc, char* argv[])
 
         spdlog::info("S0.3 complete - FTS5 index operational");
 
-        // TODO(S0.4): IndexQuery API
-        // TODO(S0.5): LLM client
+        // S0.5: LLM client smoke test
+        locus::LLMConfig llm_cfg;
+        llm_cfg.base_url = args.endpoint;
+        llm_cfg.model    = args.model;
+
+        auto llm = locus::create_llm_client(llm_cfg);
+
+        spdlog::info("LLM smoke test: sending test prompt...");
+        std::vector<locus::ChatMessage> test_msgs = {
+            {locus::MessageRole::system, "You are a helpful assistant. Reply in one short sentence."},
+            {locus::MessageRole::user,   "What is 2 + 2?"}
+        };
+
+        int est_tokens = locus::ILLMClient::estimate_tokens(test_msgs);
+        spdlog::info("Estimated prompt tokens: {}", est_tokens);
+
+        std::string full_response;
+        llm->stream_completion(test_msgs, {}, {
+            /* on_token */
+            [&](const std::string& token) {
+                full_response += token;
+                std::cout << token << std::flush;
+            },
+            /* on_tool_calls */
+            [](const std::vector<locus::ToolCallRequest>&) {},
+            /* on_complete */
+            [&]() {
+                std::cout << "\n";
+                spdlog::info("LLM response complete ({} chars, ~{} tokens)",
+                             full_response.size(),
+                             locus::ILLMClient::estimate_tokens(full_response));
+            },
+            /* on_error */
+            [](const std::string& err) {
+                spdlog::error("LLM error: {}", err);
+            }
+        });
+
+        spdlog::info("S0.5 complete - LLM client operational");
+
         // TODO(S0.6): Tool system
         // TODO(S0.7): Agent core
         // TODO(S0.8): full CLI frontend loop
