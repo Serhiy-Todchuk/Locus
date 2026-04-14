@@ -19,6 +19,7 @@ find_package(nlohmann_json CONFIG REQUIRED)
 find_package(unofficial-sqlite3 CONFIG REQUIRED)
 find_package(efsw CONFIG REQUIRED)
 find_package(Catch2 CONFIG REQUIRED)
+find_package(cpr CONFIG REQUIRED)
 find_package(unofficial-tree-sitter CONFIG REQUIRED)
 
 # -- Tree-sitter grammars (fetched at configure time) --------------------------
@@ -152,6 +153,8 @@ add_library(locus_core STATIC
     src/file_watcher.cpp
     src/indexer.cpp
     src/index_query.cpp
+    src/sse_parser.cpp
+    src/llm_client.cpp
 )
 
 target_include_directories(locus_core PUBLIC src)
@@ -163,6 +166,7 @@ target_link_libraries(locus_core PUBLIC
     efsw::efsw
     unofficial::tree-sitter::tree-sitter
     ts_grammars
+    cpr::cpr
 )
 
 # -- Main executable -----------------------------------------------------------

@@ -63,6 +63,48 @@ The WebSocket server is an adapter that implements `IFrontend` over the wire.
 
 ---
 
+## Project Structure
+
+```
+locus/
+├── architecture/           Design docs (this file, tech stack, tool protocol, etc.)
+├── cmake/
+│   └── triplets/           vcpkg custom triplet (x64-windows-static)
+├── src/                    All source — headers and implementations live together
+│   ├── main.cpp            CLI entry point
+│   ├── workspace.{h,cpp}   Workspace class — owns DB, watcher, indexer, query
+│   ├── database.{h,cpp}    SQLite RAII wrapper, schema creation
+│   ├── file_watcher.{h,cpp} efsw wrapper, FileEvent queue with debounce
+│   ├── indexer.{h,cpp}     Full/incremental indexing: FTS5, symbols, headings
+│   ├── index_query.{h,cpp} Read-only query API over the index
+│   ├── llm_client.{h,cpp}  ILLMClient interface + LMStudioClient (SSE streaming)
+│   ├── sse_parser.{h,cpp}  Incremental SSE line parser
+│   └── glob_match.h        Glob pattern matching for exclude filters
+├── tests/                  Catch2 test files (one per subsystem)
+├── tools/                  (reserved for future tool implementations)
+├── build/                  CMake build output (git-ignored)
+├── CMakeLists.txt          Root build — locus_core lib, locus exe, tree-sitter grammars
+├── CMakePresets.json        Debug/Release presets
+├── vcpkg.json              Dependency manifest
+├── CLAUDE.md               Claude Code working guide
+├── roadmap.md              Milestones, stages, tasks
+├── vision.md               Project vision and goals
+├── requirements.md         Full feature list
+├── DIFFERENTIATORS.md      What makes Locus different
+└── test-workspaces.md      Three test workspace definitions
+```
+
+Runtime directory created inside each workspace:
+```
+<workspace>/
+└── .locus/                 Workspace-local data (git-ignored by users)
+    ├── config.json         Workspace settings (exclude patterns, toggles)
+    ├── index.db            SQLite database (FTS5 + symbols + headings + files)
+    └── locus.log           Rotating log file (max 10 MB × 3)
+```
+
+---
+
 ## Key Subsystems
 
 ### 1. Frontend Interface Layer

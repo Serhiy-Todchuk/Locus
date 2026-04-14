@@ -76,15 +76,15 @@ Proves: agent loop, LLM streaming, tool system, workspace index, LOCUS.md inject
 - [x] `list_directory(path, depth)` → directory tree with file metadata from `files` table
 - [x] All queries return in < 100ms on a 10k-file workspace (Catch2 perf test)
 
-### S0.5 — LLM Client
-- [ ] `ILLMClient` interface: `stream_completion(messages, tools, callback)`
-- [ ] `LMStudioClient` implementation using cpr + SSE
-- [ ] SSE parser: split `data:` lines, accumulate JSON delta chunks
-- [ ] OpenAI tool-call protocol: detect `tool_calls` in delta, accumulate full call JSON
-- [ ] Token heuristic counter: `~4 chars = 1 token` (good enough for local models)
-- [ ] Config: base URL, model name, temperature, max_tokens, context_limit
-- [ ] Error handling: LM Studio not running → clear error message; timeout → retry once
-- [ ] Catch2 tests: SSE parser correctly assembles streaming chunks; tool-call detection
+### S0.5 — LLM Client ✔
+- [x] `ILLMClient` interface: `stream_completion(messages, tools, callback)`
+- [x] `LMStudioClient` implementation using cpr + SSE
+- [x] SSE parser: split `data:` lines, accumulate JSON delta chunks
+- [x] OpenAI tool-call protocol: detect `tool_calls` in delta, accumulate full call JSON
+- [x] Token heuristic counter: `~4 chars = 1 token` (good enough for local models)
+- [x] Config: base URL, model name, temperature, max_tokens, context_limit
+- [x] Error handling: LM Studio not running → clear error message; timeout → retry once
+- [x] Catch2 tests: SSE parser correctly assembles streaming chunks; tool-call detection
 
 ### S0.6 — Tool System
 - [ ] `ITool` abstract class (name, description, params, execute, approval_policy, preview)
@@ -305,3 +305,6 @@ Items from requirements Nice-to-Have — not scheduled yet:
 - Native mobile app
 - Plugin system for community tools
 - Line-level diff viewer for AI-proposed file changes (ImGui, dtl library)
+- Voice chat
+- Feeding an image as an inut to LLM
+
