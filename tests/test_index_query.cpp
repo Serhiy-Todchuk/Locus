@@ -352,6 +352,33 @@ TEST_CASE("list_directory returns file metadata", "[s0.4][index_query][list_dir]
     cleanup(tmp);
 }
 
+TEST_CASE("list_directory with '.' returns same as empty (root)", "[s0.4][index_query][list_dir]")
+{
+    auto tmp = make_test_dir("listdir_dot");
+
+    write_file(tmp / "readme.md", "# Hello");
+    write_file(tmp / "src" / "main.cpp", "int main() {}");
+
+    {
+        locus::Workspace ws(tmp);
+        auto& q = ws.query();
+
+        auto root_empty = q.list_directory("", 0);
+        auto root_dot   = q.list_directory(".", 0);
+
+        REQUIRE(root_empty.size() == root_dot.size());
+        REQUIRE(root_empty.size() >= 2);  // readme.md + src/
+
+        // Same paths in both results.
+        for (size_t i = 0; i < root_empty.size(); ++i) {
+            REQUIRE(root_empty[i].path == root_dot[i].path);
+            REQUIRE(root_empty[i].is_directory == root_dot[i].is_directory);
+        }
+    }
+
+    cleanup(tmp);
+}
+
 // -- Performance test ---------------------------------------------------------
 
 TEST_CASE("All queries return in under 100ms on moderate workspace", "[s0.4][index_query][perf]")

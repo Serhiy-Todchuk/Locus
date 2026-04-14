@@ -60,7 +60,10 @@
       "Bash(grep -E \"\\\\.\\(h|cpp\\)$\")",
       "Bash(grep -E \"^\\(class|struct\\) [A-Z]\" src/*.h)",
       "Bash(grep -E \"constexpr|const.*=\" src/*.h)",
-      "Bash(ctest -C Debug --output-on-failure -L s0.7)"
+      "Bash(ctest -C Debug --output-on-failure -L s0.7)",
+      "Bash(tests/Debug/locus_tests.exe \"ListDirectoryTool: returns indexed files at root with '.'\" -v)",
+      "Bash(\"tests/Debug/locus_tests.exe\" \"ListDirectoryTool: returns indexed files at root with '.'\" --verbosity high)",
+      "Bash(\"tests/Debug/locus_tests.exe\" \"ListDirectoryTool: returns indexed files at root with '.'\")"
     ]
   }
 }

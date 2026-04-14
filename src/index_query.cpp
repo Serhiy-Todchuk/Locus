@@ -286,8 +286,9 @@ std::vector<FileEntry> IndexQuery::list_directory(const std::string& path, int d
 
     std::vector<FileEntry> results;
 
-    // Normalize prefix: empty = root, otherwise ensure trailing /
+    // Normalize prefix: empty or "." = root, otherwise ensure trailing /
     std::string prefix = path;
+    if (prefix == "." || prefix == "./") prefix.clear();
     if (!prefix.empty() && prefix.back() != '/') prefix += '/';
 
     // We scan all files and filter in C++. For workspaces up to tens of
