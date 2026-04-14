@@ -127,11 +127,11 @@ Proves: agent loop, LLM streaming, tool system, workspace index, LOCUS.md inject
 - [x] Log file always written to `.locus/locus.log` (rotating, max 10MB × 3 files)
 - [x] Graceful Ctrl+C shutdown (flush log, close SQLite)
 
-### S0.9 — M0 Validation
-- [ ] End-to-end: open Locus project folder (WS1), ask "where is ITool defined?" → agent searches index, returns correct file + line
-- [ ] End-to-end: ask agent to create a new file → approval prompt → file created on disk
-- [ ] End-to-end: ask agent to run `cmake --build` → approval → output streamed to terminal
-- [ ] All Catch2 tests pass
+### S0.9 — M0 Validation ✔
+- [x] End-to-end: open Locus project folder (WS1), ask "where is ITool defined?" → agent searches index, returns correct file + line
+- [x] End-to-end: ask agent to create a new file → approval prompt → file created on disk
+- [x] End-to-end: ask agent to run `cmake --build` → approval → output streamed to terminal
+- [x] All Catch2 tests pass (70/70; 1 flaky Windows file-handle race on re-run)
 
 ---
 
