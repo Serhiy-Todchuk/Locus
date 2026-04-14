@@ -4,6 +4,8 @@
 #include "llm_client.h"
 #include "tool_registry.h"
 #include "tools.h"
+#include "agent_core.h"
+#include "frontend.h"
 
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
@@ -144,70 +146,73 @@ int main(int argc, char* argv[])
 
         spdlog::info("S0.3 complete - FTS5 index operational");
 
-        // S0.5: LLM client smoke test
+        // S0.5/S0.6: LLM client + tool system
         locus::LLMConfig llm_cfg;
         llm_cfg.base_url = args.endpoint;
         llm_cfg.model    = args.model;
 
         auto llm = locus::create_llm_client(llm_cfg);
 
-        spdlog::info("LLM smoke test: sending test prompt...");
-        std::vector<locus::ChatMessage> test_msgs = {
-            {locus::MessageRole::system, "You are a helpful assistant. Reply in one short sentence."},
-            {locus::MessageRole::user,   "What is 2 + 2?"}
-        };
-
-        int est_tokens = locus::ILLMClient::estimate_tokens(test_msgs);
-        spdlog::info("Estimated prompt tokens: {}", est_tokens);
-
-        std::string full_response;
-        llm->stream_completion(test_msgs, {}, {
-            /* on_token */
-            [&](const std::string& token) {
-                full_response += token;
-                std::cout << token << std::flush;
-            },
-            /* on_tool_calls */
-            [](const std::vector<locus::ToolCallRequest>&) {},
-            /* on_complete */
-            [&]() {
-                std::cout << "\n";
-                spdlog::info("LLM response complete ({} chars, ~{} tokens)",
-                             full_response.size(),
-                             locus::ILLMClient::estimate_tokens(full_response));
-            },
-            /* on_error */
-            [](const std::string& err) {
-                spdlog::error("LLM error: {}", err);
-            }
-        });
-
-        spdlog::info("S0.5 complete - LLM client operational");
-
-        // S0.6: Tool system
         locus::ToolRegistry tool_registry;
         locus::register_builtin_tools(tool_registry);
+        spdlog::info("Tool system: {} tools registered", tool_registry.all().size());
 
-        auto tool_schema = tool_registry.build_schema_json();
-        spdlog::info("Tool system: {} tools registered, schema {} bytes",
-                     tool_registry.all().size(), tool_schema.dump().size());
+        // S0.7: Agent core smoke test
+        locus::WorkspaceContext ws_ctx{workspace_path, &ws.query()};
+        locus::WorkspaceMetadata ws_meta;
+        ws_meta.root = workspace_path;
+        ws_meta.file_count = static_cast<int>(st.files_total);
+        ws_meta.symbol_count = static_cast<int>(st.symbols_total);
+        ws_meta.heading_count = static_cast<int>(st.headings_total);
 
-        // Quick smoke test: read this project's own CLAUDE.md via ReadFileTool
-        locus::WorkspaceContext tool_ws{workspace_path, &ws.query()};
-        auto* read_tool = tool_registry.find("read_file");
-        if (read_tool) {
-            locus::ToolCall test_call{"smoke_1", "read_file",
-                {{"path", "CLAUDE.md"}, {"offset", 1}, {"length", 5}}};
-            auto result = read_tool->execute(test_call, tool_ws);
-            spdlog::info("ReadFileTool smoke test: success={}, content_size={}",
-                         result.success, result.content.size());
-            spdlog::trace("ReadFileTool output:\n{}", result.content);
-        }
+        locus::AgentCore agent(*llm, tool_registry, ws_ctx,
+                               ws.locus_md(), ws_meta, llm_cfg);
 
-        spdlog::info("S0.6 complete - tool system operational");
+        // Minimal CLI frontend for smoke test: prints tokens, auto-approves tools.
+        struct SmokeFrontend : locus::IFrontend {
+            locus::ILocusCore* core = nullptr;
 
-        // TODO(S0.7): Agent core
-        // TODO(S0.8): full CLI frontend loop
+            void on_token(std::string_view token) override {
+                std::cout << token << std::flush;
+            }
+            void on_tool_call_pending(const locus::ToolCall& call,
+                                      const std::string& preview) override {
+                std::cout << "\n[tool: " << call.tool_name << "] "
+                          << preview << "\n";
+                // Auto-approve for smoke test.
+                if (core)
+                    core->tool_decision(call.id, locus::ToolDecision::approve);
+            }
+            void on_tool_result(const std::string& /*call_id*/,
+                                const std::string& display) override {
+                std::cout << "[result] " << display.substr(0, 200) << "\n";
+            }
+            void on_message_complete() override {
+                std::cout << "\n---\n";
+            }
+            void on_context_meter(int used, int limit) override {
+                spdlog::trace("Context: {}/{} tokens", used, limit);
+            }
+            void on_compaction_needed(int used, int limit) override {
+                std::cout << "[warning] Context at " << used << "/"
+                          << limit << " tokens. Consider compaction.\n";
+            }
+            void on_error(const std::string& msg) override {
+                std::cerr << "[error] " << msg << "\n";
+            }
+        };
+
+        SmokeFrontend smoke_fe;
+        smoke_fe.core = &agent;
+        agent.register_frontend(&smoke_fe);
+
+        spdlog::info("S0.7 agent core ready. Sending smoke test message...");
+        agent.send_message("What files are in the root of this workspace? "
+                           "Use the list_directory tool to find out, then summarize.");
+
+        spdlog::info("S0.7 complete - agent core operational");
+
+        // TODO(S0.8): full CLI frontend loop (stdin read loop)
 
     } catch (const std::exception& ex) {
         spdlog::error("Fatal: {}", ex.what());
