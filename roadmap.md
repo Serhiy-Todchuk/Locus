@@ -297,14 +297,14 @@ Wikipedia (WS2) and personal documents (WS3) work end-to-end.
 
 Items from requirements Nice-to-Have — not scheduled yet:
 
+- Native mobile app (CrowServer client)
+- Voice chat
+- Feeding an image as an inut to LLM
+- Online model backends (Claude, OpenAI, Gemini)
+- Full VS Code extension (embedded UI panel, not just shim)
+- Plugin system for community tools
+- Line-level diff viewer for AI-proposed file changes (wxStyledTextCtrl, dtl library)
 - Multiple workspaces open simultaneously (tabbed sessions)
 - Export session as markdown report
 - Automated coding pipeline (plan → code → test → fix loop, user-supervised)
-- Online model backends (Claude, OpenAI, Gemini)
-- Full VS Code extension (embedded UI panel, not just shim)
-- Native mobile app (CrowServer client)
-- Plugin system for community tools
-- Line-level diff viewer for AI-proposed file changes (wxStyledTextCtrl, dtl library)
-- Voice chat
-- Feeding an image as an inut to LLM
 
