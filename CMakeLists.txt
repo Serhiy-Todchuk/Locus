@@ -157,6 +157,9 @@ add_library(locus_core STATIC
     src/llm_client.cpp
     src/tool_registry.cpp
     src/tools.cpp
+    src/conversation.cpp
+    src/system_prompt.cpp
+    src/agent_core.cpp
 )
 
 target_include_directories(locus_core PUBLIC src)

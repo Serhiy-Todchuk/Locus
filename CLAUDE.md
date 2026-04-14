@@ -38,8 +38,8 @@ data into context, and keeps the user in full transparent control of every step.
 
 ## Current Stage
 
-**M0 — CLI Prototype, S0.7 next.** S0.1 (project setup), S0.2 (workspace foundation),
-S0.3 (FTS5 index), S0.4 (Index Query API), S0.5 (LLM Client), and S0.6 (Tool System) are complete and verified. See [roadmap.md](roadmap.md) for full status.
+**M0 — CLI Prototype, S0.8 next.** S0.1 (project setup), S0.2 (workspace foundation),
+S0.3 (FTS5 index), S0.4 (Index Query API), S0.5 (LLM Client), S0.6 (Tool System), and S0.7 (Agent Core) are complete and verified. See [roadmap.md](roadmap.md) for full status.
 
 ---
 
@@ -127,11 +127,15 @@ Core is a static lib (`locus_core`). Both `locus` (exe) and `locus_tests` link i
 | `src/tool_registry.h/cpp` | Concrete registry. Schema JSON builder. ToolCall parser. | `ToolRegistry` |
 | `src/tools.h/cpp` | All 9 built-in tools + `register_builtin_tools()` factory. | `ReadFileTool`, `WriteFileTool`, `CreateFileTool`, `DeleteFileTool`, `ListDirectoryTool`, `SearchTextTool`, `SearchSymbolsTool`, `GetFileOutlineTool`, `RunCommandTool` |
 | `src/glob_match.h` | Header-only glob pattern matching for exclude patterns. | `glob_match()` |
-| `src/main.cpp` | CLI entry point. Arg parsing, logging init, smoke tests. | `CliArgs` |
+| `src/frontend.h` | Frontend/core interfaces (no .cpp — pure abstract + enums). | `IFrontend`, `ILocusCore`, `ToolDecision`, `CompactionStrategy` |
+| `src/conversation.h/cpp` | Conversation history with JSON serialization and compaction. | `ConversationHistory` |
+| `src/system_prompt.h/cpp` | Assembles system prompt from base + LOCUS.md + metadata + tools. | `SystemPromptBuilder`, `WorkspaceMetadata` |
+| `src/agent_core.h/cpp` | Agent loop: LLM → stream → tool calls → approval → execute → resume. | `AgentCore` |
+| `src/main.cpp` | CLI entry point. Arg parsing, logging init, agent smoke test. | `CliArgs` |
 
 **Test files** follow `tests/test_<topic>.cpp` — one per subsystem, tagged by stage.
 
-**Data flow**: `main` → `Workspace` (owns `Database`, `FileWatcher`, `Indexer`, `IndexQuery`) → tools query via `WorkspaceContext{root, &IndexQuery}`. LLM client is separate — agent core (S0.7) will bridge them.
+**Data flow**: `main` → `Workspace` (owns `Database`, `FileWatcher`, `Indexer`, `IndexQuery`) → `AgentCore` (owns `ConversationHistory`, bridges `ILLMClient` + `IToolRegistry` + `WorkspaceContext`) → frontends receive events via `IFrontend`.
 
 ---
 

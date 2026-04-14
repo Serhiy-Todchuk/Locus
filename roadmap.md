@@ -102,17 +102,17 @@ Proves: agent loop, LLM streaming, tool system, workspace index, LOCUS.md inject
 - [x] Implement `RunCommandTool`: `CreateProcess` on Windows, stream stdout/stderr, approval: always
 - [x] Catch2 tests: schema JSON valid, ReadFileTool pagination, RunCommandTool exit code capture
 
-### S0.7 — Agent Core
-- [ ] `IFrontend` interface: `on_token`, `on_tool_call_pending`, `on_tool_result`, `on_message_complete`, `on_context_meter`
-- [ ] `ILocusCore` interface: `send_message`, `tool_decision`, `register_frontend`, `unregister_frontend`
-- [ ] `ConversationHistory`: `vector<Message>`, JSON serialise/deserialise
-- [ ] `SystemPromptBuilder`: assemble base + LOCUS.md + workspace metadata + tool schema
-- [ ] LOCUS.md token budget warning (log warning if > 500 tokens)
-- [ ] Agent loop: build prompt → call LLM → stream tokens to frontend → detect tool calls → pause → await `tool_decision` → execute → inject result → resume
-- [ ] Context tracker: running token count; fire `on_context_meter` after each message
-- [ ] Hard stop when context would overflow: fire `on_compaction_needed` (CLI: print warning + offer strategy B/C)
-- [ ] Compaction strategy B (drop tool results): strip `tool_result` messages from history
-- [ ] Compaction strategy C (drop oldest): remove N oldest turns
+### S0.7 — Agent Core ✔
+- [x] `IFrontend` interface: `on_token`, `on_tool_call_pending`, `on_tool_result`, `on_message_complete`, `on_context_meter`
+- [x] `ILocusCore` interface: `send_message`, `tool_decision`, `register_frontend`, `unregister_frontend`
+- [x] `ConversationHistory`: `vector<Message>`, JSON serialise/deserialise
+- [x] `SystemPromptBuilder`: assemble base + LOCUS.md + workspace metadata + tool schema
+- [x] LOCUS.md token budget warning (log warning if > 500 tokens)
+- [x] Agent loop: build prompt → call LLM → stream tokens to frontend → detect tool calls → pause → await `tool_decision` → execute → inject result → resume
+- [x] Context tracker: running token count; fire `on_context_meter` after each message
+- [x] Hard stop when context would overflow: fire `on_compaction_needed` (CLI: print warning + offer strategy B/C)
+- [x] Compaction strategy B (drop tool results): strip `tool_result` messages from history
+- [x] Compaction strategy C (drop oldest): remove N oldest turns
 
 ### S0.8 — CLI Frontend
 - [ ] `CliFrontend : IFrontend`
@@ -212,8 +212,8 @@ Full chat UI, tool approval panels, compaction dialog. VS1 (Locus project) fully
 Wikipedia (WS2) and personal documents (WS3) work end-to-end.
 
 ### S2.1 — Semantic Search
-- [ ] ONNX Runtime C++ API initialised; model loaded from `.locus/models/<name>.onnx`
-- [ ] Model downloader: fetch `all-MiniLM-L6-v2.onnx` on first semantic-search enable (with progress)
+- [ ] ONNX Runtime C++ API initialised; model loaded from `models/all-MiniLM-L6-v2.onnx` (bundled)
+- [ ] Bundle INT8 quantized `all-MiniLM-L6-v2.onnx` (~23 MB, Apache 2.0) in release; add `THIRD_PARTY_LICENSES`
 - [ ] `chunks` table schema; chunking pipeline wired into indexer
 - [ ] Code chunking: Tree-sitter function/class boundaries → one chunk each; split at 80 lines
 - [ ] Document chunking: heading boundaries (H2/H3); sliding window fallback
