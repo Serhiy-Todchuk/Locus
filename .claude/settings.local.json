@@ -52,7 +52,11 @@
       "Bash(ctest --test-dir . -C Debug -R \"s0.5\" --output-on-failure)",
       "Bash(ctest --test-dir . -C Debug --output-on-failure)",
       "Bash(./tests/Debug/locus_tests.exe \"[s0.5]\")",
-      "Bash(./build/debug/Debug/locus.exe \"d:/Projects/AICodeAss\" -verbose)"
+      "Bash(./build/debug/Debug/locus.exe \"d:/Projects/AICodeAss\" -verbose)",
+      "Bash(ctest -C Debug --output-on-failure -R \"s0.6\")",
+      "Bash(d:/Projects/AICodeAss/build/debug/tests/Debug/locus_tests.exe \"[s0.6]\" --reporter compact)",
+      "Bash(cmake --build build/debug --config Debug --target locus_tests)",
+      "Bash(cmake --build build/debug --config Debug --target locus)"
     ]
   }
 }

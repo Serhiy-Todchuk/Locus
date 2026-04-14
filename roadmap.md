@@ -86,21 +86,21 @@ Proves: agent loop, LLM streaming, tool system, workspace index, LOCUS.md inject
 - [x] Error handling: LM Studio not running → clear error message; timeout → retry once
 - [x] Catch2 tests: SSE parser correctly assembles streaming chunks; tool-call detection
 
-### S0.6 — Tool System
-- [ ] `ITool` abstract class (name, description, params, execute, approval_policy, preview)
-- [ ] `ToolRegistry`: register, find by name, `build_schema_json()` for system prompt
-- [ ] `ToolCall` struct + JSON parser (from LLM output)
-- [ ] `ToolResult` struct (success, content for LLM, display for user)
-- [ ] Implement `ReadFileTool`: paginated read (offset + length params), approval: auto
-- [ ] Implement `WriteFileTool`: write/overwrite, approval: always
-- [ ] Implement `CreateFileTool`: create new file, approval: always
-- [ ] Implement `DeleteFileTool`: delete with extra warning in preview, approval: always
-- [ ] Implement `ListDirectoryTool`: calls `IndexQuery::list_directory`, approval: auto
-- [ ] Implement `SearchTextTool`: calls `IndexQuery::search_text`, approval: auto
-- [ ] Implement `SearchSymbolsTool`: calls `IndexQuery::search_symbols`, approval: auto
-- [ ] Implement `GetFileOutlineTool`: calls `IndexQuery::get_file_outline`, approval: auto
-- [ ] Implement `RunCommandTool`: `CreateProcess` on Windows, stream stdout/stderr, approval: always
-- [ ] Catch2 tests: schema JSON valid, ReadFileTool pagination, RunCommandTool exit code capture
+### S0.6 — Tool System ✔
+- [x] `ITool` abstract class (name, description, params, execute, approval_policy, preview)
+- [x] `ToolRegistry`: register, find by name, `build_schema_json()` for system prompt
+- [x] `ToolCall` struct + JSON parser (from LLM output)
+- [x] `ToolResult` struct (success, content for LLM, display for user)
+- [x] Implement `ReadFileTool`: paginated read (offset + length params), approval: auto
+- [x] Implement `WriteFileTool`: write/overwrite, approval: always
+- [x] Implement `CreateFileTool`: create new file, approval: always
+- [x] Implement `DeleteFileTool`: delete with extra warning in preview, approval: always
+- [x] Implement `ListDirectoryTool`: calls `IndexQuery::list_directory`, approval: auto
+- [x] Implement `SearchTextTool`: calls `IndexQuery::search_text`, approval: auto
+- [x] Implement `SearchSymbolsTool`: calls `IndexQuery::search_symbols`, approval: auto
+- [x] Implement `GetFileOutlineTool`: calls `IndexQuery::get_file_outline`, approval: auto
+- [x] Implement `RunCommandTool`: `CreateProcess` on Windows, stream stdout/stderr, approval: always
+- [x] Catch2 tests: schema JSON valid, ReadFileTool pagination, RunCommandTool exit code capture
 
 ### S0.7 — Agent Core
 - [ ] `IFrontend` interface: `on_token`, `on_tool_call_pending`, `on_tool_result`, `on_message_complete`, `on_context_meter`

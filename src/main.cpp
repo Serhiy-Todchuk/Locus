@@ -2,6 +2,8 @@
 #include "file_watcher.h"
 #include "indexer.h"
 #include "llm_client.h"
+#include "tool_registry.h"
+#include "tools.h"
 
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
@@ -182,7 +184,28 @@ int main(int argc, char* argv[])
 
         spdlog::info("S0.5 complete - LLM client operational");
 
-        // TODO(S0.6): Tool system
+        // S0.6: Tool system
+        locus::ToolRegistry tool_registry;
+        locus::register_builtin_tools(tool_registry);
+
+        auto tool_schema = tool_registry.build_schema_json();
+        spdlog::info("Tool system: {} tools registered, schema {} bytes",
+                     tool_registry.all().size(), tool_schema.dump().size());
+
+        // Quick smoke test: read this project's own CLAUDE.md via ReadFileTool
+        locus::WorkspaceContext tool_ws{workspace_path, &ws.query()};
+        auto* read_tool = tool_registry.find("read_file");
+        if (read_tool) {
+            locus::ToolCall test_call{"smoke_1", "read_file",
+                {{"path", "CLAUDE.md"}, {"offset", 1}, {"length", 5}}};
+            auto result = read_tool->execute(test_call, tool_ws);
+            spdlog::info("ReadFileTool smoke test: success={}, content_size={}",
+                         result.success, result.content.size());
+            spdlog::trace("ReadFileTool output:\n{}", result.content);
+        }
+
+        spdlog::info("S0.6 complete - tool system operational");
+
         // TODO(S0.7): Agent core
         // TODO(S0.8): full CLI frontend loop
 
