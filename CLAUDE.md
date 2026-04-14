@@ -38,8 +38,8 @@ data into context, and keeps the user in full transparent control of every step.
 
 ## Current Stage
 
-**M0 — CLI Prototype, S0.9 next.** S0.1 (project setup), S0.2 (workspace foundation),
-S0.3 (FTS5 index), S0.4 (Index Query API), S0.5 (LLM Client), S0.6 (Tool System), S0.7 (Agent Core), and S0.8 (CLI Frontend) are complete and verified. See [roadmap.md](roadmap.md) for full status.
+**M0 — CLI Prototype complete.** All stages S0.1–S0.9 are done and verified.
+M1 (Desktop App) is next. See [roadmap.md](roadmap.md) for full status.
 
 ---
 
