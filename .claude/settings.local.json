@@ -72,7 +72,8 @@
       "Bash(curl -s -N -X POST http://127.0.0.1:1234/v1/chat/completions -H \"Content-Type: application/json\" -d '{\"messages\":[{\"role\":\"user\",\"content\":\"say hi\"}],\"max_tokens\":5,\"stream\":true}')",
       "Bash(curl -s -N -X POST http://127.0.0.1:1234/v1/chat/completions -H \"Content-Type: application/json\" -d '{\"messages\":[{\"role\":\"user\",\"content\":\"say hi\"}],\"max_tokens\":5,\"stream\":true,\"stream_options\":{\"include_usage\":true}}')",
       "Bash(curl -s https://raw.githubusercontent.com/ollama/ollama/main/docs/api.md)",
-      "Bash(ctest --output-on-failure -C Debug -R \"Incremental update handles file deletion\")"
+      "Bash(ctest --output-on-failure -C Debug -R \"Incremental update handles file deletion\")",
+      "Bash(ls d:/Projects/AICodeAss/src/cli_frontend.*)"
     ]
   }
 }

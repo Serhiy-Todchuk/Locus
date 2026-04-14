@@ -18,10 +18,10 @@ The WebSocket server is an adapter that implements `IFrontend` over the wire.
 
 ```
 ┌──────────────────┐     ┌───────────────────────────────────────────────┐
-│  wxWidgets       │     │        Tauri/Web · Mobile · Browser           │
-│  (C++, v1)       │     │            (any language, any device)          │
+│  wxWidgets       │     │        Browser · VS Code · Mobile             │
+│  (C++, v1)       │     │         (external clients, any device)         │
 │                  │     │                                                │
-│  implements      │     │  connect via WebSocket + HTTP REST             │
+│  implements      │     │  connect via CrowServer (WebSocket + HTTP)     │
 │  IFrontend       │     │  local or LAN (token auth for remote)          │
 └────────┬─────────┘     └──────────────────────┬────────────────────────┘
          │                                       │
@@ -152,12 +152,13 @@ The wxWidgets frontend lives in the same process as Core. It gets an `ILocusCore
 registers itself as an `IFrontend`, and calls/receives everything with zero overhead.
 Agent thread events are marshalled to the UI thread via `wxQueueEvent()` + custom `wxThreadEvent` types.
 
-#### WebSocket + HTTP (all other frontends)
+#### WebSocket + HTTP (CrowServer → external clients)
 
-The `WebSocketAdapter` implements `IFrontend` and registers with Core like any other frontend.
-It translates Core callbacks into JSON WebSocket messages and routes incoming messages
-to `ILocusCore` calls. Remote frontends (Tauri, mobile, browser) never know they are
-talking through an adapter — they see the same logical interface over the wire.
+The `CrowFrontend` implements `IFrontend` and registers with Core like any other frontend.
+It runs a Crow HTTP/WebSocket server and translates Core callbacks into JSON WebSocket
+messages, routing incoming messages to `ILocusCore` calls. External clients (browser,
+VS Code extension, mobile app) connect to this server — they see the same logical
+interface over the wire.
 
 **WebSocket** — streaming and bidirectional:
 - LLM token streaming, tool approval flow, index progress, compaction events
@@ -225,13 +226,16 @@ Frontend responsibilities:          Core responsibilities:
 
 | Frontend | Connection | Overhead |
 |---|---|---|
+| CLI (C++) | `IFrontend` / `ILocusCore` direct | Zero — same process, virtual calls |
 | wxWidgets (C++) | `IFrontend` / `ILocusCore` direct | Zero — same process, virtual calls |
-| Tauri/web | WebSocket + HTTP (via `WebSocketAdapter`) | Minimal — local loopback |
-| Mobile app | WebSocket + HTTP over LAN | Network RTT only |
-| Browser | WebSocket + HTTP over LAN | Network RTT only |
+| CrowServer (C++) | `IFrontend` / `ILocusCore` direct | Zero — same process, serves external clients |
+| Browser client | WebSocket + HTTP via CrowServer | Minimal — local loopback |
+| VS Code extension | WebSocket + HTTP via CrowServer | Minimal — local loopback |
+| Mobile app | WebSocket + HTTP via CrowServer over LAN | Network RTT only |
 
-All frontends, regardless of connection type, see the same events and share the same session.
-A Rust+Tauri window and a wxWidgets window can be open simultaneously on the same session.
+All three C++ frontends (CLI, wxWidgets, CrowServer) implement `IFrontend` and register
+directly with Core. External clients connect to CrowServer. Multiple frontends and clients
+can be active simultaneously on the same session.
 
 ---
 
@@ -315,9 +319,9 @@ User picks a strategy:
 
 1. **CLI prototype (C++20)** — no UI, no API server. Agent core + index + LLM client.
    Validates architecture before any UI work. Tool approval via y/n prompts.
-2. **API Server + wxWidgets frontend (C++20)** — add tray daemon + WebSocket server + first real UI.
-3. **VS Code shim (v1.5)** — ~200 lines TypeScript, connects to Core API, sends edit context.
-4. **Additional frontends (future)** — Tauri/web, mobile app — all speak the same API.
+2. **wxWidgets frontend (C++20)** — system tray daemon + first real UI.
+3. **CrowServer frontend (C++20)** — HTTP/WebSocket server, enables external clients.
+4. **External clients** — VS Code extension, browser web page, mobile app — all connect to CrowServer.
 
 ---
 

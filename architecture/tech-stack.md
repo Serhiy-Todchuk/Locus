@@ -38,35 +38,25 @@ UI thread via `wxQueueEvent()` + custom `wxThreadEvent` types. See [overview.md]
 
 ---
 
-## 3. Future Frontend Options
+## 3. Frontend Architecture
 
-Core exposes a frontend-agnostic API (C++ direct + WebSocket/HTTP). Any of the
-following can be attached later without modifying Core. Multiple can run simultaneously.
+Three C++ frontends, all implementing `IFrontend` and linking `locus_core`:
 
-### Rust + Tauri (web frontend on C++ core)
-- Tauri app connects to the Core's WebSocket/HTTP API like any other remote frontend
-- Frontend: HTML/CSS/JS (Svelte) in WebView2 — markdown, code highlight, streaming free
-- C++ Core remains unchanged — Tauri is just another API client
-- Benefit: rich web UI, natural path to browser-based remote access
-- Note: Rust is only used for the thin Tauri shell; Core stays C++
+| Frontend | Location | Purpose |
+|---|---|---|
+| **CLI** | `src/frontends/cli_frontend.*` | Terminal REPL, y/n tool approval, M0 prototype |
+| **wxWidgets** | `src/frontends/wx/*` (M1) | Desktop GUI with system tray, chat UI, tool panels |
+| **CrowServer** | `src/frontends/crow/*` (M3) | HTTP/WebSocket server for external clients |
 
-### Sciter (HTML/CSS in C++ process)
-- Embeds an HTML/CSS/JS renderer as a DLL in the C++ app (~10MB)
-- UI written in HTML/CSS, calls C++ backend directly
-- Web-style richness with zero separate process
-- License: free for open-source
-- [sciter.com](https://sciter.com)
+External clients connect to CrowServer — they are not C++ frontends themselves:
 
-### WinUI 3 (Windows App SDK)
-- Microsoft's modern native Windows UI (C++/WinRT)
-- Best Windows integration (accessibility, dark mode, system fonts)
-- Windows-only; C++/WinRT is verbose but well-documented
+| Client | Technology | Connection |
+|---|---|---|
+| **Browser** | HTML/CSS/JS, served by Crow at `GET /` | WebSocket + HTTP, local or LAN |
+| **VS Code extension** | TypeScript, ~200 lines | WebSocket to CrowServer |
+| **Mobile app** | Future | WebSocket over LAN |
 
-### Browser / PWA
-- Any browser connecting to Core's HTTP/WebSocket server
-- Zero frontend deployment — user opens `http://localhost:PORT`
-- Progressive Web App: installable on desktop or mobile from browser
-- Natural path for the mobile remote access use case
+Multiple frontends and clients can be active simultaneously on the same session.
 
 ---
 
@@ -145,8 +135,10 @@ behind one clean interface now, making future cross-platform support a drop-in.
 - HTTP REST for stateless operations (workspace mgmt, sessions, settings)
 - MIT licensed, vcpkg: `crowcpp-crow`
 
-The C++ wxWidgets frontend bypasses Crow entirely (direct C++ interface).
-Crow serves only remote frontends (Tauri, browser, mobile).
+`CrowFrontend` is the third C++ frontend — it implements `IFrontend`, registers
+with Core directly, and exposes the session to external clients (browser, VS Code
+extension, mobile) via HTTP/WebSocket. The CLI and wxWidgets frontends bypass Crow
+entirely (direct C++ interface).
 
 ---
 
@@ -213,7 +205,7 @@ Thread layout:
 | Indexer (FTS) | File traversal + FTS5 index build/update |
 | Indexer (Vec) | ONNX embedding, sqlite-vec writes (lower priority) |
 | Watcher | efsw event loop, posts file change events to Indexer queue |
-| Crow | HTTP + WebSocket server for remote frontends |
+| Crow | CrowFrontend HTTP + WebSocket server for external clients |
 
 Communication between threads via `std::queue<Event>` with `std::mutex` + `std::condition_variable`.
 No lock-free structures unless profiling shows a bottleneck.
@@ -260,9 +252,9 @@ See [web-retrieval.md](web-retrieval.md) for the full pipeline design.
 |---|---|---|
 | Language | C++20 | — |
 | Build | CMake + vcpkg | — |
-| Frontend v1 | wxWidgets + wxWebView | `wxwidgets`, `md4c` |
-| Future frontends | Tauri/web, Sciter, WinUI3, browser PWA | — |
-| API server (remote) | Crow | `crowcpp-crow` |
+| Frontend: CLI | Terminal REPL | — |
+| Frontend: wxWidgets | wxWidgets + wxWebView | `wxwidgets`, `md4c` |
+| Frontend: CrowServer | Crow HTTP/WS for external clients | `crowcpp-crow` |
 | Index database | SQLite + FTS5 | `sqlite3` |
 | Vector search | sqlite-vec | (bundled extension) |
 | Embeddings | ONNX Runtime | `onnxruntime` |
