@@ -155,6 +155,8 @@ add_library(locus_core STATIC
     src/index_query.cpp
     src/sse_parser.cpp
     src/llm_client.cpp
+    src/tool_registry.cpp
+    src/tools.cpp
 )
 
 target_include_directories(locus_core PUBLIC src)
