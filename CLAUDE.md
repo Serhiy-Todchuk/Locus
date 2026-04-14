@@ -62,7 +62,7 @@ M1 (Desktop App) is next. See [roadmap.md](roadmap.md) for full status.
 | Test model | **Gemma 4 26B A4B** | Modern mid-range consumer GPU model |
 | Core deployment | **System tray daemon** | Headless always-on process, frontends attach via API |
 | Frontend API | **Crow (WebSocket + HTTP)** | Any frontend, any language, including remote |
-| Desktop UI (v1) | **Dear ImGui + DX11** | Immediate mode, native, user's home territory |
+| Desktop UI (v1) | **wxWidgets + wxWebView** | Native widgets, OS-provided WebView2 for markdown, no bundled runtime |
 | ZIM reader | **libzim** | Kiwix/Wikipedia native format |
 | VS Code integration | **Thin shim, v1.5** | ~200 lines TS sends context over local socket |
 | Logging | **spdlog** | File sink + stderr, structured levels |

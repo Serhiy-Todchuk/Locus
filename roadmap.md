@@ -27,7 +27,7 @@ Default (`info`) logs only errors, warnings, and stage transitions.
 | Milestone | Goal | Test workspaces unlocked |
 |---|---|---|
 | **M0 — CLI Prototype** | Prove the hard parts work before any UI | WS1 (Locus project) |
-| **M1 — Desktop App** | Usable standalone tool with full ImGui UI | WS1 |
+| **M1 — Desktop App** | Usable standalone tool with wxWidgets UI | WS1 |
 | **M2 — Full Workspace Support** | All 3 test workspaces functional | WS1, WS2 (Wikipedia), WS3 (Docs) |
 | **M3 — Connected** | Remote access, VS Code shim, web frontend | All, from any device |
 
@@ -137,8 +137,8 @@ Proves: agent loop, LLM streaming, tool system, workspace index, LOCUS.md inject
 
 ## M1 — Desktop App
 
-**Goal**: Core runs as a system tray daemon. ImGui/DX11 frontend connects via C++ direct interface.
-Full chat UI, tool approval panels, compaction dialog. VS1 (Locus project) fully usable as a daily driver.
+**Goal**: Core runs as a system tray daemon. wxWidgets frontend connects via C++ direct interface.
+Full chat UI, tool approval panels, compaction dialog. WS1 (Locus project) fully usable as a daily driver.
 
 ### S1.1 — Core / Frontend Architecture
 - [ ] Harden `IFrontend` / `ILocusCore` interfaces based on M0 learnings
@@ -147,52 +147,52 @@ Full chat UI, tool approval panels, compaction dialog. VS1 (Locus project) fully
 - [ ] Session serialisation: save/load full `ConversationHistory` to `.locus/sessions/<timestamp>.json`
 - [ ] Session list API: enumerate sessions for a workspace
 
-### S1.2 — System Tray Daemon
-- [ ] Windows tray icon via `Shell_NotifyIcon` (Win32)
-- [ ] State icons: idle (grey) / indexing (animated) / active session (blue) / error (red)
-- [ ] Right-click context menu: Open UI, Open Settings, Quit
-- [ ] Single instance: named mutex on startup; second launch sends `open_ui` IPC and exits
+### S1.2 — wxWidgets Bootstrap + System Tray
+- [ ] Add `wxwidgets` (with `webview` feature) + `md4c` to `vcpkg.json`
+- [ ] `locus_gui` CMake target (WIN32 exe), links `locus_core` + `wx::core wx::base wx::aui wx::stc wx::webview` + `md4c::md4c-html`
+- [ ] `LocusApp : wxApp` — entry point, owns Workspace + AgentCore lifetime
+- [ ] `LocusFrame : wxFrame` + `wxAuiManager` — dockable 3-pane layout (sidebar, chat, right panel)
+- [ ] `LocusTray : wxTaskBarIcon` — state icons (idle/active/error), right-click menu, minimize-to-tray
+- [ ] `wxSingleInstanceChecker` for single-instance enforcement
+- [ ] `WxFrontend : IFrontend` — thread bridge: all callbacks post `wxThreadEvent` via `wxQueueEvent()` to main thread
 - [ ] Startup on login: write/remove `HKCU\...\Run` key (user opt-in, off by default)
 - [ ] Core shutdown: wait for agent thread to finish current turn, close DB cleanly
+- [ ] Source layout: `src/gui/*.h/cpp`
 
-### S1.3 — ImGui Frontend — Skeleton
-- [ ] DX11 device + swap chain + render target setup
-- [ ] ImGui init with `imgui_impl_dx11` + `imgui_impl_win32`
-- [ ] `ImGuiFrontend : IFrontend` class; all callbacks post events to a `std::queue` read by render thread
-- [ ] Window create / show / hide / close independent of Core lifetime
-- [ ] Basic layout: left sidebar (file tree) + main chat area + right panel (context / settings)
-
-### S1.4 — ImGui Frontend — Chat UI
+### S1.3 — Chat UI + Markdown
+- [ ] `wxWebView` (Edge/WebView2, OS-provided) as chat display panel — HTML/CSS rendering surface, not a bundled browser
+- [ ] `md4c` converts markdown → HTML before injection into WebView
+- [ ] Streaming: `wxTimer` (30–50ms) flushes token buffer via `wxWebView::RunScript()` (DOM append)
+- [ ] Syntax highlighting in code blocks via embedded Prism.js (~20KB)
 - [ ] Scrollable message history: user messages (right-aligned), assistant messages (left-aligned)
-- [ ] Streaming: token buffer drains into last assistant message on each frame
-- [ ] imgui_md: render code blocks, bold, headings in assistant messages
-- [ ] Input box: `InputTextMultiline`, Enter submits, Shift+Enter inserts newline
-- [ ] Context meter: coloured progress bar (green → yellow → red as % fills), always visible in footer
+- [ ] `wxTextCtrl` (`wxTE_MULTILINE | wxTE_PROCESS_ENTER`) for input; Shift+Enter = newline
+- [ ] `wxGauge` + `wxStaticText` in footer for context meter (green → yellow → red)
 - [ ] LOCUS.md token cost shown as `[LOCUS.md: 120 tk]` chip in footer
 
-### S1.5 — Tool Approval UI
-- [ ] Approval panel: slides in above input box when tool call is pending
-- [ ] Shows: tool name badge, formatted args (syntax-highlighted JSON), `preview()` text
-- [ ] Buttons: Approve (Enter), Modify (M), Reject (Esc)
-- [ ] Modify flow: editable JSON args field, confirm with Enter
-- [ ] Post-execution: tool result shown as collapsed `▶ tool_result` block in chat; click to expand
+### S1.4 — Tool Approval UI
+- [ ] `ToolApprovalPanel : wxPanel` — dynamic show/hide between chat and input
+- [ ] `wxStyledTextCtrl` for JSON args display (Scintilla JSON lexer, syntax-colored)
+- [ ] `wxStaticText` for tool name badge + `preview()` text
+- [ ] Buttons: Approve (Enter), Modify (M), Reject (Esc) with `wxAcceleratorTable`
+- [ ] Modify flow: switch args STC to editable, parse JSON on confirm
+- [ ] Post-execution: tool result injected into WebView as collapsible `<details>` block
 
-### S1.6 — Context Compaction UI
-- [ ] `on_compaction_needed` → modal dialog overlaid on chat
-- [ ] Four strategy buttons with description text
+### S1.5 — Context Compaction UI
+- [ ] `on_compaction_needed` → modal `wxDialog` overlaid on chat
+- [ ] Strategy radio buttons with description text
 - [ ] Strategy A: trigger LLM summarisation → show proposed summary in scrollable text area → Confirm / Revise
-- [ ] Strategy C: slider for N turns + live preview of which messages will be removed
-- [ ] All strategies: show before/after token counts before confirming
-- [ ] Manual compaction: button in context meter area
+- [ ] Strategy C: `wxSlider` for N turns + `wxListBox` live preview of which messages will be removed
+- [ ] All strategies: show before/after token counts via `wxStaticText`, updated on strategy change
+- [ ] Manual compaction: button in context meter footer area
 
-### S1.7 — Workspace & Settings UI
-- [ ] Workspace open dialog: native `IFileOpenDialog` (Win32), selects folder
-- [ ] File tree panel: collapsible directory tree, file type icons, click to preview in chat
-- [ ] Index status: two progress bars (FTS, Vec), "Last indexed: X min ago"
-- [ ] Settings panel: endpoint URL, model, temperature, context limit, compaction threshold, exclude patterns
+### S1.6 — Workspace, File Tree & Settings
+- [ ] `wxTreeCtrl` + `wxImageList` in left AUI pane for file tree; populated from `IndexQuery::list_directory()`
+- [ ] Workspace open: `wxDirDialog` (native folder picker)
+- [ ] Index status: `wxStaticText` labels (file counts, last indexed), `wxGauge` for active re-index
+- [ ] Settings panel: `wxTextCtrl` for endpoint URL/model, `wxSpinCtrlDouble` for temperature, `wxSpinCtrl` for context limit, `wxTextCtrl` (multiline) for exclude patterns
 - [ ] Workspace config saved to `.locus/config.json` on change
 
-### S1.8 — Web Retrieval (RAG)
+### S1.7 — Web Retrieval (RAG)
 - [ ] `gumbo` vcpkg dependency added; HTML → plain text extractor (skip script/style/nav/footer)
 - [ ] `web_pages`, `web_fts`, `web_headings` tables in index.db schema
 - [ ] `WebSearchTool`: call configurable search API (Brave default), return titles + URLs + snippets
@@ -248,7 +248,7 @@ Wikipedia (WS2) and personal documents (WS3) work end-to-end.
 - [ ] `ILocusCore::set_edit_context(EditContext)` — stores in Core, associates with current session
 - [ ] Context injected into system prompt when non-empty: `[Editing: path:line — selection]`
 - [ ] User toggle: per-message checkbox "Include edit context" (default: on when context is set)
-- [ ] ImGui: visible "attached context" chip above input showing file + line; click to clear
+- [ ] UI: visible "attached context" chip above input showing file + line; click to clear
 - [ ] Standalone attach: user can right-click a file in the file tree panel → "Attach to context"
 
 ---
@@ -304,7 +304,7 @@ Items from requirements Nice-to-Have — not scheduled yet:
 - Tauri frontend
 - Native mobile app
 - Plugin system for community tools
-- Line-level diff viewer for AI-proposed file changes (ImGui, dtl library)
+- Line-level diff viewer for AI-proposed file changes (wxStyledTextCtrl, dtl library)
 - Voice chat
 - Feeding an image as an inut to LLM
 

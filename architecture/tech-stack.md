@@ -19,19 +19,22 @@
 
 ---
 
-## 2. Frontend — v1: Dear ImGui + DX11
+## 2. Frontend — v1: wxWidgets + wxWebView
 
 **Decided for v1** — deferred until after CLI prototype.
 
-- Immediate mode UI — zero retained state, perfect for a tool app
-- DX11 backend: native Windows, user's home territory from graphics work
-- Markdown rendering: [imgui_md](https://github.com/mekhontsev/imgui_md)
-- Code view with syntax highlight: [ImGuiColorTextEdit](https://github.com/BalazsJako/ImGuiColorTextEdit)
-- Streaming LLM output: append to `std::string` buffer, ImGui renders on next frame
-- Result: ~2–4MB binary, instant startup, no external runtime
+- Native widgets via wxWidgets — proper text selection/copy, system tray, file dialogs, all built-in
+- Chat display: `wxWebView` (Edge/WebView2, OS-provided — not bundled Chromium, not Electron)
+- Markdown rendering: `md4c` (C library) converts markdown → HTML, injected into WebView
+- Code syntax highlighting: Prism.js (~20KB) embedded in WebView's HTML template
+- Streaming LLM output: `wxTimer` flushes token buffer via `wxWebView::RunScript()` (DOM append)
+- Dockable layout: `wxAuiManager` for sidebar + chat + right panel
+- Tool args display: `wxStyledTextCtrl` (Scintilla) with JSON lexer
+- Result: native-looking app, zero external runtime, full text editing capabilities
 
-ImGui connects to Core via the **C++ direct interface** (`IFrontend` / `ILocusCore`
-virtual calls, same process, zero overhead). See [overview.md](overview.md).
+wxWidgets connects to Core via the **C++ direct interface** (`IFrontend` / `ILocusCore`
+virtual calls, same process, zero overhead). Agent thread events are marshalled to the
+UI thread via `wxQueueEvent()` + custom `wxThreadEvent` types. See [overview.md](overview.md).
 
 ---
 
@@ -142,7 +145,7 @@ behind one clean interface now, making future cross-platform support a drop-in.
 - HTTP REST for stateless operations (workspace mgmt, sessions, settings)
 - MIT licensed, vcpkg: `crowcpp-crow`
 
-The C++ ImGui frontend bypasses Crow entirely (direct C++ interface).
+The C++ wxWidgets frontend bypasses Crow entirely (direct C++ interface).
 Crow serves only remote frontends (Tauri, browser, mobile).
 
 ---
@@ -205,7 +208,7 @@ Fits the project philosophy: direct control, no hidden runtime, predictable beha
 Thread layout:
 | Thread | Responsibility |
 |---|---|
-| Main | ImGui render loop (UI thread) — never blocks |
+| Main | wxWidgets event loop (UI thread) — never blocks |
 | Agent | LLM request, SSE streaming, tool dispatch |
 | Indexer (FTS) | File traversal + FTS5 index build/update |
 | Indexer (Vec) | ONNX embedding, sqlite-vec writes (lower priority) |
@@ -257,7 +260,7 @@ See [web-retrieval.md](web-retrieval.md) for the full pipeline design.
 |---|---|---|
 | Language | C++20 | — |
 | Build | CMake + vcpkg | — |
-| Frontend v1 | Dear ImGui + DX11 | `imgui` |
+| Frontend v1 | wxWidgets + wxWebView | `wxwidgets`, `md4c` |
 | Future frontends | Tauri/web, Sciter, WinUI3, browser PWA | — |
 | API server (remote) | Crow | `crowcpp-crow` |
 | Index database | SQLite + FTS5 | `sqlite3` |

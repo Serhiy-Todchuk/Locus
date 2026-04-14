@@ -10,7 +10,7 @@
 Locus Core runs as a **system tray background process** — always on, no visible window.
 Frontends connect via one of two paths:
 
-- **C++ direct** — in-process virtual interface, zero overhead. For the ImGui frontend only.
+- **C++ direct** — in-process virtual interface, zero overhead. For the wxWidgets frontend only.
 - **WebSocket + HTTP** — network API, language-agnostic. For all other frontends.
 
 Both paths are symmetric: the same `IFrontend` / `ILocusCore` concepts apply to both.
@@ -18,7 +18,7 @@ The WebSocket server is an adapter that implements `IFrontend` over the wire.
 
 ```
 ┌──────────────────┐     ┌───────────────────────────────────────────────┐
-│  ImGui / DX11    │     │        Tauri/Web · Mobile · Browser           │
+│  wxWidgets       │     │        Tauri/Web · Mobile · Browser           │
 │  (C++, v1)       │     │            (any language, any device)          │
 │                  │     │                                                │
 │  implements      │     │  connect via WebSocket + HTTP REST             │
@@ -37,7 +37,7 @@ The WebSocket server is an adapter that implements `IFrontend` over the wire.
 │                                                                          │
 │  ┌──────────────────────────────────────────────────────────────────┐   │
 │  │  Frontend Registry                                                │   │
-│  │  - ImGui frontend registered directly (IFrontend* ptr)           │   │
+│  │  - wxWidgets frontend registered directly (IFrontend* ptr)       │   │
 │  │  - WebSocket adapter registered once (fans out to N remote)      │   │
 │  │  - All registered frontends receive the same events              │   │
 │  └───────────────────────────┬──────────────────────────────────────┘   │
@@ -111,10 +111,10 @@ Runtime directory created inside each workspace:
 
 Two connection paths, one symmetric design.
 
-#### C++ Direct Interface (ImGui frontend)
+#### C++ Direct Interface (wxWidgets frontend)
 
 ```cpp
-// Core calls these on every registered frontend (ImGui implements this directly)
+// Core calls these on every registered frontend (wxWidgets implements this directly)
 class IFrontend {
 public:
     virtual void on_token(std::string_view token) = 0;
@@ -128,7 +128,7 @@ public:
                                       int used_pct) = 0;
 };
 
-// Frontends call these into the Core (ImGui calls these directly)
+// Frontends call these into the Core (wxWidgets calls these directly)
 class ILocusCore {
 public:
     virtual void register_frontend(IFrontend* fe) = 0;
@@ -148,8 +148,9 @@ public:
 };
 ```
 
-ImGui lives in the same process as Core. It gets an `ILocusCore*` at startup,
+The wxWidgets frontend lives in the same process as Core. It gets an `ILocusCore*` at startup,
 registers itself as an `IFrontend`, and calls/receives everything with zero overhead.
+Agent thread events are marshalled to the UI thread via `wxQueueEvent()` + custom `wxThreadEvent` types.
 
 #### WebSocket + HTTP (all other frontends)
 
@@ -224,13 +225,13 @@ Frontend responsibilities:          Core responsibilities:
 
 | Frontend | Connection | Overhead |
 |---|---|---|
-| ImGui/DX11 (C++) | `IFrontend` / `ILocusCore` direct | Zero — same process, virtual calls |
+| wxWidgets (C++) | `IFrontend` / `ILocusCore` direct | Zero — same process, virtual calls |
 | Tauri/web | WebSocket + HTTP (via `WebSocketAdapter`) | Minimal — local loopback |
 | Mobile app | WebSocket + HTTP over LAN | Network RTT only |
 | Browser | WebSocket + HTTP over LAN | Network RTT only |
 
 All frontends, regardless of connection type, see the same events and share the same session.
-A Rust+Tauri window and an ImGui window can be open simultaneously on the same session.
+A Rust+Tauri window and a wxWidgets window can be open simultaneously on the same session.
 
 ---
 
@@ -314,7 +315,7 @@ User picks a strategy:
 
 1. **CLI prototype (C++20)** — no UI, no API server. Agent core + index + LLM client.
    Validates architecture before any UI work. Tool approval via y/n prompts.
-2. **API Server + ImGui frontend (C++20)** — add tray daemon + WebSocket server + first real UI.
+2. **API Server + wxWidgets frontend (C++20)** — add tray daemon + WebSocket server + first real UI.
 3. **VS Code shim (v1.5)** — ~200 lines TypeScript, connects to Core API, sends edit context.
 4. **Additional frontends (future)** — Tauri/web, mobile app — all speak the same API.
 

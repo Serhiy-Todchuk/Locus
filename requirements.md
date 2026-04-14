@@ -236,5 +236,5 @@ The user is presented with a compaction dialog and chooses the strategy.
 - [ ] Online model backends (Claude, OpenAI, Gemini)
 - [ ] VS Code extension host
 - [ ] Diff viewer for AI-proposed file changes before accepting
-  <!-- impl note: v1 = line-level diff rendered in ImGui (dtl or similar C++ lib).
+  <!-- impl note: v1 = line-level diff rendered in wxStyledTextCtrl (dtl or similar C++ lib).
        When VS Code shim is active: "open in VS Code diff" button calls `code --diff old new` for free. -->
