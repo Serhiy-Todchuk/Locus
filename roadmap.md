@@ -114,18 +114,18 @@ Proves: agent loop, LLM streaming, tool system, workspace index, LOCUS.md inject
 - [x] Compaction strategy B (drop tool results): strip `tool_result` messages from history
 - [x] Compaction strategy C (drop oldest): remove N oldest turns
 
-### S0.8 — CLI Frontend
-- [ ] `CliFrontend : IFrontend`
+### S0.8 — CLI Frontend ✔
+- [x] `CliFrontend : IFrontend`
   - `on_token()` → `std::cout << token` (no newline, flush)
   - `on_tool_call_pending()` → print tool name + args + preview, prompt `[y]es / [n]o / [e]dit: `
   - `on_tool_result()` → print result display text
   - `on_message_complete()` → print `\n---`
   - `on_context_meter()` → print `[ctx: 3200/8192]` in prompt
-- [ ] `main.cpp`: parse args — `<workspace_path>` (required), `--endpoint`, `--model`, `-verbose`
-- [ ] `-verbose` flag: set spdlog level to `trace`; logs SQL queries, tool call args/results, LLM token stream, index events
-- [ ] Default log level (`info`): logs errors, warnings, stage transitions only
-- [ ] Log file always written to `.locus/locus.log` (rotating, max 10MB × 3 files)
-- [ ] Graceful Ctrl+C shutdown (flush log, close SQLite)
+- [x] `main.cpp`: parse args — `<workspace_path>` (required), `--endpoint`, `--model`, `-verbose`
+- [x] `-verbose` flag: set spdlog level to `trace`; logs SQL queries, tool call args/results, LLM token stream, index events
+- [x] Default log level (`info`): logs errors, warnings, stage transitions only
+- [x] Log file always written to `.locus/locus.log` (rotating, max 10MB × 3 files)
+- [x] Graceful Ctrl+C shutdown (flush log, close SQLite)
 
 ### S0.9 — M0 Validation
 - [ ] End-to-end: open Locus project folder (WS1), ask "where is ITool defined?" → agent searches index, returns correct file + line

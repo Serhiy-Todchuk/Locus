@@ -5,20 +5,33 @@
 #include "tool_registry.h"
 #include "tools.h"
 #include "agent_core.h"
-#include "frontend.h"
+#include "cli_frontend.h"
 
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/sinks/rotating_file_sink.h>
 
+#include <csignal>
 #include <filesystem>
 #include <iostream>
 #include <string>
 #include <vector>
 #include <thread>
 #include <chrono>
+#include <atomic>
 
 namespace fs = std::filesystem;
+
+// ---------------------------------------------------------------------------
+// Globals for signal handling
+// ---------------------------------------------------------------------------
+
+static std::atomic<bool> g_shutdown_requested{false};
+
+static void signal_handler(int /*sig*/)
+{
+    g_shutdown_requested.store(true, std::memory_order_relaxed);
+}
 
 // ---------------------------------------------------------------------------
 // CLI arguments
@@ -69,9 +82,9 @@ static void init_logging(const fs::path& locus_dir, bool verbose)
             3                    // 3 rotating files
         );
 
-        // stderr: always at least info (cleaner console output)
+        // stderr: info by default, trace with -verbose
         stderr_sink->set_level(verbose ? spdlog::level::trace : spdlog::level::info);
-        // file: always trace
+        // file: always trace (full diagnostic detail)
         file_sink->set_level(spdlog::level::trace);
 
         auto logger = std::make_shared<spdlog::logger>(
@@ -98,7 +111,10 @@ int main(int argc, char* argv[])
 {
     CliArgs args = parse_args(argc, argv);
 
-    // Resolve and validate workspace path
+    // Install Ctrl+C handler.
+    std::signal(SIGINT, signal_handler);
+
+    // Resolve and validate workspace path.
     std::error_code ec;
     fs::path workspace_path = fs::absolute(args.workspace_path, ec);
     if (ec || !fs::is_directory(workspace_path)) {
@@ -106,7 +122,7 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    // Ensure .locus/ exists before log init
+    // Ensure .locus/ exists before log init.
     fs::path locus_dir = workspace_path / ".locus";
     fs::create_directories(locus_dir, ec);
     if (ec) {
@@ -117,20 +133,18 @@ int main(int argc, char* argv[])
     init_logging(locus_dir, args.verbose);
 
     spdlog::info("Locus starting");
-    spdlog::info("Workspace : {}", workspace_path.string());
-    if (args.verbose) {
+    spdlog::info("Workspace: {}", workspace_path.string());
+    if (args.verbose)
         spdlog::trace("Verbose logging active");
-    }
 
-    // S0.2: Open workspace (config, DB, file watcher)
     try {
+        // Open workspace: config, DB, file watcher, index.
         locus::Workspace ws(workspace_path);
 
-        if (!ws.locus_md().empty()) {
+        if (!ws.locus_md().empty())
             spdlog::info("LOCUS.md loaded ({} bytes)", ws.locus_md().size());
-        }
 
-        // Drain file watcher events and run incremental index updates
+        // Drain startup file events.
         std::this_thread::sleep_for(std::chrono::milliseconds(300));
         std::vector<locus::FileEvent> events;
         size_t n = ws.file_watcher().drain(events);
@@ -140,79 +154,110 @@ int main(int argc, char* argv[])
         }
 
         auto& st = ws.indexer().stats();
-        spdlog::info("Index stats: {} files ({} text, {} binary), {} symbols, {} headings",
+        spdlog::info("Index: {} files ({} text, {} binary), {} symbols, {} headings",
                      st.files_total, st.files_indexed, st.files_binary,
                      st.symbols_total, st.headings_total);
 
-        spdlog::info("S0.3 complete - FTS5 index operational");
-
-        // S0.5/S0.6: LLM client + tool system
+        // LLM client.
         locus::LLMConfig llm_cfg;
         llm_cfg.base_url = args.endpoint;
         llm_cfg.model    = args.model;
-
         auto llm = locus::create_llm_client(llm_cfg);
 
+        // Tool system.
         locus::ToolRegistry tool_registry;
         locus::register_builtin_tools(tool_registry);
-        spdlog::info("Tool system: {} tools registered", tool_registry.all().size());
+        spdlog::info("Tools: {} registered", tool_registry.all().size());
 
-        // S0.7: Agent core smoke test
+        // Agent core.
         locus::WorkspaceContext ws_ctx{workspace_path, &ws.query()};
         locus::WorkspaceMetadata ws_meta;
-        ws_meta.root = workspace_path;
-        ws_meta.file_count = static_cast<int>(st.files_total);
-        ws_meta.symbol_count = static_cast<int>(st.symbols_total);
+        ws_meta.root          = workspace_path;
+        ws_meta.file_count    = static_cast<int>(st.files_total);
+        ws_meta.symbol_count  = static_cast<int>(st.symbols_total);
         ws_meta.heading_count = static_cast<int>(st.headings_total);
 
         locus::AgentCore agent(*llm, tool_registry, ws_ctx,
                                ws.locus_md(), ws_meta, llm_cfg);
 
-        // Minimal CLI frontend for smoke test: prints tokens, auto-approves tools.
-        struct SmokeFrontend : locus::IFrontend {
-            locus::ILocusCore* core = nullptr;
+        // CLI frontend.
+        locus::CliFrontend cli(agent);
+        agent.register_frontend(&cli);
 
-            void on_token(std::string_view token) override {
-                std::cout << token << std::flush;
-            }
-            void on_tool_call_pending(const locus::ToolCall& call,
-                                      const std::string& preview) override {
-                std::cout << "\n[tool: " << call.tool_name << "] "
-                          << preview << "\n";
-                // Auto-approve for smoke test.
-                if (core)
-                    core->tool_decision(call.id, locus::ToolDecision::approve);
-            }
-            void on_tool_result(const std::string& /*call_id*/,
-                                const std::string& display) override {
-                std::cout << "[result] " << display.substr(0, 200) << "\n";
-            }
-            void on_message_complete() override {
-                std::cout << "\n---\n";
-            }
-            void on_context_meter(int used, int limit) override {
-                spdlog::trace("Context: {}/{} tokens", used, limit);
-            }
-            void on_compaction_needed(int used, int limit) override {
-                std::cout << "[warning] Context at " << used << "/"
-                          << limit << " tokens. Consider compaction.\n";
-            }
-            void on_error(const std::string& msg) override {
-                std::cerr << "[error] " << msg << "\n";
-            }
-        };
+        // REPL.
+        std::cout << "Locus ready. Type a message, or /quit to exit.\n\n";
 
-        SmokeFrontend smoke_fe;
-        smoke_fe.core = &agent;
-        agent.register_frontend(&smoke_fe);
+        while (!g_shutdown_requested.load(std::memory_order_relaxed)) {
+            // Prompt with context meter.
+            std::cout << "[ctx: " << cli.last_used() << "/"
+                      << cli.last_limit() << "] > " << std::flush;
 
-        spdlog::info("S0.7 agent core ready. Sending smoke test message...");
-        agent.send_message("What files are in the root of this workspace? "
-                           "Use the list_directory tool to find out, then summarize.");
+            std::string line;
+            if (!std::getline(std::cin, line))
+                break;  // EOF or closed stdin
 
-        spdlog::info("S0.7 complete - agent core operational");
+            if (g_shutdown_requested.load(std::memory_order_relaxed))
+                break;
 
-        // TODO(S0.8): full CLI frontend loop (stdin read loop)
+            // Trim whitespace.
+            auto start = line.find_first_not_of(" \t\r\n");
+            if (start == std::string::npos)
+                continue;  // empty input
+            line = line.substr(start);
+            auto end = line.find_last_not_of(" \t\r\n");
+            if (end != std::string::npos)
+                line.resize(end + 1);
+
+            // Commands.
+            if (line == "/quit" || line == "/exit" || line == "/q")
+                break;
+
+            if (line == "/compact") {
+                agent.compact_context(locus::CompactionStrategy::drop_tool_results);
+                std::cout << "Compacted: tool results dropped.\n";
+                continue;
+            }
+
+            if (line == "/history") {
+                auto& h = agent.history();
+                std::cout << "Conversation: " << h.size() << " messages, ~"
+                          << h.estimate_tokens() << " tokens\n";
+                for (size_t i = 0; i < h.size(); ++i) {
+                    auto& m = h.messages()[i];
+                    std::cout << "  [" << i << "] "
+                              << locus::to_string(m.role) << ": "
+                              << m.content.substr(0, 80);
+                    if (m.content.size() > 80) std::cout << "...";
+                    std::cout << "\n";
+                }
+                continue;
+            }
+
+            if (line == "/help") {
+                std::cout << "Commands:\n"
+                          << "  /quit     Exit Locus\n"
+                          << "  /compact  Drop tool results to free context\n"
+                          << "  /history  Show conversation summary\n"
+                          << "  /help     Show this help\n"
+                          << "Anything else is sent as a message to the agent.\n";
+                continue;
+            }
+
+            // Drain incremental file events before each turn.
+            events.clear();
+            n = ws.file_watcher().drain(events);
+            if (n > 0) {
+                spdlog::trace("Pre-turn: {} file events, updating index", n);
+                ws.indexer().process_events(events);
+            }
+
+            // Send message to agent (blocks until turn completes).
+            std::cout << "\n";
+            agent.send_message(line);
+            std::cout << "\n";
+        }
+
+        agent.unregister_frontend(&cli);
 
     } catch (const std::exception& ex) {
         spdlog::error("Fatal: {}", ex.what());
