@@ -38,8 +38,8 @@ data into context, and keeps the user in full transparent control of every step.
 
 ## Current Stage
 
-**M0 — CLI Prototype complete.** All stages S0.1–S0.9 are done and verified.
-M1 (Desktop App) is next. See [roadmap.md](roadmap.md) for full status.
+**M1 — Desktop App in progress.** S1.1 (Core/Frontend Architecture) complete.
+S1.2 (wxWidgets Bootstrap + System Tray) is next. See [roadmap.md](roadmap.md) for full status.
 
 ---
 
@@ -128,15 +128,17 @@ Core is a static lib (`locus_core`). Both `locus` (exe) and `locus_tests` link i
 | `src/tools.h/cpp` | All 9 built-in tools + `register_builtin_tools()` factory. | `ReadFileTool`, `WriteFileTool`, `CreateFileTool`, `DeleteFileTool`, `ListDirectoryTool`, `SearchTextTool`, `SearchSymbolsTool`, `GetFileOutlineTool`, `RunCommandTool` |
 | `src/glob_match.h` | Header-only glob pattern matching for exclude patterns. | `glob_match()` |
 | `src/frontend.h` | Frontend/core interfaces (no .cpp — pure abstract + enums). | `IFrontend`, `ILocusCore`, `ToolDecision`, `CompactionStrategy` |
+| `src/frontend_registry.h` | Thread-safe frontend registry with exception-isolated fan-out. Header-only. | `FrontendRegistry` |
 | `src/conversation.h/cpp` | Conversation history with JSON serialization and compaction. | `ConversationHistory` |
 | `src/system_prompt.h/cpp` | Assembles system prompt from base + LOCUS.md + metadata + tools. | `SystemPromptBuilder`, `WorkspaceMetadata` |
-| `src/agent_core.h/cpp` | Agent loop: LLM → stream → tool calls → approval → execute → resume. | `AgentCore` |
+| `src/session_manager.h/cpp` | Save/load/list conversation sessions to `.locus/sessions/`. | `SessionManager`, `SessionInfo` |
+| `src/agent_core.h/cpp` | Agent loop on dedicated thread: LLM → stream → tool calls → approval → execute → resume. | `AgentCore` |
 | `src/frontends/cli_frontend.h/cpp` | Terminal frontend: token streaming, y/n/e tool approval, context meter, compaction prompts. | `CliFrontend` |
 | `src/main.cpp` | CLI entry point. Arg parsing, logging init, REPL loop, Ctrl+C handler. | `CliArgs` |
 
 **Test files** follow `tests/test_<topic>.cpp` — one per subsystem, tagged by stage.
 
-**Data flow**: `main` → `Workspace` (owns `Database`, `FileWatcher`, `Indexer`, `IndexQuery`) → `AgentCore` (owns `ConversationHistory`, bridges `ILLMClient` + `IToolRegistry` + `WorkspaceContext`) → frontends receive events via `IFrontend`.
+**Data flow**: `main` → `Workspace` (owns `Database`, `FileWatcher`, `Indexer`, `IndexQuery`) → `AgentCore` (owns `ConversationHistory`, `SessionManager`, bridges `ILLMClient` + `IToolRegistry` + `WorkspaceContext`) → frontends receive events via `IFrontend` through `FrontendRegistry`.
 
 ---
 

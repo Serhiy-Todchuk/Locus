@@ -24,6 +24,10 @@ class IFrontend {
 public:
     virtual ~IFrontend() = default;
 
+    // Agent has begun processing a user message. Fired before the first LLM
+    // call. Use for busy indicators and input disabling.
+    virtual void on_turn_start() = 0;
+
     // Streamed text token from LLM.
     virtual void on_token(std::string_view token) = 0;
 
@@ -37,14 +41,18 @@ public:
     virtual void on_tool_result(const std::string& call_id,
                                 const std::string& display) = 0;
 
-    // LLM finished its response (no more tokens or tool calls for this turn).
-    virtual void on_message_complete() = 0;
+    // Agent turn complete (no more tokens or tool calls). Fired once per
+    // send_message, after all LLM round-trips finish. Pair with on_turn_start.
+    virtual void on_turn_complete() = 0;
 
     // Context window usage update.
     virtual void on_context_meter(int used_tokens, int limit) = 0;
 
     // Context is critically full. Frontend should offer compaction options.
     virtual void on_compaction_needed(int used_tokens, int limit) = 0;
+
+    // Conversation was reset (history cleared, system prompt re-seeded).
+    virtual void on_session_reset() = 0;
 
     // Non-fatal error from the agent (LLM error, unknown tool, etc.).
     virtual void on_error(const std::string& message) = 0;
@@ -75,6 +83,21 @@ public:
 
     // Reset conversation: clear history, re-seed system prompt, start fresh.
     virtual void reset_conversation() = 0;
+
+    // Save the current conversation to a session file. Returns session ID.
+    virtual std::string save_session() = 0;
+
+    // Load a previously saved session, replacing current conversation.
+    virtual void load_session(const std::string& session_id) = 0;
+
+    // True while the agent is processing a turn (between on_turn_start and
+    // on_turn_complete). Thread-safe.
+    virtual bool is_busy() const = 0;
+
+    // Request cancellation of the current turn. The agent will stop after
+    // the current LLM call or tool execution finishes (not instant).
+    // No-op if not busy.
+    virtual void cancel_turn() = 0;
 };
 
 } // namespace locus

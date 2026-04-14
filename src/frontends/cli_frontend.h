@@ -7,21 +7,23 @@
 namespace locus {
 
 // CLI frontend: renders the agent conversation in a terminal.
-// All callbacks fire on the agent thread (the thread that called send_message).
-// Tool approval reads from stdin, blocking the agent until the user responds.
+// All callbacks fire on the agent thread. Tool approval reads from stdin,
+// blocking the agent until the user responds.
 class CliFrontend : public IFrontend {
 public:
     // core pointer is needed so on_tool_call_pending can call tool_decision().
     explicit CliFrontend(ILocusCore& core);
 
+    void on_turn_start() override;
     void on_token(std::string_view token) override;
     void on_tool_call_pending(const ToolCall& call,
                               const std::string& preview) override;
     void on_tool_result(const std::string& call_id,
                         const std::string& display) override;
-    void on_message_complete() override;
+    void on_turn_complete() override;
     void on_context_meter(int used_tokens, int limit) override;
     void on_compaction_needed(int used_tokens, int limit) override;
+    void on_session_reset() override;
     void on_error(const std::string& message) override;
 
     // Last context meter values, for displaying in the input prompt.

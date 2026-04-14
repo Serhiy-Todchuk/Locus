@@ -6,6 +6,7 @@ add_executable(locus_tests
     test_llm_client.cpp
     test_tools.cpp
     test_agent_core.cpp
+    test_s1_1.cpp
 )
 
 target_link_libraries(locus_tests PRIVATE

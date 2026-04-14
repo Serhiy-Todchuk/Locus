@@ -160,6 +160,7 @@ add_library(locus_core STATIC
     src/conversation.cpp
     src/system_prompt.cpp
     src/agent_core.cpp
+    src/session_manager.cpp
     src/frontends/cli_frontend.cpp
 )
 

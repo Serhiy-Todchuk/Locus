@@ -140,12 +140,12 @@ Proves: agent loop, LLM streaming, tool system, workspace index, LOCUS.md inject
 **Goal**: Core runs as a system tray daemon. wxWidgets frontend connects via C++ direct interface.
 Full chat UI, tool approval panels, compaction dialog. WS1 (Locus project) fully usable as a daily driver.
 
-### S1.1 — Core / Frontend Architecture
-- [ ] Harden `IFrontend` / `ILocusCore` interfaces based on M0 learnings
-- [ ] `FrontendRegistry`: thread-safe register/unregister, fan-out events to all registered frontends
-- [ ] Promote Agent Core to run on its own `std::thread`; all `IFrontend` callbacks dispatched from agent thread
-- [ ] Session serialisation: save/load full `ConversationHistory` to `.locus/sessions/<timestamp>.json`
-- [ ] Session list API: enumerate sessions for a workspace
+### S1.1 — Core / Frontend Architecture ✔
+- [x] Harden `IFrontend` / `ILocusCore` interfaces based on M0 learnings
+- [x] `FrontendRegistry`: thread-safe register/unregister, fan-out events to all registered frontends
+- [x] Promote Agent Core to run on its own `std::thread`; all `IFrontend` callbacks dispatched from agent thread
+- [x] Session serialisation: save/load full `ConversationHistory` to `.locus/sessions/<timestamp>.json`
+- [x] Session list API: enumerate sessions for a workspace
 
 ### S1.2 — wxWidgets Bootstrap + System Tray
 - [ ] Add `wxwidgets` (with `webview` feature) + `md4c` to `vcpkg.json`
@@ -170,6 +170,7 @@ Full chat UI, tool approval panels, compaction dialog. WS1 (Locus project) fully
 - [ ] LOCUS.md token cost shown as `[LOCUS.md: 120 tk]` chip in footer
 
 ### S1.4 — Tool Approval UI
+- [ ] Add `ask_user` tool
 - [ ] `ToolApprovalPanel : wxPanel` — dynamic show/hide between chat and input
 - [ ] `wxStyledTextCtrl` for JSON args display (Scintilla JSON lexer, syntax-colored)
 - [ ] `wxStaticText` for tool name badge + `preview()` text

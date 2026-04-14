@@ -12,11 +12,13 @@ AgentCore::AgentCore(ILLMClient& llm,
                      const WorkspaceContext& ws_context,
                      const std::string& locus_md,
                      const WorkspaceMetadata& ws_meta,
-                     const LLMConfig& llm_config)
+                     const LLMConfig& llm_config,
+                     const std::filesystem::path& sessions_dir)
     : llm_(llm)
     , tools_(tools)
     , ws_context_(ws_context)
     , llm_config_(llm_config)
+    , sessions_(sessions_dir)
 {
     system_prompt_ = SystemPromptBuilder::build(locus_md, ws_meta, tools);
 
@@ -28,37 +30,147 @@ AgentCore::AgentCore(ILLMClient& llm,
     history_.add({MessageRole::system, system_prompt_});
 }
 
+AgentCore::~AgentCore()
+{
+    stop();
+}
+
+// -- Start / Stop -------------------------------------------------------------
+
+void AgentCore::start()
+{
+    if (running_.load())
+        return;
+
+    running_.store(true);
+    agent_thread_ = std::thread(&AgentCore::agent_thread_func, this);
+    spdlog::info("AgentCore: agent thread started");
+}
+
+void AgentCore::stop()
+{
+    if (!running_.load())
+        return;
+
+    running_.store(false);
+    cancel_requested_.store(true);
+
+    // Wake the agent thread so it can exit.
+    queue_cv_.notify_one();
+    // Also wake decision wait in case it's blocked on tool approval.
+    decision_cv_.notify_one();
+
+    if (agent_thread_.joinable())
+        agent_thread_.join();
+
+    spdlog::info("AgentCore: agent thread stopped");
+}
+
+// -- Agent thread -------------------------------------------------------------
+
+void AgentCore::agent_thread_func()
+{
+    spdlog::trace("AgentCore: agent thread running");
+
+    while (running_.load()) {
+        std::string message;
+
+        {
+            std::unique_lock lock(queue_mutex_);
+            queue_cv_.wait(lock, [&] {
+                return !message_queue_.empty() || !running_.load();
+            });
+
+            if (!running_.load())
+                break;
+
+            message = std::move(message_queue_.front());
+            message_queue_.pop();
+        }
+
+        process_message(message);
+
+        // Signal sync waiters that the turn is done.
+        {
+            std::lock_guard lock(sync_mutex_);
+            sync_turn_done_ = true;
+        }
+        sync_cv_.notify_all();
+    }
+
+    spdlog::trace("AgentCore: agent thread exiting");
+}
+
 // -- Frontend registration ----------------------------------------------------
 
 void AgentCore::register_frontend(IFrontend* fe)
 {
-    std::lock_guard lock(frontends_mutex_);
-    frontends_.push_back(fe);
-    spdlog::trace("AgentCore: frontend registered ({} total)", frontends_.size());
+    frontends_.register_frontend(fe);
 }
 
 void AgentCore::unregister_frontend(IFrontend* fe)
 {
-    std::lock_guard lock(frontends_mutex_);
-    frontends_.erase(std::remove(frontends_.begin(), frontends_.end(), fe),
-                     frontends_.end());
-    spdlog::trace("AgentCore: frontend unregistered ({} remain)", frontends_.size());
+    frontends_.unregister_frontend(fe);
 }
 
-// -- send_message (main entry point) ------------------------------------------
+// -- send_message (non-blocking) ----------------------------------------------
 
 void AgentCore::send_message(const std::string& content)
 {
-    spdlog::info("AgentCore: user message ({} chars)", content.size());
+    spdlog::info("AgentCore: queuing user message ({} chars)", content.size());
+
+    {
+        std::lock_guard lock(queue_mutex_);
+        message_queue_.push(content);
+    }
+    queue_cv_.notify_one();
+}
+
+// -- send_message_sync (blocking, for CLI) ------------------------------------
+
+void AgentCore::send_message_sync(const std::string& content)
+{
+    {
+        std::lock_guard lock(sync_mutex_);
+        sync_turn_done_ = false;
+    }
+
+    send_message(content);
+
+    std::unique_lock lock(sync_mutex_);
+    sync_cv_.wait(lock, [&] { return sync_turn_done_; });
+}
+
+// -- process_message (runs on agent thread) -----------------------------------
+
+void AgentCore::process_message(const std::string& content)
+{
+    spdlog::info("AgentCore: processing user message ({} chars)", content.size());
+
+    busy_.store(true);
+    cancel_requested_.store(false);
+
+    frontends_.broadcast([](IFrontend& fe) { fe.on_turn_start(); });
 
     history_.add({MessageRole::user, content});
-    broadcast_context_meter();
+
+    frontends_.broadcast([&](IFrontend& fe) {
+        fe.on_context_meter(current_token_count(), llm_config_.context_limit);
+    });
 
     // Agent loop: call LLM, handle tool calls, repeat until text-only response.
     int round = 0;
     static constexpr int k_max_rounds = 20;
 
     while (round < k_max_rounds) {
+        if (cancel_requested_.load()) {
+            spdlog::info("AgentCore: turn cancelled by user");
+            frontends_.broadcast([](IFrontend& fe) {
+                fe.on_error("Turn cancelled.");
+            });
+            break;
+        }
+
         ++round;
         spdlog::trace("AgentCore: LLM round {}", round);
 
@@ -66,7 +178,10 @@ void AgentCore::send_message(const std::string& content)
             break;
 
         bool has_tool_calls = run_llm_step();
-        broadcast_context_meter();
+
+        frontends_.broadcast([&](IFrontend& fe) {
+            fe.on_context_meter(current_token_count(), llm_config_.context_limit);
+        });
 
         if (!has_tool_calls)
             break;
@@ -74,10 +189,30 @@ void AgentCore::send_message(const std::string& content)
 
     if (round >= k_max_rounds) {
         spdlog::warn("AgentCore: hit max round limit ({})", k_max_rounds);
-        broadcast_error("Agent reached the maximum number of tool call rounds.");
+        frontends_.broadcast([](IFrontend& fe) {
+            fe.on_error("Agent reached the maximum number of tool call rounds.");
+        });
     }
 
-    broadcast_message_complete();
+    frontends_.broadcast([](IFrontend& fe) { fe.on_turn_complete(); });
+    busy_.store(false);
+}
+
+// -- is_busy / cancel_turn ----------------------------------------------------
+
+bool AgentCore::is_busy() const
+{
+    return busy_.load();
+}
+
+void AgentCore::cancel_turn()
+{
+    if (busy_.load()) {
+        cancel_requested_.store(true);
+        // Wake decision wait so we don't hang on tool approval.
+        decision_cv_.notify_one();
+        spdlog::info("AgentCore: cancellation requested");
+    }
 }
 
 // -- tool_decision ------------------------------------------------------------
@@ -114,7 +249,10 @@ void AgentCore::compact_context(CompactionStrategy strategy, int n)
     int after = history_.estimate_tokens();
     spdlog::info("AgentCore: compaction freed ~{} tokens ({} -> {})",
                  before - after, before, after);
-    broadcast_context_meter();
+
+    frontends_.broadcast([&](IFrontend& fe) {
+        fe.on_context_meter(current_token_count(), llm_config_.context_limit);
+    });
 }
 
 // -- reset_conversation -------------------------------------------------------
@@ -125,7 +263,33 @@ void AgentCore::reset_conversation()
     history_.add({MessageRole::system, system_prompt_});
     last_server_total_tokens_ = 0;
     spdlog::info("AgentCore: conversation reset");
-    broadcast_context_meter();
+
+    frontends_.broadcast([&](IFrontend& fe) {
+        fe.on_context_meter(current_token_count(), llm_config_.context_limit);
+    });
+    frontends_.broadcast([](IFrontend& fe) { fe.on_session_reset(); });
+}
+
+// -- save_session / load_session -----------------------------------------------
+
+std::string AgentCore::save_session()
+{
+    auto id = sessions_.save(history_);
+    spdlog::info("AgentCore: session saved as '{}'", id);
+    return id;
+}
+
+void AgentCore::load_session(const std::string& session_id)
+{
+    history_ = sessions_.load(session_id);
+    last_server_total_tokens_ = 0;
+    spdlog::info("AgentCore: loaded session '{}' ({} messages)",
+                 session_id, history_.size());
+
+    frontends_.broadcast([&](IFrontend& fe) {
+        fe.on_context_meter(current_token_count(), llm_config_.context_limit);
+    });
+    frontends_.broadcast([](IFrontend& fe) { fe.on_session_reset(); });
 }
 
 // -- run_llm_step -------------------------------------------------------------
@@ -143,7 +307,7 @@ bool AgentCore::run_llm_step()
         /* on_token */
         [&](const std::string& token) {
             accumulated_text += token;
-            broadcast_token(token);
+            frontends_.broadcast([&](IFrontend& fe) { fe.on_token(token); });
         },
         /* on_tool_calls */
         [&](const std::vector<ToolCallRequest>& calls) {
@@ -158,7 +322,7 @@ bool AgentCore::run_llm_step()
         /* on_error */
         [&](const std::string& err) {
             had_error = true;
-            broadcast_error(err);
+            frontends_.broadcast([&](IFrontend& fe) { fe.on_error(err); });
         },
         /* on_usage */
         [&](const CompletionUsage& u) {
@@ -183,18 +347,24 @@ bool AgentCore::run_llm_step()
 
     // Process each tool call.
     for (auto& tc_req : tool_call_requests) {
+        if (cancel_requested_.load()) {
+            spdlog::info("AgentCore: skipping remaining tool calls (cancelled)");
+            break;
+        }
+
         auto call = ToolRegistry::parse_tool_call(tc_req.id, tc_req.name, tc_req.arguments);
         auto* tool = tools_.find(call.tool_name);
 
         if (!tool) {
             spdlog::warn("AgentCore: unknown tool '{}'", call.tool_name);
-            // Inject error result so LLM knows the call failed.
             ChatMessage err_result;
             err_result.role = MessageRole::tool;
             err_result.tool_call_id = call.id;
             err_result.content = "Error: unknown tool '" + call.tool_name + "'";
             history_.add(std::move(err_result));
-            broadcast_error("Unknown tool: " + call.tool_name);
+            frontends_.broadcast([&](IFrontend& fe) {
+                fe.on_error("Unknown tool: " + call.tool_name);
+            });
             continue;
         }
 
@@ -214,16 +384,33 @@ void AgentCore::process_tool_call(const ToolCall& call, ITool* tool)
     ToolCall effective_call = call;
 
     if (tool->approval_policy() == "auto") {
-        // Auto-approve: execute immediately.
         spdlog::trace("AgentCore: auto-approve '{}'", call.tool_name);
     } else {
         // Needs user approval.
         std::string preview = tool->preview(call);
-        broadcast_tool_call_pending(call, preview);
+        frontends_.broadcast([&](IFrontend& fe) {
+            fe.on_tool_call_pending(call, preview);
+        });
 
-        // Wait for decision.
+        // Wait for decision (or cancellation).
         std::unique_lock lock(decision_mutex_);
-        decision_cv_.wait(lock, [&] { return pending_decision_.has_value(); });
+        decision_cv_.wait(lock, [&] {
+            return pending_decision_.has_value() || cancel_requested_.load();
+        });
+
+        if (cancel_requested_.load() && !pending_decision_.has_value()) {
+            // Cancelled while waiting for approval — treat as reject.
+            lock.unlock();
+            ChatMessage reject_result;
+            reject_result.role = MessageRole::tool;
+            reject_result.tool_call_id = call.id;
+            reject_result.content = "Tool call cancelled.";
+            history_.add(std::move(reject_result));
+            frontends_.broadcast([&](IFrontend& fe) {
+                fe.on_tool_result(call.id, "[cancelled]");
+            });
+            return;
+        }
 
         ToolDecision decision = *pending_decision_;
         nlohmann::json mod_args = pending_modified_args_;
@@ -238,7 +425,9 @@ void AgentCore::process_tool_call(const ToolCall& call, ITool* tool)
             reject_result.tool_call_id = call.id;
             reject_result.content = "Tool call rejected by user.";
             history_.add(std::move(reject_result));
-            broadcast_tool_result(call.id, "[rejected]");
+            frontends_.broadcast([&](IFrontend& fe) {
+                fe.on_tool_result(call.id, "[rejected]");
+            });
             return;
         }
 
@@ -262,7 +451,9 @@ void AgentCore::process_tool_call(const ToolCall& call, ITool* tool)
     tool_msg.content = result.content;
     history_.add(std::move(tool_msg));
 
-    broadcast_tool_result(call.id, result.display);
+    frontends_.broadcast([&](IFrontend& fe) {
+        fe.on_tool_result(call.id, result.display);
+    });
 }
 
 // -- build_tool_schemas -------------------------------------------------------
@@ -283,63 +474,6 @@ std::vector<ToolSchema> AgentCore::build_tool_schemas() const
     }
 
     return schemas;
-}
-
-// -- Broadcast helpers --------------------------------------------------------
-
-void AgentCore::broadcast_token(std::string_view token)
-{
-    std::lock_guard lock(frontends_mutex_);
-    for (auto* fe : frontends_)
-        fe->on_token(token);
-}
-
-void AgentCore::broadcast_tool_call_pending(const ToolCall& call,
-                                            const std::string& preview)
-{
-    std::lock_guard lock(frontends_mutex_);
-    for (auto* fe : frontends_)
-        fe->on_tool_call_pending(call, preview);
-}
-
-void AgentCore::broadcast_tool_result(const std::string& call_id,
-                                      const std::string& display)
-{
-    std::lock_guard lock(frontends_mutex_);
-    for (auto* fe : frontends_)
-        fe->on_tool_result(call_id, display);
-}
-
-void AgentCore::broadcast_message_complete()
-{
-    std::lock_guard lock(frontends_mutex_);
-    for (auto* fe : frontends_)
-        fe->on_message_complete();
-}
-
-void AgentCore::broadcast_context_meter()
-{
-    int used = current_token_count();
-    int limit = llm_config_.context_limit;
-    std::lock_guard lock(frontends_mutex_);
-    for (auto* fe : frontends_)
-        fe->on_context_meter(used, limit);
-}
-
-void AgentCore::broadcast_compaction_needed()
-{
-    int used = current_token_count();
-    int limit = llm_config_.context_limit;
-    std::lock_guard lock(frontends_mutex_);
-    for (auto* fe : frontends_)
-        fe->on_compaction_needed(used, limit);
-}
-
-void AgentCore::broadcast_error(const std::string& msg)
-{
-    std::lock_guard lock(frontends_mutex_);
-    for (auto* fe : frontends_)
-        fe->on_error(msg);
 }
 
 // -- Token count --------------------------------------------------------------
@@ -363,15 +497,18 @@ bool AgentCore::check_context_overflow()
     if (ratio >= 1.0) {
         spdlog::warn("AgentCore: context FULL ({}/{} tokens, {:.0f}%)",
                      used, limit, ratio * 100);
-        broadcast_compaction_needed();
+        frontends_.broadcast([&](IFrontend& fe) {
+            fe.on_compaction_needed(used, limit);
+        });
         return true;
     }
 
     if (ratio >= k_compaction_threshold) {
         spdlog::warn("AgentCore: context at {:.0f}% ({}/{} tokens)",
                      ratio * 100, used, limit);
-        broadcast_compaction_needed();
-        // Don't stop — let the LLM try, but warn.
+        frontends_.broadcast([&](IFrontend& fe) {
+            fe.on_compaction_needed(used, limit);
+        });
     }
 
     return false;
