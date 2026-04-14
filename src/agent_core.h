@@ -2,14 +2,20 @@
 
 #include "conversation.h"
 #include "frontend.h"
+#include "frontend_registry.h"
 #include "llm_client.h"
+#include "session_manager.h"
 #include "system_prompt.h"
 #include "tool.h"
 
+#include <atomic>
 #include <condition_variable>
+#include <functional>
 #include <mutex>
 #include <optional>
+#include <queue>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace locus {
@@ -18,15 +24,13 @@ namespace locus {
 //   build prompt -> call LLM -> stream tokens -> detect tool calls ->
 //   pause for approval -> execute -> inject result -> resume
 //
-// Threading: send_message() blocks the calling thread until the full turn
-// completes (including all tool call round-trips). Callbacks (on_token, etc.)
-// fire on the calling thread. tool_decision() may be called from any thread
-// (it signals the agent loop via condition variable).
+// Threading model (S1.1):
+//   The agent loop runs on a dedicated thread. send_message() is non-blocking:
+//   it enqueues the message and returns immediately. All IFrontend callbacks
+//   fire on the agent thread. tool_decision() may be called from any thread.
 //
-// For S0.7 CLI: main thread calls send_message(), which calls
-// on_tool_call_pending() synchronously. The CLI frontend reads stdin in that
-// callback and calls tool_decision() before returning, so the loop continues
-// on the same thread without actual multi-thread synchronization.
+// For CLI compatibility, send_message_sync() blocks the caller until the
+// turn completes (same as the M0 behavior).
 
 class AgentCore : public ILocusCore {
 public:
@@ -35,9 +39,10 @@ public:
               const WorkspaceContext& ws_context,
               const std::string& locus_md,
               const WorkspaceMetadata& ws_meta,
-              const LLMConfig& llm_config);
+              const LLMConfig& llm_config,
+              const std::filesystem::path& sessions_dir);
 
-    ~AgentCore() override = default;
+    ~AgentCore() override;
 
     AgentCore(const AgentCore&) = delete;
     AgentCore& operator=(const AgentCore&) = delete;
@@ -47,8 +52,11 @@ public:
     void register_frontend(IFrontend* fe) override;
     void unregister_frontend(IFrontend* fe) override;
 
-    // Blocks until the turn completes (text-only response from LLM).
+    // Non-blocking: enqueues message, returns immediately.
     void send_message(const std::string& content) override;
+
+    // Blocking: waits until the turn completes. Used by CLI frontend.
+    void send_message_sync(const std::string& content);
 
     void tool_decision(const std::string& call_id,
                        ToolDecision decision,
@@ -57,12 +65,32 @@ public:
     void compact_context(CompactionStrategy strategy, int n = 0) override;
     void reset_conversation() override;
 
+    std::string save_session() override;
+    void load_session(const std::string& session_id) override;
+
+    bool is_busy() const override;
+    void cancel_turn() override;
+
+    // Direct access to session manager for listing etc.
+    SessionManager& sessions() { return sessions_; }
+
     // -- Accessors ------------------------------------------------------------
 
     const ConversationHistory& history() const { return history_; }
     int context_limit() const { return llm_config_.context_limit; }
 
+    // Start/stop the agent thread. Must be called after construction.
+    // stop() waits for the current turn to finish before returning.
+    void start();
+    void stop();
+
 private:
+    // Agent thread entry point: drains the message queue.
+    void agent_thread_func();
+
+    // Process a single user message (runs on agent thread).
+    void process_message(const std::string& content);
+
     // Run one LLM call, stream tokens, detect tool calls.
     // Returns true if tool calls were made (loop should continue).
     bool run_llm_step();
@@ -72,15 +100,6 @@ private:
 
     // Build the OpenAI tools array from the registry.
     std::vector<ToolSchema> build_tool_schemas() const;
-
-    // Broadcast helpers.
-    void broadcast_token(std::string_view token);
-    void broadcast_tool_call_pending(const ToolCall& call, const std::string& preview);
-    void broadcast_tool_result(const std::string& call_id, const std::string& display);
-    void broadcast_message_complete();
-    void broadcast_context_meter();
-    void broadcast_compaction_needed();
-    void broadcast_error(const std::string& msg);
 
     // Check if adding est_new_tokens would overflow context. If at hard limit,
     // fires on_compaction_needed and returns true (caller should stop).
@@ -101,14 +120,28 @@ private:
     // Last server-reported token usage (0 if server doesn't report it).
     int last_server_total_tokens_ = 0;
 
-    std::vector<IFrontend*> frontends_;
-    std::mutex              frontends_mutex_;
+    FrontendRegistry frontends_;
+    SessionManager   sessions_;
 
     // Tool decision synchronization.
     std::mutex              decision_mutex_;
     std::condition_variable decision_cv_;
     std::optional<ToolDecision> pending_decision_;
     nlohmann::json          pending_modified_args_;
+
+    // Agent thread and message queue.
+    std::thread              agent_thread_;
+    std::mutex               queue_mutex_;
+    std::condition_variable  queue_cv_;
+    std::queue<std::string>  message_queue_;
+    std::atomic<bool>        running_{false};
+    std::atomic<bool>        busy_{false};
+    std::atomic<bool>        cancel_requested_{false};
+
+    // Sync-mode: signaled when a turn completes.
+    std::mutex               sync_mutex_;
+    std::condition_variable  sync_cv_;
+    bool                     sync_turn_done_ = false;
 
     // Compaction threshold (fraction of context_limit).
     static constexpr double k_compaction_threshold = 0.80;

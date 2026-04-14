@@ -65,9 +65,19 @@ void CliFrontend::on_tool_result(const std::string& /*call_id*/,
     }
 }
 
-void CliFrontend::on_message_complete()
+void CliFrontend::on_turn_start()
+{
+    // Nothing to do in CLI — the prompt already indicates we're waiting.
+}
+
+void CliFrontend::on_turn_complete()
 {
     std::cout << "\n---\n";
+}
+
+void CliFrontend::on_session_reset()
+{
+    // Handled by main.cpp which prints its own message.
 }
 
 void CliFrontend::on_context_meter(int used_tokens, int limit)

@@ -215,12 +215,16 @@ int main(int argc, char* argv[])
         ws_meta.symbol_count  = static_cast<int>(st.symbols_total);
         ws_meta.heading_count = static_cast<int>(st.headings_total);
 
+        fs::path sessions_dir = locus_dir / "sessions";
         locus::AgentCore agent(*llm, tool_registry, ws_ctx,
-                               ws.locus_md(), ws_meta, llm_cfg);
+                               ws.locus_md(), ws_meta, llm_cfg, sessions_dir);
 
         // CLI frontend.
         locus::CliFrontend cli(agent);
         agent.register_frontend(&cli);
+
+        // Start the agent thread.
+        agent.start();
 
         // REPL.
         std::cout << "Locus ready. Type a message, or /quit to exit.\n\n";
@@ -277,13 +281,57 @@ int main(int argc, char* argv[])
                 continue;
             }
 
+            if (line == "/save") {
+                auto id = agent.save_session();
+                std::cout << "Session saved: " << id << "\n";
+                continue;
+            }
+
+            if (line == "/sessions") {
+                auto sessions = agent.sessions().list();
+                if (sessions.empty()) {
+                    std::cout << "No saved sessions.\n";
+                } else {
+                    std::cout << "Saved sessions:\n";
+                    for (auto& s : sessions) {
+                        std::cout << "  " << s.id
+                                  << "  (" << s.message_count << " msgs, ~"
+                                  << s.estimated_tokens << " tk)";
+                        if (!s.first_user_message.empty())
+                            std::cout << "  \"" << s.first_user_message << "\"";
+                        std::cout << "\n";
+                    }
+                }
+                continue;
+            }
+
+            if (line.rfind("/load ", 0) == 0) {
+                auto id = line.substr(6);
+                // Trim whitespace.
+                auto s = id.find_first_not_of(" \t");
+                if (s != std::string::npos) id = id.substr(s);
+                auto e = id.find_last_not_of(" \t");
+                if (e != std::string::npos) id.resize(e + 1);
+
+                try {
+                    agent.load_session(id);
+                    std::cout << "Session loaded: " << id << "\n";
+                } catch (const std::exception& ex) {
+                    std::cerr << "Error: " << ex.what() << "\n";
+                }
+                continue;
+            }
+
             if (line == "/help") {
                 std::cout << "Commands:\n"
-                          << "  /quit     Exit Locus\n"
-                          << "  /reset    Start a fresh conversation\n"
-                          << "  /compact  Drop tool results to free context\n"
-                          << "  /history  Show conversation summary\n"
-                          << "  /help     Show this help\n"
+                          << "  /quit       Exit Locus\n"
+                          << "  /reset      Start a fresh conversation\n"
+                          << "  /compact    Drop tool results to free context\n"
+                          << "  /history    Show conversation summary\n"
+                          << "  /save       Save current session\n"
+                          << "  /sessions   List saved sessions\n"
+                          << "  /load <id>  Load a saved session\n"
+                          << "  /help       Show this help\n"
                           << "Anything else is sent as a message to the agent.\n";
                 continue;
             }
@@ -298,10 +346,11 @@ int main(int argc, char* argv[])
 
             // Send message to agent (blocks until turn completes).
             std::cout << "\n";
-            agent.send_message(line);
+            agent.send_message_sync(line);
             std::cout << "\n";
         }
 
+        agent.stop();
         agent.unregister_frontend(&cli);
 
     } catch (const std::exception& ex) {
