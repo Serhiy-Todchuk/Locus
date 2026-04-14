@@ -63,7 +63,15 @@
       "Bash(ctest -C Debug --output-on-failure -L s0.7)",
       "Bash(tests/Debug/locus_tests.exe \"ListDirectoryTool: returns indexed files at root with '.'\" -v)",
       "Bash(\"tests/Debug/locus_tests.exe\" \"ListDirectoryTool: returns indexed files at root with '.'\" --verbosity high)",
-      "Bash(\"tests/Debug/locus_tests.exe\" \"ListDirectoryTool: returns indexed files at root with '.'\")"
+      "Bash(\"tests/Debug/locus_tests.exe\" \"ListDirectoryTool: returns indexed files at root with '.'\")",
+      "Bash(curl -s http://127.0.0.1:1234/v1/models)",
+      "Bash(curl -s http://127.0.0.1:1234/v1/models/google/gemma-4-26b-a4b)",
+      "Bash(curl -s -X POST http://127.0.0.1:1234/v1/chat/completions -H \"Content-Type: application/json\" -d '{\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"max_tokens\":1,\"stream\":false}')",
+      "Bash(python -m json.tool)",
+      "Bash(curl -s http://127.0.0.1:1234/api/v0/models)",
+      "Bash(curl -s -N -X POST http://127.0.0.1:1234/v1/chat/completions -H \"Content-Type: application/json\" -d '{\"messages\":[{\"role\":\"user\",\"content\":\"say hi\"}],\"max_tokens\":5,\"stream\":true}')",
+      "Bash(curl -s -N -X POST http://127.0.0.1:1234/v1/chat/completions -H \"Content-Type: application/json\" -d '{\"messages\":[{\"role\":\"user\",\"content\":\"say hi\"}],\"max_tokens\":5,\"stream\":true,\"stream_options\":{\"include_usage\":true}}')",
+      "Bash(curl -s https://raw.githubusercontent.com/ollama/ollama/main/docs/api.md)"
     ]
   }
 }

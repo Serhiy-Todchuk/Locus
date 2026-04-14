@@ -41,7 +41,7 @@ struct CliArgs {
     std::string workspace_path;
     std::string endpoint = "http://127.0.0.1:1234";
     std::string model;   // empty = server default
-    int         context  = 8192;
+    int         context  = 0;     // 0 = auto-detect from server, fallback 8192
     bool        verbose  = false;
     bool        reindex  = false;
 };
@@ -184,6 +184,24 @@ int main(int argc, char* argv[])
         llm_cfg.context_limit = args.context;
         auto llm = locus::create_llm_client(llm_cfg);
 
+        // Query server for model info (context length, model name).
+        auto model_info = llm->query_model_info();
+        if (!model_info.id.empty() && llm_cfg.model.empty()) {
+            llm_cfg.model = model_info.id;
+            spdlog::info("Model auto-detected: {}", llm_cfg.model);
+        }
+        if (args.context > 0) {
+            // Explicit CLI override takes priority.
+            llm_cfg.context_limit = args.context;
+            spdlog::info("Context limit (from --context): {}", llm_cfg.context_limit);
+        } else if (model_info.context_length > 0) {
+            llm_cfg.context_limit = model_info.context_length;
+            spdlog::info("Context limit (from server): {}", llm_cfg.context_limit);
+        } else {
+            llm_cfg.context_limit = 8192;  // fallback default
+            spdlog::info("Context limit (default): {}", llm_cfg.context_limit);
+        }
+
         // Tool system.
         locus::ToolRegistry tool_registry;
         locus::register_builtin_tools(tool_registry);
@@ -232,6 +250,12 @@ int main(int argc, char* argv[])
             if (line == "/quit" || line == "/exit" || line == "/q")
                 break;
 
+            if (line == "/reset") {
+                agent.reset_conversation();
+                std::cout << "Conversation reset.\n";
+                continue;
+            }
+
             if (line == "/compact") {
                 agent.compact_context(locus::CompactionStrategy::drop_tool_results);
                 std::cout << "Compacted: tool results dropped.\n";
@@ -256,6 +280,7 @@ int main(int argc, char* argv[])
             if (line == "/help") {
                 std::cout << "Commands:\n"
                           << "  /quit     Exit Locus\n"
+                          << "  /reset    Start a fresh conversation\n"
                           << "  /compact  Drop tool results to free context\n"
                           << "  /history  Show conversation summary\n"
                           << "  /help     Show this help\n"

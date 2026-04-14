@@ -66,6 +66,21 @@ struct LLMConfig {
     int         timeout_ms    = 60000;       // per-request timeout
 };
 
+// ---- Model info (from /v1/models) -------------------------------------------
+
+struct ModelInfo {
+    std::string id;              // e.g. "gemma-3-4b-instruct"
+    int         context_length = 0;  // max context window (0 = unknown)
+};
+
+// ---- Completion usage (from response) ---------------------------------------
+
+struct CompletionUsage {
+    int prompt_tokens     = 0;
+    int completion_tokens = 0;
+    int total_tokens      = 0;
+};
+
 // ---- Streaming callbacks ----------------------------------------------------
 
 // Called for each text token as it arrives.
@@ -80,11 +95,15 @@ using OnComplete = std::function<void()>;
 // Called on error (network, parse, timeout).
 using OnError = std::function<void(const std::string& error)>;
 
+// Called with token usage from the server (if available in the response).
+using OnUsage = std::function<void(const CompletionUsage& usage)>;
+
 struct StreamCallbacks {
     OnToken     on_token;
     OnToolCalls on_tool_calls;
     OnComplete  on_complete;
     OnError     on_error;
+    OnUsage     on_usage;
 };
 
 // ---- Tool schema (for function calling) ------------------------------------
@@ -109,6 +128,10 @@ public:
         const std::vector<ChatMessage>& messages,
         const std::vector<ToolSchema>&  tools,
         const StreamCallbacks&          callbacks) = 0;
+
+    // Query the server for loaded model info (id, context_length).
+    // Returns the first loaded model, or empty ModelInfo on failure.
+    virtual ModelInfo query_model_info() = 0;
 
     // Heuristic token count for a string (~4 chars = 1 token).
     static int estimate_tokens(const std::string& text);

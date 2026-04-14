@@ -72,6 +72,9 @@ public:
 
     // Apply a compaction strategy to reduce context usage.
     virtual void compact_context(CompactionStrategy strategy, int n = 0) = 0;
+
+    // Reset conversation: clear history, re-seed system prompt, start fresh.
+    virtual void reset_conversation() = 0;
 };
 
 } // namespace locus

@@ -117,6 +117,17 @@ void AgentCore::compact_context(CompactionStrategy strategy, int n)
     broadcast_context_meter();
 }
 
+// -- reset_conversation -------------------------------------------------------
+
+void AgentCore::reset_conversation()
+{
+    history_.clear();
+    history_.add({MessageRole::system, system_prompt_});
+    last_server_total_tokens_ = 0;
+    spdlog::info("AgentCore: conversation reset");
+    broadcast_context_meter();
+}
+
 // -- run_llm_step -------------------------------------------------------------
 
 bool AgentCore::run_llm_step()
@@ -148,6 +159,12 @@ bool AgentCore::run_llm_step()
         [&](const std::string& err) {
             had_error = true;
             broadcast_error(err);
+        },
+        /* on_usage */
+        [&](const CompletionUsage& u) {
+            last_server_total_tokens_ = u.total_tokens;
+            spdlog::trace("AgentCore: server reports {} total tokens (prompt={}, completion={})",
+                          u.total_tokens, u.prompt_tokens, u.completion_tokens);
         }
     });
 
@@ -302,7 +319,7 @@ void AgentCore::broadcast_message_complete()
 
 void AgentCore::broadcast_context_meter()
 {
-    int used = history_.estimate_tokens();
+    int used = current_token_count();
     int limit = llm_config_.context_limit;
     std::lock_guard lock(frontends_mutex_);
     for (auto* fe : frontends_)
@@ -311,7 +328,7 @@ void AgentCore::broadcast_context_meter()
 
 void AgentCore::broadcast_compaction_needed()
 {
-    int used = history_.estimate_tokens();
+    int used = current_token_count();
     int limit = llm_config_.context_limit;
     std::lock_guard lock(frontends_mutex_);
     for (auto* fe : frontends_)
@@ -325,11 +342,21 @@ void AgentCore::broadcast_error(const std::string& msg)
         fe->on_error(msg);
 }
 
+// -- Token count --------------------------------------------------------------
+
+int AgentCore::current_token_count() const
+{
+    // Prefer server-reported usage when available.
+    if (last_server_total_tokens_ > 0)
+        return last_server_total_tokens_;
+    return history_.estimate_tokens();
+}
+
 // -- Context overflow check ---------------------------------------------------
 
 bool AgentCore::check_context_overflow()
 {
-    int used = history_.estimate_tokens();
+    int used = current_token_count();
     int limit = llm_config_.context_limit;
     double ratio = static_cast<double>(used) / limit;
 
