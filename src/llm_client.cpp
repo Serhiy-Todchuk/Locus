@@ -97,6 +97,8 @@ public:
         const std::vector<ToolSchema>&  tools,
         const StreamCallbacks&          callbacks) override;
 
+    ModelInfo query_model_info() override;
+
 private:
     json build_request_body(
         const std::vector<ChatMessage>& messages,
@@ -121,6 +123,127 @@ LMStudioClient::LMStudioClient(LLMConfig config)
                  config_.max_tokens);
 }
 
+// Helper: extract context length from a model JSON object using known field names.
+static int extract_context_length(const json& model)
+{
+    // LM Studio proprietary: loaded_context_length (actual), max_context_length (ceiling).
+    if (model.contains("loaded_context_length") && model["loaded_context_length"].is_number())
+        return model["loaded_context_length"].get<int>();
+    if (model.contains("max_context_length") && model["max_context_length"].is_number())
+        return model["max_context_length"].get<int>();
+    // OpenAI / vLLM / other servers.
+    if (model.contains("context_length") && model["context_length"].is_number())
+        return model["context_length"].get<int>();
+    if (model.contains("max_model_len") && model["max_model_len"].is_number())
+        return model["max_model_len"].get<int>();
+    return 0;
+}
+
+// Helper: find a model in a JSON data array, preferring config_.model if set.
+static ModelInfo find_model_in(const json& data, const std::string& preferred_model)
+{
+    // Try to match the preferred model first.
+    for (auto& model : data) {
+        std::string id = model.value("id", "");
+        if (!preferred_model.empty() && id != preferred_model)
+            continue;
+
+        ModelInfo info;
+        info.id = id;
+        info.context_length = extract_context_length(model);
+        return info;
+    }
+
+    // Preferred model not found — fall back to first.
+    if (!data.empty()) {
+        auto& first = data[0];
+        ModelInfo info;
+        info.id = first.value("id", "");
+        info.context_length = extract_context_length(first);
+        return info;
+    }
+
+    return {};
+}
+
+ModelInfo LMStudioClient::query_model_info()
+{
+    // Try LM Studio proprietary API first — it includes loaded_context_length.
+    {
+        std::string url = config_.base_url + "/api/v0/models";
+        spdlog::trace("LLM GET {}", url);
+
+        cpr::Response response = cpr::Get(
+            cpr::Url{url},
+            cpr::Header{{"Accept", "application/json"}},
+            cpr::Timeout{5000}
+        );
+
+        if (response.error.code == cpr::ErrorCode::OK && response.status_code == 200) {
+            try {
+                auto j = json::parse(response.text);
+                if (j.contains("data") && j["data"].is_array() && !j["data"].empty()) {
+                    // Filter to loaded models only (LM Studio marks state).
+                    json loaded = json::array();
+                    for (auto& m : j["data"]) {
+                        if (m.value("state", "") == "loaded")
+                            loaded.push_back(m);
+                    }
+                    // Use loaded models if any, otherwise all.
+                    auto& candidates = loaded.empty() ? j["data"] : loaded;
+                    auto info = find_model_in(candidates, config_.model);
+                    if (!info.id.empty()) {
+                        spdlog::info("Model info (LM Studio API): id={}, context_length={}",
+                                     info.id, info.context_length);
+                        return info;
+                    }
+                }
+            } catch (const json::exception& e) {
+                spdlog::trace("LM Studio /api/v0/models parse failed: {}", e.what());
+            }
+        } else {
+            spdlog::trace("LM Studio /api/v0/models not available, trying /v1/models");
+        }
+    }
+
+    // Fallback: standard OpenAI-compatible /v1/models.
+    {
+        std::string url = config_.base_url + "/v1/models";
+        spdlog::trace("LLM GET {}", url);
+
+        cpr::Response response = cpr::Get(
+            cpr::Url{url},
+            cpr::Header{{"Accept", "application/json"}},
+            cpr::Timeout{5000}
+        );
+
+        if (response.error.code != cpr::ErrorCode::OK) {
+            spdlog::warn("Failed to query /v1/models: {}", response.error.message);
+            return {};
+        }
+        if (response.status_code != 200) {
+            spdlog::warn("GET /v1/models returned HTTP {}", response.status_code);
+            return {};
+        }
+
+        try {
+            auto j = json::parse(response.text);
+            if (!j.contains("data") || !j["data"].is_array() || j["data"].empty()) {
+                spdlog::warn("/v1/models: no models in response");
+                return {};
+            }
+
+            auto info = find_model_in(j["data"], config_.model);
+            spdlog::info("Model info: id={}, context_length={}", info.id, info.context_length);
+            return info;
+
+        } catch (const json::exception& e) {
+            spdlog::warn("Failed to parse /v1/models response: {}", e.what());
+            return {};
+        }
+    }
+}
+
 json LMStudioClient::build_request_body(
     const std::vector<ChatMessage>& messages,
     const std::vector<ToolSchema>&  tools) const
@@ -134,6 +257,7 @@ json LMStudioClient::build_request_body(
     body["messages"] = std::move(msgs);
 
     body["stream"] = true;
+    body["stream_options"] = {{"include_usage", true}};
     body["temperature"] = config_.temperature;
     body["max_tokens"]  = config_.max_tokens;
 
@@ -189,7 +313,7 @@ void LMStudioClient::do_stream(
 
     // Track whether we received any data at all (for error detection).
     bool got_data = false;
-    std::string stream_error;
+    CompletionUsage usage;
 
     // Helper: safely extract a string from a JSON value that might be null or wrong type.
     auto safe_string = [](const json& j) -> std::string {
@@ -255,6 +379,16 @@ void LMStudioClient::do_stream(
                             accum.arguments += safe_string(fn["arguments"]);
                     }
                 }
+            }
+
+            // Usage (typically in the final chunk).
+            if (delta_json.contains("usage") && delta_json["usage"].is_object()) {
+                auto& u = delta_json["usage"];
+                usage.prompt_tokens     = u.value("prompt_tokens", 0);
+                usage.completion_tokens = u.value("completion_tokens", 0);
+                usage.total_tokens      = u.value("total_tokens", 0);
+                spdlog::trace("LLM usage: prompt={}, completion={}, total={}",
+                              usage.prompt_tokens, usage.completion_tokens, usage.total_tokens);
             }
         } catch (const json::exception& e) {
             spdlog::warn("LLM stream: JSON error in chunk: {}", e.what());
@@ -342,6 +476,10 @@ void LMStudioClient::do_stream(
             spdlog::trace("  tool: {} id={} args={}", c.name, c.id, c.arguments);
         callbacks.on_tool_calls(calls);
     }
+
+    // Deliver usage if available.
+    if (usage.total_tokens > 0 && callbacks.on_usage)
+        callbacks.on_usage(usage);
 
     // Signal completion.
     if (callbacks.on_complete)

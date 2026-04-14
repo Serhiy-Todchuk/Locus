@@ -55,6 +55,7 @@ public:
                        const nlohmann::json& modified_args = {}) override;
 
     void compact_context(CompactionStrategy strategy, int n = 0) override;
+    void reset_conversation() override;
 
     // -- Accessors ------------------------------------------------------------
 
@@ -85,6 +86,10 @@ private:
     // fires on_compaction_needed and returns true (caller should stop).
     bool check_context_overflow();
 
+    // Best-effort token count: uses server-reported usage if available,
+    // otherwise falls back to heuristic estimate.
+    int current_token_count() const;
+
     // Members
     ILLMClient&      llm_;
     IToolRegistry&   tools_;
@@ -92,6 +97,9 @@ private:
     LLMConfig        llm_config_;
     ConversationHistory history_;
     std::string      system_prompt_;
+
+    // Last server-reported token usage (0 if server doesn't report it).
+    int last_server_total_tokens_ = 0;
 
     std::vector<IFrontend*> frontends_;
     std::mutex              frontends_mutex_;
