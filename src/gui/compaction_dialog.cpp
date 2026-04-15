@@ -57,9 +57,10 @@ void CompactionDialog::create_controls(int used_tokens, int limit_tokens)
         "Drop oldest turns  (remove N oldest exchanges)");
 
     // Turns slider (for strategy C).
-    int max_turns = std::max(1, static_cast<int>(history_.size()) / 2);
-    turns_slider_ = new wxSlider(this, ID_TURNS_SLIDER, 3, 1,
-                                 std::max(1, max_turns),
+    // history includes system message at [0], so user turns ≈ (size - 1) / 2.
+    int max_turns = std::max(2, static_cast<int>(history_.size()) / 2);
+    int initial = std::min(3, max_turns - 1);
+    turns_slider_ = new wxSlider(this, ID_TURNS_SLIDER, initial, 1, max_turns,
                                  wxDefaultPosition, wxDefaultSize,
                                  wxSL_HORIZONTAL | wxSL_LABELS);
     turns_slider_->Enable(false);  // disabled until radio C is selected

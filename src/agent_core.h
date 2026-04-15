@@ -91,6 +91,10 @@ private:
     // Process a single user message (runs on agent thread).
     void process_message(const std::string& content);
 
+    // Try to handle a /slash command (direct tool invocation).
+    // Returns true if handled, false if not a command.
+    bool try_slash_command(const std::string& content);
+
     // Run one LLM call, stream tokens, detect tool calls.
     // Returns true if tool calls were made (loop should continue).
     bool run_llm_step();
