@@ -14,6 +14,15 @@ Modern AI coding assistants (GitHub Copilot, Cursor, etc.) are:
 Consumer-grade local LLMs are now capable enough for serious work (e.g. Gemma 4 26B A4B),
 but no good tooling exists to wield them effectively, especially over large local data sets.
 
+### Origin
+
+Locus started as a knowledge navigation tool — inspired by Google's Project Nomad — focused
+on searching and browsing large local datasets (Wikipedia dumps, document libraries, personal
+archives) with AI assistance. The coding agent features came later, once it became clear that
+navigating a codebase and navigating a document folder are fundamentally the same problem:
+index the workspace, let the agent fetch what it needs, keep the user in control. There was
+no reason to build two separate tools.
+
 ### Solution
 
 An AI agent assistant that:
@@ -111,10 +120,21 @@ connections, expand thoughts, and organize material.
 
 ---
 
-### 5. Remote Assistant
-Locus Core runs as a background process on the PC. Any frontend — desktop, browser,
-or mobile — can connect to it over the local network. Use the assistant from your
-phone or tablet while your PC is running, without sending anything to the cloud.
+### 5. Your Workstation in Your Pocket
+Locus Core runs as a background process on your PC. Any frontend — desktop, browser,
+or mobile — can connect to it over the local network. This means you can open your
+phone on the couch, on a train, or in another room, and work on the same project
+that's sitting on your desktop: read code, ask the agent questions, approve tool calls,
+run builds — everything short of physically being at the keyboard.
+
+Your PC does the heavy lifting (LLM inference, file I/O, indexing). The phone is just
+a thin window into the workspace. Nothing leaves your network, and the full tool
+approval flow works exactly the same as on desktop — you see every action, approve
+or reject it, and stay in control.
+
+This is built for engineers who actually care about what's happening under the hood.
+You're not typing prompts into a black box and hoping for the best — you're operating
+your workspace remotely with full visibility into every step the agent takes.
 
 ---
 

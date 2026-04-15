@@ -8,6 +8,11 @@
 ## Deployment Model
 
 Locus Core runs as a **system tray background process** — always on, no visible window.
+Your PC does all the work: LLM inference, file indexing, tool execution. Frontends are
+thin clients that display results and relay user input — which means you can connect from
+your phone, a tablet, or a browser on another machine and get the full agent experience
+over your local network. No cloud relay, no tunneling service required for LAN use.
+
 Frontends connect via one of two paths:
 
 - **C++ direct** — in-process virtual interface, zero overhead. For the wxWidgets frontend only.
