@@ -193,24 +193,12 @@ Full chat UI, tool approval panels, compaction dialog. WS1 (Locus project) fully
 - [ ] Settings panel: `wxTextCtrl` for endpoint URL/model, `wxSpinCtrlDouble` for temperature, `wxSpinCtrl` for context limit, `wxTextCtrl` (multiline) for exclude patterns
 - [ ] Workspace config saved to `.locus/config.json` on change
 
-### S1.7 — Web Retrieval (RAG)
-- [ ] `gumbo` vcpkg dependency added; HTML → plain text extractor (skip script/style/nav/footer)
-- [ ] `web_pages`, `web_fts`, `web_headings` tables in index.db schema
-- [ ] `WebSearchTool`: call configurable search API (Brave default), return titles + URLs + snippets
-- [ ] `WebFetchTool`: HTTP GET via cpr → gumbo extract → store in web_fts → return outline only
-- [ ] `WebReadTool`: read a section of a fetched page by heading or line range (like `read_file` for web)
-- [ ] `search_text` extended: optional `sources` param to include web_fts alongside files_fts
-- [ ] Web cache: per-session scoping, TTL eviction, configurable size cap (default 50 MB)
-- [ ] Web config in `.locus/config.json`: enabled, provider, api_key, api_url, cache settings
-- [ ] Per-workspace toggle: `web.enabled` (default false)
-- [ ] Catch2 tests: HTML extraction, web_fts indexing, cache eviction
-
 ---
 
 ## M2 — Full Workspace Support
 
 **Goal**: All three test workspaces functional. Semantic search operational.
-Wikipedia (WS2) and personal documents (WS3) work end-to-end.
+Personal documents (WS3) works end-to-end.
 
 ### S2.1 — Semantic Search
 - [ ] ONNX Runtime C++ API initialised; model loaded from `models/all-MiniLM-L6-v2.onnx` (bundled)
@@ -226,16 +214,7 @@ Wikipedia (WS2) and personal documents (WS3) work end-to-end.
 - [ ] Per-workspace toggle: `semantic_search.enabled` in config; UI toggle in settings
 - [ ] Catch2 tests: RRF merge correctness, chunking boundary detection
 
-### S2.2 — ZIM Reader (Wikipedia / Kiwix)
-- [ ] libzim vcpkg dependency added; `zim::Archive` opens a `.zim` file
-- [ ] `ZimWorkspace` wraps a `.zim` as a virtual workspace; articles are virtual "files"
-- [ ] Article iterator feeds indexer: title → path, HTML content → stripped plain text
-- [ ] `list_directory` maps to ZIM namespace/category browsing
-- [ ] `read_file` returns stripped article text (HTML tags removed)
-- [ ] Index build progress for large ZIM (English Wikipedia ~21M articles takes hours; shown in UI)
-- [ ] Catch2 tests: open a small test ZIM, verify article retrieval and FTS search
-
-### S2.3 — Document Text Extraction
+### S2.2 — Document Text Extraction
 - [ ] pdfium vcpkg dependency; `PdfiumExtractor`: extract text per page, detect encrypted
 - [ ] miniz + pugixml: `DocxExtractor` (unzip → parse `word/document.xml`)
 - [ ] miniz + pugixml: `XlsxExtractor` (unzip → parse `xl/sharedStrings.xml` + sheets)
@@ -244,7 +223,7 @@ Wikipedia (WS2) and personal documents (WS3) work end-to-end.
 - [ ] Graceful skip: unreadable/encrypted files logged to spdlog, `files` table flagged as `is_binary=1`
 - [ ] Catch2 tests: PDF extraction round-trip, DOCX heading extraction
 
-### S2.4 — Active Edit Context (F7)
+### S2.3 — Active Edit Context (F7)
 - [ ] `EditContext` struct: `file_path`, `line`, `col`, `selection_text`, `selection_start`, `selection_end`
 - [ ] `ILocusCore::set_edit_context(EditContext)` — stores in Core, associates with current session
 - [ ] Context injected into system prompt when non-empty: `[Editing: path:line — selection]`
@@ -256,16 +235,37 @@ Wikipedia (WS2) and personal documents (WS3) work end-to-end.
 
 ## M3 — Connected
 
-**Goal**: Core accessible over LAN. VS Code sends editor context. Browser frontend works.
+**Goal**: Core accessible over LAN. VS Code sends editor context. Browser frontend works. Wikipedia works end-to-end
 
-### S3.1 — CrowServer Frontend
+### S3.1 — Web Retrieval (RAG)
+- [ ] `gumbo` vcpkg dependency added; HTML → plain text extractor (skip script/style/nav/footer)
+- [ ] `web_pages`, `web_fts`, `web_headings` tables in index.db schema
+- [ ] `WebSearchTool`: call configurable search API (Brave default), return titles + URLs + snippets
+- [ ] `WebFetchTool`: HTTP GET via cpr → gumbo extract → store in web_fts → return outline only
+- [ ] `WebReadTool`: read a section of a fetched page by heading or line range (like `read_file` for web)
+- [ ] `search_text` extended: optional `sources` param to include web_fts alongside files_fts
+- [ ] Web cache: per-session scoping, TTL eviction, configurable size cap (default 50 MB)
+- [ ] Web config in `.locus/config.json`: enabled, provider, api_key, api_url, cache settings
+- [ ] Per-workspace toggle: `web.enabled` (default false)
+- [ ] Catch2 tests: HTML extraction, web_fts indexing, cache eviction
+
+### S3.2 — ZIM Reader (Wikipedia / Kiwix)
+- [ ] libzim vcpkg dependency added; `zim::Archive` opens a `.zim` file
+- [ ] `ZimWorkspace` wraps a `.zim` as a virtual workspace; articles are virtual "files"
+- [ ] Article iterator feeds indexer: title → path, HTML content → stripped plain text
+- [ ] `list_directory` maps to ZIM namespace/category browsing
+- [ ] `read_file` returns stripped article text (HTML tags removed)
+- [ ] Index build progress for large ZIM (English Wikipedia ~21M articles takes hours; shown in UI)
+- [ ] Catch2 tests: open a small test ZIM, verify article retrieval and FTS search
+
+### S3.3 — CrowServer Frontend
 - [ ] `CrowFrontend : IFrontend` in `src/frontends/crow/` — registers with Core, serves external clients
 - [ ] Crow server starts on Core init, binds to `127.0.0.1:PORT` (default 7700)
 - [ ] WebSocket: translates Core callbacks → JSON messages, routes incoming → `ILocusCore` calls
 - [ ] HTTP REST: `GET /workspaces`, `POST /workspaces/open`, `GET /sessions`, `GET /status`
 - [ ] Protocol version header on all responses; mismatch → `426 Upgrade Required`
 
-### S3.2 — Remote Access
+### S3.4 — Remote Access
 - [ ] Crow: optional bind to `0.0.0.0:PORT` (off by default; toggle in settings)
 - [ ] Bearer token: generate random 32-byte token on first run, store in `.locus/auth.token`
 - [ ] Token display: shown in settings panel with copy button; used by remote clients
@@ -274,15 +274,7 @@ Wikipedia (WS2) and personal documents (WS3) work end-to-end.
 - [ ] Trust-on-first-use: remote client shows cert fingerprint, user confirms once
 - [ ] Tray icon tooltip: show active remote connections count
 
-### S3.3 — VS Code Shim
-- [ ] TypeScript VS Code extension project: `package.json`, `tsconfig.json`, `src/extension.ts`
-- [ ] On `vscode.window.onDidChangeTextEditorSelection`: build `EditContext`, POST to Core `/edit-context`
-- [ ] On `vscode.workspace.onDidChangeTextDocument`: throttle, update context
-- [ ] Extension settings: `locus.coreUrl` (default `http://127.0.0.1:7700`), `locus.token`
-- [ ] Status bar item: `$(locus-icon) Locus: Connected` / `Disconnected`; click to open settings
-- [ ] Activation: on workspace open; deactivation: clean up on VS Code close
-
-### S3.4 — Web / Browser Frontend
+### S3.5 — Web / Browser Frontend
 - [ ] Single HTML file + inline CSS + vanilla JS (no build step, no framework)
 - [ ] WebSocket client: connect to CrowServer, handle all message types
 - [ ] Chat UI: streaming token append, tool approval buttons, context meter bar
@@ -290,6 +282,15 @@ Wikipedia (WS2) and personal documents (WS3) work end-to-end.
 - [ ] PWA: `manifest.json` (name, icon, `display: standalone`)
 - [ ] `Service Worker`: cache static assets for offline load after first visit
 - [ ] Mobile-responsive layout: works on phone browser connected to PC over LAN
+
+### S3.6 — VS Code Shim
+- [ ] TypeScript VS Code extension project: `package.json`, `tsconfig.json`, `src/extension.ts`
+- [ ] On `vscode.window.onDidChangeTextEditorSelection`: build `EditContext`, POST to Core `/edit-context`
+- [ ] On `vscode.workspace.onDidChangeTextDocument`: throttle, update context
+- [ ] Extension settings: `locus.coreUrl` (default `http://127.0.0.1:7700`), `locus.token`
+- [ ] Status bar item: `$(locus-icon) Locus: Connected` / `Disconnected`; click to open settings
+- [ ] Activation: on workspace open; deactivation: clean up on VS Code close
+
 
 ---
 
@@ -309,4 +310,6 @@ Items from requirements Nice-to-Have — not scheduled yet:
 - Multiple workspaces open simultaneously (tabbed sessions)
 - Export session as markdown report
 - Automated coding pipeline (plan → code → test → fix loop, user-supervised)
+- LaTeX math display in LLM chat (for formulas)
+- Symbol index: extract member variables / field declarations (C++ `field_declaration`, etc.)
 

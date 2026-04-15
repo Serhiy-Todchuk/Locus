@@ -4,6 +4,8 @@
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
+#include <chrono>
+#include <sstream>
 
 namespace locus {
 
@@ -151,6 +153,13 @@ void AgentCore::process_message(const std::string& content)
     cancel_requested_.store(false);
 
     frontends_.broadcast([](IFrontend& fe) { fe.on_turn_start(); });
+
+    // Check for /slash commands (direct tool invocation).
+    if (try_slash_command(content)) {
+        frontends_.broadcast([](IFrontend& fe) { fe.on_turn_complete(); });
+        busy_.store(false);
+        return;
+    }
 
     history_.add({MessageRole::user, content});
 
@@ -512,6 +521,173 @@ bool AgentCore::check_context_overflow()
     }
 
     return false;
+}
+
+// -- Slash commands (direct tool invocation) ----------------------------------
+
+bool AgentCore::try_slash_command(const std::string& content)
+{
+    if (content.empty() || content[0] != '/')
+        return false;
+
+    // Parse: /tool_name [positional_arg] [key=value ...]
+    // Special: /help lists all available tools.
+    std::istringstream iss(content.substr(1));  // skip '/'
+    std::string tool_name;
+    iss >> tool_name;
+
+    if (tool_name.empty())
+        return false;
+
+    // /help — list all available slash commands.
+    if (tool_name == "help") {
+        std::string help = "Available /commands (direct tool invocation):\n\n";
+        for (auto* t : tools_.all()) {
+            help += "  /" + t->name();
+            for (auto& p : t->params()) {
+                if (p.required)
+                    help += " <" + p.name + ">";
+                else
+                    help += " [" + p.name + "=" + p.type + "]";
+            }
+            help += "\n    " + t->description() + "\n\n";
+        }
+        help += "  /help\n    Show this help\n";
+        frontends_.broadcast([&](IFrontend& fe) { fe.on_token(help); });
+        return true;
+    }
+
+    // Find the tool.
+    auto* tool = tools_.find(tool_name);
+    if (!tool) {
+        std::string err = "Unknown command '/" + tool_name + "'. Type /help for available commands.";
+        frontends_.broadcast([&](IFrontend& fe) { fe.on_error(err); });
+        return true;
+    }
+
+    // Parse remaining args: first collect the rest of the line.
+    std::string rest;
+    if (iss.tellg() != -1)
+        rest = content.substr(static_cast<size_t>(iss.tellg()) + 1);  // +1 for '/'
+
+    // Trim leading whitespace.
+    auto trim_start = rest.find_first_not_of(" \t");
+    if (trim_start != std::string::npos)
+        rest = rest.substr(trim_start);
+    else
+        rest.clear();
+
+    // Build args JSON.
+    // Tokenizer: respects "quoted strings" for multi-word values.
+    // Syntax:  /tool positional_arg key=value key="multi word value"
+    //          /tool "positional with spaces" key=value
+    auto tool_params = tool->params();
+    nlohmann::json args = nlohmann::json::object();
+
+    // Tokenize rest into shell-like tokens (handles double quotes).
+    std::vector<std::string> tokens;
+    {
+        size_t i = 0;
+        while (i < rest.size()) {
+            while (i < rest.size() && rest[i] == ' ') ++i;
+            if (i >= rest.size()) break;
+
+            std::string tok;
+            if (rest[i] == '"') {
+                // Quoted token: consume until closing quote.
+                ++i;
+                while (i < rest.size() && rest[i] != '"')
+                    tok += rest[i++];
+                if (i < rest.size()) ++i;  // skip closing quote
+            } else {
+                // Unquoted token: consume until space or key="...
+                while (i < rest.size() && rest[i] != ' ') {
+                    if (rest[i] == '"') {
+                        // key="value with spaces"
+                        ++i;
+                        while (i < rest.size() && rest[i] != '"')
+                            tok += rest[i++];
+                        if (i < rest.size()) ++i;
+                    } else {
+                        tok += rest[i++];
+                    }
+                }
+            }
+            tokens.push_back(std::move(tok));
+        }
+    }
+
+    // Separate into named (key=value) and positional args.
+    std::vector<std::string> positional;
+    for (auto& tok : tokens) {
+        auto eq = tok.find('=');
+        if (eq != std::string::npos && eq > 0) {
+            std::string key = tok.substr(0, eq);
+            std::string val = tok.substr(eq + 1);
+            // Match param type for proper JSON conversion.
+            bool found = false;
+            for (auto& p : tool_params) {
+                if (p.name == key) {
+                    if (p.type == "integer")
+                        args[key] = std::stoi(val);
+                    else if (p.type == "boolean")
+                        args[key] = (val == "true" || val == "1");
+                    else
+                        args[key] = val;
+                    found = true;
+                    break;
+                }
+            }
+            if (!found)
+                args[key] = val;
+        } else {
+            positional.push_back(tok);
+        }
+    }
+
+    // Map positional args to params in declaration order.
+    size_t pos_idx = 0;
+    for (auto& p : tool_params) {
+        if (args.contains(p.name)) continue;
+        if (pos_idx < positional.size()) {
+            if (p.type == "integer")
+                args[p.name] = std::stoi(positional[pos_idx]);
+            else if (p.type == "boolean")
+                args[p.name] = (positional[pos_idx] == "true" || positional[pos_idx] == "1");
+            else
+                args[p.name] = positional[pos_idx];
+            ++pos_idx;
+        }
+    }
+
+    // Execute with timing.
+    ToolCall call;
+    call.id = "slash_" + tool_name;
+    call.tool_name = tool_name;
+    call.args = args;
+
+    spdlog::info("Slash command: /{} args={}", tool_name, args.dump());
+
+    auto t0 = std::chrono::steady_clock::now();
+    auto result = tool->execute(call, ws_context_);
+    auto t1 = std::chrono::steady_clock::now();
+    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
+
+    // Format output.
+    std::string output = "**/" + tool_name + "** ";
+    if (result.success)
+        output += "(OK, " + std::to_string(ms) + "ms)\n\n";
+    else
+        output += "(FAILED, " + std::to_string(ms) + "ms)\n\n";
+
+    // Prefer display text, fall back to content.
+    if (!result.display.empty())
+        output += result.display;
+    else
+        output += result.content;
+
+    frontends_.broadcast([&](IFrontend& fe) { fe.on_token(output); });
+    return true;
 }
 
 } // namespace locus
