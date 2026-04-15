@@ -136,7 +136,7 @@ void LocusFrame::setup_aui_layout()
 {
     // Left sidebar (file tree in S1.6).
     sidebar_panel_ = new wxPanel(this, wxID_ANY);
-    sidebar_panel_->SetBackgroundColour(wxColour(245, 245, 245));
+    sidebar_panel_->SetBackgroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW));
     auto* sidebar_label = new wxStaticText(sidebar_panel_, wxID_ANY,
         "File Tree\n(S1.6)", wxDefaultPosition, wxDefaultSize,
         wxALIGN_CENTER_HORIZONTAL);
@@ -160,7 +160,7 @@ void LocusFrame::setup_aui_layout()
 
     // Right detail panel (file details / outline in S1.6).
     detail_panel_ = new wxPanel(this, wxID_ANY);
-    detail_panel_->SetBackgroundColour(wxColour(245, 245, 245));
+    detail_panel_->SetBackgroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW));
     auto* detail_label = new wxStaticText(detail_panel_, wxID_ANY,
         "Details\n(S1.6)", wxDefaultPosition, wxDefaultSize,
         wxALIGN_CENTER_HORIZONTAL);
