@@ -28,6 +28,12 @@ struct WorkspaceConfig {
     int embedding_dimensions = 384;
     int chunk_size_lines = 80;
     int chunk_overlap_lines = 10;
+
+    // LLM settings (persisted per-workspace)
+    std::string llm_endpoint = "http://127.0.0.1:1234";
+    std::string llm_model;           // empty = server default
+    double      llm_temperature = 0.7;
+    int         llm_context_limit = 0; // 0 = auto-detect from server
 };
 
 // Owns all workspace-level resources: config, database, file watcher, LOCUS.md.
@@ -46,6 +52,7 @@ public:
     const fs::path& locus_dir() const { return locus_dir_; }
 
     const WorkspaceConfig& config() const { return config_; }
+    WorkspaceConfig& config() { return config_; }
     void save_config();
 
     // LOCUS.md content (empty string if file doesn't exist). Read-only.

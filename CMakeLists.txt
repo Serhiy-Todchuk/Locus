@@ -200,6 +200,8 @@ add_executable(locus_gui WIN32
     src/gui/chat_panel.cpp
     src/gui/tool_approval_panel.cpp
     src/gui/compaction_dialog.cpp
+    src/gui/file_tree_panel.cpp
+    src/gui/settings_dialog.cpp
     src/gui/markdown.cpp
     src/gui/autostart.cpp
 )

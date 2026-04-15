@@ -1,8 +1,12 @@
 #include "locus_frame.h"
 
+#include "../indexer.h"
+
 #include <spdlog/spdlog.h>
 
 #include <wx/aboutdlg.h>
+#include <wx/dirdlg.h>
+#include <wx/stdpaths.h>
 
 namespace locus {
 
@@ -13,6 +17,7 @@ enum {
     ID_MENU_COMPACT,
     ID_MENU_SAVE_SESSION,
     ID_MENU_OPEN_WORKSPACE,
+    ID_MENU_SETTINGS,
 };
 
 wxBEGIN_EVENT_TABLE(LocusFrame, wxFrame)
@@ -60,6 +65,9 @@ LocusFrame::LocusFrame(AgentCore& agent, Workspace& workspace)
         chat_panel_->set_locus_md_tokens(locus_tokens);
     }
 
+    // Populate index stats in the file tree panel.
+    refresh_index_stats();
+
     Centre();
     spdlog::info("LocusFrame created");
 }
@@ -78,6 +86,7 @@ void LocusFrame::create_menu_bar()
 {
     auto* file_menu = new wxMenu;
     file_menu->Append(ID_MENU_OPEN_WORKSPACE, "Open Workspace...\tCtrl+O");
+    file_menu->Append(ID_MENU_SETTINGS,       "Settings...\tCtrl+,");
     file_menu->AppendSeparator();
     file_menu->Append(ID_MENU_QUIT, "Quit\tCtrl+Q");
 
@@ -98,6 +107,20 @@ void LocusFrame::create_menu_bar()
     // Menu event handlers.
     Bind(wxEVT_MENU, [this](wxCommandEvent&) { Close(false); }, ID_MENU_QUIT);
     Bind(wxEVT_MENU, [this](wxCommandEvent&) {
+        wxDirDialog dlg(this, "Select workspace folder",
+            wxStandardPaths::Get().GetDocumentsDir(),
+            wxDD_DEFAULT_STYLE | wxDD_DIR_MUST_EXIST);
+        if (dlg.ShowModal() == wxID_OK) {
+            wxString path = dlg.GetPath();
+            SetStatusText("Restart Locus to open: " + path, 0);
+            wxMessageBox(
+                "Workspace changed to:\n" + path +
+                "\n\nRestart Locus to apply.",
+                "Open Workspace", wxOK | wxICON_INFORMATION, this);
+            spdlog::info("User selected new workspace: {}", path.ToStdString());
+        }
+    }, ID_MENU_OPEN_WORKSPACE);
+    Bind(wxEVT_MENU, [this](wxCommandEvent&) {
         agent_.reset_conversation();
     }, ID_MENU_RESET);
     Bind(wxEVT_MENU, [this](wxCommandEvent&) {
@@ -107,6 +130,9 @@ void LocusFrame::create_menu_bar()
         auto id = agent_.save_session();
         SetStatusText(wxString::Format("Session saved: %s", id));
     }, ID_MENU_SAVE_SESSION);
+    Bind(wxEVT_MENU, [this](wxCommandEvent&) {
+        show_settings_dialog();
+    }, ID_MENU_SETTINGS);
     Bind(wxEVT_MENU, [this](wxCommandEvent&) {
         wxAboutDialogInfo info;
         info.SetName("Locus");
@@ -134,17 +160,13 @@ void LocusFrame::create_status_bar()
 
 void LocusFrame::setup_aui_layout()
 {
-    // Left sidebar (file tree in S1.6).
-    sidebar_panel_ = new wxPanel(this, wxID_ANY);
-    sidebar_panel_->SetBackgroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW));
-    auto* sidebar_label = new wxStaticText(sidebar_panel_, wxID_ANY,
-        "File Tree\n(S1.6)", wxDefaultPosition, wxDefaultSize,
-        wxALIGN_CENTER_HORIZONTAL);
-    auto* sb_sizer = new wxBoxSizer(wxVERTICAL);
-    sb_sizer->AddStretchSpacer();
-    sb_sizer->Add(sidebar_label, 0, wxALIGN_CENTER);
-    sb_sizer->AddStretchSpacer();
-    sidebar_panel_->SetSizer(sb_sizer);
+    // Left sidebar: file tree with index stats.
+    file_tree_panel_ = new FileTreePanel(this, workspace_.query(),
+        workspace_.root().string(),
+        [this](const std::string& path) {
+            spdlog::trace("File selected in tree: {}", path);
+            SetStatusText(wxString::FromUTF8(path), 0);
+        });
 
     // Center chat panel.
     chat_panel_ = new ChatPanel(this,
@@ -158,22 +180,14 @@ void LocusFrame::setup_aui_layout()
             agent_.tool_decision(call_id, decision, modified_args);
         });
 
-    // Right detail panel (file details / outline in S1.6).
+    // Right detail panel (placeholder for future file details / outline).
     detail_panel_ = new wxPanel(this, wxID_ANY);
     detail_panel_->SetBackgroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW));
-    auto* detail_label = new wxStaticText(detail_panel_, wxID_ANY,
-        "Details\n(S1.6)", wxDefaultPosition, wxDefaultSize,
-        wxALIGN_CENTER_HORIZONTAL);
-    auto* dt_sizer = new wxBoxSizer(wxVERTICAL);
-    dt_sizer->AddStretchSpacer();
-    dt_sizer->Add(detail_label, 0, wxALIGN_CENTER);
-    dt_sizer->AddStretchSpacer();
-    detail_panel_->SetSizer(dt_sizer);
 
     // Add panes.
-    aui_.AddPane(sidebar_panel_, wxAuiPaneInfo()
+    aui_.AddPane(file_tree_panel_, wxAuiPaneInfo()
         .Name("sidebar").Caption("Files")
-        .Left().MinSize(180, -1).BestSize(220, -1)
+        .Left().MinSize(180, -1).BestSize(240, -1)
         .CloseButton(true).PinButton(true));
 
     aui_.AddPane(chat_panel_, wxAuiPaneInfo()
@@ -209,6 +223,38 @@ void LocusFrame::show_compaction_dialog()
             SetStatusText("Context compacted", 0);
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Settings dialog
+// ---------------------------------------------------------------------------
+
+void LocusFrame::show_settings_dialog()
+{
+    SettingsDialog dlg(this, workspace_.config());
+    if (dlg.ShowModal() == wxID_OK && dlg.config_changed()) {
+        workspace_.save_config();
+        SetStatusText("Settings saved", 0);
+
+        if (dlg.llm_changed()) {
+            wxMessageBox(
+                "LLM settings changed.\nRestart Locus to apply new endpoint/model settings.",
+                "Settings", wxOK | wxICON_INFORMATION, this);
+        }
+
+        spdlog::info("Settings saved to config.json");
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Index stats
+// ---------------------------------------------------------------------------
+
+void LocusFrame::refresh_index_stats()
+{
+    auto& st = workspace_.indexer().stats();
+    file_tree_panel_->set_index_stats(
+        st.files_total, st.symbols_total, st.headings_total);
 }
 
 // ---------------------------------------------------------------------------
