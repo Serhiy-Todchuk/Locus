@@ -12,6 +12,7 @@
 #include <spdlog/sinks/rotating_file_sink.h>
 
 #include <csignal>
+#include <clocale>
 #include <filesystem>
 #include <iostream>
 #include <string>
@@ -19,6 +20,10 @@
 #include <thread>
 #include <chrono>
 #include <atomic>
+
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 namespace fs = std::filesystem;
 
@@ -115,6 +120,20 @@ static void init_logging(const fs::path& locus_dir, bool verbose)
 
 int main(int argc, char* argv[])
 {
+    // Enable UTF-8 console I/O (Ukrainian, etc.).
+#ifdef _WIN32
+    SetConsoleCP(CP_UTF8);
+    SetConsoleOutputCP(CP_UTF8);
+    // Enable VT processing for proper Unicode rendering in modern terminals.
+    HANDLE h_out = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (h_out != INVALID_HANDLE_VALUE) {
+        DWORD mode = 0;
+        if (GetConsoleMode(h_out, &mode))
+            SetConsoleMode(h_out, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+    }
+#endif
+    std::setlocale(LC_ALL, ".UTF-8");
+
     CliArgs args = parse_args(argc, argv);
 
     // Install Ctrl+C handler.
