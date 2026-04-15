@@ -131,7 +131,19 @@ Locus treats token usage as a first-class engineering concern:
 - Context window always visible to the user
 - Compaction strategies that the user controls
 
-### 5. No Internet Required
+### 5. Your Workstation, Accessible From Anywhere
+Locus Core runs as a daemon on your PC. Connect to it from your phone, tablet, or a
+browser on another machine — over your local network, without routing through any cloud.
+You get the full agent experience remotely: browse code, ask questions, approve tool calls,
+kick off builds. Your PC does all the compute; the remote device is just a thin client.
+
+Most AI coding tools are either bolted into a specific editor or live entirely in the cloud.
+Locus is neither — it's a headless process on your machine that any frontend can attach to.
+This is built for engineers who want to operate their workspace, not just chat with it.
+You see every tool call, every argument, every result — whether you're at the desk or on
+the couch with your phone.
+
+### 6. No Internet Required
 Core functionality works with zero network access.
 This is both a privacy guarantee and a reliability guarantee.
 
