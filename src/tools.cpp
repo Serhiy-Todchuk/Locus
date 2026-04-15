@@ -496,6 +496,26 @@ ToolResult RunCommandTool::execute(const ToolCall& call, const WorkspaceContext&
 
 #endif
 
+// -- AskUserTool -------------------------------------------------------------
+
+std::string AskUserTool::preview(const ToolCall& call) const
+{
+    return call.args.value("question", "");
+}
+
+ToolResult AskUserTool::execute(const ToolCall& call, const WorkspaceContext& /*ws*/)
+{
+    // The frontend injects the user's response into args["response"] via the
+    // modify flow in tool_decision(). If no response was provided (direct
+    // approve), return a note that the user approved without answering.
+    std::string response = call.args.value("response", "");
+    if (response.empty())
+        return {true, "[User approved without providing a response]",
+                      "[User approved without providing a response]"};
+
+    return {true, response, response};
+}
+
 // -- Factory ----------------------------------------------------------------
 
 void register_builtin_tools(IToolRegistry& registry)
@@ -509,6 +529,7 @@ void register_builtin_tools(IToolRegistry& registry)
     registry.register_tool(std::make_unique<SearchSymbolsTool>());
     registry.register_tool(std::make_unique<GetFileOutlineTool>());
     registry.register_tool(std::make_unique<RunCommandTool>());
+    registry.register_tool(std::make_unique<AskUserTool>());
 }
 
 } // namespace locus

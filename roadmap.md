@@ -169,14 +169,14 @@ Full chat UI, tool approval panels, compaction dialog. WS1 (Locus project) fully
 - [x] `wxGauge` + `wxStaticText` in footer for context meter (green → yellow → red)
 - [x] LOCUS.md token cost shown as `[LOCUS.md: N tk]` chip in footer
 
-### S1.4 — Tool Approval UI
-- [ ] Add `ask_user` tool
-- [ ] `ToolApprovalPanel : wxPanel` — dynamic show/hide between chat and input
-- [ ] `wxStyledTextCtrl` for JSON args display (Scintilla JSON lexer, syntax-colored)
-- [ ] `wxStaticText` for tool name badge + `preview()` text
-- [ ] Buttons: Approve (Enter), Modify (M), Reject (Esc) with `wxAcceleratorTable`
-- [ ] Modify flow: switch args STC to editable, parse JSON on confirm
-- [ ] Post-execution: tool result injected into WebView as collapsible `<details>` block
+### S1.4 — Tool Approval UI ✔
+- [x] Add `ask_user` tool
+- [x] `ToolApprovalPanel : wxPanel` — dynamic show/hide between chat and input
+- [x] `wxStyledTextCtrl` for JSON args display (Scintilla JSON lexer, syntax-colored)
+- [x] `wxStaticText` for tool name badge + `preview()` text
+- [x] Buttons: Approve (Enter), Modify (M), Reject (Esc) via `wxEVT_CHAR_HOOK`
+- [x] Modify flow: switch args STC to editable, parse JSON on confirm
+- [x] Post-execution: tool result injected into WebView as collapsible `<details>` block
 
 ### S1.5 — Context Compaction UI
 - [ ] `on_compaction_needed` → modal `wxDialog` overlaid on chat

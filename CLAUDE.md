@@ -38,8 +38,8 @@ data into context, and keeps the user in full transparent control of every step.
 
 ## Current Stage
 
-**M1 — Desktop App in progress.** S1.1, S1.2, and S1.3 complete.
-S1.4 (Tool Approval UI) is next. See [roadmap.md](roadmap.md) for full status.
+**M1 — Desktop App in progress.** S1.1 through S1.4 complete.
+S1.5 (Context Compaction UI) is next. See [roadmap.md](roadmap.md) for full status.
 
 ---
 
@@ -140,6 +140,7 @@ Core is a static lib (`locus_core`). Both `locus` (exe) and `locus_tests` link i
 | `src/gui/chat_panel.h/cpp` | Chat UI: wxWebView (HTML/CSS), wxTextCtrl input, context meter footer. Streaming via wxTimer + md4c. | `ChatPanel` |
 | `src/gui/markdown.h/cpp` | md4c wrapper: markdown → HTML (GitHub-flavored dialect). | `markdown_to_html()` |
 | `src/gui/locus_tray.h/cpp` | System tray icon. State display (idle/active/error), right-click menu, minimize-to-tray. | `LocusTray` |
+| `src/gui/tool_approval_panel.h/cpp` | Tool approval: AUI bottom pane with JSON args (Scintilla), approve/modify/reject buttons, ask_user mode. | `ToolApprovalPanel` |
 | `src/gui/wx_frontend.h/cpp` | IFrontend thread bridge: agent thread callbacks → wxThreadEvent → UI thread. | `WxFrontend` |
 | `src/gui/autostart.h/cpp` | Windows startup-on-login via HKCU Run key (opt-in). | `is_autostart_enabled()`, `set_autostart_enabled()` |
 

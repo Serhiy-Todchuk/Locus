@@ -2,6 +2,7 @@
 
 #include "chat_panel.h"
 #include "locus_tray.h"
+#include "tool_approval_panel.h"
 #include "wx_frontend.h"
 #include "../agent_core.h"
 #include "../workspace.h"
@@ -57,9 +58,10 @@ private:
     std::unique_ptr<WxFrontend>   wx_frontend_;
 
     // Pane panels.
-    wxPanel*    sidebar_panel_ = nullptr;  // placeholder for S1.6
-    ChatPanel*  chat_panel_    = nullptr;  // chat UI (S1.3)
-    wxPanel*    detail_panel_  = nullptr;  // placeholder for S1.4
+    wxPanel*           sidebar_panel_  = nullptr;  // placeholder for S1.6
+    ChatPanel*         chat_panel_     = nullptr;  // chat UI (S1.3)
+    ToolApprovalPanel* approval_panel_ = nullptr;  // tool approval (S1.4)
+    wxPanel*           detail_panel_   = nullptr;  // placeholder for S1.6 details
 
     wxDECLARE_EVENT_TABLE();
 };
