@@ -11,6 +11,11 @@
             "features": ["fts5"]
         },
         "efsw",
-        "tree-sitter"
+        "tree-sitter",
+        {
+            "name": "wxwidgets",
+            "features": ["webview"]
+        },
+        "md4c"
     ]
 }
