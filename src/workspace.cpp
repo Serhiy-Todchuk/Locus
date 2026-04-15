@@ -85,6 +85,18 @@ static WorkspaceConfig config_from_json(const json& j)
         }
     }
 
+    if (j.contains("llm")) {
+        auto& llm = j["llm"];
+        if (llm.contains("endpoint"))
+            cfg.llm_endpoint = llm["endpoint"].get<std::string>();
+        if (llm.contains("model"))
+            cfg.llm_model = llm["model"].get<std::string>();
+        if (llm.contains("temperature"))
+            cfg.llm_temperature = llm["temperature"].get<double>();
+        if (llm.contains("context_limit"))
+            cfg.llm_context_limit = llm["context_limit"].get<int>();
+    }
+
     return cfg;
 }
 
@@ -102,6 +114,12 @@ static json config_to_json(const WorkspaceConfig& cfg)
                 {"chunk_size_lines", cfg.chunk_size_lines},
                 {"chunk_overlap_lines", cfg.chunk_overlap_lines}
             }}
+        }},
+        {"llm", {
+            {"endpoint", cfg.llm_endpoint},
+            {"model", cfg.llm_model},
+            {"temperature", cfg.llm_temperature},
+            {"context_limit", cfg.llm_context_limit}
         }}
     };
 }

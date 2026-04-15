@@ -186,12 +186,12 @@ Full chat UI, tool approval panels, compaction dialog. WS1 (Locus project) fully
 - [x] All strategies: show before/after token counts via `wxStaticText`, updated on strategy change
 - [x] Manual compaction: button in context meter footer area
 
-### S1.6 — Workspace, File Tree & Settings
-- [ ] `wxTreeCtrl` + `wxImageList` in left AUI pane for file tree; populated from `IndexQuery::list_directory()`
-- [ ] Workspace open: `wxDirDialog` (native folder picker)
-- [ ] Index status: `wxStaticText` labels (file counts, last indexed), `wxGauge` for active re-index
-- [ ] Settings panel: `wxTextCtrl` for endpoint URL/model, `wxSpinCtrlDouble` for temperature, `wxSpinCtrl` for context limit, `wxTextCtrl` (multiline) for exclude patterns
-- [ ] Workspace config saved to `.locus/config.json` on change
+### S1.6 — Workspace, File Tree & Settings ✔
+- [x] `wxTreeCtrl` + `wxImageList` in left AUI pane for file tree; populated from `IndexQuery::list_directory()`
+- [x] Workspace open: `wxDirDialog` (native folder picker)
+- [x] Index status: `wxStaticText` labels (file counts, last indexed), `wxGauge` for active re-index
+- [x] Settings panel: `wxTextCtrl` for endpoint URL/model, `wxSpinCtrlDouble` for temperature, `wxSpinCtrl` for context limit, `wxTextCtrl` (multiline) for exclude patterns
+- [x] Workspace config saved to `.locus/config.json` on change
 
 ---
 

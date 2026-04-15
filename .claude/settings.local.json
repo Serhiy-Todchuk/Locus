@@ -84,7 +84,15 @@
       "Bash(cmake --build build/release --config Release --target locus_tests)",
       "Bash(cmake --build build/debug --config Debug --target locus_gui)",
       "Bash(cmake --build build/release --config Release --target locus --target locus_tests)",
-      "Bash(cmake --build build/release --config Release --target locus_gui --target locus)"
+      "Bash(cmake --build build/release --config Release --target locus_gui --target locus)",
+      "Bash(cmake --build build --target locus_gui --config Debug)",
+      "Bash(ls build/*.sln)",
+      "Bash(ls build/*.vcxproj)",
+      "Bash(cmake --preset default)",
+      "Bash(cmake -B build -G \"Visual Studio 18 2026\" -DCMAKE_TOOLCHAIN_FILE=D:/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-windows-static -DVCPKG_OVERLAY_TRIPLETS=cmake/triplets)",
+      "Bash(cmake --build build/debug --target locus_gui)",
+      "Bash(cmake --build build/debug --target locus)",
+      "Bash(cmake --build build/debug --target locus_tests)"
     ]
   }
 }

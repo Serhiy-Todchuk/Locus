@@ -2,7 +2,9 @@
 
 #include "chat_panel.h"
 #include "compaction_dialog.h"
+#include "file_tree_panel.h"
 #include "locus_tray.h"
+#include "settings_dialog.h"
 #include "tool_approval_panel.h"
 #include "wx_frontend.h"
 #include "../agent_core.h"
@@ -16,9 +18,9 @@
 namespace locus {
 
 // Main application window. Owns the AUI layout with three panes:
-//   left:   sidebar (file tree — placeholder for S1.6)
+//   left:   file tree with index status
 //   center: chat panel (wxWebView + input + footer)
-//   right:  detail panel (placeholder for S1.4)
+//   right:  detail panel (placeholder)
 //
 // Also owns the system tray icon and the WxFrontend thread bridge.
 class LocusFrame : public wxFrame {
@@ -36,6 +38,12 @@ private:
 
     // Show the compaction dialog and apply the chosen strategy.
     void show_compaction_dialog();
+
+    // Show the settings dialog and apply changes.
+    void show_settings_dialog();
+
+    // Update file tree index stats from current workspace.
+    void refresh_index_stats();
 
     // Event handlers: window lifecycle
     void on_close(wxCloseEvent& evt);
@@ -62,10 +70,10 @@ private:
     std::unique_ptr<WxFrontend>   wx_frontend_;
 
     // Pane panels.
-    wxPanel*           sidebar_panel_  = nullptr;  // placeholder for S1.6
-    ChatPanel*         chat_panel_     = nullptr;  // chat UI (S1.3)
-    ToolApprovalPanel* approval_panel_ = nullptr;  // tool approval (S1.4)
-    wxPanel*           detail_panel_   = nullptr;  // placeholder for S1.6 details
+    FileTreePanel*     file_tree_panel_ = nullptr;  // file tree + index status (S1.6)
+    ChatPanel*         chat_panel_     = nullptr;   // chat UI (S1.3)
+    ToolApprovalPanel* approval_panel_ = nullptr;   // tool approval (S1.4)
+    wxPanel*           detail_panel_   = nullptr;   // placeholder for future details
 
     wxDECLARE_EVENT_TABLE();
 };
