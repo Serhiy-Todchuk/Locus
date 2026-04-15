@@ -79,7 +79,10 @@
       "Bash(build/debug/tests/Debug/locus_tests.exe \"[s1.1]\" --verbosity high)",
       "Bash(build/debug/tests/Debug/locus_tests.exe)",
       "Bash(cmake --build build --config Release --target locus)",
-      "Bash(cmake --build build/release --config Release --target locus)"
+      "Bash(cmake --build build/release --config Release --target locus)",
+      "Bash(cmake --build build/release --config Release --target locus_gui)",
+      "Bash(cmake --build build/release --config Release --target locus_tests)",
+      "Bash(cmake --build build/debug --config Debug --target locus_gui)"
     ]
   }
 }

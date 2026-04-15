@@ -147,17 +147,17 @@ Full chat UI, tool approval panels, compaction dialog. WS1 (Locus project) fully
 - [x] Session serialisation: save/load full `ConversationHistory` to `.locus/sessions/<timestamp>.json`
 - [x] Session list API: enumerate sessions for a workspace
 
-### S1.2 — wxWidgets Bootstrap + System Tray
-- [ ] Add `wxwidgets` (with `webview` feature) + `md4c` to `vcpkg.json`
-- [ ] `locus_gui` CMake target (WIN32 exe), links `locus_core` + `wx::core wx::base wx::aui wx::stc wx::webview` + `md4c::md4c-html`
-- [ ] `LocusApp : wxApp` — entry point, owns Workspace + AgentCore lifetime
-- [ ] `LocusFrame : wxFrame` + `wxAuiManager` — dockable 3-pane layout (sidebar, chat, right panel)
-- [ ] `LocusTray : wxTaskBarIcon` — state icons (idle/active/error), right-click menu, minimize-to-tray
-- [ ] `wxSingleInstanceChecker` for single-instance enforcement
-- [ ] `WxFrontend : IFrontend` — thread bridge: all callbacks post `wxThreadEvent` via `wxQueueEvent()` to main thread
-- [ ] Startup on login: write/remove `HKCU\...\Run` key (user opt-in, off by default)
-- [ ] Core shutdown: wait for agent thread to finish current turn, close DB cleanly
-- [ ] Source layout: `src/gui/*.h/cpp`
+### S1.2 — wxWidgets Bootstrap + System Tray ✔
+- [x] Add `wxwidgets` (with `webview` feature) + `md4c` to `vcpkg.json`
+- [x] `locus_gui` CMake target (WIN32 exe), links `locus_core` + `wx::core wx::base wx::aui wx::stc wx::webview` + `md4c::md4c-html`
+- [x] `LocusApp : wxApp` — entry point, owns Workspace + AgentCore lifetime
+- [x] `LocusFrame : wxFrame` + `wxAuiManager` — dockable 3-pane layout (sidebar, chat, right panel)
+- [x] `LocusTray : wxTaskBarIcon` — state icons (idle/active/error), right-click menu, minimize-to-tray
+- [x] `wxSingleInstanceChecker` for single-instance enforcement
+- [x] `WxFrontend : IFrontend` — thread bridge: all callbacks post `wxThreadEvent` via `wxQueueEvent()` to main thread
+- [x] Startup on login: write/remove `HKCU\...\Run` key (user opt-in, off by default)
+- [x] Core shutdown: wait for agent thread to finish current turn, close DB cleanly
+- [x] Source layout: `src/gui/*.h/cpp`
 
 ### S1.3 — Chat UI + Markdown
 - [ ] `wxWebView` (Edge/WebView2, OS-provided) as chat display panel — HTML/CSS rendering surface, not a bundled browser

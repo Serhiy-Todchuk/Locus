@@ -38,8 +38,8 @@ data into context, and keeps the user in full transparent control of every step.
 
 ## Current Stage
 
-**M1 — Desktop App in progress.** S1.1 (Core/Frontend Architecture) complete.
-S1.2 (wxWidgets Bootstrap + System Tray) is next. See [roadmap.md](roadmap.md) for full status.
+**M1 — Desktop App in progress.** S1.1 and S1.2 complete.
+S1.3 (Chat UI + Markdown) is next. See [roadmap.md](roadmap.md) for full status.
 
 ---
 
@@ -135,6 +135,11 @@ Core is a static lib (`locus_core`). Both `locus` (exe) and `locus_tests` link i
 | `src/agent_core.h/cpp` | Agent loop on dedicated thread: LLM → stream → tool calls → approval → execute → resume. | `AgentCore` |
 | `src/frontends/cli_frontend.h/cpp` | Terminal frontend: token streaming, y/n/e tool approval, context meter, compaction prompts. | `CliFrontend` |
 | `src/main.cpp` | CLI entry point. Arg parsing, logging init, REPL loop, Ctrl+C handler. | `CliArgs` |
+| `src/gui/locus_app.h/cpp` | wxApp entry point. Owns Workspace, LLM, Agent lifetime. Single-instance check. | `LocusApp` |
+| `src/gui/locus_frame.h/cpp` | Main window. wxAuiManager 3-pane layout, menu bar, status bar. Binds agent events. | `LocusFrame` |
+| `src/gui/locus_tray.h/cpp` | System tray icon. State display (idle/active/error), right-click menu, minimize-to-tray. | `LocusTray` |
+| `src/gui/wx_frontend.h/cpp` | IFrontend thread bridge: agent thread callbacks → wxThreadEvent → UI thread. | `WxFrontend` |
+| `src/gui/autostart.h/cpp` | Windows startup-on-login via HKCU Run key (opt-in). | `is_autostart_enabled()`, `set_autostart_enabled()` |
 
 **Test files** follow `tests/test_<topic>.cpp` — one per subsystem, tagged by stage.
 
