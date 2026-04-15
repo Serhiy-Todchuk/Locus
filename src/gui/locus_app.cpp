@@ -33,6 +33,9 @@ bool LocusApp::OnInit()
     if (!wxApp::OnInit())
         return false;
 
+    // Follow OS light/dark theme (Windows 10+).
+    MSWEnableDarkMode();
+
     // UTF-8 support.
 #ifdef _WIN32
     SetConsoleCP(CP_UTF8);

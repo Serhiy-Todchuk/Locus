@@ -17,8 +17,10 @@ static constexpr int k_flush_interval_ms = 33;  // ~30fps
 // if offline-only operation matters for the GUI too.
 // ---------------------------------------------------------------------------
 
-static const char* k_prism_css_url =
+static const char* k_prism_css_light_url =
     "https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css";
+static const char* k_prism_css_dark_url =
+    "https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css";
 static const char* k_prism_js_url =
     "https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js";
 static const char* k_prism_autoloader_url =
@@ -34,8 +36,11 @@ std::string ChatPanel::build_chat_html()
 <html><head>
 <meta charset="utf-8">
 <link rel="stylesheet" href=")html";
-    html += k_prism_css_url;
-    html += R"html(">
+    html += k_prism_css_light_url;
+    html += R"html(" media="(prefers-color-scheme: light)">
+<link rel="stylesheet" href=")html";
+    html += k_prism_css_dark_url;
+    html += R"html(" media="(prefers-color-scheme: dark)">
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
@@ -181,6 +186,38 @@ body {
     margin-left: 2px;
 }
 @keyframes blink { 50% { opacity: 0; } }
+
+/* -- Dark mode -- */
+@media (prefers-color-scheme: dark) {
+    body { background: #1e1e1e; color: #d4d4d4; }
+    .msg-user { background: #264f78; color: #e0e0e0; }
+    .msg-assistant {
+        background: #2d2d2d; color: #d4d4d4;
+        border-color: #444;
+    }
+    .msg-assistant code { background: #3a3a3a; color: #d4d4d4; }
+    .msg-assistant pre code {
+        background: #1e1e1e; border-color: #444; color: #d4d4d4;
+    }
+    .msg-assistant blockquote { border-left-color: #4a9eff; color: #aaa; }
+    .msg-assistant th, .msg-assistant td { border-color: #555; }
+    .msg-assistant th { background: #333; }
+    .msg-tool {
+        background: #252830; color: #aaa;
+        border-color: #3a3f4b;
+    }
+    .msg-tool .tool-name { color: #ccc; }
+    .msg-tool .tool-preview { color: #888; }
+    .msg-tool .tool-result-details summary { color: #999; }
+    .msg-tool .tool-result-details pre {
+        background: #1e1e1e; border-color: #444; color: #ccc;
+    }
+    .msg-error {
+        background: #3b1c1c; color: #f48771;
+        border-color: #5a2d2d;
+    }
+    .streaming-cursor::after { color: #4a9eff; }
+}
 </style>
 </head><body>
 <div id="chat"></div>
@@ -246,9 +283,9 @@ ChatPanel::ChatPanel(wxWindow* parent,
 
     // Footer bar.
     auto* footer = new wxBoxSizer(wxHORIZONTAL);
-    footer->Add(ctx_gauge_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
-    footer->Add(ctx_label_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
-    footer->Add(compact_btn_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 12);
+    footer->Add(ctx_gauge_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
+    footer->Add(ctx_label_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
+    footer->Add(compact_btn_, 0, wxALIGN_CENTER_VERTICAL);
     footer->AddStretchSpacer();
     footer->Add(locus_chip_, 0, wxALIGN_CENTER_VERTICAL);
     sizer->Add(footer, 0, wxEXPAND | wxALL, 4);
@@ -292,7 +329,8 @@ void ChatPanel::create_footer()
 {
     ctx_gauge_ = new wxGauge(this, wxID_ANY, 100,
                              wxDefaultPosition, wxSize(120, 16));
-    ctx_label_ = new wxStaticText(this, wxID_ANY, "ctx: 0/0");
+    ctx_label_ = new wxStaticText(this, wxID_ANY, "ctx: 0/0",
+                                     wxDefaultPosition, wxSize(150, -1));
     compact_btn_ = new wxButton(this, wxID_ANY, "Compact",
                                 wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
     compact_btn_->SetToolTip("Open context compaction dialog");
