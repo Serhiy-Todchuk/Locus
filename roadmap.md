@@ -159,15 +159,15 @@ Full chat UI, tool approval panels, compaction dialog. WS1 (Locus project) fully
 - [x] Core shutdown: wait for agent thread to finish current turn, close DB cleanly
 - [x] Source layout: `src/gui/*.h/cpp`
 
-### S1.3 — Chat UI + Markdown
-- [ ] `wxWebView` (Edge/WebView2, OS-provided) as chat display panel — HTML/CSS rendering surface, not a bundled browser
-- [ ] `md4c` converts markdown → HTML before injection into WebView
-- [ ] Streaming: `wxTimer` (30–50ms) flushes token buffer via `wxWebView::RunScript()` (DOM append)
-- [ ] Syntax highlighting in code blocks via embedded Prism.js (~20KB)
-- [ ] Scrollable message history: user messages (right-aligned), assistant messages (left-aligned)
-- [ ] `wxTextCtrl` (`wxTE_MULTILINE | wxTE_PROCESS_ENTER`) for input; Shift+Enter = newline
-- [ ] `wxGauge` + `wxStaticText` in footer for context meter (green → yellow → red)
-- [ ] LOCUS.md token cost shown as `[LOCUS.md: 120 tk]` chip in footer
+### S1.3 — Chat UI + Markdown ✔
+- [x] `wxWebView` (Edge/WebView2, OS-provided) as chat display panel — HTML/CSS rendering surface, not a bundled browser
+- [x] `md4c` converts markdown → HTML before injection into WebView
+- [x] Streaming: `wxTimer` (33ms / ~30fps) flushes token buffer via `wxWebView::RunScript()` (DOM append)
+- [x] Syntax highlighting in code blocks via Prism.js (CDN, bundled copy later)
+- [x] Scrollable message history: user messages (right-aligned), assistant messages (left-aligned)
+- [x] `wxTextCtrl` (`wxTE_MULTILINE | wxTE_PROCESS_ENTER`) for input; Shift+Enter = newline
+- [x] `wxGauge` + `wxStaticText` in footer for context meter (green → yellow → red)
+- [x] LOCUS.md token cost shown as `[LOCUS.md: N tk]` chip in footer
 
 ### S1.4 — Tool Approval UI
 - [ ] Add `ask_user` tool

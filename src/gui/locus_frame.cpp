@@ -53,6 +53,13 @@ LocusFrame::LocusFrame(AgentCore& agent, Workspace& workspace)
     Bind(EVT_AGENT_SESSION_RESET, &LocusFrame::on_agent_session_reset, this);
     Bind(EVT_AGENT_ERROR,         &LocusFrame::on_agent_error,         this);
 
+    // Show LOCUS.md token cost if present.
+    if (!workspace_.locus_md().empty()) {
+        // Rough estimate: ~4 chars per token.
+        int locus_tokens = static_cast<int>(workspace_.locus_md().size()) / 4;
+        chat_panel_->set_locus_md_tokens(locus_tokens);
+    }
+
     Centre();
     spdlog::info("LocusFrame created");
 }
@@ -139,17 +146,10 @@ void LocusFrame::setup_aui_layout()
     sb_sizer->AddStretchSpacer();
     sidebar_panel_->SetSizer(sb_sizer);
 
-    // Center chat panel (chat UI in S1.3).
-    chat_panel_ = new wxPanel(this, wxID_ANY);
-    chat_panel_->SetBackgroundColour(*wxWHITE);
-    auto* chat_label = new wxStaticText(chat_panel_, wxID_ANY,
-        "Chat Panel\n(S1.3)", wxDefaultPosition, wxDefaultSize,
-        wxALIGN_CENTER_HORIZONTAL);
-    auto* ch_sizer = new wxBoxSizer(wxVERTICAL);
-    ch_sizer->AddStretchSpacer();
-    ch_sizer->Add(chat_label, 0, wxALIGN_CENTER);
-    ch_sizer->AddStretchSpacer();
-    chat_panel_->SetSizer(ch_sizer);
+    // Center chat panel.
+    chat_panel_ = new ChatPanel(this, [this](const std::string& msg) {
+        agent_.send_message(msg);
+    });
 
     // Right detail panel (tool approval in S1.4).
     detail_panel_ = new wxPanel(this, wxID_ANY);
@@ -210,49 +210,66 @@ void LocusFrame::on_agent_turn_start(wxThreadEvent& /*evt*/)
 {
     SetStatusText("Agent working...", 0);
     if (tray_) tray_->set_state(LocusTray::State::active);
+    chat_panel_->on_turn_start();
 }
 
-void LocusFrame::on_agent_token(wxThreadEvent& /*evt*/)
+void LocusFrame::on_agent_token(wxThreadEvent& evt)
 {
-    // Token streaming display is implemented in S1.3 (chat UI).
-    // For now, just update status to show activity.
+    chat_panel_->on_token(evt.GetString());
 }
 
-void LocusFrame::on_agent_tool_pending(wxThreadEvent& /*evt*/)
+void LocusFrame::on_agent_tool_pending(wxThreadEvent& evt)
 {
-    // Tool approval UI is implemented in S1.4.
-    // For S1.2 bootstrap, auto-approve all tool calls.
-    // NOTE: this is intentionally minimal — real UI comes in S1.4.
-    SetStatusText("Tool call pending (auto-approve in S1.2)", 0);
+    // Full tool approval UI comes in S1.4. For now, show inline in chat
+    // and auto-approve.
+    try {
+        auto payload = nlohmann::json::parse(evt.GetString().ToStdString());
+        wxString tool = wxString::FromUTF8(payload.value("tool", ""));
+        wxString preview = wxString::FromUTF8(payload.value("preview", ""));
+        wxString call_id = wxString::FromUTF8(payload.value("id", ""));
+        chat_panel_->on_tool_pending(tool, preview);
+
+        // Auto-approve until S1.4 provides a real approval UI.
+        agent_.tool_decision(call_id.ToStdString(), ToolDecision::approve);
+    } catch (const std::exception& ex) {
+        spdlog::warn("Failed to parse tool_pending payload: {}", ex.what());
+    }
 }
 
-void LocusFrame::on_agent_tool_result(wxThreadEvent& /*evt*/)
+void LocusFrame::on_agent_tool_result(wxThreadEvent& evt)
 {
-    // Tool result display is implemented in S1.4.
+    try {
+        auto payload = nlohmann::json::parse(evt.GetString().ToStdString());
+        wxString display = wxString::FromUTF8(payload.value("display", ""));
+        chat_panel_->on_tool_result(display);
+    } catch (...) {}
 }
 
 void LocusFrame::on_agent_turn_complete(wxThreadEvent& /*evt*/)
 {
     SetStatusText("Ready", 0);
     if (tray_) tray_->set_state(LocusTray::State::idle);
+    chat_panel_->on_turn_complete();
 }
 
 void LocusFrame::on_agent_context_meter(wxThreadEvent& evt)
 {
     int used  = evt.GetInt();
-    long limit = evt.GetExtraLong();
-    SetStatusText(wxString::Format("ctx: %d/%ld", used, limit), 1);
+    int limit = static_cast<int>(evt.GetExtraLong());
+    SetStatusText(wxString::Format("ctx: %d/%d", used, limit), 1);
+    chat_panel_->set_context_meter(used, limit);
 }
 
 void LocusFrame::on_agent_compaction(wxThreadEvent& /*evt*/)
 {
     // Compaction dialog is implemented in S1.5.
-    SetStatusText("Context full — compaction needed", 0);
+    SetStatusText("Context full -- compaction needed", 0);
 }
 
 void LocusFrame::on_agent_session_reset(wxThreadEvent& /*evt*/)
 {
     SetStatusText("Conversation reset", 0);
+    chat_panel_->on_session_reset();
 }
 
 void LocusFrame::on_agent_error(wxThreadEvent& evt)
@@ -260,6 +277,7 @@ void LocusFrame::on_agent_error(wxThreadEvent& evt)
     wxString msg = evt.GetString();
     SetStatusText("Error: " + msg, 0);
     if (tray_) tray_->set_state(LocusTray::State::error);
+    chat_panel_->on_error(msg);
     spdlog::error("Agent error (shown in UI): {}", msg.ToStdString());
 }
 
