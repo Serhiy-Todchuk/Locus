@@ -1,5 +1,6 @@
 #pragma once
 
+#include "chat_panel.h"
 #include "locus_tray.h"
 #include "wx_frontend.h"
 #include "../agent_core.h"
@@ -14,7 +15,7 @@ namespace locus {
 
 // Main application window. Owns the AUI layout with three panes:
 //   left:   sidebar (file tree — placeholder for S1.6)
-//   center: chat panel (placeholder for S1.3)
+//   center: chat panel (wxWebView + input + footer)
 //   right:  detail panel (placeholder for S1.4)
 //
 // Also owns the system tray icon and the WxFrontend thread bridge.
@@ -55,11 +56,10 @@ private:
     std::unique_ptr<LocusTray>    tray_;
     std::unique_ptr<WxFrontend>   wx_frontend_;
 
-    // Placeholder panels for the 3-pane layout.
-    // Actual implementations come in S1.3 / S1.4 / S1.6.
-    wxPanel* sidebar_panel_  = nullptr;
-    wxPanel* chat_panel_     = nullptr;
-    wxPanel* detail_panel_   = nullptr;
+    // Pane panels.
+    wxPanel*    sidebar_panel_ = nullptr;  // placeholder for S1.6
+    ChatPanel*  chat_panel_    = nullptr;  // chat UI (S1.3)
+    wxPanel*    detail_panel_  = nullptr;  // placeholder for S1.4
 
     wxDECLARE_EVENT_TABLE();
 };

@@ -189,6 +189,7 @@ target_link_libraries(locus PRIVATE
 # -- GUI executable (wxWidgets) ------------------------------------------------
 
 find_package(wxWidgets CONFIG REQUIRED COMPONENTS core base aui stc webview)
+find_package(unofficial-webview2 CONFIG REQUIRED)
 find_package(md4c CONFIG REQUIRED)
 
 add_executable(locus_gui WIN32
@@ -196,12 +197,15 @@ add_executable(locus_gui WIN32
     src/gui/locus_frame.cpp
     src/gui/locus_tray.cpp
     src/gui/wx_frontend.cpp
+    src/gui/chat_panel.cpp
+    src/gui/markdown.cpp
     src/gui/autostart.cpp
 )
 
 target_link_libraries(locus_gui PRIVATE
     locus_core
     wx::core wx::base wx::aui wx::stc wx::webview
+    unofficial::webview2::webview2
     md4c::md4c-html
 )
 
