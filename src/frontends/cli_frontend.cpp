@@ -20,6 +20,23 @@ void CliFrontend::on_token(std::string_view token)
 void CliFrontend::on_tool_call_pending(const ToolCall& call,
                                        const std::string& preview)
 {
+    // Special handling for ask_user: show the question and prompt for a response.
+    if (call.tool_name == "ask_user") {
+        std::string question = call.args.value("question", "");
+        std::cout << "\n\n--- Agent asks: " << question << " ---\n";
+        std::cout << "> " << std::flush;
+
+        std::string response;
+        if (std::getline(std::cin, response) && !response.empty()) {
+            nlohmann::json modified = call.args;
+            modified["response"] = response;
+            core_.tool_decision(call.id, ToolDecision::modify, modified);
+        } else {
+            core_.tool_decision(call.id, ToolDecision::approve);
+        }
+        return;
+    }
+
     std::cout << "\n\n--- Tool call: " << call.tool_name << " ---\n";
 
     // Print args in a readable format.

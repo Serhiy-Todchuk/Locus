@@ -96,6 +96,27 @@ body {
     max-height: 200px;
     overflow-y: auto;
 }
+.msg-tool .tool-result-details {
+    margin-top: 6px;
+}
+.msg-tool .tool-result-details summary {
+    cursor: pointer;
+    color: #555;
+    font-size: 12px;
+    user-select: none;
+}
+.msg-tool .tool-result-details pre {
+    margin: 4px 0 0 0;
+    padding: 6px;
+    background: #f8f8f8;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    white-space: pre-wrap;
+    font-family: "Cascadia Code", "Consolas", monospace;
+    font-size: 12px;
+    max-height: 200px;
+    overflow-y: auto;
+}
 .msg-error {
     align-self: center;
     background: #fdecea;
@@ -352,12 +373,18 @@ void ChatPanel::on_tool_result(const wxString& display)
         truncated = truncated.Left(500) + "... (" +
                     wxString::Format("%zu", display.length() - 500) + " chars truncated)";
 
-    // Append result to the last tool message.
+    // Append result to the last tool message as a collapsible <details> block.
     run_script(wxString::Format(
         "var d=document.getElementById('msg-%d');"
-        "if(d){var r=document.createElement('div');"
-        "r.className='tool-result';r.textContent=%s;"
-        "d.appendChild(r);"
+        "if(d){var det=document.createElement('details');"
+        "det.className='tool-result-details';"
+        "var sum=document.createElement('summary');"
+        "sum.textContent='Result';"
+        "det.appendChild(sum);"
+        "var pre=document.createElement('pre');"
+        "pre.className='tool-result';pre.textContent=%s;"
+        "det.appendChild(pre);"
+        "d.appendChild(det);"
         "window.scrollTo(0,document.body.scrollHeight);}",
         message_id_, "'" + js_escape(truncated) + "'"));
 }

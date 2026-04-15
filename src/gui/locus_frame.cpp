@@ -151,11 +151,18 @@ void LocusFrame::setup_aui_layout()
         agent_.send_message(msg);
     });
 
-    // Right detail panel (tool approval in S1.4).
+    // Tool approval panel — slides in when a tool call needs approval.
+    approval_panel_ = new ToolApprovalPanel(this,
+        [this](const std::string& call_id, ToolDecision decision,
+               const nlohmann::json& modified_args) {
+            agent_.tool_decision(call_id, decision, modified_args);
+        });
+
+    // Right detail panel (file details / outline in S1.6).
     detail_panel_ = new wxPanel(this, wxID_ANY);
     detail_panel_->SetBackgroundColour(wxColour(245, 245, 245));
     auto* detail_label = new wxStaticText(detail_panel_, wxID_ANY,
-        "Tool Details\n(S1.4)", wxDefaultPosition, wxDefaultSize,
+        "Details\n(S1.6)", wxDefaultPosition, wxDefaultSize,
         wxALIGN_CENTER_HORIZONTAL);
     auto* dt_sizer = new wxBoxSizer(wxVERTICAL);
     dt_sizer->AddStretchSpacer();
@@ -172,6 +179,12 @@ void LocusFrame::setup_aui_layout()
     aui_.AddPane(chat_panel_, wxAuiPaneInfo()
         .Name("chat").Caption("Chat")
         .CenterPane());
+
+    aui_.AddPane(approval_panel_, wxAuiPaneInfo()
+        .Name("approval").Caption("Tool Approval")
+        .Bottom().MinSize(-1, 180).BestSize(-1, 220)
+        .CloseButton(false).PinButton(false)
+        .Hide());  // shown dynamically when a tool call needs approval
 
     aui_.AddPane(detail_panel_, wxAuiPaneInfo()
         .Name("details").Caption("Details")
@@ -220,17 +233,21 @@ void LocusFrame::on_agent_token(wxThreadEvent& evt)
 
 void LocusFrame::on_agent_tool_pending(wxThreadEvent& evt)
 {
-    // Full tool approval UI comes in S1.4. For now, show inline in chat
-    // and auto-approve.
     try {
         auto payload = nlohmann::json::parse(evt.GetString().ToStdString());
-        wxString tool = wxString::FromUTF8(payload.value("tool", ""));
-        wxString preview = wxString::FromUTF8(payload.value("preview", ""));
-        wxString call_id = wxString::FromUTF8(payload.value("id", ""));
-        chat_panel_->on_tool_pending(tool, preview);
+        std::string tool    = payload.value("tool", "");
+        std::string call_id = payload.value("id", "");
+        std::string preview = payload.value("preview", "");
+        nlohmann::json args = payload.value("args", nlohmann::json::object());
 
-        // Auto-approve until S1.4 provides a real approval UI.
-        agent_.tool_decision(call_id.ToStdString(), ToolDecision::approve);
+        // Show tool call inline in chat.
+        chat_panel_->on_tool_pending(
+            wxString::FromUTF8(tool), wxString::FromUTF8(preview));
+
+        // Show approval panel and update AUI.
+        approval_panel_->show_tool_call(call_id, tool, args, preview);
+        aui_.GetPane("approval").Show();
+        aui_.Update();
     } catch (const std::exception& ex) {
         spdlog::warn("Failed to parse tool_pending payload: {}", ex.what());
     }
@@ -238,6 +255,13 @@ void LocusFrame::on_agent_tool_pending(wxThreadEvent& evt)
 
 void LocusFrame::on_agent_tool_result(wxThreadEvent& evt)
 {
+    // Hide approval panel (tool was executed).
+    if (approval_panel_->IsShown()) {
+        approval_panel_->dismiss();
+        aui_.GetPane("approval").Hide();
+        aui_.Update();
+    }
+
     try {
         auto payload = nlohmann::json::parse(evt.GetString().ToStdString());
         wxString display = wxString::FromUTF8(payload.value("display", ""));
@@ -249,6 +273,14 @@ void LocusFrame::on_agent_turn_complete(wxThreadEvent& /*evt*/)
 {
     SetStatusText("Ready", 0);
     if (tray_) tray_->set_state(LocusTray::State::idle);
+
+    // Ensure approval panel is hidden.
+    if (approval_panel_->IsShown()) {
+        approval_panel_->dismiss();
+        aui_.GetPane("approval").Hide();
+        aui_.Update();
+    }
+
     chat_panel_->on_turn_complete();
 }
 
