@@ -184,12 +184,6 @@ body {
 </style>
 </head><body>
 <div id="chat"></div>
-<script src=")html";
-    html += k_prism_js_url;
-    html += R"html("></script>
-<script src=")html";
-    html += k_prism_autoloader_url;
-    html += R"html("></script>
 <script>
 function addMsg(id, cls, html) {
     var d = document.createElement('div');
@@ -218,6 +212,12 @@ function clearChat() {
     document.getElementById('chat').innerHTML = '';
 }
 </script>
+<script src=")html";
+    html += k_prism_js_url;
+    html += R"html(" async></script>
+<script src=")html";
+    html += k_prism_autoloader_url;
+    html += R"html(" async></script>
 </body></html>)html";
 
     return html;
@@ -228,9 +228,11 @@ function clearChat() {
 // ---------------------------------------------------------------------------
 
 ChatPanel::ChatPanel(wxWindow* parent,
-                     std::function<void(const std::string&)> on_send)
+                     std::function<void(const std::string&)> on_send,
+                     std::function<void()> on_compact)
     : wxPanel(parent, wxID_ANY)
     , on_send_(std::move(on_send))
+    , on_compact_(std::move(on_compact))
     , flush_timer_(this)
 {
     create_webview();
@@ -245,7 +247,8 @@ ChatPanel::ChatPanel(wxWindow* parent,
     // Footer bar.
     auto* footer = new wxBoxSizer(wxHORIZONTAL);
     footer->Add(ctx_gauge_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
-    footer->Add(ctx_label_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 12);
+    footer->Add(ctx_label_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+    footer->Add(compact_btn_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 12);
     footer->AddStretchSpacer();
     footer->Add(locus_chip_, 0, wxALIGN_CENTER_VERTICAL);
     sizer->Add(footer, 0, wxEXPAND | wxALL, 4);
@@ -263,6 +266,17 @@ void ChatPanel::create_webview()
 
     // Block navigation to external URLs.
     webview_->Bind(wxEVT_WEBVIEW_NAVIGATING, &ChatPanel::on_webview_navigating, this);
+
+    // SetPage() is async in WebView2 — wait for loaded event before running JS.
+    webview_->Bind(wxEVT_WEBVIEW_LOADED, [this](wxWebViewEvent&) {
+        if (page_ready_) return;  // only handle the first load
+        page_ready_ = true;
+        size_t n = pending_scripts_.size();
+        for (auto& js : pending_scripts_)
+            webview_->RunScript(js);
+        pending_scripts_.clear();
+        spdlog::info("WebView page loaded, flushed {} queued scripts", n);
+    });
 }
 
 void ChatPanel::create_input()
@@ -279,6 +293,12 @@ void ChatPanel::create_footer()
     ctx_gauge_ = new wxGauge(this, wxID_ANY, 100,
                              wxDefaultPosition, wxSize(120, 16));
     ctx_label_ = new wxStaticText(this, wxID_ANY, "ctx: 0/0");
+    compact_btn_ = new wxButton(this, wxID_ANY, "Compact",
+                                wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+    compact_btn_->SetToolTip("Open context compaction dialog");
+    compact_btn_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
+        if (on_compact_) on_compact_();
+    });
     locus_chip_ = new wxStaticText(this, wxID_ANY, "");
 }
 
@@ -465,8 +485,13 @@ void ChatPanel::on_input_key(wxKeyEvent& evt)
 
 void ChatPanel::run_script(const wxString& js)
 {
-    if (webview_)
+    if (!webview_) return;
+
+    if (page_ready_) {
         webview_->RunScript(js);
+    } else {
+        pending_scripts_.push_back(js);
+    }
 }
 
 wxString ChatPanel::js_escape(const wxString& s)
@@ -490,10 +515,17 @@ wxString ChatPanel::js_escape(const wxString& s)
 void ChatPanel::on_webview_navigating(wxWebViewEvent& evt)
 {
     wxString url = evt.GetURL();
-    // Allow initial page load and javascript: scheme.
-    if (url == "about:blank" || url.StartsWith("javascript:"))
+
+    // Allow the initial SetPage() load — before page_ready_, let everything through.
+    if (!page_ready_)
         return;
-    // Block all external navigation.
+
+    // After page is loaded, allow javascript: scheme only.
+    if (url.StartsWith("javascript:"))
+        return;
+
+    // Block all external navigation (user clicking links in chat).
+    spdlog::trace("WebView navigation blocked: {}", url.ToStdString());
     evt.Veto();
 }
 

@@ -25,8 +25,10 @@ namespace locus {
 class ChatPanel : public wxPanel {
 public:
     // on_send is called with the user's message text when Enter is pressed.
+    // on_compact is called when the user clicks the manual compaction button.
     ChatPanel(wxWindow* parent,
-              std::function<void(const std::string&)> on_send);
+              std::function<void(const std::string&)> on_send,
+              std::function<void()> on_compact = nullptr);
 
     // -- Called by LocusFrame in response to agent events --
 
@@ -68,12 +70,14 @@ private:
     void on_webview_navigating(wxWebViewEvent& evt);
 
     std::function<void(const std::string&)> on_send_;
+    std::function<void()> on_compact_;
 
-    wxWebView*    webview_    = nullptr;
-    wxTextCtrl*   input_      = nullptr;
-    wxGauge*      ctx_gauge_  = nullptr;
-    wxStaticText* ctx_label_  = nullptr;
-    wxStaticText* locus_chip_ = nullptr;
+    wxWebView*    webview_       = nullptr;
+    wxTextCtrl*   input_         = nullptr;
+    wxGauge*      ctx_gauge_     = nullptr;
+    wxStaticText* ctx_label_     = nullptr;
+    wxButton*     compact_btn_   = nullptr;
+    wxStaticText* locus_chip_    = nullptr;
 
     wxTimer       flush_timer_;
 
@@ -82,6 +86,10 @@ private:
     std::string   current_response_;   // accumulated full response for md4c
     int           message_id_ = 0;     // monotonic ID for message divs
     bool          streaming_  = false;  // true between turn_start and turn_complete
+
+    // WebView readiness: SetPage() is async in WebView2.
+    bool                         page_ready_ = false;
+    std::vector<wxString>        pending_scripts_;
 };
 
 } // namespace locus

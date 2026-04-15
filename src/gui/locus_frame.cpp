@@ -101,7 +101,7 @@ void LocusFrame::create_menu_bar()
         agent_.reset_conversation();
     }, ID_MENU_RESET);
     Bind(wxEVT_MENU, [this](wxCommandEvent&) {
-        agent_.compact_context(CompactionStrategy::drop_tool_results);
+        show_compaction_dialog();
     }, ID_MENU_COMPACT);
     Bind(wxEVT_MENU, [this](wxCommandEvent&) {
         auto id = agent_.save_session();
@@ -147,9 +147,9 @@ void LocusFrame::setup_aui_layout()
     sidebar_panel_->SetSizer(sb_sizer);
 
     // Center chat panel.
-    chat_panel_ = new ChatPanel(this, [this](const std::string& msg) {
-        agent_.send_message(msg);
-    });
+    chat_panel_ = new ChatPanel(this,
+        [this](const std::string& msg) { agent_.send_message(msg); },
+        [this]() { show_compaction_dialog(); });
 
     // Tool approval panel — slides in when a tool call needs approval.
     approval_panel_ = new ToolApprovalPanel(this,
@@ -190,6 +190,25 @@ void LocusFrame::setup_aui_layout()
         .Name("details").Caption("Details")
         .Right().MinSize(200, -1).BestSize(300, -1)
         .CloseButton(true).PinButton(true));
+}
+
+// ---------------------------------------------------------------------------
+// Compaction dialog
+// ---------------------------------------------------------------------------
+
+void LocusFrame::show_compaction_dialog()
+{
+    int used  = static_cast<int>(agent_.history().estimate_tokens());
+    int limit = agent_.context_limit();
+
+    CompactionDialog dlg(this, used, limit, agent_.history());
+    if (dlg.ShowModal() == wxID_OK) {
+        auto choice = dlg.result();
+        if (choice.made) {
+            agent_.compact_context(choice.strategy, choice.drop_n);
+            SetStatusText("Context compacted", 0);
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -294,8 +313,7 @@ void LocusFrame::on_agent_context_meter(wxThreadEvent& evt)
 
 void LocusFrame::on_agent_compaction(wxThreadEvent& /*evt*/)
 {
-    // Compaction dialog is implemented in S1.5.
-    SetStatusText("Context full -- compaction needed", 0);
+    show_compaction_dialog();
 }
 
 void LocusFrame::on_agent_session_reset(wxThreadEvent& /*evt*/)

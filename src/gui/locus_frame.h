@@ -1,6 +1,7 @@
 #pragma once
 
 #include "chat_panel.h"
+#include "compaction_dialog.h"
 #include "locus_tray.h"
 #include "tool_approval_panel.h"
 #include "wx_frontend.h"
@@ -32,6 +33,9 @@ private:
     void create_menu_bar();
     void create_status_bar();
     void setup_aui_layout();
+
+    // Show the compaction dialog and apply the chosen strategy.
+    void show_compaction_dialog();
 
     // Event handlers: window lifecycle
     void on_close(wxCloseEvent& evt);

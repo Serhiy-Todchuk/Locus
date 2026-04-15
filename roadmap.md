@@ -178,13 +178,13 @@ Full chat UI, tool approval panels, compaction dialog. WS1 (Locus project) fully
 - [x] Modify flow: switch args STC to editable, parse JSON on confirm
 - [x] Post-execution: tool result injected into WebView as collapsible `<details>` block
 
-### S1.5 — Context Compaction UI
-- [ ] `on_compaction_needed` → modal `wxDialog` overlaid on chat
-- [ ] Strategy radio buttons with description text
-- [ ] Strategy A: trigger LLM summarisation → show proposed summary in scrollable text area → Confirm / Revise
-- [ ] Strategy C: `wxSlider` for N turns + `wxListBox` live preview of which messages will be removed
-- [ ] All strategies: show before/after token counts via `wxStaticText`, updated on strategy change
-- [ ] Manual compaction: button in context meter footer area
+### S1.5 — Context Compaction UI ✔
+- [x] `on_compaction_needed` → modal `wxDialog` overlaid on chat
+- [x] Strategy radio buttons with description text
+- [x] Strategy A: trigger LLM summarisation → show proposed summary in scrollable text area → Confirm / Revise
+- [x] Strategy C: `wxSlider` for N turns + `wxListBox` live preview of which messages will be removed
+- [x] All strategies: show before/after token counts via `wxStaticText`, updated on strategy change
+- [x] Manual compaction: button in context meter footer area
 
 ### S1.6 — Workspace, File Tree & Settings
 - [ ] `wxTreeCtrl` + `wxImageList` in left AUI pane for file tree; populated from `IndexQuery::list_directory()`
@@ -303,6 +303,8 @@ Items from requirements Nice-to-Have — not scheduled yet:
 - Online model backends (Claude, OpenAI, Gemini)
 - Full VS Code extension (embedded UI panel, not just shim)
 - Plugin system for community tools
+- Approve or modify tool actions
+- Keep working when context fills up
 - Line-level diff viewer for AI-proposed file changes (wxStyledTextCtrl, dtl library)
 - Multiple workspaces open simultaneously (tabbed sessions)
 - Export session as markdown report
