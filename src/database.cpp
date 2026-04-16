@@ -3,6 +3,14 @@
 #include <spdlog/spdlog.h>
 #include <sqlite3.h>
 
+// sqlite-vec: we compile the amalgamation with SQLITE_CORE, so when calling
+// from application code we only need the init function prototype.
+extern "C" {
+    int sqlite3_vec_init(sqlite3* db, char** pzErrMsg,
+                         const sqlite3_api_routines* pApi);
+}
+#define SQLITE_VEC_VERSION "v0.1.9"
+
 #include <stdexcept>
 #include <string>
 
@@ -22,6 +30,19 @@ Database::Database(const fs::path& db_path)
     exec("PRAGMA journal_mode=WAL");
     exec("PRAGMA synchronous=NORMAL");
     exec("PRAGMA foreign_keys=ON");
+
+    // Load sqlite-vec extension (compiled statically)
+    {
+        char* err_msg = nullptr;
+        int rc2 = sqlite3_vec_init(db_, &err_msg, nullptr);
+        if (rc2 != SQLITE_OK) {
+            std::string err = err_msg ? err_msg : "unknown error";
+            sqlite3_free(err_msg);
+            spdlog::warn("sqlite-vec init failed: {}", err);
+        } else {
+            spdlog::trace("sqlite-vec {} loaded", SQLITE_VEC_VERSION);
+        }
+    }
 
     spdlog::trace("SQLite opened: {}", db_path.string());
 
@@ -113,6 +134,27 @@ void Database::create_schema()
         )
     )");
     exec("CREATE INDEX IF NOT EXISTS headings_file ON headings(file_id)");
+
+    // Semantic search chunks
+    exec(R"(
+        CREATE TABLE IF NOT EXISTS chunks (
+            id          INTEGER PRIMARY KEY,
+            file_id     INTEGER REFERENCES files(id),
+            chunk_index INTEGER,
+            start_line  INTEGER,
+            end_line    INTEGER,
+            content     TEXT NOT NULL
+        )
+    )");
+    exec("CREATE INDEX IF NOT EXISTS chunks_file ON chunks(file_id)");
+
+    // Vector index for semantic similarity (sqlite-vec)
+    exec(R"(
+        CREATE VIRTUAL TABLE IF NOT EXISTS chunk_vectors USING vec0(
+            chunk_id INTEGER PRIMARY KEY,
+            embedding float[384]
+        )
+    )");
 
     spdlog::trace("Database schema initialised");
 }

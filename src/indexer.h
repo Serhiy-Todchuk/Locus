@@ -3,6 +3,7 @@
 #include "file_watcher.h"
 
 #include <filesystem>
+#include <functional>
 #include <string>
 #include <vector>
 #include <unordered_map>
@@ -44,8 +45,12 @@ public:
         int files_binary   = 0;
         int symbols_total  = 0;
         int headings_total = 0;
+        int chunks_total   = 0;
     };
     const Stats& stats() const { return stats_; }
+
+    // Called with chunk IDs after each file is chunked (for embedding queue).
+    std::function<void(std::vector<int64_t>)> on_chunks_created;
 
 private:
     // Index a single file (upsert files row, FTS5, symbols, headings).
@@ -65,7 +70,8 @@ private:
     void insert_headings(int64_t file_id,
                          const std::vector<struct ExtractedHeading>& headings);
     void extract_symbols(int64_t file_id, const std::string& content,
-                         const std::string& language);
+                         const std::string& language,
+                         std::vector<struct SymbolSpan>& out_spans);
 
     // Tree-sitter helpers
     void init_tree_sitter();
@@ -87,6 +93,9 @@ private:
     sqlite3_stmt* stmt_delete_syms_  = nullptr;
     sqlite3_stmt* stmt_insert_head_  = nullptr;
     sqlite3_stmt* stmt_delete_heads_ = nullptr;
+    sqlite3_stmt* stmt_insert_chunk_   = nullptr;
+    sqlite3_stmt* stmt_delete_chunks_  = nullptr;
+    sqlite3_stmt* stmt_delete_chunk_vecs_ = nullptr;
 
     // Tree-sitter
     TSParser* ts_parser_ = nullptr;

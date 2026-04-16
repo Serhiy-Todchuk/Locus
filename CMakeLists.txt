@@ -21,6 +21,7 @@ find_package(efsw CONFIG REQUIRED)
 find_package(Catch2 CONFIG REQUIRED)
 find_package(cpr CONFIG REQUIRED)
 find_package(unofficial-tree-sitter CONFIG REQUIRED)
+find_package(onnxruntime CONFIG REQUIRED)
 
 # -- Tree-sitter grammars (fetched at configure time) --------------------------
 
@@ -145,6 +146,18 @@ set_target_properties(ts_grammars PROPERTIES
     C_STANDARD 11
 )
 
+# -- sqlite-vec (compiled from amalgamation) -----------------------------------
+
+add_library(sqlite_vec STATIC
+    third_party/sqlite-vec/sqlite-vec.c
+)
+target_compile_definitions(sqlite_vec PRIVATE SQLITE_CORE)
+target_link_libraries(sqlite_vec PRIVATE unofficial::sqlite3::sqlite3)
+set_target_properties(sqlite_vec PROPERTIES
+    MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
+    C_STANDARD 11
+)
+
 # -- Core library (shared between main exe and tests) --------------------------
 
 add_library(locus_core STATIC
@@ -165,9 +178,12 @@ add_library(locus_core STATIC
     src/extractors/extractor_registry.cpp
     src/extractors/markdown_extractor.cpp
     src/extractors/html_extractor.cpp
+    src/embedder.cpp
+    src/chunker.cpp
+    src/embedding_worker.cpp
 )
 
-target_include_directories(locus_core PUBLIC src)
+target_include_directories(locus_core PUBLIC src third_party/sqlite-vec)
 
 target_link_libraries(locus_core PUBLIC
     spdlog::spdlog
@@ -177,6 +193,8 @@ target_link_libraries(locus_core PUBLIC
     unofficial::tree-sitter::tree-sitter
     ts_grammars
     cpr::cpr
+    onnxruntime::onnxruntime
+    sqlite_vec
 )
 
 # -- Main executable -----------------------------------------------------------

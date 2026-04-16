@@ -56,6 +56,9 @@ public:
 
     // Non-fatal error from the agent (LLM error, unknown tool, etc.).
     virtual void on_error(const std::string& message) = 0;
+
+    // Embedding progress update (from background worker thread).
+    virtual void on_embedding_progress(int done, int total) = 0;
 };
 
 // -- ILocusCore ---------------------------------------------------------------

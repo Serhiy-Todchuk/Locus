@@ -1,0 +1,14 @@
+Third-Party Licenses
+====================
+
+sqlite-vec v0.1.9
+-----------------
+Copyright (c) Alex Garcia
+License: MIT / Apache-2.0
+Source: https://github.com/asg017/sqlite-vec
+
+all-MiniLM-L6-v2 (ONNX, INT8 quantized)
+-----------------------------------------
+Copyright (c) Microsoft Corporation / Sentence-Transformers Authors
+License: Apache-2.0
+Source: https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2

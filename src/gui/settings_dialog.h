@@ -36,6 +36,9 @@ private:
 
     // Index controls
     wxTextCtrl*        exclude_ctrl_     = nullptr;
+
+    // Semantic search controls
+    wxCheckBox*        semantic_enabled_ctrl_ = nullptr;
 };
 
 } // namespace locus

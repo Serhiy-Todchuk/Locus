@@ -9,6 +9,8 @@ namespace locus {
 namespace fs = std::filesystem;
 
 class Database;
+class Embedder;
+class EmbeddingWorker;
 class ExtractorRegistry;
 class FileWatcher;
 class IndexQuery;
@@ -65,6 +67,10 @@ public:
     Indexer& indexer() { return *indexer_; }
     IndexQuery& query() { return *query_; }
 
+    // Semantic search (may be null if disabled)
+    Embedder* embedder() { return embedder_.get(); }
+    EmbeddingWorker* embedding_worker() { return embedding_worker_.get(); }
+
 private:
     void load_config();
     void load_locus_md();
@@ -78,6 +84,8 @@ private:
     std::unique_ptr<FileWatcher> watcher_;
     std::unique_ptr<Indexer> indexer_;
     std::unique_ptr<IndexQuery> query_;
+    std::unique_ptr<Embedder> embedder_;
+    std::unique_ptr<EmbeddingWorker> embedding_worker_;
 };
 
 } // namespace locus

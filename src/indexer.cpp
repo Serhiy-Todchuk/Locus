@@ -1,4 +1,5 @@
 #include "indexer.h"
+#include "chunker.h"
 #include "database.h"
 #include "extractors/extractor_registry.h"
 #include "extractors/text_extractor.h"
@@ -210,6 +211,14 @@ Indexer::Indexer(Database& db, const fs::path& root, const WorkspaceConfig& conf
     )");
     stmt_delete_heads_ = db_.prepare("DELETE FROM headings WHERE file_id = ?1");
 
+    stmt_insert_chunk_ = db_.prepare(R"(
+        INSERT INTO chunks (file_id, chunk_index, start_line, end_line, content)
+        VALUES (?1, ?2, ?3, ?4, ?5)
+    )");
+    stmt_delete_chunks_ = db_.prepare("DELETE FROM chunks WHERE file_id = ?1");
+    stmt_delete_chunk_vecs_ = db_.prepare(
+        "DELETE FROM chunk_vectors WHERE chunk_id IN (SELECT id FROM chunks WHERE file_id = ?1)");
+
     init_tree_sitter();
 
     spdlog::trace("Indexer initialised");
@@ -229,6 +238,9 @@ Indexer::~Indexer()
     finalize(stmt_delete_syms_);
     finalize(stmt_insert_head_);
     finalize(stmt_delete_heads_);
+    finalize(stmt_insert_chunk_);
+    finalize(stmt_delete_chunks_);
+    finalize(stmt_delete_chunk_vecs_);
 
     if (ts_parser_) {
         ts_parser_delete(ts_parser_);
@@ -366,7 +378,8 @@ void Indexer::insert_headings(int64_t file_id,
 // -- Symbol extraction (Tree-sitter) ------------------------------------------
 
 void Indexer::extract_symbols(int64_t file_id, const std::string& content,
-                              const std::string& language)
+                              const std::string& language,
+                              std::vector<SymbolSpan>& out_spans)
 {
     const TSLanguage* ts_lang = ts_language_for(language);
     if (!ts_lang) return;
@@ -424,6 +437,10 @@ void Indexer::extract_symbols(int64_t file_id, const std::string& content,
         sqlite3_step(stmt_insert_sym_);
 
         ++stats_.symbols_total;
+
+        out_spans.push_back({static_cast<int>(start.row) + 1,
+                             static_cast<int>(end.row) + 1});
+
         spdlog::trace("Symbol: {} {} '{}' lines {}-{}", it->second, language, name,
                       start.row + 1, end.row + 1);
     };
@@ -527,7 +544,7 @@ void Indexer::index_file(const fs::path& rel_path)
     if (rc != SQLITE_ROW) return;
     int64_t file_id = sqlite3_column_int64(stmt_file_id_, 0);
 
-    // Delete old FTS/symbols/headings for this file (idempotent re-index)
+    // Delete old FTS/symbols/headings/chunks for this file (idempotent re-index)
     delete_fts(rel_str);
 
     sqlite3_reset(stmt_delete_syms_);
@@ -537,6 +554,16 @@ void Indexer::index_file(const fs::path& rel_path)
     sqlite3_reset(stmt_delete_heads_);
     sqlite3_bind_int64(stmt_delete_heads_, 1, file_id);
     sqlite3_step(stmt_delete_heads_);
+
+    if (config_.semantic_search_enabled) {
+        sqlite3_reset(stmt_delete_chunk_vecs_);
+        sqlite3_bind_int64(stmt_delete_chunk_vecs_, 1, file_id);
+        sqlite3_step(stmt_delete_chunk_vecs_);
+
+        sqlite3_reset(stmt_delete_chunks_);
+        sqlite3_bind_int64(stmt_delete_chunks_, 1, file_id);
+        sqlite3_step(stmt_delete_chunks_);
+    }
 
     // Insert FTS content
     insert_fts(rel_str, content);
@@ -548,8 +575,45 @@ void Indexer::index_file(const fs::path& rel_path)
     }
 
     // Extract symbols (Tree-sitter)
+    std::vector<SymbolSpan> symbol_spans;
     if (config_.code_parsing_enabled) {
-        extract_symbols(file_id, content, language);
+        extract_symbols(file_id, content, language, symbol_spans);
+    }
+
+    // Create semantic chunks (if enabled)
+    if (config_.semantic_search_enabled && !content.empty()) {
+        std::vector<Chunk> chunks;
+        if (!symbol_spans.empty()) {
+            chunks = chunk_code(content, symbol_spans,
+                                config_.chunk_size_lines, config_.chunk_overlap_lines);
+        } else if (!headings.empty()) {
+            chunks = chunk_document(content, headings,
+                                    config_.chunk_size_lines, config_.chunk_overlap_lines);
+        } else {
+            chunks = chunk_sliding_window(content,
+                                          config_.chunk_size_lines, config_.chunk_overlap_lines);
+        }
+
+        std::vector<int64_t> chunk_ids;
+        for (int ci = 0; ci < static_cast<int>(chunks.size()); ++ci) {
+            const auto& chunk = chunks[ci];
+            sqlite3_reset(stmt_insert_chunk_);
+            sqlite3_bind_int64(stmt_insert_chunk_, 1, file_id);
+            sqlite3_bind_int(stmt_insert_chunk_, 2, ci);
+            sqlite3_bind_int(stmt_insert_chunk_, 3, chunk.start_line);
+            sqlite3_bind_int(stmt_insert_chunk_, 4, chunk.end_line);
+            sqlite3_bind_text(stmt_insert_chunk_, 5, chunk.content.c_str(), -1, SQLITE_TRANSIENT);
+            sqlite3_step(stmt_insert_chunk_);
+
+            int64_t chunk_id = sqlite3_last_insert_rowid(db_.handle());
+            chunk_ids.push_back(chunk_id);
+        }
+
+        stats_.chunks_total += static_cast<int>(chunks.size());
+
+        if (on_chunks_created && !chunk_ids.empty()) {
+            on_chunks_created(std::move(chunk_ids));
+        }
     }
 
     spdlog::trace("Indexed: {} (lang={}, {} bytes)", rel_str, language, content.size());
@@ -574,6 +638,15 @@ void Indexer::remove_file(const fs::path& rel_path)
         sqlite3_reset(stmt_delete_heads_);
         sqlite3_bind_int64(stmt_delete_heads_, 1, file_id);
         sqlite3_step(stmt_delete_heads_);
+
+        // Clean up chunks and their vectors
+        sqlite3_reset(stmt_delete_chunk_vecs_);
+        sqlite3_bind_int64(stmt_delete_chunk_vecs_, 1, file_id);
+        sqlite3_step(stmt_delete_chunk_vecs_);
+
+        sqlite3_reset(stmt_delete_chunks_);
+        sqlite3_bind_int64(stmt_delete_chunks_, 1, file_id);
+        sqlite3_step(stmt_delete_chunks_);
     }
 
     delete_fts(rel_str);

@@ -25,6 +25,7 @@ public:
     void on_compaction_needed(int used_tokens, int limit) override;
     void on_session_reset() override;
     void on_error(const std::string& message) override;
+    void on_embedding_progress(int done, int total) override;
 
     // Last context meter values, for displaying in the input prompt.
     int last_used() const { return last_used_; }

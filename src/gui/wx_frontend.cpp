@@ -14,6 +14,7 @@ wxDEFINE_EVENT(EVT_AGENT_CONTEXT_METER, wxThreadEvent);
 wxDEFINE_EVENT(EVT_AGENT_COMPACTION,    wxThreadEvent);
 wxDEFINE_EVENT(EVT_AGENT_SESSION_RESET, wxThreadEvent);
 wxDEFINE_EVENT(EVT_AGENT_ERROR,         wxThreadEvent);
+wxDEFINE_EVENT(EVT_AGENT_EMBEDDING_PROGRESS, wxThreadEvent);
 
 WxFrontend::WxFrontend(wxEvtHandler* handler)
     : handler_(handler)
@@ -91,6 +92,14 @@ void WxFrontend::on_error(const std::string& message)
 {
     auto* evt = new wxThreadEvent(EVT_AGENT_ERROR);
     evt->SetString(wxString::FromUTF8(message));
+    wxQueueEvent(handler_, evt);
+}
+
+void WxFrontend::on_embedding_progress(int done, int total)
+{
+    auto* evt = new wxThreadEvent(EVT_AGENT_EMBEDDING_PROGRESS);
+    evt->SetInt(done);
+    evt->SetExtraLong(total);
     wxQueueEvent(handler_, evt);
 }
 

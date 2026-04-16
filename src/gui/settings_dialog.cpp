@@ -76,6 +76,11 @@ SettingsDialog::SettingsDialog(wxWindow* parent, WorkspaceConfig& config)
         wxTE_MULTILINE | wxHSCROLL);
 
     idx_box->Add(exclude_ctrl_, 1, wxEXPAND | wxALL, 4);
+
+    semantic_enabled_ctrl_ = new wxCheckBox(this, wxID_ANY, "Enable semantic search");
+    semantic_enabled_ctrl_->SetValue(config.semantic_search_enabled);
+    idx_box->Add(semantic_enabled_ctrl_, 0, wxALL, 4);
+
     main_sizer->Add(idx_box, 1, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
 
     // -- Buttons --------------------------------------------------------------
@@ -115,7 +120,10 @@ void SettingsDialog::on_ok(wxCommandEvent& evt)
         llm_changed_ = true;
     }
 
-    if (new_patterns != config_.exclude_patterns) {
+    bool new_semantic = semantic_enabled_ctrl_->GetValue();
+
+    if (new_patterns != config_.exclude_patterns ||
+        new_semantic != config_.semantic_search_enabled) {
         index_changed_ = true;
     }
 
@@ -127,6 +135,7 @@ void SettingsDialog::on_ok(wxCommandEvent& evt)
         config_.llm_temperature   = new_temp;
         config_.llm_context_limit = new_context;
         config_.exclude_patterns  = new_patterns;
+        config_.semantic_search_enabled = new_semantic;
 
         spdlog::info("Settings changed (llm={}, index={})", llm_changed_, index_changed_);
     }

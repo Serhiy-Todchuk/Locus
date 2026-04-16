@@ -5,8 +5,10 @@
 #include <sqlite3.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <fstream>
+#include <unordered_map>
 
 namespace locus {
 
@@ -131,6 +133,15 @@ IndexQuery::IndexQuery(Database& db)
         ORDER BY path
     )");
 
+    stmt_search_semantic_ = db_.prepare(R"(
+        SELECT c.content, c.start_line, f.path, cv.distance
+        FROM chunk_vectors cv
+        JOIN chunks c ON c.id = cv.chunk_id
+        JOIN files f ON f.id = c.file_id
+        WHERE cv.embedding MATCH ?1 AND k = ?2
+        ORDER BY cv.distance
+    )");
+
     spdlog::trace("IndexQuery initialised");
 }
 
@@ -144,6 +155,7 @@ IndexQuery::~IndexQuery()
     finalize(stmt_outline_headings_);
     finalize(stmt_outline_symbols_);
     finalize(stmt_list_dir_);
+    finalize(stmt_search_semantic_);
 
     spdlog::trace("IndexQuery destroyed");
 }
@@ -359,6 +371,118 @@ std::vector<FileEntry> IndexQuery::list_directory(const std::string& path, int d
     });
 
     spdlog::trace("list_directory: {} entries", results.size());
+    return results;
+}
+
+// -- search_semantic ----------------------------------------------------------
+
+std::vector<SearchResult> IndexQuery::search_semantic(
+    const std::vector<float>& query_embedding,
+    const SearchOptions& opts) const
+{
+    spdlog::trace("search_semantic: dim={}, max_results={}",
+                  query_embedding.size(), opts.max_results);
+
+    std::vector<SearchResult> results;
+
+    sqlite3_reset(stmt_search_semantic_);
+    sqlite3_bind_blob(stmt_search_semantic_, 1,
+                      query_embedding.data(),
+                      static_cast<int>(query_embedding.size() * sizeof(float)),
+                      SQLITE_TRANSIENT);
+    sqlite3_bind_int(stmt_search_semantic_, 2, opts.max_results);
+
+    while (sqlite3_step(stmt_search_semantic_) == SQLITE_ROW) {
+        SearchResult r;
+        std::string chunk_text = col_text(stmt_search_semantic_, 0);
+        r.line = sqlite3_column_int(stmt_search_semantic_, 1);
+        r.path = col_text(stmt_search_semantic_, 2);
+        double distance = sqlite3_column_double(stmt_search_semantic_, 3);
+
+        // Convert distance to similarity score (1 - distance for cosine)
+        r.score = 1.0 - distance;
+
+        // Use chunk text as snippet (truncate if needed)
+        if (chunk_text.size() > 500) {
+            chunk_text.resize(500);
+            chunk_text += "...";
+        }
+        r.snippet = std::move(chunk_text);
+
+        results.push_back(std::move(r));
+    }
+
+    spdlog::trace("search_semantic: {} results", results.size());
+    return results;
+}
+
+// -- search_hybrid ------------------------------------------------------------
+
+std::vector<SearchResult> IndexQuery::search_hybrid(
+    const std::string& query_text,
+    const std::vector<float>& query_embedding,
+    const SearchOptions& opts) const
+{
+    spdlog::trace("search_hybrid: query='{}', max_results={}", query_text, opts.max_results);
+
+    // Run both searches with 2x results for better fusion
+    SearchOptions wider_opts;
+    wider_opts.max_results = opts.max_results * 2;
+
+    auto bm25_results = search_text(query_text, wider_opts);
+    auto vec_results = search_semantic(query_embedding, wider_opts);
+
+    // Reciprocal Rank Fusion (k=60)
+    constexpr double k = 60.0;
+
+    // Map: path -> combined RRF score + best result data
+    struct RrfEntry {
+        SearchResult result;
+        double rrf_score = 0.0;
+    };
+    std::unordered_map<std::string, RrfEntry> merged;
+
+    // Add BM25 results
+    for (int i = 0; i < static_cast<int>(bm25_results.size()); ++i) {
+        auto& r = bm25_results[i];
+        std::string key = r.path + ":" + std::to_string(r.line);
+        auto& entry = merged[key];
+        entry.rrf_score += 1.0 / (k + i + 1);
+        if (entry.result.path.empty()) {
+            entry.result = r;
+        }
+    }
+
+    // Add semantic results
+    for (int i = 0; i < static_cast<int>(vec_results.size()); ++i) {
+        auto& r = vec_results[i];
+        std::string key = r.path + ":" + std::to_string(r.line);
+        auto& entry = merged[key];
+        entry.rrf_score += 1.0 / (k + i + 1);
+        if (entry.result.path.empty()) {
+            entry.result = r;
+        }
+    }
+
+    // Sort by RRF score descending
+    std::vector<std::pair<std::string, RrfEntry>> sorted_entries(
+        merged.begin(), merged.end());
+    std::sort(sorted_entries.begin(), sorted_entries.end(),
+              [](const auto& a, const auto& b) {
+                  return a.second.rrf_score > b.second.rrf_score;
+              });
+
+    // Take top results
+    std::vector<SearchResult> results;
+    int limit = std::min(opts.max_results, static_cast<int>(sorted_entries.size()));
+    for (int i = 0; i < limit; ++i) {
+        auto& entry = sorted_entries[i].second;
+        entry.result.score = entry.rrf_score;
+        results.push_back(std::move(entry.result));
+    }
+
+    spdlog::trace("search_hybrid: {} results (from {} BM25 + {} semantic)",
+                  results.size(), bm25_results.size(), vec_results.size());
     return results;
 }
 

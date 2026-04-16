@@ -153,7 +153,7 @@ bool LocusApp::OnInit()
         spdlog::info("Tools: {} registered", tools_->all().size());
 
         // Agent core.
-        WorkspaceContext ws_ctx{ws_path, &workspace_->query()};
+        WorkspaceContext ws_ctx{ws_path, &workspace_->query(), workspace_->embedding_worker()};
         WorkspaceMetadata ws_meta;
         ws_meta.root          = ws_path;
         ws_meta.file_count    = static_cast<int>(st.files_total);

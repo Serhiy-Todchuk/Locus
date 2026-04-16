@@ -1,5 +1,6 @@
 #include "locus_frame.h"
 
+#include "../embedding_worker.h"
 #include "../indexer.h"
 
 #include <spdlog/spdlog.h>
@@ -57,12 +58,20 @@ LocusFrame::LocusFrame(AgentCore& agent, Workspace& workspace)
     Bind(EVT_AGENT_COMPACTION,    &LocusFrame::on_agent_compaction,    this);
     Bind(EVT_AGENT_SESSION_RESET, &LocusFrame::on_agent_session_reset, this);
     Bind(EVT_AGENT_ERROR,         &LocusFrame::on_agent_error,         this);
+    Bind(EVT_AGENT_EMBEDDING_PROGRESS, &LocusFrame::on_agent_embedding_progress, this);
 
     // Show LOCUS.md token cost if present.
     if (!workspace_.locus_md().empty()) {
         // Rough estimate: ~4 chars per token.
         int locus_tokens = static_cast<int>(workspace_.locus_md().size()) / 4;
         chat_panel_->set_locus_md_tokens(locus_tokens);
+    }
+
+    // Wire embedding worker progress to the WxFrontend thread bridge.
+    if (workspace_.embedding_worker()) {
+        workspace_.embedding_worker()->on_progress = [this](int done, int total) {
+            wx_frontend_->on_embedding_progress(done, total);
+        };
     }
 
     // Populate index stats in the file tree panel.
@@ -375,6 +384,13 @@ void LocusFrame::on_agent_error(wxThreadEvent& evt)
     if (tray_) tray_->set_state(LocusTray::State::error);
     chat_panel_->on_error(msg);
     spdlog::error("Agent error (shown in UI): {}", msg.ToStdString());
+}
+
+void LocusFrame::on_agent_embedding_progress(wxThreadEvent& evt)
+{
+    int done = evt.GetInt();
+    int total = static_cast<int>(evt.GetExtraLong());
+    file_tree_panel_->set_embedding_progress(done, total);
 }
 
 } // namespace locus

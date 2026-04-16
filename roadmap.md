@@ -200,19 +200,19 @@ Full chat UI, tool approval panels, compaction dialog. WS1 (Locus project) fully
 **Goal**: All three test workspaces functional. Semantic search operational.
 Personal documents (WS3) works end-to-end.
 
-### S2.1 — Semantic Search
-- [ ] ONNX Runtime C++ API initialised; model loaded from `models/all-MiniLM-L6-v2.onnx` (bundled)
-- [ ] Bundle INT8 quantized `all-MiniLM-L6-v2.onnx` (~23 MB, Apache 2.0) in release; add `THIRD_PARTY_LICENSES`
-- [ ] `chunks` table schema; chunking pipeline wired into indexer
-- [ ] Code chunking: Tree-sitter function/class boundaries → one chunk each; split at 80 lines
-- [ ] Document chunking: heading boundaries (H2/H3); sliding window fallback
-- [ ] sqlite-vec extension loaded; `chunk_vectors` virtual table created
-- [ ] Background embedding thread: processes `chunks` queue at low priority
-- [ ] `search_semantic(query)` tool: embed query → cosine KNN → return ranked snippets
-- [ ] `search_hybrid(query)` tool: FTS5 + semantic → RRF merge → return ranked snippets
-- [ ] UI: Vec index progress bar (S1.7 already has placeholder)
-- [ ] Per-workspace toggle: `semantic_search.enabled` in config; UI toggle in settings
-- [ ] Catch2 tests: RRF merge correctness, chunking boundary detection
+### S2.1 — Semantic Search ✔
+- [x] ONNX Runtime C++ API initialised; model loaded from `models/all-MiniLM-L6-v2.onnx` (bundled)
+- [x] Bundle INT8 quantized `all-MiniLM-L6-v2.onnx` (~23 MB, Apache 2.0) in release; add `THIRD_PARTY_LICENSES`
+- [x] `chunks` table schema; chunking pipeline wired into indexer
+- [x] Code chunking: Tree-sitter function/class boundaries → one chunk each; split at 80 lines
+- [x] Document chunking: heading boundaries (H2/H3); sliding window fallback
+- [x] sqlite-vec extension loaded; `chunk_vectors` virtual table created
+- [x] Background embedding thread: processes `chunks` queue at low priority
+- [x] `search_semantic(query)` tool: embed query → cosine KNN → return ranked snippets
+- [x] `search_hybrid(query)` tool: FTS5 + semantic → RRF merge → return ranked snippets
+- [x] UI: Vec index progress bar (S1.7 already has placeholder)
+- [x] Per-workspace toggle: `semantic_search.enabled` in config; UI toggle in settings
+- [x] Catch2 tests: RRF merge correctness, chunking boundary detection
 
 ### S2.2 — Document Text Extraction
 - [ ] pdfium vcpkg dependency; `PdfiumExtractor`: extract text per page, detect encrypted

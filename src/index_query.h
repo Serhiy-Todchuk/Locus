@@ -84,6 +84,15 @@ public:
     // Directory listing from the files table. depth=0 means immediate children only.
     std::vector<FileEntry> list_directory(const std::string& path, int depth = 0) const;
 
+    // Semantic (vector) search via sqlite-vec cosine similarity.
+    std::vector<SearchResult> search_semantic(const std::vector<float>& query_embedding,
+                                              const SearchOptions& opts = {}) const;
+
+    // Hybrid search: FTS5 BM25 + semantic, merged with Reciprocal Rank Fusion.
+    std::vector<SearchResult> search_hybrid(const std::string& query_text,
+                                            const std::vector<float>& query_embedding,
+                                            const SearchOptions& opts = {}) const;
+
 private:
     Database& db_;
 
@@ -93,6 +102,7 @@ private:
     sqlite3_stmt* stmt_outline_headings_ = nullptr;
     sqlite3_stmt* stmt_outline_symbols_ = nullptr;
     sqlite3_stmt* stmt_list_dir_ = nullptr;
+    sqlite3_stmt* stmt_search_semantic_ = nullptr;
 };
 
 } // namespace locus
