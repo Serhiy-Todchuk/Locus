@@ -227,7 +227,7 @@ int main(int argc, char* argv[])
         spdlog::info("Tools: {} registered", tool_registry.all().size());
 
         // Agent core.
-        locus::WorkspaceContext ws_ctx{workspace_path, &ws.query()};
+        locus::WorkspaceContext ws_ctx{workspace_path, &ws.query(), ws.embedding_worker()};
         locus::WorkspaceMetadata ws_meta;
         ws_meta.root          = workspace_path;
         ws_meta.file_count    = static_cast<int>(st.files_total);

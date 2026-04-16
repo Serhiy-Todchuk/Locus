@@ -1,5 +1,7 @@
 #include "workspace.h"
 #include "database.h"
+#include "embedder.h"
+#include "embedding_worker.h"
 #include "extractors/extractor_registry.h"
 #include "extractors/html_extractor.h"
 #include "extractors/markdown_extractor.h"
@@ -12,6 +14,12 @@
 
 #include <fstream>
 #include <stdexcept>
+
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+#endif
 
 namespace locus {
 
@@ -48,9 +56,55 @@ Workspace::Workspace(const fs::path& root)
     extractors_->register_extractor(".html", std::make_unique<HtmlExtractor>());
     extractors_->register_extractor(".htm",  std::make_unique<HtmlExtractor>());
 
+    // Initialise semantic search if enabled
+    if (config_.semantic_search_enabled) {
+        // Look for model relative to executable, then in workspace .locus/models/
+        fs::path exe_dir = fs::path(fs::current_path());  // fallback
+#ifdef _WIN32
+        {
+            wchar_t buf[MAX_PATH] = {};
+            if (GetModuleFileNameW(nullptr, buf, MAX_PATH))
+                exe_dir = fs::path(buf).parent_path();
+        }
+#endif
+        fs::path model_path = exe_dir / "models" / (config_.embedding_model + ".onnx");
+        if (!fs::exists(model_path)) {
+            model_path = locus_dir_ / "models" / (config_.embedding_model + ".onnx");
+        }
+
+        if (fs::exists(model_path)) {
+            try {
+                embedder_ = std::make_unique<Embedder>(model_path, config_.embedding_dimensions);
+                embedding_worker_ = std::make_unique<EmbeddingWorker>(
+                    *db_, *embedder_, config_.embedding_dimensions);
+                spdlog::info("Semantic search enabled (model: {})", model_path.string());
+            } catch (const std::exception& e) {
+                spdlog::error("Failed to initialise embedder: {}", e.what());
+                embedder_.reset();
+                embedding_worker_.reset();
+            }
+        } else {
+            spdlog::warn("Semantic search enabled but model not found: {}",
+                         model_path.string());
+        }
+    }
+
     spdlog::info("Building workspace index");
     indexer_ = std::make_unique<Indexer>(*db_, root_, config_, *extractors_);
+
+    // Wire chunking callback to embedding worker
+    if (embedding_worker_) {
+        indexer_->on_chunks_created = [this](std::vector<int64_t> ids) {
+            embedding_worker_->enqueue(std::move(ids));
+        };
+    }
+
     indexer_->build_initial();
+
+    // Start embedding worker after initial index (chunks are queued)
+    if (embedding_worker_) {
+        embedding_worker_->start();
+    }
 
     query_ = std::make_unique<IndexQuery>(*db_);
 
@@ -59,6 +113,9 @@ Workspace::Workspace(const fs::path& root)
 
 Workspace::~Workspace()
 {
+    if (embedding_worker_) {
+        embedding_worker_->stop();
+    }
     if (watcher_) {
         watcher_->stop();
     }

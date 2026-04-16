@@ -16,6 +16,7 @@
             "name": "wxwidgets",
             "features": ["webview"]
         },
-        "md4c"
+        "md4c",
+        "onnxruntime"
     ]
 }

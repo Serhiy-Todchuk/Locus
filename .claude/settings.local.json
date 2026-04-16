@@ -95,7 +95,29 @@
       "Bash(cmake --build build/debug --target locus_tests)",
       "Bash(xargs grep *)",
       "Bash(ctest --output-on-failure -C Debug -E \"timeout|100ms\")",
-      "Bash(ctest --output-on-failure -C Debug -R \"heading|Heading|outline\")"
+      "Bash(ctest --output-on-failure -C Debug -R \"heading|Heading|outline\")",
+      "Bash(grep -n \"register_builtin_tools\" /d/Projects/AICodeAss/src/*.cpp /d/Projects/AICodeAss/src/**/*.cpp)",
+      "Bash(d:/Projects/AICodeAss/vcpkg_installed/../../../vcpkg/vcpkg search *)",
+      "Bash(C:/vcpkg/vcpkg search *)",
+      "Bash(curl -L -o sqlite-vec.h \"https://raw.githubusercontent.com/asg017/sqlite-vec/main/sqlite-vec.h\")",
+      "Bash(curl -L -o sqlite-vec.c \"https://raw.githubusercontent.com/asg017/sqlite-vec/main/sqlite-vec.c\")",
+      "Bash(curl -L -o release.tar.gz \"https://github.com/asg017/sqlite-vec/releases/latest/download/sqlite-vec-amalgamation.tar.gz\")",
+      "Bash(curl -sL \"https://api.github.com/repos/asg017/sqlite-vec/releases/latest\")",
+      "Bash(rm -f release.tar.gz sqlite-vec.h sqlite-vec.c)",
+      "Bash(curl -L -o amalgamation.zip \"https://github.com/asg017/sqlite-vec/releases/download/v0.1.9/sqlite-vec-0.1.9-amalgamation.zip\")",
+      "Bash(unzip -o amalgamation.zip)",
+      "Bash(rm amalgamation.zip)",
+      "Bash(C:/vcpkg/vcpkg install *)",
+      "Read(//c/vcpkg/ports/onnxruntime/**)",
+      "Bash(tasklist)",
+      "Bash(ls -t C:/vcpkg/buildtrees/onnxruntime/*.log)",
+      "Read(//c/vcpkg/packages/onnxruntime_x64-windows-static/share/onnxruntime/**)",
+      "Read(//c/vcpkg/packages/onnxruntime_x64-windows-static/**)",
+      "Bash(taskkill /F /IM cmake.exe)",
+      "Bash(taskkill /F /IM vcpkg.exe)",
+      "Bash(taskkill /F /IM vcpkgsrv.exe)",
+      "Bash(./build/debug/tests/Debug/locus_tests.exe \"[s2.1]\")",
+      "Bash(./build/debug/tests/Debug/locus_tests.exe)"
     ]
   }
 }

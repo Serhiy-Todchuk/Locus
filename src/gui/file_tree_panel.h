@@ -31,6 +31,9 @@ public:
     // Show/hide the re-index progress gauge.
     void set_reindex_active(bool active);
 
+    // Update embedding progress (done/total chunks).
+    void set_embedding_progress(int done, int total);
+
 private:
     void create_image_list();
     void populate_children(wxTreeItemId parent, const std::string& dir_path);

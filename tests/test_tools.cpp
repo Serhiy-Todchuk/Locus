@@ -48,7 +48,7 @@ TEST_CASE("ToolRegistry: build_schema_json produces valid OpenAI schema", "[s0.6
     auto schema = registry.build_schema_json();
 
     REQUIRE(schema.is_array());
-    REQUIRE(schema.size() == 9);  // 9 built-in tools
+    REQUIRE(schema.size() == 12);  // 9 built-in tools
 
     for (auto& entry : schema) {
         REQUIRE(entry.contains("type"));
@@ -80,7 +80,7 @@ TEST_CASE("ToolRegistry: all returns all tools", "[s0.6]")
     locus::register_builtin_tools(registry);
 
     auto all = registry.all();
-    REQUIRE(all.size() == 9);
+    REQUIRE(all.size() == 12);
 }
 
 TEST_CASE("ToolRegistry: parse_tool_call handles valid and empty JSON", "[s0.6]")

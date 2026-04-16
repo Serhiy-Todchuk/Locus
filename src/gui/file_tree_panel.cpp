@@ -207,4 +207,20 @@ void FileTreePanel::set_reindex_active(bool active)
     GetSizer()->Layout();
 }
 
+void FileTreePanel::set_embedding_progress(int done, int total)
+{
+    if (total <= 0) {
+        reindex_gauge_->Hide();
+    } else if (done >= total) {
+        reindex_gauge_->Hide();
+        stats_label_->SetLabel(stats_label_->GetLabel() +
+                               wxString::Format(" | Vec: %d", total));
+    } else {
+        reindex_gauge_->Show();
+        reindex_gauge_->SetRange(total);
+        reindex_gauge_->SetValue(done);
+    }
+    GetSizer()->Layout();
+}
+
 } // namespace locus

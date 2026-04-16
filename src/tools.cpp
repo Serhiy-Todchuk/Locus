@@ -1,10 +1,12 @@
 #include "tools.h"
+#include "embedding_worker.h"
 #include "index_query.h"
 
 #include <spdlog/spdlog.h>
 
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <sstream>
 #include <string>
 
@@ -516,6 +518,82 @@ ToolResult AskUserTool::execute(const ToolCall& call, const WorkspaceContext& /*
     return {true, response, response};
 }
 
+// -- SearchSemanticTool -------------------------------------------------------
+
+ToolResult SearchSemanticTool::execute(const ToolCall& call, const WorkspaceContext& ws)
+{
+    if (!ws.embedder)
+        return error_result("Error: semantic search is not enabled. "
+                            "Enable it in Settings > Index > Semantic Search.");
+    if (!ws.index)
+        return error_result("Error: workspace index not available");
+
+    std::string query = call.args.value("query", "");
+    if (query.empty())
+        return error_result("Error: 'query' parameter is required");
+
+    int max_results = call.args.value("max_results", 10);
+
+    auto embedding = ws.embedder->embed_query(query);
+
+    SearchOptions opts;
+    opts.max_results = max_results;
+    auto results = ws.index->search_semantic(embedding, opts);
+
+    if (results.empty())
+        return {true, "No semantic matches found.", "No semantic matches found."};
+
+    std::ostringstream out;
+    out << results.size() << " semantic matches:\n";
+    for (size_t i = 0; i < results.size(); ++i) {
+        auto& r = results[i];
+        out << "\n[" << (i + 1) << "] " << r.path << ":" << r.line
+            << " (similarity: " << std::fixed << std::setprecision(3) << r.score << ")\n";
+        out << r.snippet << "\n";
+    }
+
+    std::string result = out.str();
+    return {true, result, result};
+}
+
+// -- SearchHybridTool --------------------------------------------------------
+
+ToolResult SearchHybridTool::execute(const ToolCall& call, const WorkspaceContext& ws)
+{
+    if (!ws.embedder)
+        return error_result("Error: semantic search is not enabled. "
+                            "Enable it in Settings > Index > Semantic Search.");
+    if (!ws.index)
+        return error_result("Error: workspace index not available");
+
+    std::string query = call.args.value("query", "");
+    if (query.empty())
+        return error_result("Error: 'query' parameter is required");
+
+    int max_results = call.args.value("max_results", 10);
+
+    auto embedding = ws.embedder->embed_query(query);
+
+    SearchOptions opts;
+    opts.max_results = max_results;
+    auto results = ws.index->search_hybrid(query, embedding, opts);
+
+    if (results.empty())
+        return {true, "No matches found.", "No matches found."};
+
+    std::ostringstream out;
+    out << results.size() << " hybrid matches (BM25 + semantic):\n";
+    for (size_t i = 0; i < results.size(); ++i) {
+        auto& r = results[i];
+        out << "\n[" << (i + 1) << "] " << r.path << ":" << r.line
+            << " (score: " << std::fixed << std::setprecision(4) << r.score << ")\n";
+        out << r.snippet << "\n";
+    }
+
+    std::string result = out.str();
+    return {true, result, result};
+}
+
 // -- Factory ----------------------------------------------------------------
 
 void register_builtin_tools(IToolRegistry& registry)
@@ -530,6 +608,8 @@ void register_builtin_tools(IToolRegistry& registry)
     registry.register_tool(std::make_unique<GetFileOutlineTool>());
     registry.register_tool(std::make_unique<RunCommandTool>());
     registry.register_tool(std::make_unique<AskUserTool>());
+    registry.register_tool(std::make_unique<SearchSemanticTool>());
+    registry.register_tool(std::make_unique<SearchHybridTool>());
 }
 
 } // namespace locus

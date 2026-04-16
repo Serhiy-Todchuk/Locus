@@ -8,6 +8,7 @@
 
 namespace locus {
 
+class EmbeddingWorker;
 class IndexQuery;
 
 // -- Structs passed to/from tools -------------------------------------------
@@ -35,7 +36,8 @@ struct ToolCall {
 // Tools use this to resolve paths, query the index, etc.
 struct WorkspaceContext {
     std::filesystem::path root;
-    IndexQuery*           index = nullptr;  // may be null if index unavailable
+    IndexQuery*           index = nullptr;     // may be null if index unavailable
+    EmbeddingWorker*      embedder = nullptr;  // may be null if semantic search disabled
 };
 
 // -- ITool interface --------------------------------------------------------

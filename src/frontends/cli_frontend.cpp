@@ -175,4 +175,9 @@ nlohmann::json CliFrontend::read_modified_args(const nlohmann::json& original)
     }
 }
 
+void CliFrontend::on_embedding_progress(int done, int total)
+{
+    spdlog::trace("Embedding progress: {}/{}", done, total);
+}
+
 } // namespace locus

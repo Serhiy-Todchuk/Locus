@@ -59,6 +59,7 @@ private:
     void on_agent_compaction(wxThreadEvent& evt);
     void on_agent_session_reset(wxThreadEvent& evt);
     void on_agent_error(wxThreadEvent& evt);
+    void on_agent_embedding_progress(wxThreadEvent& evt);
 
     // Core references (not owned)
     AgentCore& agent_;

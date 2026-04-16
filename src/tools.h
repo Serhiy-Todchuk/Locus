@@ -158,6 +158,44 @@ public:
     ToolResult  execute(const ToolCall& call, const WorkspaceContext& ws) override;
 };
 
+// -- Semantic search tools (approval: auto) ----------------------------------
+
+class SearchSemanticTool : public ITool {
+public:
+    std::string name()        const override { return "search_semantic"; }
+    std::string description() const override {
+        return "Semantic search across all indexed files using vector similarity. "
+               "Finds conceptually related content even without exact keyword matches. "
+               "Requires semantic search to be enabled.";
+    }
+    std::vector<ToolParam> params() const override {
+        return {
+            {"query",       "string",  "Natural language query describing what to find", true},
+            {"max_results", "integer", "Maximum results to return (default 10)", false},
+        };
+    }
+    std::string approval_policy() const override { return "auto"; }
+    ToolResult  execute(const ToolCall& call, const WorkspaceContext& ws) override;
+};
+
+class SearchHybridTool : public ITool {
+public:
+    std::string name()        const override { return "search_hybrid"; }
+    std::string description() const override {
+        return "Hybrid search combining keyword (BM25) and semantic (vector) search. "
+               "Best for queries that benefit from both exact matches and conceptual similarity. "
+               "Requires semantic search to be enabled.";
+    }
+    std::vector<ToolParam> params() const override {
+        return {
+            {"query",       "string",  "Search query (supports both keywords and natural language)", true},
+            {"max_results", "integer", "Maximum results to return (default 10)", false},
+        };
+    }
+    std::string approval_policy() const override { return "auto"; }
+    ToolResult  execute(const ToolCall& call, const WorkspaceContext& ws) override;
+};
+
 // -- Interactive tools -------------------------------------------------------
 
 class AskUserTool : public ITool {
