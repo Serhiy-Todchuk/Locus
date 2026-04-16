@@ -9,6 +9,7 @@ namespace locus {
 namespace fs = std::filesystem;
 
 class Database;
+class ExtractorRegistry;
 class FileWatcher;
 class IndexQuery;
 class Indexer;
@@ -59,6 +60,7 @@ public:
     const std::string& locus_md() const { return locus_md_; }
 
     Database& database() { return *db_; }
+    ExtractorRegistry& extractors() { return *extractors_; }
     FileWatcher& file_watcher() { return *watcher_; }
     Indexer& indexer() { return *indexer_; }
     IndexQuery& query() { return *query_; }
@@ -72,6 +74,7 @@ private:
     WorkspaceConfig config_;
     std::string locus_md_;
     std::unique_ptr<Database> db_;
+    std::unique_ptr<ExtractorRegistry> extractors_;
     std::unique_ptr<FileWatcher> watcher_;
     std::unique_ptr<Indexer> indexer_;
     std::unique_ptr<IndexQuery> query_;

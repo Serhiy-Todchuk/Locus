@@ -333,8 +333,6 @@ void LMStudioClient::do_stream(
         try {
             auto delta_json = json::parse(data);
 
-            spdlog::trace("LLM chunk: {}", data);
-
             // Navigate: choices[0].delta
             if (!delta_json.contains("choices") || delta_json["choices"].empty())
                 return true;

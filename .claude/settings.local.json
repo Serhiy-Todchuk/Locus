@@ -92,7 +92,10 @@
       "Bash(cmake -B build -G \"Visual Studio 18 2026\" -DCMAKE_TOOLCHAIN_FILE=D:/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-windows-static -DVCPKG_OVERLAY_TRIPLETS=cmake/triplets)",
       "Bash(cmake --build build/debug --target locus_gui)",
       "Bash(cmake --build build/debug --target locus)",
-      "Bash(cmake --build build/debug --target locus_tests)"
+      "Bash(cmake --build build/debug --target locus_tests)",
+      "Bash(xargs grep *)",
+      "Bash(ctest --output-on-failure -C Debug -E \"timeout|100ms\")",
+      "Bash(ctest --output-on-failure -C Debug -R \"heading|Heading|outline\")"
     ]
   }
 }

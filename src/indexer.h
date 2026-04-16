@@ -17,6 +17,7 @@ namespace locus {
 namespace fs = std::filesystem;
 
 class Database;
+class ExtractorRegistry;
 struct WorkspaceConfig;
 
 // Walks the workspace, reads files, and populates the FTS5, symbols, and
@@ -24,7 +25,8 @@ struct WorkspaceConfig;
 // updates driven by FileWatcher events.
 class Indexer {
 public:
-    Indexer(Database& db, const fs::path& root, const WorkspaceConfig& config);
+    Indexer(Database& db, const fs::path& root, const WorkspaceConfig& config,
+           const ExtractorRegistry& extractors);
     ~Indexer();
 
     Indexer(const Indexer&) = delete;
@@ -60,8 +62,8 @@ private:
     // Content extraction
     void insert_fts(const std::string& rel_path_str, const std::string& content);
     void delete_fts(const std::string& rel_path_str);
-    void extract_headings(int64_t file_id, const std::string& content,
-                          const std::string& language);
+    void insert_headings(int64_t file_id,
+                         const std::vector<struct ExtractedHeading>& headings);
     void extract_symbols(int64_t file_id, const std::string& content,
                          const std::string& language);
 
@@ -72,6 +74,7 @@ private:
     Database& db_;
     fs::path root_;
     const WorkspaceConfig& config_;
+    const ExtractorRegistry& extractors_;
     Stats stats_;
 
     // Prepared statements (owned, finalised in destructor)

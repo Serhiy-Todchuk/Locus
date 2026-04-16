@@ -1,5 +1,7 @@
 #include "indexer.h"
 #include "database.h"
+#include "extractors/extractor_registry.h"
+#include "extractors/text_extractor.h"
 #include "glob_match.h"
 #include "workspace.h"
 
@@ -9,8 +11,6 @@
 
 #include <chrono>
 #include <fstream>
-#include <regex>
-#include <sstream>
 
 // Tree-sitter grammar entry points (compiled from grammar sources)
 extern "C" {
@@ -176,10 +176,12 @@ static const std::vector<SymbolRule>& symbol_rules_for(const std::string& langua
 
 // -- Indexer ------------------------------------------------------------------
 
-Indexer::Indexer(Database& db, const fs::path& root, const WorkspaceConfig& config)
+Indexer::Indexer(Database& db, const fs::path& root, const WorkspaceConfig& config,
+                 const ExtractorRegistry& extractors)
     : db_(db)
     , root_(root)
     , config_(config)
+    , extractors_(extractors)
 {
     // Prepare statements
     stmt_upsert_file_ = db_.prepare(R"(
@@ -344,75 +346,20 @@ void Indexer::delete_fts(const std::string& rel_path_str)
     sqlite3_step(stmt_delete_fts_);
 }
 
-// -- Heading extraction -------------------------------------------------------
+// -- Heading insertion (from extractor results) --------------------------------
 
-void Indexer::extract_headings(int64_t file_id, const std::string& content,
-                               const std::string& language)
+void Indexer::insert_headings(int64_t file_id,
+                              const std::vector<ExtractedHeading>& headings)
 {
-    if (language == "markdown") {
-        // Markdown: lines starting with #
-        std::istringstream stream(content);
-        std::string line;
-        int line_num = 0;
-        while (std::getline(stream, line)) {
-            ++line_num;
-            if (line.empty() || line[0] != '#') continue;
+    for (const auto& h : headings) {
+        sqlite3_reset(stmt_insert_head_);
+        sqlite3_bind_int64(stmt_insert_head_, 1, file_id);
+        sqlite3_bind_int(stmt_insert_head_, 2, h.level);
+        sqlite3_bind_text(stmt_insert_head_, 3, h.text.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_int(stmt_insert_head_, 4, h.line_number);
+        sqlite3_step(stmt_insert_head_);
 
-            int level = 0;
-            while (level < static_cast<int>(line.size()) && line[level] == '#') ++level;
-            if (level > 6 || level >= static_cast<int>(line.size())) continue;
-            if (line[level] != ' ') continue;   // require space after #
-
-            std::string text = line.substr(level + 1);
-            // Trim trailing whitespace and #
-            while (!text.empty() && (text.back() == ' ' || text.back() == '#' || text.back() == '\r'))
-                text.pop_back();
-
-            if (text.empty()) continue;
-
-            sqlite3_reset(stmt_insert_head_);
-            sqlite3_bind_int64(stmt_insert_head_, 1, file_id);
-            sqlite3_bind_int(stmt_insert_head_, 2, level);
-            sqlite3_bind_text(stmt_insert_head_, 3, text.c_str(), -1, SQLITE_TRANSIENT);
-            sqlite3_bind_int(stmt_insert_head_, 4, line_num);
-            sqlite3_step(stmt_insert_head_);
-
-            ++stats_.headings_total;
-        }
-    }
-    else if (language == "html") {
-        // HTML: <h1>...</h1> through <h6>...</h6>
-        static const std::regex heading_re(R"(<h([1-6])[^>]*>(.*?)</h\1>)",
-                                           std::regex::icase);
-        int line_num = 1;
-        size_t search_start = 0;
-        std::smatch match;
-        std::string s = content;
-        while (std::regex_search(s.cbegin() + search_start, s.cend(), match, heading_re)) {
-            // Count newlines before this match to get approximate line number
-            auto match_pos = static_cast<size_t>(match.position()) + search_start;
-            line_num = 1 + static_cast<int>(std::count(s.begin(), s.begin() + match_pos, '\n'));
-
-            int level = std::stoi(match[1].str());
-            std::string text = match[2].str();
-
-            // Strip inner HTML tags
-            static const std::regex tag_re("<[^>]+>");
-            text = std::regex_replace(text, tag_re, "");
-
-            if (!text.empty()) {
-                sqlite3_reset(stmt_insert_head_);
-                sqlite3_bind_int64(stmt_insert_head_, 1, file_id);
-                sqlite3_bind_int(stmt_insert_head_, 2, level);
-                sqlite3_bind_text(stmt_insert_head_, 3, text.c_str(), -1, SQLITE_TRANSIENT);
-                sqlite3_bind_int(stmt_insert_head_, 4, line_num);
-                sqlite3_step(stmt_insert_head_);
-
-                ++stats_.headings_total;
-            }
-
-            search_start = match_pos + match.length();
-        }
+        ++stats_.headings_total;
     }
 }
 
@@ -527,10 +474,31 @@ void Indexer::index_file(const fs::path& rel_path)
     std::string ext = rel_path.extension().string();
     std::string language = detect_language(ext);
 
-    // Read content for binary detection and indexing
-    std::string content = read_file_content(abs_path, config_.max_file_size_kb);
-    bool binary = content.empty() ||
-                  is_binary_content(content.data(), content.size());
+    // Try extractor for this file type, fall back to raw content read
+    std::string content;
+    std::vector<ExtractedHeading> headings;
+    bool binary = false;
+
+    ITextExtractor* extractor = extractors_.find(ext);
+    if (extractor) {
+        // Check file size before invoking extractor
+        if (config_.max_file_size_kb > 0 &&
+            fsize > static_cast<uintmax_t>(config_.max_file_size_kb) * 1024) {
+            spdlog::trace("Skipping large file ({} KB): {}", fsize / 1024, abs_path.string());
+            binary = true;
+        } else {
+            auto result = extractor->extract(abs_path);
+            binary = result.is_binary;
+            if (!binary) {
+                content = std::move(result.text);
+                headings = std::move(result.headings);
+            }
+        }
+    } else {
+        content = read_file_content(abs_path, config_.max_file_size_kb);
+        binary = content.empty() ||
+                 is_binary_content(content.data(), content.size());
+    }
 
     // Upsert files row
     sqlite3_reset(stmt_upsert_file_);
@@ -574,8 +542,10 @@ void Indexer::index_file(const fs::path& rel_path)
     insert_fts(rel_str, content);
     ++stats_.files_indexed;
 
-    // Extract headings
-    extract_headings(file_id, content, language);
+    // Insert headings (from extractor)
+    if (!headings.empty()) {
+        insert_headings(file_id, headings);
+    }
 
     // Extract symbols (Tree-sitter)
     if (config_.code_parsing_enabled) {
