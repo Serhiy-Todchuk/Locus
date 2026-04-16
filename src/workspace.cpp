@@ -1,5 +1,8 @@
 #include "workspace.h"
 #include "database.h"
+#include "extractors/extractor_registry.h"
+#include "extractors/html_extractor.h"
+#include "extractors/markdown_extractor.h"
 #include "file_watcher.h"
 #include "index_query.h"
 #include "indexer.h"
@@ -38,8 +41,15 @@ Workspace::Workspace(const fs::path& root)
     watcher_ = std::make_unique<FileWatcher>(root_, config_.exclude_patterns);
     watcher_->start();
 
+    // Register text extractors for known document formats
+    extractors_ = std::make_unique<ExtractorRegistry>();
+    extractors_->register_extractor(".md",   std::make_unique<MarkdownExtractor>());
+    extractors_->register_extractor(".markdown", std::make_unique<MarkdownExtractor>());
+    extractors_->register_extractor(".html", std::make_unique<HtmlExtractor>());
+    extractors_->register_extractor(".htm",  std::make_unique<HtmlExtractor>());
+
     spdlog::info("Building workspace index");
-    indexer_ = std::make_unique<Indexer>(*db_, root_, config_);
+    indexer_ = std::make_unique<Indexer>(*db_, root_, config_, *extractors_);
     indexer_->build_initial();
 
     query_ = std::make_unique<IndexQuery>(*db_);

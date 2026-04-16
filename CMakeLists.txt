@@ -162,6 +162,9 @@ add_library(locus_core STATIC
     src/agent_core.cpp
     src/session_manager.cpp
     src/frontends/cli_frontend.cpp
+    src/extractors/extractor_registry.cpp
+    src/extractors/markdown_extractor.cpp
+    src/extractors/html_extractor.cpp
 )
 
 target_include_directories(locus_core PUBLIC src)

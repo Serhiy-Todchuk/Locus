@@ -119,13 +119,17 @@ Core is a static lib (`locus_core`). Both `locus` (exe) and `locus_tests` link i
 | `src/workspace.h/cpp` | Opens a folder, owns DB + watcher + indexer + query. One per folder. | `Workspace`, `WorkspaceConfig` |
 | `src/database.h/cpp` | RAII SQLite wrapper. WAL mode. Schema creation. | `Database` |
 | `src/file_watcher.h/cpp` | efsw wrapper. Debounced `FileEvent` queue. | `FileWatcher`, `FileEvent` |
-| `src/indexer.h/cpp` | Initial traversal + incremental updates. Tree-sitter parsing. | `Indexer`, `Indexer::Stats` |
+| `src/indexer.h/cpp` | Initial traversal + incremental updates. Tree-sitter symbol parsing. Uses `ExtractorRegistry` for text/heading extraction. | `Indexer`, `Indexer::Stats` |
 | `src/index_query.h/cpp` | Read-only queries: FTS5 search, symbol lookup, outlines, dir listing. | `IndexQuery`, `SearchResult`, `SymbolResult`, `OutlineEntry`, `FileEntry` |
 | `src/llm_client.h/cpp` | SSE streaming to OpenAI-compatible endpoints. Token estimation. | `ILLMClient`, `ChatMessage`, `ToolCallRequest`, `LLMConfig`, `StreamCallbacks` |
 | `src/sse_parser.h/cpp` | Low-level SSE `data:` line parser. | `SseParser` |
 | `src/tool.h` | Tool system interfaces (no .cpp — pure abstract + structs). | `ITool`, `IToolRegistry`, `ToolParam`, `ToolResult`, `ToolCall`, `WorkspaceContext` |
 | `src/tool_registry.h/cpp` | Concrete registry. Schema JSON builder. ToolCall parser. | `ToolRegistry` |
 | `src/tools.h/cpp` | All 9 built-in tools + `register_builtin_tools()` factory. | `ReadFileTool`, `WriteFileTool`, `CreateFileTool`, `DeleteFileTool`, `ListDirectoryTool`, `SearchTextTool`, `SearchSymbolsTool`, `GetFileOutlineTool`, `RunCommandTool` |
+| `src/extractors/text_extractor.h` | Base interface for file format extractors (no .cpp — pure abstract + structs). | `ITextExtractor`, `ExtractionResult`, `ExtractedHeading` |
+| `src/extractors/extractor_registry.h/cpp` | Maps file extension → `ITextExtractor`. Owned by `Workspace`. | `ExtractorRegistry` |
+| `src/extractors/markdown_extractor.h/cpp` | Extracts text + `#` headings from `.md` files. | `MarkdownExtractor` |
+| `src/extractors/html_extractor.h/cpp` | Extracts text + `<h1>`–`<h6>` headings from `.html` files. | `HtmlExtractor` |
 | `src/glob_match.h` | Header-only glob pattern matching for exclude patterns. | `glob_match()` |
 | `src/frontend.h` | Frontend/core interfaces (no .cpp — pure abstract + enums). | `IFrontend`, `ILocusCore`, `ToolDecision`, `CompactionStrategy` |
 | `src/frontend_registry.h` | Thread-safe frontend registry with exception-isolated fan-out. Header-only. | `FrontendRegistry` |
@@ -149,7 +153,9 @@ Core is a static lib (`locus_core`). Both `locus` (exe) and `locus_tests` link i
 
 **Test files** follow `tests/test_<topic>.cpp` — one per subsystem, tagged by stage.
 
-**Data flow**: `main` → `Workspace` (owns `Database`, `FileWatcher`, `Indexer`, `IndexQuery`) → `AgentCore` (owns `ConversationHistory`, `SessionManager`, bridges `ILLMClient` + `IToolRegistry` + `WorkspaceContext`) → frontends receive events via `IFrontend` through `FrontendRegistry`.
+**Data flow**: `main` → `Workspace` (owns `Database`, `ExtractorRegistry`, `FileWatcher`, `Indexer`, `IndexQuery`) → `AgentCore` (owns `ConversationHistory`, `SessionManager`, bridges `ILLMClient` + `IToolRegistry` + `WorkspaceContext`) → frontends receive events via `IFrontend` through `FrontendRegistry`.
+
+**Adding a new file format extractor**: Create `src/extractors/<format>_extractor.h/cpp` implementing `ITextExtractor`. Register it in `Workspace::Workspace()` (`workspace.cpp`) with `extractors_->register_extractor(".ext", ...)`. Add the `.cpp` to `locus_core` in `CMakeLists.txt`. No changes to `indexer.cpp` needed.
 
 ---
 
