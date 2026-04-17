@@ -197,6 +197,15 @@ target_link_libraries(locus_core PUBLIC
     sqlite_vec
 )
 
+# ONNX schema registration workaround: in vcpkg static builds, the MSVC linker
+# may strip schema registration static constructors from onnx.lib, causing
+# "invalid model" errors at runtime.  We try to force-include the library.
+# If this does not resolve the issue, the embedding model must be loaded in
+# a Release build or use an ORT-format model.
+find_package(ONNX CONFIG REQUIRED)
+target_link_options(locus_core INTERFACE
+    "$<$<CXX_COMPILER_ID:MSVC>:/WHOLEARCHIVE:$<TARGET_FILE:ONNX::onnx>>")
+
 # -- Main executable -----------------------------------------------------------
 
 add_executable(locus

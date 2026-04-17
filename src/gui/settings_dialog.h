@@ -19,14 +19,16 @@ public:
     // Which parts changed (for the caller to know what to reconfigure).
     bool llm_changed() const { return llm_changed_; }
     bool index_changed() const { return index_changed_; }
+    bool semantic_changed() const { return semantic_changed_; }
 
 private:
     void on_ok(wxCommandEvent& evt);
 
     WorkspaceConfig& config_;
-    bool changed_      = false;
-    bool llm_changed_  = false;
-    bool index_changed_ = false;
+    bool changed_        = false;
+    bool llm_changed_    = false;
+    bool index_changed_  = false;
+    bool semantic_changed_ = false;
 
     // LLM controls
     wxTextCtrl*        endpoint_ctrl_    = nullptr;
@@ -39,6 +41,7 @@ private:
 
     // Semantic search controls
     wxCheckBox*        semantic_enabled_ctrl_ = nullptr;
+    wxTextCtrl*        semantic_model_ctrl_   = nullptr;
 };
 
 } // namespace locus

@@ -117,7 +117,30 @@
       "Bash(taskkill /F /IM vcpkg.exe)",
       "Bash(taskkill /F /IM vcpkgsrv.exe)",
       "Bash(./build/debug/tests/Debug/locus_tests.exe \"[s2.1]\")",
-      "Bash(./build/debug/tests/Debug/locus_tests.exe)"
+      "Bash(./build/debug/tests/Debug/locus_tests.exe)",
+      "Bash(curl -L -o d:/Projects/AICodeAss/models/all-MiniLM-L6-v2.onnx \"https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/onnx/model.onnx\")",
+      "Bash(taskkill /f /im locus_gui.exe)",
+      "Bash(./build/debug/tests/Debug/locus_tests.exe \"Embedder*\" -v)",
+      "Bash(./build/debug/tests/Debug/locus_tests.exe \"Embedder*\" --verbosity high)",
+      "Bash(python3 -c \"import onnx; m = onnx.load\\('d:/Projects/AICodeAss/models/all-MiniLM-L6-v2.onnx'\\); print\\(m.opset_import\\)\")",
+      "Bash(python -c \"import onnx; m = onnx.load\\('d:/Projects/AICodeAss/models/all-MiniLM-L6-v2.onnx'\\); print\\(m.opset_import\\)\")",
+      "Bash(pip install *)",
+      "Bash(python -c \"import onnx; m = onnx.load\\('d:/Projects/AICodeAss/models/all-MiniLM-L6-v2.onnx'\\); print\\([f'domain={o.domain!r} version={o.version}' for o in m.opset_import]\\)\")",
+      "Bash(./build/debug/tests/Debug/locus_tests.exe \"Embedder*\")",
+      "Bash(timeout 10 ./build/debug/Debug/locus.exe . -verbose)",
+      "Bash(timeout 15 ./build/debug/Debug/locus.exe . -verbose)",
+      "Bash(cmake -B build/debug -G \"Visual Studio 18 2026\" -DCMAKE_TOOLCHAIN_FILE=d:/Projects/AICodeAss/build/debug/vcpkg_installed/../../../vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-windows-static -DVCPKG_OVERLAY_TRIPLETS=cmake/triplets)",
+      "Bash(grep -vE \"^Schema error|^Debug \\\\\\(cpuinfo\\\\\\)|^$\")",
+      "Bash(cmake -B build/debug -G \"Visual Studio 18 2026\" -DVCPKG_TARGET_TRIPLET=x64-windows-static -DVCPKG_OVERLAY_TRIPLETS=cmake/triplets)",
+      "Bash(dumpbin /SYMBOLS d:/Projects/AICodeAss/build/debug/vcpkg_installed/x64-windows-static/debug/lib/onnx.lib)",
+      "Bash(dumpbin /ARCHIVEMEMBERS d:/Projects/AICodeAss/build/debug/vcpkg_installed/x64-windows-static/debug/lib/onnx.lib)",
+      "Bash(\"C:/Program Files/Microsoft Visual Studio/2026/Community/VC/Tools/MSVC/14.45.35204/bin/Hostx64/x64/dumpbin.exe\" /ARCHIVEMEMBERS d:/Projects/AICodeAss/build/debug/vcpkg_installed/x64-windows-static/debug/lib/onnx.lib)",
+      "Bash(\"C:/Program Files/Microsoft Visual Studio/18/Community/VC/Tools/MSVC/14.44.35207/bin/HostX64/x64/dumpbin.exe\" /ARCHIVEMEMBERS d:/Projects/AICodeAss/build/debug/vcpkg_installed/x64-windows-static/debug/lib/onnx.lib)",
+      "Bash(lib /LIST d:/Projects/AICodeAss/build/debug/vcpkg_installed/x64-windows-static/debug/lib/onnx.lib)",
+      "Bash(cmake --build build/debug --config Debug --target locus_tests --target locus)",
+      "Bash(python -c \" import json, sys c = json.load\\(sys.stdin\\) c['index']['semantic_search']['model'] = 'all-MiniLM-L6-v2.onnx' print\\(json.dumps\\(c, indent=2\\)\\) \")",
+      "Bash(curl -L -o d:/Projects/AICodeAss/models/all-MiniLM-L6-v2-q8.onnx \"https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/onnx/model_quint8_avx2.onnx\")",
+      "Bash(python -c ' *)"
     ]
   }
 }

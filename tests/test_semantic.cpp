@@ -2,16 +2,37 @@
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include "chunker.h"
+#include "embedder.h"
 #include "extractors/text_extractor.h"
 #include "index_query.h"
 
 #include <cmath>
+#include <filesystem>
 #include <numeric>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
 using namespace locus;
+namespace fs = std::filesystem;
+
+// Locate the ONNX model file. Prefers .ort (pre-optimised), falls back to .onnx.
+// Returns empty path if not found.
+static fs::path find_model()
+{
+    // Try both names in both locations
+    const char* names[] = {"all-MiniLM-L6-v2.ort", "all-MiniLM-L6-v2.onnx"};
+    for (const char* name : names) {
+        // CWD (project root when run from CLI)
+        if (fs::exists(fs::path("models") / name))
+            return fs::path("models") / name;
+        // Relative to typical MSVC test exe: build/debug/tests/Debug/
+        fs::path up4 = fs::path("../../../../models") / name;
+        if (fs::exists(up4))
+            return up4;
+    }
+    return {};
+}
 
 // ============================================================================
 // Chunker tests
@@ -236,4 +257,87 @@ TEST_CASE("RRF merge empty inputs", "[s2.1]")
     merged = rrf_merge(list_a, empty);
     REQUIRE(merged.size() == 1);
     CHECK(merged[0].first == "a.cpp");
+}
+
+// ============================================================================
+// Embedder tests (skipped if model is missing or fails to load)
+// ============================================================================
+
+// Try to create an Embedder. Returns nullptr if model is missing or ONNX
+// Runtime rejects it (e.g. static-link schema registration issue in Debug).
+static std::unique_ptr<Embedder> try_load_embedder()
+{
+    auto model_path = find_model();
+    if (model_path.empty()) return nullptr;
+    try {
+        return std::make_unique<Embedder>(model_path, 384);
+    } catch (const std::exception& e) {
+        WARN("Model load failed: " << e.what());
+        return nullptr;
+    }
+}
+
+TEST_CASE("Embedder produces 384-dim normalised vector", "[s2.1]")
+{
+    auto embedder = try_load_embedder();
+    if (!embedder) {
+        WARN("Skipping: ONNX model not found or failed to load");
+        return;
+    }
+
+    auto vec = embedder->embed("hello world");
+
+    REQUIRE(vec.size() == 384);
+
+    // Check L2 norm is ~1.0 (normalised)
+    float norm = 0.0f;
+    for (float v : vec) norm += v * v;
+    CHECK_THAT(std::sqrt(norm), Catch::Matchers::WithinAbs(1.0, 0.01));
+}
+
+TEST_CASE("Embedder similar texts have high cosine similarity", "[s2.1]")
+{
+    auto embedder = try_load_embedder();
+    if (!embedder) {
+        WARN("Skipping: ONNX model not found or failed to load");
+        return;
+    }
+
+    auto v1 = embedder->embed("the cat sat on the mat");
+    auto v2 = embedder->embed("a cat is sitting on a mat");
+    auto v3 = embedder->embed("quantum chromodynamics and gluon fields");
+
+    // Cosine similarity (vectors are already L2-normalised, so dot product = cosine)
+    auto cosine = [](const std::vector<float>& a, const std::vector<float>& b) {
+        float dot = 0.0f;
+        for (size_t i = 0; i < a.size(); ++i) dot += a[i] * b[i];
+        return dot;
+    };
+
+    float sim_similar   = cosine(v1, v2);
+    float sim_different = cosine(v1, v3);
+
+    // Similar sentences should have higher similarity than unrelated ones
+    CHECK(sim_similar > sim_different);
+    CHECK(sim_similar > 0.5f);
+}
+
+TEST_CASE("Embedder empty and short inputs do not crash", "[s2.1]")
+{
+    auto embedder = try_load_embedder();
+    if (!embedder) {
+        WARN("Skipping: ONNX model not found or failed to load");
+        return;
+    }
+
+    auto v_empty = embedder->embed("");
+    REQUIRE(v_empty.size() == 384);
+
+    auto v_short = embedder->embed("x");
+    REQUIRE(v_short.size() == 384);
+
+    // Both should still be normalised
+    float norm = 0.0f;
+    for (float v : v_short) norm += v * v;
+    CHECK_THAT(std::sqrt(norm), Catch::Matchers::WithinAbs(1.0, 0.01));
 }

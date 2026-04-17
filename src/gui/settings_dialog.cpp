@@ -81,6 +81,15 @@ SettingsDialog::SettingsDialog(wxWindow* parent, WorkspaceConfig& config)
     semantic_enabled_ctrl_->SetValue(config.semantic_search_enabled);
     idx_box->Add(semantic_enabled_ctrl_, 0, wxALL, 4);
 
+    auto* sem_grid = new wxFlexGridSizer(2, wxSize(8, 4));
+    sem_grid->AddGrowableCol(1, 1);
+    sem_grid->Add(new wxStaticText(this, wxID_ANY, "Semantic search model:"),
+                  0, wxALIGN_CENTER_VERTICAL);
+    semantic_model_ctrl_ = new wxTextCtrl(this, wxID_ANY,
+        wxString::FromUTF8(config.embedding_model));
+    sem_grid->Add(semantic_model_ctrl_, 1, wxEXPAND);
+    idx_box->Add(sem_grid, 0, wxEXPAND | wxALL, 4);
+
     main_sizer->Add(idx_box, 1, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
 
     // -- Buttons --------------------------------------------------------------
@@ -121,13 +130,15 @@ void SettingsDialog::on_ok(wxCommandEvent& evt)
     }
 
     bool new_semantic = semantic_enabled_ctrl_->GetValue();
+    std::string new_sem_model = semantic_model_ctrl_->GetValue().ToStdString();
 
-    if (new_patterns != config_.exclude_patterns ||
-        new_semantic != config_.semantic_search_enabled) {
+    if (new_patterns != config_.exclude_patterns)
         index_changed_ = true;
-    }
+    if (new_semantic != config_.semantic_search_enabled ||
+        new_sem_model != config_.embedding_model)
+        semantic_changed_ = true;
 
-    changed_ = llm_changed_ || index_changed_;
+    changed_ = llm_changed_ || index_changed_ || semantic_changed_;
 
     if (changed_) {
         config_.llm_endpoint      = new_endpoint;
@@ -136,8 +147,10 @@ void SettingsDialog::on_ok(wxCommandEvent& evt)
         config_.llm_context_limit = new_context;
         config_.exclude_patterns  = new_patterns;
         config_.semantic_search_enabled = new_semantic;
+        config_.embedding_model   = new_sem_model;
 
-        spdlog::info("Settings changed (llm={}, index={})", llm_changed_, index_changed_);
+        spdlog::info("Settings changed (llm={}, index={}, semantic={})",
+                     llm_changed_, index_changed_, semantic_changed_);
     }
 
     evt.Skip();  // let wxDialog handle EndModal(wxID_OK)
