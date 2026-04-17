@@ -42,6 +42,9 @@ private:
     // Show the settings dialog and apply changes.
     void show_settings_dialog();
 
+    // Rebuild the "Recent Workspaces" submenu from disk.
+    void rebuild_recent_menu();
+
     // Update file tree index stats from current workspace.
     void refresh_index_stats();
 
@@ -75,6 +78,7 @@ private:
     ChatPanel*         chat_panel_     = nullptr;   // chat UI (S1.3)
     ToolApprovalPanel* approval_panel_ = nullptr;   // tool approval (S1.4)
     wxPanel*           detail_panel_   = nullptr;   // placeholder for future details
+    wxMenu*            recent_menu_    = nullptr;   // "Recent Workspaces" submenu (owned by menu bar)
 
     wxDECLARE_EVENT_TABLE();
 };
