@@ -58,35 +58,7 @@ Workspace::Workspace(const fs::path& root)
 
     // Initialise semantic search if enabled
     if (config_.semantic_search_enabled) {
-        // Look for model relative to executable, then in workspace .locus/models/
-        fs::path exe_dir = fs::path(fs::current_path());  // fallback
-#ifdef _WIN32
-        {
-            wchar_t buf[MAX_PATH] = {};
-            if (GetModuleFileNameW(nullptr, buf, MAX_PATH))
-                exe_dir = fs::path(buf).parent_path();
-        }
-#endif
-        fs::path model_path = exe_dir / "models" / (config_.embedding_model + ".onnx");
-        if (!fs::exists(model_path)) {
-            model_path = locus_dir_ / "models" / (config_.embedding_model + ".onnx");
-        }
-
-        if (fs::exists(model_path)) {
-            try {
-                embedder_ = std::make_unique<Embedder>(model_path, config_.embedding_dimensions);
-                embedding_worker_ = std::make_unique<EmbeddingWorker>(
-                    *db_, *embedder_, config_.embedding_dimensions);
-                spdlog::info("Semantic search enabled (model: {})", model_path.string());
-            } catch (const std::exception& e) {
-                spdlog::error("Failed to initialise embedder: {}", e.what());
-                embedder_.reset();
-                embedding_worker_.reset();
-            }
-        } else {
-            spdlog::warn("Semantic search enabled but model not found: {}",
-                         model_path.string());
-        }
+        enable_semantic_search();
     }
 
     spdlog::info("Building workspace index");
@@ -120,6 +92,67 @@ Workspace::~Workspace()
         watcher_->stop();
     }
     spdlog::info("Workspace closed: {}", root_.string());
+}
+
+// -- Semantic search hot-toggle -----------------------------------------------
+
+bool Workspace::enable_semantic_search()
+{
+    if (embedder_ && embedding_worker_)
+        return true;  // already active
+
+    // Find model in the bundled models/ folder (next to executable)
+    fs::path exe_dir = fs::current_path();
+#ifdef _WIN32
+    {
+        wchar_t buf[MAX_PATH] = {};
+        if (GetModuleFileNameW(nullptr, buf, MAX_PATH))
+            exe_dir = fs::path(buf).parent_path();
+    }
+#endif
+    fs::path model_path = exe_dir / "models" / config_.embedding_model;
+
+    if (!fs::exists(model_path)) {
+        spdlog::warn("Semantic search enabled but model not found: {}",
+                     model_path.string());
+        return false;
+    }
+
+    try {
+        embedder_ = std::make_unique<Embedder>(model_path, config_.embedding_dimensions);
+        embedding_worker_ = std::make_unique<EmbeddingWorker>(
+            *db_, *embedder_, config_.embedding_dimensions);
+
+        // Wire indexer callback
+        if (indexer_) {
+            indexer_->on_chunks_created = [this](std::vector<int64_t> ids) {
+                embedding_worker_->enqueue(std::move(ids));
+            };
+        }
+
+        embedding_worker_->start();
+        spdlog::info("Semantic search enabled (model: {})", model_path.string());
+        return true;
+    } catch (const std::exception& e) {
+        spdlog::error("Failed to initialise embedder: {}", e.what());
+        embedder_.reset();
+        embedding_worker_.reset();
+        return false;
+    }
+}
+
+void Workspace::disable_semantic_search()
+{
+    if (embedding_worker_) {
+        embedding_worker_->stop();
+        embedding_worker_.reset();
+    }
+    embedder_.reset();
+
+    if (indexer_)
+        indexer_->on_chunks_created = nullptr;
+
+    spdlog::info("Semantic search disabled");
 }
 
 // -- Config -------------------------------------------------------------------

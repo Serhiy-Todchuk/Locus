@@ -1,0 +1,7 @@
+Analyze the project, this is your codebase - do you have everything (all the docs understandable and consistent, code is transparent) to perform fixes or write features by yourself.
+
+let's test ask_user tool, ask me anything. use your imagination
+
+Use search_semantic to find code related to embedding inference
+
+Use search_hybrid to find files about file watching and debouncing

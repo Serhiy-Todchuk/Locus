@@ -76,14 +76,21 @@ static std::vector<int64_t> tokenize(const std::string& text)
 // Embedder::Impl  —  wraps Ort::Session
 // ---------------------------------------------------------------------------
 
+// Singleton Ort::Env — ONNX Runtime must only register schemas once per process.
+// Creating multiple Ort::Env instances (e.g. in tests) causes fatal
+// double-registration errors when statically linked.
+static Ort::Env& get_ort_env()
+{
+    static Ort::Env env(ORT_LOGGING_LEVEL_WARNING, "locus_embedder");
+    return env;
+}
+
 struct Embedder::Impl {
-    Ort::Env env;
     Ort::Session session;
     Ort::MemoryInfo mem_info;
 
     Impl(const fs::path& model_path)
-        : env(ORT_LOGGING_LEVEL_WARNING, "locus_embedder")
-        , session(nullptr)
+        : session(nullptr)
         , mem_info(Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault))
     {
         Ort::SessionOptions opts;
@@ -91,9 +98,9 @@ struct Embedder::Impl {
         opts.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
 
 #ifdef _WIN32
-        session = Ort::Session(env, model_path.wstring().c_str(), opts);
+        session = Ort::Session(get_ort_env(), model_path.wstring().c_str(), opts);
 #else
-        session = Ort::Session(env, model_path.string().c_str(), opts);
+        session = Ort::Session(get_ort_env(), model_path.string().c_str(), opts);
 #endif
 
         spdlog::info("ONNX model loaded: {}", model_path.string());

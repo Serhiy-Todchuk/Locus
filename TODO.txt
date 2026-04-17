@@ -1,6 +1,7 @@
 - When I send message to LLM in the chat window - then input message field becomes light-themed - only during LLM answering is in progress - then it switches to dark again after answer complete. Please fix so it remains dark-themed.
+- Enabling semantic search in settings doesn't allow LLM to use semantic search anyway.
 - "File -> Open Workspace" doesn't work
-- Add "Recent workspaces" sub-menu under File menu. Store last ~10 recent workspaces somewhere in global settings folder (AppData?).
+- Add "Recent workspaces" sub-menu under File menu. Store last ~10 recent workspaces somewhere in global settings folder (AppData?). When starting - Select workspace folder appears - it should point to the last workspace by default.
 - Add View menu where there are check boxes for closable sub-windows such as File-tree or Details panels (so when I close any panel - I can open it again through this menu)
 - How do I open previously saved session in UI app? Add sub-menu to Session menu "Saved sessions" with delete buttons near each session?
 - We have context info in chat window - no need to have it in the right corner of main window bottom bar. Better display there last indexing status (for example "indexed 3 files at 9:42", or similiar).
@@ -12,4 +13,6 @@
 - Are we going to have file viewer
 - Tool approval settings
 - Create an app icon
+- File view
+- Stop LLM answering button
 - Is it worth adding llama.cpp for directly running LLMs?

@@ -251,6 +251,21 @@ void LocusFrame::show_settings_dialog()
                 "Settings", wxOK | wxICON_INFORMATION, this);
         }
 
+        if (dlg.semantic_changed()) {
+            // Always disable first (handles model name change while enabled)
+            workspace_.disable_semantic_search();
+
+            if (workspace_.config().semantic_search_enabled) {
+                if (!workspace_.enable_semantic_search()) {
+                    wxMessageBox(
+                        "Could not enable semantic search.\n"
+                        "Check that the ONNX model file exists in the models/ folder\n"
+                        "next to the Locus executable.",
+                        "Semantic Search", wxOK | wxICON_WARNING, this);
+                }
+            }
+        }
+
         spdlog::info("Settings saved to config.json");
     }
 }

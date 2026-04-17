@@ -1,6 +1,7 @@
 #include "tools.h"
 #include "embedding_worker.h"
 #include "index_query.h"
+#include "workspace.h"
 
 #include <spdlog/spdlog.h>
 
@@ -522,7 +523,11 @@ ToolResult AskUserTool::execute(const ToolCall& call, const WorkspaceContext& /*
 
 ToolResult SearchSemanticTool::execute(const ToolCall& call, const WorkspaceContext& ws)
 {
-    if (!ws.embedder)
+    // Resolve embedder: prefer direct pointer, fall back to workspace (hot-toggled)
+    auto* emb = ws.embedder;
+    if (!emb && ws.workspace)
+        emb = ws.workspace->embedding_worker();
+    if (!emb)
         return error_result("Error: semantic search is not enabled. "
                             "Enable it in Settings > Index > Semantic Search.");
     if (!ws.index)
@@ -534,7 +539,7 @@ ToolResult SearchSemanticTool::execute(const ToolCall& call, const WorkspaceCont
 
     int max_results = call.args.value("max_results", 10);
 
-    auto embedding = ws.embedder->embed_query(query);
+    auto embedding = emb->embed_query(query);
 
     SearchOptions opts;
     opts.max_results = max_results;
@@ -560,7 +565,10 @@ ToolResult SearchSemanticTool::execute(const ToolCall& call, const WorkspaceCont
 
 ToolResult SearchHybridTool::execute(const ToolCall& call, const WorkspaceContext& ws)
 {
-    if (!ws.embedder)
+    auto* emb = ws.embedder;
+    if (!emb && ws.workspace)
+        emb = ws.workspace->embedding_worker();
+    if (!emb)
         return error_result("Error: semantic search is not enabled. "
                             "Enable it in Settings > Index > Semantic Search.");
     if (!ws.index)
@@ -572,7 +580,7 @@ ToolResult SearchHybridTool::execute(const ToolCall& call, const WorkspaceContex
 
     int max_results = call.args.value("max_results", 10);
 
-    auto embedding = ws.embedder->embed_query(query);
+    auto embedding = emb->embed_query(query);
 
     SearchOptions opts;
     opts.max_results = max_results;

@@ -25,9 +25,9 @@ struct WorkspaceConfig {
     int max_file_size_kb = 1024;
     bool code_parsing_enabled = true;
 
-    // Semantic search (off by default)
-    bool semantic_search_enabled = false;
-    std::string embedding_model = "all-MiniLM-L6-v2";
+    // Semantic search (on by default — gracefully disabled if model missing)
+    bool semantic_search_enabled = true;
+    std::string embedding_model = "all-MiniLM-L6-v2.onnx";
     int embedding_dimensions = 384;
     int chunk_size_lines = 80;
     int chunk_overlap_lines = 10;
@@ -70,6 +70,11 @@ public:
     // Semantic search (may be null if disabled)
     Embedder* embedder() { return embedder_.get(); }
     EmbeddingWorker* embedding_worker() { return embedding_worker_.get(); }
+
+    // Hot-toggle semantic search at runtime (creates/destroys embedder + worker).
+    // Returns true on success, false if model not found or init failed.
+    bool enable_semantic_search();
+    void disable_semantic_search();
 
 private:
     void load_config();
