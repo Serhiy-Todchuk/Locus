@@ -1,5 +1,6 @@
 #include "locus_app.h"
 #include "locus_frame.h"
+#include "recent_workspaces.h"
 #include "../tools.h"
 #include "../indexer.h"
 #include "../file_watcher.h"
@@ -75,8 +76,13 @@ bool LocusApp::OnInit()
 
     // If no workspace path given, prompt user.
     if (workspace_path_str.empty()) {
+        // Default to last used workspace, fall back to Documents.
+        std::string default_dir = RecentWorkspaces::last();
+        if (default_dir.empty())
+            default_dir = wxStandardPaths::Get().GetDocumentsDir().ToStdString();
+
         wxDirDialog dlg(nullptr, "Select workspace folder",
-                        wxStandardPaths::Get().GetDocumentsDir(),
+                        default_dir,
                         wxDD_DEFAULT_STYLE | wxDD_DIR_MUST_EXIST);
         if (dlg.ShowModal() != wxID_OK)
             return false;
@@ -101,6 +107,9 @@ bool LocusApp::OnInit()
         return false;
     }
     init_logging(locus_dir);
+
+    // Record in recent workspaces list.
+    RecentWorkspaces::add(ws_path.string());
 
     spdlog::info("Locus GUI starting");
     spdlog::info("Workspace: {}", ws_path.string());
@@ -179,6 +188,125 @@ bool LocusApp::OnInit()
     }
 
     return true;
+}
+
+void LocusApp::open_workspace(const std::string& path)
+{
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    fs::path ws_path = fs::absolute(path, ec);
+    if (ec || !fs::is_directory(ws_path)) {
+        wxMessageBox(wxString::Format("Not a directory: %s", path),
+                     "Locus", wxOK | wxICON_ERROR);
+        return;
+    }
+
+    // Record in recent workspaces list.
+    RecentWorkspaces::add(ws_path.string());
+
+    // Tear down current subsystems in reverse order.
+    spdlog::info("Switching workspace to: {}", ws_path.string());
+
+    // Close the old frame (triggers ~LocusFrame which unregisters frontend).
+    if (frame_) {
+        frame_->Destroy();
+        frame_ = nullptr;
+    }
+
+    if (agent_) {
+        agent_->stop();
+        agent_.reset();
+    }
+    tools_.reset();
+    llm_.reset();
+    workspace_.reset();
+
+    // Set up .locus/ dir and logging for the new workspace.
+    fs::path locus_dir = ws_path / ".locus";
+    fs::create_directories(locus_dir, ec);
+    if (ec) {
+        wxMessageBox("Cannot create .locus/ directory", "Locus",
+                     wxOK | wxICON_ERROR);
+        return;
+    }
+    init_logging(locus_dir);
+
+    try {
+        workspace_ = std::make_unique<Workspace>(ws_path);
+
+        if (!workspace_->locus_md().empty())
+            spdlog::info("LOCUS.md loaded ({} bytes)", workspace_->locus_md().size());
+
+        // Drain startup file events.
+        std::this_thread::sleep_for(std::chrono::milliseconds(300));
+        std::vector<FileEvent> events;
+        size_t n = workspace_->file_watcher().drain(events);
+        if (n > 0) {
+            spdlog::info("File watcher: drained {} events, updating index", n);
+            workspace_->indexer().process_events(events);
+        }
+
+        auto& st = workspace_->indexer().stats();
+        spdlog::info("Index: {} files ({} text, {} binary), {} symbols, {} headings",
+                     st.files_total, st.files_indexed, st.files_binary,
+                     st.symbols_total, st.headings_total);
+
+        // Reuse LLM settings from workspace config if available,
+        // otherwise fall back to defaults.
+        LLMConfig llm_cfg;
+        auto& wc = workspace_->config();
+        if (!wc.llm_endpoint.empty())
+            llm_cfg.base_url = wc.llm_endpoint;
+        if (!wc.llm_model.empty())
+            llm_cfg.model = wc.llm_model;
+        if (wc.llm_context_limit > 0)
+            llm_cfg.context_limit = wc.llm_context_limit;
+        if (wc.llm_temperature > 0.0)
+            llm_cfg.temperature = wc.llm_temperature;
+
+        llm_ = create_llm_client(llm_cfg);
+
+        auto model_info = llm_->query_model_info();
+        if (!model_info.id.empty() && llm_cfg.model.empty()) {
+            llm_cfg.model = model_info.id;
+            spdlog::info("Model auto-detected: {}", llm_cfg.model);
+        }
+        if (llm_cfg.context_limit <= 0) {
+            if (model_info.context_length > 0)
+                llm_cfg.context_limit = model_info.context_length;
+            else
+                llm_cfg.context_limit = 8192;
+        }
+        spdlog::info("Context limit: {}", llm_cfg.context_limit);
+
+        tools_ = std::make_unique<ToolRegistry>();
+        register_builtin_tools(*tools_);
+        spdlog::info("Tools: {} registered", tools_->all().size());
+
+        WorkspaceContext ws_ctx{ws_path, &workspace_->query(), workspace_->embedding_worker(), workspace_.get()};
+        WorkspaceMetadata ws_meta;
+        ws_meta.root          = ws_path;
+        ws_meta.file_count    = static_cast<int>(st.files_total);
+        ws_meta.symbol_count  = static_cast<int>(st.symbols_total);
+        ws_meta.heading_count = static_cast<int>(st.headings_total);
+
+        fs::path sessions_dir = locus_dir / "sessions";
+        agent_ = std::make_unique<AgentCore>(
+            *llm_, *tools_, ws_ctx,
+            workspace_->locus_md(), ws_meta, llm_cfg, sessions_dir);
+
+        agent_->start();
+
+        frame_ = new LocusFrame(*agent_, *workspace_);
+        frame_->Show(true);
+
+        spdlog::info("Workspace switch complete");
+
+    } catch (const std::exception& ex) {
+        spdlog::error("Workspace switch failed: {}", ex.what());
+        wxMessageBox(wxString::Format("Failed to open workspace: %s", ex.what()),
+                     "Locus", wxOK | wxICON_ERROR);
+    }
 }
 
 int LocusApp::OnExit()

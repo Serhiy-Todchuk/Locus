@@ -21,6 +21,10 @@ public:
     bool OnInit() override;
     int  OnExit() override;
 
+    // Switch to a different workspace folder. Tears down the current
+    // agent/frame and reinitializes everything with the new path.
+    void open_workspace(const std::string& path);
+
 private:
     void init_logging(const std::filesystem::path& locus_dir);
 
@@ -34,5 +38,7 @@ private:
 
     LocusFrame* frame_ = nullptr;  // owned by wxWidgets
 };
+
+wxDECLARE_APP(LocusApp);
 
 } // namespace locus

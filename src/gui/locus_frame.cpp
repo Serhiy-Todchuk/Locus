@@ -1,4 +1,6 @@
 #include "locus_frame.h"
+#include "locus_app.h"
+#include "recent_workspaces.h"
 
 #include "../embedding_worker.h"
 #include "../indexer.h"
@@ -19,6 +21,7 @@ enum {
     ID_MENU_SAVE_SESSION,
     ID_MENU_OPEN_WORKSPACE,
     ID_MENU_SETTINGS,
+    ID_MENU_RECENT_BASE = wxID_HIGHEST + 300,  // 300..309 for recent workspaces
 };
 
 wxBEGIN_EVENT_TABLE(LocusFrame, wxFrame)
@@ -95,6 +98,12 @@ void LocusFrame::create_menu_bar()
 {
     auto* file_menu = new wxMenu;
     file_menu->Append(ID_MENU_OPEN_WORKSPACE, "Open Workspace...\tCtrl+O");
+
+    // Recent Workspaces submenu.
+    recent_menu_ = new wxMenu;
+    rebuild_recent_menu();
+    file_menu->AppendSubMenu(recent_menu_, "Recent Workspaces");
+
     file_menu->Append(ID_MENU_SETTINGS,       "Settings...\tCtrl+,");
     file_menu->AppendSeparator();
     file_menu->Append(ID_MENU_QUIT, "Quit\tCtrl+Q");
@@ -120,13 +129,11 @@ void LocusFrame::create_menu_bar()
             wxStandardPaths::Get().GetDocumentsDir(),
             wxDD_DEFAULT_STYLE | wxDD_DIR_MUST_EXIST);
         if (dlg.ShowModal() == wxID_OK) {
-            wxString path = dlg.GetPath();
-            SetStatusText("Restart Locus to open: " + path, 0);
-            wxMessageBox(
-                "Workspace changed to:\n" + path +
-                "\n\nRestart Locus to apply.",
-                "Open Workspace", wxOK | wxICON_INFORMATION, this);
-            spdlog::info("User selected new workspace: {}", path.ToStdString());
+            std::string path = dlg.GetPath().ToStdString();
+            // Defer the switch so this handler returns before the frame is destroyed.
+            CallAfter([path]() {
+                wxGetApp().open_workspace(path);
+            });
         }
     }, ID_MENU_OPEN_WORKSPACE);
     Bind(wxEVT_MENU, [this](wxCommandEvent&) {
@@ -150,6 +157,29 @@ void LocusFrame::create_menu_bar()
         info.SetCopyright("MIT License");
         wxAboutBox(info, this);
     }, ID_MENU_ABOUT);
+}
+
+void LocusFrame::rebuild_recent_menu()
+{
+    // Clear existing items.
+    while (recent_menu_->GetMenuItemCount() > 0)
+        recent_menu_->Delete(recent_menu_->FindItemByPosition(0));
+
+    auto entries = RecentWorkspaces::load();
+    if (entries.empty()) {
+        recent_menu_->Append(wxID_ANY, "(none)")->Enable(false);
+        return;
+    }
+
+    int id = ID_MENU_RECENT_BASE;
+    for (size_t i = 0; i < entries.size() && i < RecentWorkspaces::k_max_entries; ++i, ++id) {
+        recent_menu_->Append(id, wxString::FromUTF8(entries[i]));
+        Bind(wxEVT_MENU, [this, path = entries[i]](wxCommandEvent&) {
+            CallAfter([path]() {
+                wxGetApp().open_workspace(path);
+            });
+        }, id);
+    }
 }
 
 // ---------------------------------------------------------------------------
