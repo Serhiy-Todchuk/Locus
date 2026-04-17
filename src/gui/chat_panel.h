@@ -26,9 +26,11 @@ class ChatPanel : public wxPanel {
 public:
     // on_send is called with the user's message text when Enter is pressed.
     // on_compact is called when the user clicks the manual compaction button.
+    // on_stop is called when the user clicks Stop during generation.
     ChatPanel(wxWindow* parent,
               std::function<void(const std::string&)> on_send,
-              std::function<void()> on_compact = nullptr);
+              std::function<void()> on_compact = nullptr,
+              std::function<void()> on_stop = nullptr);
 
     // -- Called by LocusFrame in response to agent events --
 
@@ -71,12 +73,14 @@ private:
 
     std::function<void(const std::string&)> on_send_;
     std::function<void()> on_compact_;
+    std::function<void()> on_stop_;
 
     wxWebView*    webview_       = nullptr;
     wxTextCtrl*   input_         = nullptr;
     wxGauge*      ctx_gauge_     = nullptr;
     wxStaticText* ctx_label_     = nullptr;
     wxButton*     compact_btn_   = nullptr;
+    wxButton*     stop_btn_      = nullptr;
     wxStaticText* locus_chip_    = nullptr;
 
     wxTimer       flush_timer_;

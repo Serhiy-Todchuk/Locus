@@ -266,10 +266,12 @@ function clearChat() {
 
 ChatPanel::ChatPanel(wxWindow* parent,
                      std::function<void(const std::string&)> on_send,
-                     std::function<void()> on_compact)
+                     std::function<void()> on_compact,
+                     std::function<void()> on_stop)
     : wxPanel(parent, wxID_ANY)
     , on_send_(std::move(on_send))
     , on_compact_(std::move(on_compact))
+    , on_stop_(std::move(on_stop))
     , flush_timer_(this)
 {
     create_webview();
@@ -285,7 +287,8 @@ ChatPanel::ChatPanel(wxWindow* parent,
     auto* footer = new wxBoxSizer(wxHORIZONTAL);
     footer->Add(ctx_gauge_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
     footer->Add(ctx_label_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
-    footer->Add(compact_btn_, 0, wxALIGN_CENTER_VERTICAL);
+    footer->Add(compact_btn_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
+    footer->Add(stop_btn_, 0, wxALIGN_CENTER_VERTICAL);
     footer->AddStretchSpacer();
     footer->Add(locus_chip_, 0, wxALIGN_CENTER_VERTICAL);
     sizer->Add(footer, 0, wxEXPAND | wxALL, 4);
@@ -337,6 +340,13 @@ void ChatPanel::create_footer()
     compact_btn_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
         if (on_compact_) on_compact_();
     });
+    stop_btn_ = new wxButton(this, wxID_ANY, "Stop",
+                             wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+    stop_btn_->SetToolTip("Stop the current generation");
+    stop_btn_->Disable();
+    stop_btn_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
+        if (on_stop_) on_stop_();
+    });
     locus_chip_ = new wxStaticText(this, wxID_ANY, "");
 }
 
@@ -349,6 +359,8 @@ void ChatPanel::on_turn_start()
     streaming_ = true;
     current_response_.clear();
     token_buffer_.clear();
+
+    stop_btn_->Enable();
 
     // Create an empty assistant message div.
     ++message_id_;
@@ -388,6 +400,7 @@ void ChatPanel::on_turn_complete()
     run_script("highlightAll();");
 
     streaming_ = false;
+    stop_btn_->Disable();
     input_->Enable();
     input_->SetFocus();
 }
@@ -398,6 +411,7 @@ void ChatPanel::on_session_reset()
     current_response_.clear();
     token_buffer_.clear();
     streaming_ = false;
+    stop_btn_->Disable();
     message_id_ = 0;
 }
 

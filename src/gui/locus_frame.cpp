@@ -210,7 +210,8 @@ void LocusFrame::setup_aui_layout()
     // Center chat panel.
     chat_panel_ = new ChatPanel(this,
         [this](const std::string& msg) { agent_.send_message(msg); },
-        [this]() { show_compaction_dialog(); });
+        [this]() { show_compaction_dialog(); },
+        [this]() { agent_.cancel_turn(); });
 
     // Tool approval panel — slides in when a tool call needs approval.
     approval_panel_ = new ToolApprovalPanel(this,
