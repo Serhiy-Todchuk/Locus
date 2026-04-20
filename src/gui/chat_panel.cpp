@@ -1,5 +1,6 @@
 #include "chat_panel.h"
 #include "markdown.h"
+#include "theme.h"
 
 #include <spdlog/spdlog.h>
 
@@ -325,6 +326,8 @@ void ChatPanel::create_input()
                             wxDefaultPosition, wxSize(-1, 60),
                             wxTE_MULTILINE | wxTE_PROCESS_ENTER | wxTE_RICH2);
     input_->SetHint("Type a message... (Enter to send, Shift+Enter for newline)");
+    input_->SetBackgroundColour(theme::text_bg());
+    input_->SetForegroundColour(theme::text_fg());
     input_->Bind(wxEVT_KEY_DOWN, &ChatPanel::on_input_key, this);
 }
 
@@ -401,7 +404,9 @@ void ChatPanel::on_turn_complete()
 
     streaming_ = false;
     stop_btn_->Disable();
-    input_->Enable();
+    // Use SetEditable (not Enable) to preserve the custom dark background —
+    // Disable() forces Windows' light "disabled control" colour.
+    input_->SetEditable(true);
     input_->SetFocus();
 }
 
@@ -520,8 +525,9 @@ void ChatPanel::on_input_key(wxKeyEvent& evt)
             "addMsg(%d, 'msg-user', %s);",
             message_id_, "'" + js_escape(text) + "'"));
 
-        // Disable input while agent is working.
-        input_->Disable();
+        // Block typing while agent is working, but keep the dark styling.
+        // (Enable/Disable on Windows resets colours to the light system defaults.)
+        input_->SetEditable(false);
 
         // Fire callback.
         if (on_send_)

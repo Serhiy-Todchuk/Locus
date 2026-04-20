@@ -1,4 +1,5 @@
 #include "tool_approval_panel.h"
+#include "theme.h"
 
 #include <spdlog/spdlog.h>
 
@@ -15,7 +16,8 @@ ToolApprovalPanel::ToolApprovalPanel(wxWindow* parent,
     : wxPanel(parent, wxID_ANY)
     , on_decision_(std::move(on_decision))
 {
-    SetBackgroundColour(wxColour(255, 250, 240));
+    // Match the OS window colour so the panel blends with the dark (or light) frame.
+    SetBackgroundColour(theme::panel_bg());
     create_controls();
 
     main_sizer_ = new wxBoxSizer(wxVERTICAL);
@@ -57,7 +59,7 @@ void ToolApprovalPanel::create_controls()
 
     // Preview text.
     preview_label_ = new wxStaticText(this, wxID_ANY, "");
-    preview_label_->SetForegroundColour(wxColour(100, 100, 100));
+    preview_label_->SetForegroundColour(theme::muted_fg());
 
     // JSON args — Scintilla with JSON lexer.
     args_stc_ = new wxStyledTextCtrl(this, wxID_ANY,
@@ -68,15 +70,33 @@ void ToolApprovalPanel::create_controls()
     args_stc_->SetMarginWidth(0, 0);  // no line numbers
     args_stc_->SetMarginWidth(1, 0);  // no symbols margin
 
-    // JSON syntax colors.
-    args_stc_->StyleSetForeground(wxSTC_JSON_DEFAULT, wxColour(0, 0, 0));
-    args_stc_->StyleSetForeground(wxSTC_JSON_NUMBER, wxColour(0, 128, 128));
-    args_stc_->StyleSetForeground(wxSTC_JSON_STRING, wxColour(163, 21, 21));
-    args_stc_->StyleSetForeground(wxSTC_JSON_PROPERTYNAME, wxColour(0, 0, 180));
-    args_stc_->StyleSetForeground(wxSTC_JSON_KEYWORD, wxColour(0, 0, 180));
-    args_stc_->StyleSetForeground(wxSTC_JSON_OPERATOR, wxColour(0, 0, 0));
-    args_stc_->StyleSetForeground(wxSTC_JSON_BLOCKCOMMENT, wxColour(0, 128, 0));
-    args_stc_->StyleSetForeground(wxSTC_JSON_LINECOMMENT, wxColour(0, 128, 0));
+    // Apply a consistent background + default foreground to every style, then
+    // override per-token foregrounds. Order matters: StyleClearAll() copies
+    // STYLE_DEFAULT to all styles, so it has to come before the per-style sets.
+    const bool dark = theme::is_dark();
+    const wxColour bg = theme::text_bg();
+    const wxColour fg = theme::text_fg();
+    args_stc_->StyleSetBackground(wxSTC_STYLE_DEFAULT, bg);
+    args_stc_->StyleSetForeground(wxSTC_STYLE_DEFAULT, fg);
+    args_stc_->StyleClearAll();
+    args_stc_->SetCaretForeground(theme::caret_fg());
+    args_stc_->SetSelBackground(true, theme::selection_bg());
+
+    // JSON syntax colours — two palettes so tokens read well on either theme.
+    const wxColour c_number   = dark ? wxColour(181, 206, 168) : wxColour(0, 128, 128);
+    const wxColour c_string   = dark ? wxColour(214, 157, 133) : wxColour(163, 21, 21);
+    const wxColour c_property = dark ? wxColour(156, 220, 254) : wxColour(0, 0, 180);
+    const wxColour c_keyword  = dark ? wxColour(86, 156, 214)  : wxColour(0, 0, 180);
+    const wxColour c_comment  = dark ? wxColour(87, 166, 74)   : wxColour(0, 128, 0);
+
+    args_stc_->StyleSetForeground(wxSTC_JSON_DEFAULT,      fg);
+    args_stc_->StyleSetForeground(wxSTC_JSON_NUMBER,       c_number);
+    args_stc_->StyleSetForeground(wxSTC_JSON_STRING,       c_string);
+    args_stc_->StyleSetForeground(wxSTC_JSON_PROPERTYNAME, c_property);
+    args_stc_->StyleSetForeground(wxSTC_JSON_KEYWORD,      c_keyword);
+    args_stc_->StyleSetForeground(wxSTC_JSON_OPERATOR,     fg);
+    args_stc_->StyleSetForeground(wxSTC_JSON_BLOCKCOMMENT, c_comment);
+    args_stc_->StyleSetForeground(wxSTC_JSON_LINECOMMENT,  c_comment);
 
     // Monospace font for all JSON styles.
     wxFont mono(10, wxFONTFAMILY_MODERN, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL,
@@ -91,6 +111,8 @@ void ToolApprovalPanel::create_controls()
         wxDefaultPosition, wxSize(-1, 60),
         wxTE_MULTILINE | wxTE_PROCESS_ENTER);
     ask_input_->SetHint("Type your response...");
+    ask_input_->SetBackgroundColour(theme::text_bg());
+    ask_input_->SetForegroundColour(theme::text_fg());
     ask_input_->Hide();
 
     // Buttons.
