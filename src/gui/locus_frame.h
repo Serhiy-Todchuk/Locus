@@ -5,6 +5,7 @@
 #include "file_tree_panel.h"
 #include "locus_tray.h"
 #include "settings_dialog.h"
+#include "ask_user_dialog.h"
 #include "tool_approval_panel.h"
 #include "wx_frontend.h"
 #include "../agent_core.h"

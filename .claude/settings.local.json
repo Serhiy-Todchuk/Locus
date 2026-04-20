@@ -170,7 +170,9 @@
       "Bash(\"C:/Program Files/CMake/bin/cmake.exe\" --build build/release --config Release)",
       "Bash(\"C:/Program Files/CMake/bin/ctest.exe\" --test-dir build/release -C Release --output-on-failure)",
       "Bash(\"C:/Program Files/CMake/bin/ctest.exe\" --test-dir build/release -C Release -R \"Incremental update handles file deletion\" --output-on-failure)",
-      "Bash(cmake --build d:/Projects/AICodeAss/build/debug --target locus --config Debug)"
+      "Bash(cmake --build d:/Projects/AICodeAss/build/debug --target locus --config Debug)",
+      "Bash(cmake --build build --target locus_gui)",
+      "Bash(cmake --build d:/Projects/AICodeAss/build/debug --target locus_gui)"
     ]
   }
 }

@@ -86,6 +86,12 @@ LocusFrame::LocusFrame(AgentCore& agent, Workspace& workspace)
 
 LocusFrame::~LocusFrame()
 {
+    // Detach the embedding-worker progress callback before tearing down
+    // wx_frontend_ — the worker runs on its own thread and may still fire
+    // progress events after the frame starts destructing.
+    if (workspace_.embedding_worker())
+        workspace_.embedding_worker()->on_progress = nullptr;
+
     agent_.unregister_frontend(wx_frontend_.get());
     aui_.UnInit();
 }
@@ -318,6 +324,14 @@ void LocusFrame::refresh_index_stats()
 
 void LocusFrame::on_close(wxCloseEvent& evt)
 {
+    // The embedding worker runs on its own thread and fires on_progress
+    // callbacks into this frame.  Stop it here — before destruction — so no
+    // callback can fire into freed memory.  stop() joins the thread.
+    if (auto* ew = workspace_.embedding_worker()) {
+        ew->on_progress = nullptr;
+        ew->stop();
+    }
+
     // Remove tray icon before destroying frame.
     if (tray_)
         tray_->RemoveIcon();
@@ -364,10 +378,23 @@ void LocusFrame::on_agent_tool_pending(wxThreadEvent& evt)
         chat_panel_->on_tool_pending(
             wxString::FromUTF8(tool), wxString::FromUTF8(preview));
 
-        // Show approval panel and update AUI.
-        approval_panel_->show_tool_call(call_id, tool, args, preview);
-        aui_.GetPane("approval").Show();
-        aui_.Update();
+        if (tool == "ask_user") {
+            // Pop-up modal — disappears immediately after answer/cancel.
+            std::string question = args.value("question", "");
+            AskUserDialog dlg(this, question);
+            if (dlg.ShowModal() == wxID_OK) {
+                nlohmann::json modified = args;
+                modified["response"] = dlg.response();
+                agent_.tool_decision(call_id, ToolDecision::modify, modified);
+            } else {
+                agent_.tool_decision(call_id, ToolDecision::reject, {});
+            }
+        } else {
+            // Show approval panel and update AUI.
+            approval_panel_->show_tool_call(call_id, tool, args, preview);
+            aui_.GetPane("approval").Show();
+            aui_.Update();
+        }
     } catch (const std::exception& ex) {
         spdlog::warn("Failed to parse tool_pending payload: {}", ex.what());
     }
