@@ -9,14 +9,17 @@ namespace locus {
 
 namespace fs = std::filesystem;
 
-// ONNX Runtime-based text embedder.  Loads a sentence-transformer model
-// (e.g. all-MiniLM-L6-v2) and produces normalised float32 embeddings.
+// llama.cpp-based text embedder.  Loads a sentence-transformer model in
+// GGUF format (e.g. all-MiniLM-L6-v2) and produces normalised float32
+// embeddings.  Tokenisation uses the WordPiece/SentencePiece vocabulary
+// embedded inside the GGUF file.
 //
-// Thread safety: embed() is safe to call from multiple threads — the
-// ONNX Runtime session handles concurrent inference internally.
+// Thread safety: embed() is safe to call from multiple threads.  The
+// implementation serialises access to the underlying llama_context
+// internally, because the KV cache is reset on each call.
 class Embedder {
 public:
-    // Loads the ONNX model from disk.  Throws std::runtime_error on failure.
+    // Loads the GGUF model from disk.  Throws std::runtime_error on failure.
     explicit Embedder(const fs::path& model_path, int dimensions = 384);
     ~Embedder();
 

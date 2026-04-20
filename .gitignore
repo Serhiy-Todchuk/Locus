@@ -3,6 +3,7 @@ out/
 .vs/
 .locus/
 *.db
+*.gguf
 *.onnx
 *.user
 CMakeUserPresets.json

@@ -290,7 +290,7 @@ void LocusFrame::show_settings_dialog()
                 if (!workspace_.enable_semantic_search()) {
                     wxMessageBox(
                         "Could not enable semantic search.\n"
-                        "Check that the ONNX model file exists in the models/ folder\n"
+                        "Check that the GGUF model file exists in the models/ folder\n"
                         "next to the Locus executable.",
                         "Semantic Search", wxOK | wxICON_WARNING, this);
                 }

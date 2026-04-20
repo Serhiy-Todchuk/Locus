@@ -12,3 +12,4 @@
 - Create an app icon
 - Make tools accessible to user through "/" in the chat window as well as other CLI-"/" commands. when user types "/" show suggestions, when user types more symbols after "/" - update suggestions.
 - Is it worth adding llama.cpp for directly running LLMs?
+- use direct guthub downloads instead of vcpkgs for third-parties? more cross-platform? more control over dependencies?

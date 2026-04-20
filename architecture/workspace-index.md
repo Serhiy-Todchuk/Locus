@@ -151,20 +151,26 @@ semantically coherent — a complete thought, function, or section — not an ar
 
 ### Embedding model
 
-Embedding runs **in-process** via ONNX Runtime (C++ API).
+Embedding runs **in-process** via the llama.cpp C API.
 No dependency on LM Studio being available. No VRAM used.
 
-**Default model: `all-MiniLM-L6-v2`**
-- Size: ~22MB ONNX file stored in `.locus/models/`
+**Default model: `all-MiniLM-L6-v2` (Q8_0 GGUF)**
+- Size: ~25MB GGUF file stored in `models/` (bundled next to the executable)
 - Output dimension: 384
 - Speed: ~5,000 chunks/minute on CPU (typical)
 - Quality: good for code and English text; sufficient for most use cases
+- Tokenisation: WordPiece vocab embedded in the GGUF — no auxiliary `vocab.txt` needed
 
-**Upgrade option: `nomic-embed-text-v1.5`**
+**Upgrade option: `nomic-embed-text-v1.5` (GGUF)**
 - Size: ~280MB
 - Output dimension: 768
 - Significantly better quality for long documents and cross-lingual content
 - Slower (~800 chunks/minute on CPU)
+
+Swapped from ONNX Runtime in April 2026: vcpkg's static-CRT onnxruntime dropped ONNX schema
+registration constructors at link time, causing "invalid model" failures. llama.cpp is a
+single-file C library with no linker-sensitive static registrations and ships a correct
+tokenizer. See [tech-stack.md § 5](tech-stack.md) for details.
 
 Model is configured per workspace. Changing the model triggers a full re-embedding pass.
 
@@ -263,7 +269,7 @@ Full content is fetched only via `read_file` when the agent decides it's necessa
     "semantic_search": {
       "enabled": false,
       "model": "all-MiniLM-L6-v2",
-      "model_path": ".locus/models/all-MiniLM-L6-v2.onnx",
+      "model_path": "models/all-MiniLM-L6-v2.Q8_0.gguf",
       "dimensions": 384,
       "chunk_size_lines": 80,
       "chunk_overlap_lines": 10

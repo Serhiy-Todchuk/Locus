@@ -21,7 +21,7 @@ find_package(efsw CONFIG REQUIRED)
 find_package(Catch2 CONFIG REQUIRED)
 find_package(cpr CONFIG REQUIRED)
 find_package(unofficial-tree-sitter CONFIG REQUIRED)
-find_package(onnxruntime CONFIG REQUIRED)
+find_package(Llama CONFIG REQUIRED)
 
 # -- Tree-sitter grammars (fetched at configure time) --------------------------
 
@@ -193,18 +193,9 @@ target_link_libraries(locus_core PUBLIC
     unofficial::tree-sitter::tree-sitter
     ts_grammars
     cpr::cpr
-    onnxruntime::onnxruntime
+    llama
     sqlite_vec
 )
-
-# ONNX schema registration workaround: in vcpkg static builds, the MSVC linker
-# may strip schema registration static constructors from onnx.lib, causing
-# "invalid model" errors at runtime.  We try to force-include the library.
-# If this does not resolve the issue, the embedding model must be loaded in
-# a Release build or use an ORT-format model.
-find_package(ONNX CONFIG REQUIRED)
-target_link_options(locus_core INTERFACE
-    "$<$<CXX_COMPILER_ID:MSVC>:/WHOLEARCHIVE:$<TARGET_FILE:ONNX::onnx>>")
 
 # -- Main executable -----------------------------------------------------------
 

@@ -7,8 +7,21 @@ Copyright (c) Alex Garcia
 License: MIT / Apache-2.0
 Source: https://github.com/asg017/sqlite-vec
 
-all-MiniLM-L6-v2 (ONNX, INT8 quantized)
+all-MiniLM-L6-v2 (GGUF, Q8_0 quantized)
 -----------------------------------------
 Copyright (c) Microsoft Corporation / Sentence-Transformers Authors
 License: Apache-2.0
 Source: https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2
+GGUF conversion: https://huggingface.co/second-state/All-MiniLM-L6-v2-Embedding-GGUF
+
+llama.cpp
+---------
+Copyright (c) ggml-org contributors
+License: MIT
+Source: https://github.com/ggml-org/llama.cpp
+
+ggml
+----
+Copyright (c) Georgi Gerganov and contributors
+License: MIT
+Source: https://github.com/ggml-org/ggml

@@ -14,7 +14,7 @@ namespace locus {
 class Database;
 class Embedder;
 
-// Background thread that reads chunk text from the DB, runs ONNX embedding,
+// Background thread that reads chunk text from the DB, runs the embedder,
 // and writes vectors into chunk_vectors.  Designed for low-priority background
 // work — does not block the indexer or the UI.
 class EmbeddingWorker {

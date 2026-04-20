@@ -101,7 +101,9 @@ bool Workspace::enable_semantic_search()
     if (embedder_ && embedding_worker_)
         return true;  // already active
 
-    // Find model in the bundled models/ folder (next to executable)
+    // Find models/<name> by walking up from the exe dir.  Supports both packaged
+    // layout (models/ next to exe) and dev layout (exe in build/<cfg>/<cfg>/,
+    // models/ at repo root — up to 4 levels up).
     fs::path exe_dir = fs::current_path();
 #ifdef _WIN32
     {
@@ -110,11 +112,22 @@ bool Workspace::enable_semantic_search()
             exe_dir = fs::path(buf).parent_path();
     }
 #endif
-    fs::path model_path = exe_dir / "models" / config_.embedding_model;
 
-    if (!fs::exists(model_path)) {
-        spdlog::warn("Semantic search enabled but model not found: {}",
-                     model_path.string());
+    fs::path model_path;
+    fs::path base = exe_dir;
+    for (int i = 0; i < 6; ++i) {
+        fs::path candidate = base / "models" / config_.embedding_model;
+        if (fs::exists(candidate)) {
+            model_path = candidate;
+            break;
+        }
+        if (!base.has_parent_path() || base.parent_path() == base) break;
+        base = base.parent_path();
+    }
+
+    if (model_path.empty()) {
+        spdlog::warn("Semantic search enabled but model '{}' not found under {} or its parents",
+                     config_.embedding_model, exe_dir.string());
         return false;
     }
 

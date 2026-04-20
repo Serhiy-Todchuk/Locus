@@ -86,7 +86,7 @@ Build: CMake + vcpkg, target MSVC 2022.
 ### F4 — Search
 - [ ] **Keyword search** — FTS5 full-text search with BM25 ranking (always available)
 - [ ] **Symbol search** — find classes/functions/methods by name via Tree-sitter index
-- [ ] **Semantic search** — vector similarity via ONNX in-process embedding model
+- [ ] **Semantic search** — vector similarity via llama.cpp in-process embedding model (GGUF)
       - Opt-in per workspace (disabled by default — costs CPU + disk for embeddings)
       - Default model: `all-MiniLM-L6-v2` (22MB, 384-dim, runs on CPU)
       - Upgrade option: `nomic-embed-text-v1.5` (280MB, higher quality)

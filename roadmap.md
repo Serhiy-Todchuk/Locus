@@ -44,7 +44,7 @@ Proves: agent loop, LLM streaming, tool system, workspace index, LOCUS.md inject
 - [x] `vcpkg.json` manifest with initial deps: `spdlog`, `catch2`, `nlohmann-json`, `cpr`, `sqlite3`, `efsw`, `tree-sitter`
 - [x] `CMakeLists.txt`: main target + `locus_tests` Catch2 target wired up
 - [x] MIT `LICENSE` file
-- [x] `.gitignore` (build/, .locus/, *.db, *.onnx)
+- [x] `.gitignore` (build/, .locus/, *.db, *.onnx, *.gguf)
 - [x] spdlog initialised: stderr sink for CLI, rotating file sink in `.locus/locus.log`
 
 ### S0.2 — Workspace Foundation ✔
@@ -201,8 +201,9 @@ Full chat UI, tool approval panels, compaction dialog. WS1 (Locus project) fully
 Personal documents (WS3) works end-to-end.
 
 ### S2.1 — Semantic Search ✔
-- [x] ONNX Runtime C++ API initialised; model loaded from `models/all-MiniLM-L6-v2.onnx` (bundled)
-- [x] Bundle INT8 quantized `all-MiniLM-L6-v2.onnx` (~23 MB, Apache 2.0) in release; add `THIRD_PARTY_LICENSES`
+- [x] ~~ONNX Runtime~~ → **llama.cpp** C API initialised; model loaded from `models/all-MiniLM-L6-v2.Q8_0.gguf` (bundled)
+- [x] Bundle Q8_0-quantized `all-MiniLM-L6-v2.Q8_0.gguf` (~25 MB, Apache 2.0) in release; add `THIRD_PARTY_LICENSES`
+- [x] Runtime migrated from ONNX Runtime → llama.cpp: fixes MSVC/static-CRT schema-registration linker issue; replaces fake FNV-hash tokenizer with real WordPiece via GGUF-embedded vocab
 - [x] `chunks` table schema; chunking pipeline wired into indexer
 - [x] Code chunking: Tree-sitter function/class boundaries → one chunk each; split at 80 lines
 - [x] Document chunking: heading boundaries (H2/H3); sliding window fallback

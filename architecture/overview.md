@@ -59,7 +59,7 @@ The WebSocket server is an adapter that implements `IFrontend` over the wire.
 │  │  LM Studio  │  │ (ITool API)│  │  File Watcher (ReadDirChangesW)  │  │
 │  │  OpenAI-    │  │ - Files    │  │  FTS5 Index     (SQLite)         │  │
 │  │  compat.    │  │ - Search   │  │  Vector Index   (sqlite-vec)     │  │
-│  │  REST API   │  │ - Terminal │  │  ONNX Embeddings                 │  │
+│  │  REST API   │  │ - Terminal │  │  llama.cpp Embeddings (GGUF)     │  │
 │  └─────────────┘  │ - Web      │  │  ZIM Reader     (libzim)         │  │
 │                   └────────────┘  │  Doc Extractors (pdfium/pugixml) │  │
 │                                   └─────────────────────────────────-┘  │
@@ -180,7 +180,7 @@ interface over the wire.
 The heart of the system. Responsible for:
 - Watching the workspace folder for changes (`ReadDirectoryChangesW` on Windows)
 - FTS5 keyword index (SQLite + FTS5)
-- Vector semantic index (sqlite-vec + ONNX in-process embeddings)
+- Vector semantic index (sqlite-vec + llama.cpp in-process embeddings)
 - ZIM archive support via libzim (for Kiwix/Wikipedia workspaces)
 - Document text extraction (PDF via pdfium, DOCX via ZIP+XML)
 - Managing the `.locus/` directory inside each workspace
