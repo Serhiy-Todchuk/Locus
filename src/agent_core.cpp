@@ -371,15 +371,22 @@ bool AgentCore::run_llm_step()
     auto tool_schemas = build_tool_schemas();
 
     std::string accumulated_text;
+    std::string accumulated_reasoning;
     std::vector<ToolCallRequest> tool_call_requests;
     bool has_tool_calls = false;
     bool had_error = false;
+    int reasoning_tokens_reported = 0;
 
     llm_.stream_completion(history_.messages(), tool_schemas, {
         /* on_token */
         [&](const std::string& token) {
             accumulated_text += token;
             frontends_.broadcast([&](IFrontend& fe) { fe.on_token(token); });
+        },
+        /* on_reasoning_token */
+        [&](const std::string& token) {
+            accumulated_reasoning += token;
+            frontends_.broadcast([&](IFrontend& fe) { fe.on_reasoning_token(token); });
         },
         /* on_tool_calls */
         [&](const std::vector<ToolCallRequest>& calls) {
@@ -388,8 +395,10 @@ bool AgentCore::run_llm_step()
         },
         /* on_complete */
         [&]() {
-            spdlog::trace("AgentCore: LLM step complete, text={} chars, tool_calls={}",
-                          accumulated_text.size(), tool_call_requests.size());
+            spdlog::trace("AgentCore: LLM step complete, text={} chars, "
+                          "reasoning={} chars, tool_calls={}",
+                          accumulated_text.size(), accumulated_reasoning.size(),
+                          tool_call_requests.size());
         },
         /* on_error */
         [&](const std::string& err) {
@@ -400,8 +409,11 @@ bool AgentCore::run_llm_step()
         /* on_usage */
         [&](const CompletionUsage& u) {
             last_server_total_tokens_ = u.total_tokens;
-            spdlog::trace("AgentCore: server reports {} total tokens (prompt={}, completion={})",
-                          u.total_tokens, u.prompt_tokens, u.completion_tokens);
+            reasoning_tokens_reported = u.reasoning_tokens;
+            spdlog::trace("AgentCore: server reports {} total tokens "
+                          "(prompt={}, completion={}, reasoning={})",
+                          u.total_tokens, u.prompt_tokens, u.completion_tokens,
+                          u.reasoning_tokens);
         }
     });
 
@@ -422,9 +434,16 @@ bool AgentCore::run_llm_step()
         std::string summary = "LLM response (total=" + std::to_string(total);
         if (delta != 0)
             summary += (delta > 0 ? ", +" : ", ") + std::to_string(delta);
-        summary += from_server ? " tokens)" : " tokens est.)";
+        summary += from_server ? " tokens" : " tokens est.";
+        if (reasoning_tokens_reported > 0)
+            summary += ", reasoning=" + std::to_string(reasoning_tokens_reported);
+        summary += ")";
 
-        std::string detail = accumulated_text;
+        std::string detail;
+        if (!accumulated_reasoning.empty()) {
+            detail += "[thinking]\n" + accumulated_reasoning + "\n\n";
+        }
+        detail += accumulated_text;
         if (!tool_call_requests.empty()) {
             detail += "\n\n[tool_calls: ";
             for (size_t i = 0; i < tool_call_requests.size(); ++i) {

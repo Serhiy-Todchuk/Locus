@@ -344,14 +344,20 @@ void LMStudioClient::do_stream(
 
             auto& delta = choice["delta"];
 
-            // Text content (some models use "content", reasoning models may use
-            // "reasoning_content" for chain-of-thought).
-            for (const char* field : {"content", "reasoning_content"}) {
-                if (delta.contains(field) && delta[field].is_string()) {
-                    std::string token = delta[field].get<std::string>();
-                    if (!token.empty() && callbacks.on_token)
-                        callbacks.on_token(token);
-                }
+            // Visible answer tokens.
+            if (delta.contains("content") && delta["content"].is_string()) {
+                std::string token = delta["content"].get<std::string>();
+                if (!token.empty() && callbacks.on_token)
+                    callbacks.on_token(token);
+            }
+
+            // Chain-of-thought tokens (reasoning models, e.g. Gemma via
+            // LM Studio). Routed to a separate callback so the frontend can
+            // render them distinctly (or hide them).
+            if (delta.contains("reasoning_content") && delta["reasoning_content"].is_string()) {
+                std::string token = delta["reasoning_content"].get<std::string>();
+                if (!token.empty() && callbacks.on_reasoning_token)
+                    callbacks.on_reasoning_token(token);
             }
 
             // Tool calls (streamed incrementally)
@@ -385,8 +391,14 @@ void LMStudioClient::do_stream(
                 usage.prompt_tokens     = u.value("prompt_tokens", 0);
                 usage.completion_tokens = u.value("completion_tokens", 0);
                 usage.total_tokens      = u.value("total_tokens", 0);
-                spdlog::trace("LLM usage: prompt={}, completion={}, total={}",
-                              usage.prompt_tokens, usage.completion_tokens, usage.total_tokens);
+                if (u.contains("completion_tokens_details") &&
+                    u["completion_tokens_details"].is_object()) {
+                    usage.reasoning_tokens =
+                        u["completion_tokens_details"].value("reasoning_tokens", 0);
+                }
+                spdlog::trace("LLM usage: prompt={}, completion={} (reasoning={}), total={}",
+                              usage.prompt_tokens, usage.completion_tokens,
+                              usage.reasoning_tokens, usage.total_tokens);
             }
         } catch (const json::exception& e) {
             spdlog::warn("LLM stream: JSON error in chunk: {}", e.what());

@@ -172,7 +172,9 @@
       "Bash(\"C:/Program Files/CMake/bin/ctest.exe\" --test-dir build/release -C Release -R \"Incremental update handles file deletion\" --output-on-failure)",
       "Bash(cmake --build d:/Projects/AICodeAss/build/debug --target locus --config Debug)",
       "Bash(cmake --build build --target locus_gui)",
-      "Bash(cmake --build d:/Projects/AICodeAss/build/debug --target locus_gui)"
+      "Bash(cmake --build d:/Projects/AICodeAss/build/debug --target locus_gui)",
+      "Bash(curl -s http://127.0.0.1:1234/v1/chat/completions -H \"Content-Type: application/json\" -d '{\"model\":\"google/gemma-4-26b-a4b\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":false}')",
+      "Bash(curl -s -N http://127.0.0.1:1234/v1/chat/completions -H \"Content-Type: application/json\" -d '{\"model\":\"google/gemma-4-26b-a4b\",\"messages\":[{\"role\":\"user\",\"content\":\"Hi\"}],\"stream\":true,\"max_tokens\":40}')"
     ]
   }
 }

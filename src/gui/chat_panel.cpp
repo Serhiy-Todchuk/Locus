@@ -180,6 +180,33 @@ body {
     line-height: 1.3;
 }
 
+.msg-reasoning {
+    align-self: flex-start;
+    background: transparent;
+    color: #888;
+    border: 1px dashed #d0d0d0;
+    border-radius: 8px;
+    font-size: 12px;
+    max-width: 90%;
+    padding: 6px 10px;
+}
+.msg-reasoning summary {
+    cursor: pointer;
+    color: #888;
+    user-select: none;
+    font-style: italic;
+}
+.msg-reasoning .reasoning-body {
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px dashed #d0d0d0;
+    white-space: pre-wrap;
+    font-family: "Cascadia Code", "Consolas", monospace;
+    color: #777;
+    max-height: 240px;
+    overflow-y: auto;
+}
+
 .streaming-cursor::after {
     content: "\25CF";
     color: #0078d4;
@@ -217,6 +244,13 @@ body {
         background: #3b1c1c; color: #f48771;
         border-color: #5a2d2d;
     }
+    .msg-reasoning {
+        border-color: #444; color: #888;
+    }
+    .msg-reasoning summary { color: #888; }
+    .msg-reasoning .reasoning-body {
+        border-top-color: #444; color: #999;
+    }
     .streaming-cursor::after { color: #4a9eff; }
 }
 </style>
@@ -248,6 +282,34 @@ function highlightAll() {
 }
 function clearChat() {
     document.getElementById('chat').innerHTML = '';
+}
+function addReasoning(id, beforeId) {
+    var d = document.createElement('details');
+    d.id = 'msg-' + id;
+    d.className = 'msg msg-reasoning';
+    d.open = true;
+    d.innerHTML = '<summary>Thinking\u2026</summary><div class="reasoning-body"></div>';
+    var chat = document.getElementById('chat');
+    var before = document.getElementById('msg-' + beforeId);
+    if (before) chat.insertBefore(d, before);
+    else chat.appendChild(d);
+    window.scrollTo(0, document.body.scrollHeight);
+}
+function setReasoningBody(id, text) {
+    var d = document.getElementById('msg-' + id);
+    if (d) {
+        var body = d.querySelector('.reasoning-body');
+        if (body) { body.textContent = text; }
+        if (d.open) window.scrollTo(0, document.body.scrollHeight);
+    }
+}
+function finalizeReasoning(id, label) {
+    var d = document.getElementById('msg-' + id);
+    if (d) {
+        d.open = false;
+        var s = d.querySelector('summary');
+        if (s && label) s.textContent = label;
+    }
 }
 </script>
 <script src=")html";
@@ -362,13 +424,17 @@ void ChatPanel::on_turn_start()
     streaming_ = true;
     current_response_.clear();
     token_buffer_.clear();
+    current_reasoning_.clear();
+    reasoning_buffer_.clear();
+    reasoning_id_ = 0;
 
     stop_btn_->Enable();
 
     // Create an empty assistant message div.
     ++message_id_;
+    assistant_id_ = message_id_;
     run_script(wxString::Format(
-        "addMsg(%d, 'msg-assistant streaming-cursor', '');", message_id_));
+        "addMsg(%d, 'msg-assistant streaming-cursor', '');", assistant_id_));
 
     flush_timer_.Start(k_flush_interval_ms);
 }
@@ -379,9 +445,36 @@ void ChatPanel::on_token(const wxString& token)
     token_buffer_.append(token.ToUTF8().data());
 }
 
+void ChatPanel::on_reasoning_token(const wxString& token)
+{
+    reasoning_buffer_.append(token.ToUTF8().data());
+}
+
 void ChatPanel::on_turn_complete()
 {
     flush_timer_.Stop();
+
+    // Final flush of any remaining reasoning tokens.
+    if (!reasoning_buffer_.empty()) {
+        if (reasoning_id_ == 0) {
+            ++message_id_;
+            reasoning_id_ = message_id_;
+            run_script(wxString::Format(
+                "addReasoning(%d, %d);", reasoning_id_, assistant_id_));
+        }
+        current_reasoning_ += reasoning_buffer_;
+        reasoning_buffer_.clear();
+        run_script(wxString::Format(
+            "setReasoningBody(%d, %s);",
+            reasoning_id_,
+            "'" + js_escape(wxString::FromUTF8(current_reasoning_)) + "'"));
+    }
+
+    // Collapse reasoning block: "Thinking…" → "Thoughts".
+    if (reasoning_id_ != 0) {
+        run_script(wxString::Format(
+            "finalizeReasoning(%d, 'Thoughts');", reasoning_id_));
+    }
 
     // Final flush of any remaining tokens.
     if (!token_buffer_.empty()) {
@@ -393,11 +486,11 @@ void ChatPanel::on_turn_complete()
     std::string html = markdown_to_html(current_response_);
     run_script(wxString::Format(
         "setMsgHtml(%d, %s);",
-        message_id_, "'" + js_escape(wxString::FromUTF8(html)) + "'"));
+        assistant_id_, "'" + js_escape(wxString::FromUTF8(html)) + "'"));
 
     // Remove streaming cursor.
     run_script(wxString::Format(
-        "removeClassFromMsg(%d, 'streaming-cursor');", message_id_));
+        "removeClassFromMsg(%d, 'streaming-cursor');", assistant_id_));
 
     // Highlight code blocks.
     run_script("highlightAll();");
@@ -415,9 +508,13 @@ void ChatPanel::on_session_reset()
     run_script("clearChat();");
     current_response_.clear();
     token_buffer_.clear();
+    current_reasoning_.clear();
+    reasoning_buffer_.clear();
     streaming_ = false;
     stop_btn_->Disable();
     message_id_ = 0;
+    assistant_id_ = 0;
+    reasoning_id_ = 0;
 }
 
 void ChatPanel::on_error(const wxString& message)
@@ -495,6 +592,23 @@ void ChatPanel::set_locus_md_tokens(int tokens)
 
 void ChatPanel::on_flush_timer(wxTimerEvent& /*evt*/)
 {
+    // Flush reasoning first (it arrives before content for Gemma etc.).
+    if (!reasoning_buffer_.empty()) {
+        if (reasoning_id_ == 0) {
+            ++message_id_;
+            reasoning_id_ = message_id_;
+            // Insert reasoning block BEFORE the assistant bubble.
+            run_script(wxString::Format(
+                "addReasoning(%d, %d);", reasoning_id_, assistant_id_));
+        }
+        current_reasoning_ += reasoning_buffer_;
+        reasoning_buffer_.clear();
+        run_script(wxString::Format(
+            "setReasoningBody(%d, %s);",
+            reasoning_id_,
+            "'" + js_escape(wxString::FromUTF8(current_reasoning_)) + "'"));
+    }
+
     if (token_buffer_.empty()) return;
 
     current_response_ += token_buffer_;
@@ -504,7 +618,8 @@ void ChatPanel::on_flush_timer(wxTimerEvent& /*evt*/)
     std::string html = markdown_to_html(current_response_);
     run_script(wxString::Format(
         "setMsgHtml(%d, %s);",
-        message_id_, "'" + js_escape(wxString::FromUTF8(html)) + "'"));
+        assistant_id_,
+        "'" + js_escape(wxString::FromUTF8(html)) + "'"));
 }
 
 // ---------------------------------------------------------------------------

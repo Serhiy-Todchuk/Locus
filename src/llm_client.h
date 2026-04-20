@@ -79,6 +79,7 @@ struct CompletionUsage {
     int prompt_tokens     = 0;
     int completion_tokens = 0;
     int total_tokens      = 0;
+    int reasoning_tokens  = 0;   // subset of completion_tokens (reasoning models)
 };
 
 // ---- Streaming callbacks ----------------------------------------------------
@@ -100,6 +101,8 @@ using OnUsage = std::function<void(const CompletionUsage& usage)>;
 
 struct StreamCallbacks {
     OnToken     on_token;
+    OnToken     on_reasoning_token;   // chain-of-thought tokens (LM Studio's
+                                      // reasoning_content); empty = ignored
     OnToolCalls on_tool_calls;
     OnComplete  on_complete;
     OnError     on_error;

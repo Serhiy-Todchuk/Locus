@@ -36,6 +36,7 @@ public:
 
     void on_turn_start();
     void on_token(const wxString& token);
+    void on_reasoning_token(const wxString& token);
     void on_turn_complete();
     void on_session_reset();
     void on_error(const wxString& message);
@@ -88,7 +89,11 @@ private:
     // Token buffer (written from UI thread via on_token, read by timer).
     std::string   token_buffer_;
     std::string   current_response_;   // accumulated full response for md4c
+    std::string   reasoning_buffer_;   // pending chain-of-thought tokens
+    std::string   current_reasoning_;  // accumulated full reasoning text
     int           message_id_ = 0;     // monotonic ID for message divs
+    int           assistant_id_ = 0;   // id of the assistant bubble for this turn
+    int           reasoning_id_ = 0;   // id of the <details> thought block for this turn
     bool          streaming_  = false;  // true between turn_start and turn_complete
 
     // WebView readiness: SetPage() is async in WebView2.

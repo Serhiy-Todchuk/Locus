@@ -54,6 +54,7 @@ LocusFrame::LocusFrame(AgentCore& agent, Workspace& workspace)
     // Bind agent thread events.
     Bind(EVT_AGENT_TURN_START,    &LocusFrame::on_agent_turn_start,    this);
     Bind(EVT_AGENT_TOKEN,         &LocusFrame::on_agent_token,         this);
+    Bind(EVT_AGENT_REASONING_TOKEN, &LocusFrame::on_agent_reasoning_token, this);
     Bind(EVT_AGENT_TOOL_PENDING,  &LocusFrame::on_agent_tool_pending,  this);
     Bind(EVT_AGENT_TOOL_RESULT,   &LocusFrame::on_agent_tool_result,   this);
     Bind(EVT_AGENT_TURN_COMPLETE, &LocusFrame::on_agent_turn_complete, this);
@@ -363,6 +364,11 @@ void LocusFrame::on_agent_turn_start(wxThreadEvent& /*evt*/)
 void LocusFrame::on_agent_token(wxThreadEvent& evt)
 {
     chat_panel_->on_token(evt.GetString());
+}
+
+void LocusFrame::on_agent_reasoning_token(wxThreadEvent& evt)
+{
+    chat_panel_->on_reasoning_token(evt.GetString());
 }
 
 void LocusFrame::on_agent_tool_pending(wxThreadEvent& evt)

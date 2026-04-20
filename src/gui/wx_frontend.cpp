@@ -6,6 +6,7 @@ namespace locus {
 
 // Define the custom event types.
 wxDEFINE_EVENT(EVT_AGENT_TOKEN,         wxThreadEvent);
+wxDEFINE_EVENT(EVT_AGENT_REASONING_TOKEN, wxThreadEvent);
 wxDEFINE_EVENT(EVT_AGENT_TOOL_PENDING,  wxThreadEvent);
 wxDEFINE_EVENT(EVT_AGENT_TOOL_RESULT,   wxThreadEvent);
 wxDEFINE_EVENT(EVT_AGENT_TURN_START,    wxThreadEvent);
@@ -31,6 +32,13 @@ void WxFrontend::on_turn_start()
 void WxFrontend::on_token(std::string_view token)
 {
     auto* evt = new wxThreadEvent(EVT_AGENT_TOKEN);
+    evt->SetString(wxString::FromUTF8(token.data(), token.size()));
+    wxQueueEvent(handler_, evt);
+}
+
+void WxFrontend::on_reasoning_token(std::string_view token)
+{
+    auto* evt = new wxThreadEvent(EVT_AGENT_REASONING_TOKEN);
     evt->SetString(wxString::FromUTF8(token.data(), token.size()));
     wxQueueEvent(handler_, evt);
 }

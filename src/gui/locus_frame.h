@@ -57,6 +57,7 @@ private:
     // Event handlers: agent thread events (via WxFrontend)
     void on_agent_turn_start(wxThreadEvent& evt);
     void on_agent_token(wxThreadEvent& evt);
+    void on_agent_reasoning_token(wxThreadEvent& evt);
     void on_agent_tool_pending(wxThreadEvent& evt);
     void on_agent_tool_result(wxThreadEvent& evt);
     void on_agent_turn_complete(wxThreadEvent& evt);
