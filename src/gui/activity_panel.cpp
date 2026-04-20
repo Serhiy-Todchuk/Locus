@@ -127,9 +127,9 @@ wxString ActivityPanel::list_text_for(long item, long col) const
     case 1: return wxString::FromAscii(to_string(ev.kind));
     case 2: return wxString::FromUTF8(ev.summary);
     case 3: {
-        if (ev.tokens_delta) {
+        if (ev.tokens_delta && *ev.tokens_delta != 0) {
             int d = *ev.tokens_delta;
-            return wxString::Format("%s%d", d >= 0 ? "+" : "", d);
+            return wxString::Format("%s%d", d > 0 ? "+" : "", d);
         }
         if (ev.tokens_in) return wxString::Format("%d", *ev.tokens_in);
         return {};

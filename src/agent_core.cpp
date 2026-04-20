@@ -408,23 +408,22 @@ bool AgentCore::run_llm_step()
     if (had_error)
         return false;
 
-    // Emit LLM-response activity with real usage numbers (if reported).
+    // Emit LLM-response activity with token accounting. Prefer server-reported
+    // usage; if the backend (e.g. older LM Studio) omits it, fall back to the
+    // heuristic estimate of the full conversation so the column is never empty.
     {
-        int p = 0, c = 0, total = 0;
-        // last_server_total_tokens_ was updated above when usage fired.
-        total = last_server_total_tokens_;
-        // Recover prompt/completion from the conversation's last assistant msg
-        // and the reported total: we don't have per-call p/c separately here,
-        // so fall back to reporting what we have.
-        int delta = total > 0 ? (total - prev_turn_total_tokens_) : 0;
-        std::string summary;
-        if (total > 0) {
-            summary = "LLM response (total=" + std::to_string(total);
-            if (delta > 0) summary += ", +" + std::to_string(delta);
-            summary += " tokens)";
-        } else {
-            summary = "LLM response (" + std::to_string(accumulated_text.size()) + " chars)";
-        }
+        int total = last_server_total_tokens_;
+        bool from_server = (total > 0);
+        if (!from_server)
+            total = history_.estimate_tokens();
+
+        int delta = total - prev_turn_total_tokens_;
+
+        std::string summary = "LLM response (total=" + std::to_string(total);
+        if (delta != 0)
+            summary += (delta > 0 ? ", +" : ", ") + std::to_string(delta);
+        summary += from_server ? " tokens)" : " tokens est.)";
+
         std::string detail = accumulated_text;
         if (!tool_call_requests.empty()) {
             detail += "\n\n[tool_calls: ";
@@ -435,11 +434,10 @@ bool AgentCore::run_llm_step()
             detail += "]";
         }
         emit_activity(ActivityKind::llm_response, std::move(summary), std::move(detail),
-                      /*tokens_in=*/(total > 0 ? std::optional<int>(total) : std::nullopt),
+                      /*tokens_in=*/total,
                       /*tokens_out=*/std::nullopt,
-                      /*tokens_delta=*/(delta != 0 ? std::optional<int>(delta) : std::nullopt));
-        if (total > 0) prev_turn_total_tokens_ = total;
-        (void)p; (void)c;
+                      /*tokens_delta=*/delta);
+        prev_turn_total_tokens_ = total;
     }
 
     // Add assistant message to history.
