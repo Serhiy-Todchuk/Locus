@@ -27,7 +27,7 @@ struct WorkspaceConfig {
 
     // Semantic search (on by default — gracefully disabled if model missing)
     bool semantic_search_enabled = true;
-    std::string embedding_model = "all-MiniLM-L6-v2.onnx";
+    std::string embedding_model = "all-MiniLM-L6-v2.Q8_0.gguf";
     int embedding_dimensions = 384;
     int chunk_size_lines = 80;
     int chunk_overlap_lines = 10;

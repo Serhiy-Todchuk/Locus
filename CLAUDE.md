@@ -69,6 +69,7 @@ See [roadmap.md](roadmap.md) for full status.
 | Threading | **std::thread + std::mutex/queue** | Explicit, no framework |
 | Tests | **Catch2** | Unit tests from day one, separate CMake target |
 | HTML parser | **gumbo-parser** | Google's C HTML5 parser, handles malformed HTML |
+| Index embedder | **llama.cpp (GGUF)** | CPU-only in-process inference; WordPiece vocab bundled in the GGUF; replaced ONNX Runtime which had MSVC-static-CRT schema-registration issues |
 | Web search API | **Brave Search (default)** | Clean JSON API, free tier, configurable |
 | License | **MIT** | Maximum permissive, community-friendly |
 
@@ -126,7 +127,7 @@ Core is a static lib (`locus_core`). Both `locus` (exe) and `locus_tests` link i
 | `src/tool.h` | Tool system interfaces (no .cpp — pure abstract + structs). | `ITool`, `IToolRegistry`, `ToolParam`, `ToolResult`, `ToolCall`, `WorkspaceContext` |
 | `src/tool_registry.h/cpp` | Concrete registry. Schema JSON builder. ToolCall parser. | `ToolRegistry` |
 | `src/tools.h/cpp` | All 12 built-in tools + `register_builtin_tools()` factory. | `ReadFileTool`, `WriteFileTool`, `CreateFileTool`, `DeleteFileTool`, `ListDirectoryTool`, `SearchTextTool`, `SearchSymbolsTool`, `GetFileOutlineTool`, `RunCommandTool`, `AskUserTool`, `SearchSemanticTool`, `SearchHybridTool` |
-| `src/embedder.h/cpp` | ONNX Runtime session wrapper. Loads model, runs inference, returns normalized embedding vector. | `Embedder` |
+| `src/embedder.h/cpp` | llama.cpp session wrapper. Loads a GGUF model, tokenises via the embedded vocab, runs inference, returns an L2-normalised embedding vector. | `Embedder` |
 | `src/chunker.h/cpp` | Content chunking: code (Tree-sitter boundaries), document (heading boundaries), sliding window fallback. | `Chunk`, `SymbolSpan`, `chunk_code()`, `chunk_document()`, `chunk_sliding_window()` |
 | `src/embedding_worker.h/cpp` | Background thread: consumes chunk queue, calls Embedder, writes embeddings to DB. | `EmbeddingWorker` |
 | `src/extractors/text_extractor.h` | Base interface for file format extractors (no .cpp — pure abstract + structs). | `ITextExtractor`, `ExtractionResult`, `ExtractedHeading` |

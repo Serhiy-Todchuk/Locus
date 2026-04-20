@@ -16,20 +16,30 @@
 using namespace locus;
 namespace fs = std::filesystem;
 
-// Locate the ONNX model file. Prefers .ort (pre-optimised), falls back to .onnx.
-// Returns empty path if not found.
+// Locate the GGUF model file.  Prefers Q8_0 (smallest), then F16, then any
+// all-MiniLM-L6-v2.*.gguf.  Returns empty path if not found.
+//
+// The working directory depends on how the test is launched:
+//   direct exe:    build/debug/tests/Debug/   (4 up to project root)
+//   ctest default: build/debug/tests/         (3 up to project root)
+//   dev CLI:       d:/Projects/AICodeAss/     (0 up)
+// Walk up to 6 levels looking for a "models/<name>" sibling.
 static fs::path find_model()
 {
-    // Try both names in both locations
-    const char* names[] = {"all-MiniLM-L6-v2.ort", "all-MiniLM-L6-v2.onnx"};
-    for (const char* name : names) {
-        // CWD (project root when run from CLI)
-        if (fs::exists(fs::path("models") / name))
-            return fs::path("models") / name;
-        // Relative to typical MSVC test exe: build/debug/tests/Debug/
-        fs::path up4 = fs::path("../../../../models") / name;
-        if (fs::exists(up4))
-            return up4;
+    const char* names[] = {
+        "all-MiniLM-L6-v2.Q8_0.gguf",
+        "all-MiniLM-L6-v2.f16.gguf",
+        "all-MiniLM-L6-v2.gguf",
+    };
+    fs::path base = fs::current_path();
+    for (int i = 0; i < 7; ++i) {
+        for (const char* name : names) {
+            fs::path candidate = base / "models" / name;
+            if (fs::exists(candidate))
+                return candidate;
+        }
+        if (!base.has_parent_path() || base.parent_path() == base) break;
+        base = base.parent_path();
     }
     return {};
 }
@@ -260,30 +270,21 @@ TEST_CASE("RRF merge empty inputs", "[s2.1]")
 }
 
 // ============================================================================
-// Embedder tests (skipped if model is missing or fails to load)
+// Embedder tests — fail-hard when the GGUF model is missing
 // ============================================================================
 
-// Try to create an Embedder. Returns nullptr if model is missing or ONNX
-// Runtime rejects it (e.g. static-link schema registration issue in Debug).
-static std::unique_ptr<Embedder> try_load_embedder()
+// Construct an Embedder.  The model must be present at models/*.gguf; a
+// missing or broken model is a test failure, not a silent skip.
+static std::unique_ptr<Embedder> load_embedder()
 {
     auto model_path = find_model();
-    if (model_path.empty()) return nullptr;
-    try {
-        return std::make_unique<Embedder>(model_path, 384);
-    } catch (const std::exception& e) {
-        WARN("Model load failed: " << e.what());
-        return nullptr;
-    }
+    REQUIRE_FALSE(model_path.empty());
+    return std::make_unique<Embedder>(model_path, 384);
 }
 
 TEST_CASE("Embedder produces 384-dim normalised vector", "[s2.1]")
 {
-    auto embedder = try_load_embedder();
-    if (!embedder) {
-        WARN("Skipping: ONNX model not found or failed to load");
-        return;
-    }
+    auto embedder = load_embedder();
 
     auto vec = embedder->embed("hello world");
 
@@ -297,11 +298,7 @@ TEST_CASE("Embedder produces 384-dim normalised vector", "[s2.1]")
 
 TEST_CASE("Embedder similar texts have high cosine similarity", "[s2.1]")
 {
-    auto embedder = try_load_embedder();
-    if (!embedder) {
-        WARN("Skipping: ONNX model not found or failed to load");
-        return;
-    }
+    auto embedder = load_embedder();
 
     auto v1 = embedder->embed("the cat sat on the mat");
     auto v2 = embedder->embed("a cat is sitting on a mat");
@@ -324,11 +321,7 @@ TEST_CASE("Embedder similar texts have high cosine similarity", "[s2.1]")
 
 TEST_CASE("Embedder empty and short inputs do not crash", "[s2.1]")
 {
-    auto embedder = try_load_embedder();
-    if (!embedder) {
-        WARN("Skipping: ONNX model not found or failed to load");
-        return;
-    }
+    auto embedder = load_embedder();
 
     auto v_empty = embedder->embed("");
     REQUIRE(v_empty.size() == 384);
@@ -336,8 +329,31 @@ TEST_CASE("Embedder empty and short inputs do not crash", "[s2.1]")
     auto v_short = embedder->embed("x");
     REQUIRE(v_short.size() == 384);
 
-    // Both should still be normalised
+    // Short input should still be normalised
     float norm = 0.0f;
     for (float v : v_short) norm += v * v;
     CHECK_THAT(std::sqrt(norm), Catch::Matchers::WithinAbs(1.0, 0.01));
+}
+
+// Anchor test: proves the real tokenizer (from GGUF vocab) is active.
+// The previous FNV-hash tokenizer would NOT pass these thresholds because
+// hashed IDs break the model's embedding-layer lookup.
+TEST_CASE("Embedder anchors real-tokenizer semantic quality", "[s2.1]")
+{
+    auto embedder = load_embedder();
+
+    auto cos = [](const std::vector<float>& a, const std::vector<float>& b) {
+        float s = 0.0f;
+        for (size_t i = 0; i < a.size(); ++i) s += a[i] * b[i];
+        return s;
+    };
+
+    // Synonymy — common lexical equivalence.
+    CHECK(cos(embedder->embed("car"), embedder->embed("automobile")) > 0.6f);
+    // Paraphrase — same intent, different word order.
+    CHECK(cos(embedder->embed("how to bake bread"),
+              embedder->embed("bread baking instructions")) > 0.6f);
+    // Unrelated — different domain.
+    CHECK(cos(embedder->embed("car"),
+              embedder->embed("photosynthesis chlorophyll")) < 0.4f);
 }

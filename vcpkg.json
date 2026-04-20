@@ -17,6 +17,6 @@
             "features": ["webview"]
         },
         "md4c",
-        "onnxruntime"
+        "llama-cpp"
     ]
 }

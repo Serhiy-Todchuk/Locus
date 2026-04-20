@@ -76,14 +76,21 @@ No server, no config, single file, zero external process.
 
 ## 5. Semantic Embeddings
 
-**ONNX Runtime C++ API** — in-process, no dependency on LM Studio being up.
+**llama.cpp C API** — in-process CPU inference, no dependency on LM Studio being up.
 
-- Official ONNX Runtime C++ API, Apache 2.0, vcpkg: `onnxruntime`
-- Models stored in `.locus/models/` as `.onnx` files
-- **Default model**: `all-MiniLM-L6-v2` — 22MB, 384-dim, good quality, fast on CPU
-- **Upgrade model**: `nomic-embed-text-v1.5` — 280MB, 768-dim, better for long docs
+- llama.cpp, MIT, vcpkg: `llama-cpp` (transitively pulls `ggml`)
+- Models stored as `.gguf` files (single file: weights + vocab + metadata)
+- **Default model**: `all-MiniLM-L6-v2.Q8_0.gguf` — ~25MB, 384-dim, good quality, fast on CPU
+- **Upgrade model**: any BERT-family GGUF (e.g. `bge-small-en`, `nomic-embed-text` GGUF builds)
 - Runs in a background thread at lower priority than FTS indexing
 - Opt-in per workspace; disabled by default
+- Tokenisation uses the WordPiece vocabulary embedded inside the GGUF file — no separate `vocab.txt` needed
+
+**Why not ONNX Runtime?** The vcpkg `onnxruntime` port under `x64-windows-static` strips
+ONNX schema-registration static constructors at link time, causing runtime "invalid model"
+failures in both Debug and Release. `/WHOLEARCHIVE:ONNX::onnx` did not resolve it. llama.cpp
+has no equivalent schema registry and links cleanly under static CRT. As a bonus, llama.cpp
+ships a real tokenizer, replacing the stub FNV-hash tokenizer that the earlier ONNX path used.
 
 See [workspace-index.md](workspace-index.md) for chunking strategy and hybrid search design.
 
@@ -203,7 +210,7 @@ Thread layout:
 | Main | wxWidgets event loop (UI thread) — never blocks |
 | Agent | LLM request, SSE streaming, tool dispatch |
 | Indexer (FTS) | File traversal + FTS5 index build/update |
-| Indexer (Vec) | ONNX embedding, sqlite-vec writes (lower priority) |
+| Indexer (Vec) | llama.cpp embedding, sqlite-vec writes (lower priority) |
 | Watcher | efsw event loop, posts file change events to Indexer queue |
 | Crow | CrowFrontend HTTP + WebSocket server for external clients |
 
@@ -257,7 +264,7 @@ See [web-retrieval.md](web-retrieval.md) for the full pipeline design.
 | Frontend: CrowServer | Crow HTTP/WS for external clients | `crowcpp-crow` |
 | Index database | SQLite + FTS5 | `sqlite3` |
 | Vector search | sqlite-vec | (bundled extension) |
-| Embeddings | ONNX Runtime | `onnxruntime` |
+| Embeddings | llama.cpp (GGUF) | `llama-cpp` |
 | Code parser | Tree-sitter | `tree-sitter` |
 | File watcher | efsw | `efsw` |
 | LLM HTTP client | cpr | `cpr` |
