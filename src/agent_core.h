@@ -84,7 +84,24 @@ public:
     void start();
     void stop();
 
+    // Late-joining frontend catch-up: returns all buffered events with
+    // id > since_id.
+    std::vector<ActivityEvent> get_activity(uint64_t since_id = 0) const override;
+
+    // External subsystems (indexer, embedding worker) report activity here.
+    // Thread-safe. Broadcasts to all frontends and appends to ring buffer.
+    void emit_index_event(const std::string& summary,
+                          const std::string& detail = {});
+
 private:
+    // Build + broadcast + buffer a new activity event.
+    void emit_activity(ActivityKind kind,
+                       std::string summary,
+                       std::string detail = {},
+                       std::optional<int> tokens_in = std::nullopt,
+                       std::optional<int> tokens_out = std::nullopt,
+                       std::optional<int> tokens_delta = std::nullopt);
+
     // Agent thread entry point: drains the message queue.
     void agent_thread_func();
 
@@ -149,6 +166,13 @@ private:
 
     // Compaction threshold (fraction of context_limit).
     static constexpr double k_compaction_threshold = 0.80;
+
+    // Activity ring buffer (protected by activity_mutex_).
+    mutable std::mutex         activity_mutex_;
+    std::vector<ActivityEvent> activity_buffer_;
+    uint64_t                   next_activity_id_ = 1;
+    int                        prev_turn_total_tokens_ = 0;
+    static constexpr size_t k_activity_buffer_max = 1000;
 };
 
 } // namespace locus

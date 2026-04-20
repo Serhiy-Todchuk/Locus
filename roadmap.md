@@ -215,7 +215,21 @@ Personal documents (WS3) works end-to-end.
 - [x] Per-workspace toggle: `semantic_search.enabled` in config; UI toggle in settings
 - [x] Catch2 tests: RRF merge correctness, chunking boundary detection
 
-### S2.2 — Document Text Extraction
+### S2.2 — Activity Details Panel
+
+- [ ] `ActivityEvent` struct in `src/activity_event.h`: `id`, `timestamp`, `kind` enum (`system_prompt`, `user_message`, `llm_response`, `tool_call`, `tool_result`, `index_event`, `warning`, `error`), `summary` (one-line), `detail` (full text), optional `tokens_in`/`tokens_out`/`tokens_delta`
+- [ ] Extend `IFrontend` with `on_activity(const ActivityEvent&)` — all activity fans out through this
+- [ ] `AgentCore` emits events at hook points: after `SystemPromptBuilder::build()`, on `send_message` entry, on LLM stream complete (attach `CompletionUsage`), on each tool_call pending/result, on errors
+- [ ] `Indexer` + `EmbeddingWorker`: emit through a core-provided callback ("indexed 12 files", "embedded 47 chunks") routed via `AgentCore` so they reach all frontends uniformly
+- [ ] Plumb real token counts: capture `CompletionUsage` in agent loop; compute per-message delta against prior turn; attach to `llm_response` events
+- [ ] In-memory ring buffer (last N=1000) owned by `AgentCore`; query API `get_activity(since_id)` for late-joining frontends
+- [ ] CLI frontend: `on_activity` → `spdlog::trace` (no console spam)
+- [ ] `ActivityPanel : wxPanel` replacing the Details panel dummy: virtual `wxListCtrl` (time, kind icon, summary, tokens), row click expands inline `wxStyledTextCtrl` detail (read-only, selectable, JSON lexer for tool args), hover → `wxRichToolTip`, filter chips per kind + search box, severity colors
+- [ ] Persistence: append events to `.locus/activity/<session_id>.jsonl`; load on session load
+- [ ] Settings: max ring buffer size, enable/disable persistence
+- [ ] Catch2 tests: event emission order on a mocked agent turn, ring buffer eviction, token delta accounting
+
+### S2.3 — Document Text Extraction
 - [ ] pdfium vcpkg dependency; `PdfiumExtractor`: extract text per page, detect encrypted
 - [ ] miniz + pugixml: `DocxExtractor` (unzip → parse `word/document.xml`)
 - [ ] miniz + pugixml: `XlsxExtractor` (unzip → parse `xl/sharedStrings.xml` + sheets)
@@ -224,7 +238,7 @@ Personal documents (WS3) works end-to-end.
 - [ ] Graceful skip: unreadable/encrypted files logged to spdlog, `files` table flagged as `is_binary=1`
 - [ ] Catch2 tests: PDF extraction round-trip, DOCX heading extraction
 
-### S2.3 — Active Edit Context (F7)
+### S2.4 — Active Edit Context (F7)
 - [ ] `EditContext` struct: `file_path`, `line`, `col`, `selection_text`, `selection_start`, `selection_end`
 - [ ] `ILocusCore::set_edit_context(EditContext)` — stores in Core, associates with current session
 - [ ] Context injected into system prompt when non-empty: `[Editing: path:line — selection]`

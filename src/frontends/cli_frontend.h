@@ -26,6 +26,7 @@ public:
     void on_session_reset() override;
     void on_error(const std::string& message) override;
     void on_embedding_progress(int done, int total) override;
+    void on_activity(const ActivityEvent& event) override;
 
     // Last context meter values, for displaying in the input prompt.
     int last_used() const { return last_used_; }

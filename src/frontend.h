@@ -1,9 +1,12 @@
 #pragma once
 
+#include "activity_event.h"
 #include "tool.h"
 
+#include <cstdint>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace locus {
 
@@ -59,6 +62,12 @@ public:
 
     // Embedding progress update (from background worker thread).
     virtual void on_embedding_progress(int done, int total) = 0;
+
+    // Activity log entry. All structured events (system prompts, user msgs,
+    // LLM responses, tool calls, index events, warnings, errors) fan out
+    // through this in addition to their specific callbacks. Frontends that
+    // don't care can ignore it.
+    virtual void on_activity(const ActivityEvent& event) = 0;
 };
 
 // -- ILocusCore ---------------------------------------------------------------
@@ -101,6 +110,10 @@ public:
     // the current LLM call or tool execution finishes (not instant).
     // No-op if not busy.
     virtual void cancel_turn() = 0;
+
+    // Snapshot of buffered activity events with id > since_id. Used by
+    // late-joining frontends (e.g. web clients) to catch up.
+    virtual std::vector<ActivityEvent> get_activity(uint64_t since_id = 0) const = 0;
 };
 
 } // namespace locus

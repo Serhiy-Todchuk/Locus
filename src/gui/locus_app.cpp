@@ -174,6 +174,11 @@ bool LocusApp::OnInit()
             *llm_, *tools_, ws_ctx,
             workspace_->locus_md(), ws_meta, llm_cfg, sessions_dir);
 
+        workspace_->indexer().on_activity =
+            [agent = agent_.get()](const std::string& s, const std::string& d) {
+                agent->emit_index_event(s, d);
+            };
+
         agent_->start();
 
         // Create the main frame (wxWidgets owns it after Show).
@@ -294,6 +299,11 @@ void LocusApp::open_workspace(const std::string& path)
         agent_ = std::make_unique<AgentCore>(
             *llm_, *tools_, ws_ctx,
             workspace_->locus_md(), ws_meta, llm_cfg, sessions_dir);
+
+        workspace_->indexer().on_activity =
+            [agent = agent_.get()](const std::string& s, const std::string& d) {
+                agent->emit_index_event(s, d);
+            };
 
         agent_->start();
 

@@ -34,6 +34,7 @@ struct StubFrontend : IFrontend {
     void on_session_reset() override { events.push_back("session_reset"); }
     void on_error(const std::string& msg) override { events.push_back("error:" + msg); }
     void on_embedding_progress(int, int) override {}
+    void on_activity(const ActivityEvent&) override {}
 };
 
 // Throws on every callback — used to test exception isolation.
@@ -52,6 +53,7 @@ struct ThrowingFrontend : IFrontend {
     void on_session_reset() override { throw std::runtime_error("boom"); }
     void on_error(const std::string&) override { throw std::runtime_error("boom"); }
     void on_embedding_progress(int, int) override { throw std::runtime_error("boom"); }
+    void on_activity(const ActivityEvent&) override { throw std::runtime_error("boom"); }
 };
 
 // ---- FrontendRegistry tests -------------------------------------------------

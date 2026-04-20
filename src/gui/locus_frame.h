@@ -1,5 +1,6 @@
 #pragma once
 
+#include "activity_panel.h"
 #include "chat_panel.h"
 #include "compaction_dialog.h"
 #include "file_tree_panel.h"
@@ -64,6 +65,7 @@ private:
     void on_agent_session_reset(wxThreadEvent& evt);
     void on_agent_error(wxThreadEvent& evt);
     void on_agent_embedding_progress(wxThreadEvent& evt);
+    void on_agent_activity(wxThreadEvent& evt);
 
     // Core references (not owned)
     AgentCore& agent_;
@@ -78,7 +80,7 @@ private:
     FileTreePanel*     file_tree_panel_ = nullptr;  // file tree + index status (S1.6)
     ChatPanel*         chat_panel_     = nullptr;   // chat UI (S1.3)
     ToolApprovalPanel* approval_panel_ = nullptr;   // tool approval (S1.4)
-    wxPanel*           detail_panel_   = nullptr;   // placeholder for future details
+    ActivityPanel*     activity_panel_ = nullptr;   // activity log (S2.2)
     wxMenu*            recent_menu_    = nullptr;   // "Recent Workspaces" submenu (owned by menu bar)
 
     wxDECLARE_EVENT_TABLE();

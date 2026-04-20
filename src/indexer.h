@@ -52,6 +52,10 @@ public:
     // Called with chunk IDs after each file is chunked (for embedding queue).
     std::function<void(std::vector<int64_t>)> on_chunks_created;
 
+    // Activity hook — summary + detail, thread-safe handler required.
+    // Fired after build_initial completes and after each process_events batch.
+    std::function<void(const std::string&, const std::string&)> on_activity;
+
 private:
     // Index a single file (upsert files row, FTS5, symbols, headings).
     void index_file(const fs::path& rel_path);
