@@ -11,6 +11,7 @@ namespace locus {
 
 // Custom wxEvent IDs for agent thread -> UI thread marshalling.
 wxDECLARE_EVENT(EVT_AGENT_TOKEN,         wxThreadEvent);
+wxDECLARE_EVENT(EVT_AGENT_REASONING_TOKEN, wxThreadEvent);
 wxDECLARE_EVENT(EVT_AGENT_TOOL_PENDING,  wxThreadEvent);
 wxDECLARE_EVENT(EVT_AGENT_TOOL_RESULT,   wxThreadEvent);
 wxDECLARE_EVENT(EVT_AGENT_TURN_START,    wxThreadEvent);
@@ -32,6 +33,7 @@ public:
 
     void on_turn_start() override;
     void on_token(std::string_view token) override;
+    void on_reasoning_token(std::string_view token) override;
     void on_tool_call_pending(const ToolCall& call,
                               const std::string& preview) override;
     void on_tool_result(const std::string& call_id,

@@ -31,8 +31,11 @@ public:
     // call. Use for busy indicators and input disabling.
     virtual void on_turn_start() = 0;
 
-    // Streamed text token from LLM.
+    // Streamed text token from LLM (visible answer).
     virtual void on_token(std::string_view token) = 0;
+
+    // Streamed chain-of-thought token (reasoning models). Default: ignore.
+    virtual void on_reasoning_token(std::string_view /*token*/) {}
 
     // A tool call needs approval. Frontend should display info and eventually
     // call ILocusCore::tool_decision(). For auto-approve tools this is NOT
