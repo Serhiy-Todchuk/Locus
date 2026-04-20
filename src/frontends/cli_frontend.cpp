@@ -180,4 +180,9 @@ void CliFrontend::on_embedding_progress(int done, int total)
     spdlog::trace("Embedding progress: {}/{}", done, total);
 }
 
+void CliFrontend::on_activity(const ActivityEvent& event)
+{
+    spdlog::trace("activity[{}] {}: {}", event.id, to_string(event.kind), event.summary);
+}
+
 } // namespace locus

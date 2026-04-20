@@ -687,6 +687,17 @@ void Indexer::build_initial()
                  "{} symbols, {} headings in {} ms",
                  stats_.files_total, stats_.files_indexed, stats_.files_binary,
                  stats_.symbols_total, stats_.headings_total, elapsed.count());
+
+    if (on_activity) {
+        std::string sum = "Initial index: " + std::to_string(stats_.files_total) +
+                          " files (" + std::to_string(stats_.files_indexed) + " text, " +
+                          std::to_string(stats_.files_binary) + " binary) in " +
+                          std::to_string(elapsed.count()) + " ms";
+        std::string det = "symbols: " + std::to_string(stats_.symbols_total) +
+                          "\nheadings: " + std::to_string(stats_.headings_total) +
+                          "\nchunks: " + std::to_string(stats_.chunks_total);
+        on_activity(sum, det);
+    }
 }
 
 // -- Incremental updates ------------------------------------------------------
@@ -718,6 +729,22 @@ void Indexer::process_events(const std::vector<FileEvent>& events)
     db_.exec("COMMIT");
 
     spdlog::trace("Processed {} file events", events.size());
+
+    if (on_activity) {
+        std::string sum = "Indexed " + std::to_string(events.size()) + " file event" +
+                          (events.size() == 1 ? "" : "s");
+        std::string det;
+        for (auto& ev : events) {
+            det += (ev.action == FileAction::Deleted ? "- " :
+                    ev.action == FileAction::Added   ? "+ " :
+                    ev.action == FileAction::Moved   ? "> " : "~ ");
+            det += ev.path.string();
+            if (ev.action == FileAction::Moved)
+                det += " (from " + ev.old_path.string() + ")";
+            det += "\n";
+        }
+        on_activity(sum, det);
+    }
 }
 
 } // namespace locus

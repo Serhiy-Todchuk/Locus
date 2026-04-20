@@ -62,6 +62,7 @@ LocusFrame::LocusFrame(AgentCore& agent, Workspace& workspace)
     Bind(EVT_AGENT_SESSION_RESET, &LocusFrame::on_agent_session_reset, this);
     Bind(EVT_AGENT_ERROR,         &LocusFrame::on_agent_error,         this);
     Bind(EVT_AGENT_EMBEDDING_PROGRESS, &LocusFrame::on_agent_embedding_progress, this);
+    Bind(EVT_AGENT_ACTIVITY,      &LocusFrame::on_agent_activity,      this);
 
     // Show LOCUS.md token cost if present.
     if (!workspace_.locus_md().empty()) {
@@ -226,9 +227,8 @@ void LocusFrame::setup_aui_layout()
             agent_.tool_decision(call_id, decision, modified_args);
         });
 
-    // Right detail panel (placeholder for future file details / outline).
-    detail_panel_ = new wxPanel(this, wxID_ANY);
-    detail_panel_->SetBackgroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW));
+    // Right detail panel — Activity log (S2.2).
+    activity_panel_ = new ActivityPanel(this, agent_);
 
     // Add panes.
     aui_.AddPane(file_tree_panel_, wxAuiPaneInfo()
@@ -246,9 +246,9 @@ void LocusFrame::setup_aui_layout()
         .CloseButton(false).PinButton(false)
         .Hide());  // shown dynamically when a tool call needs approval
 
-    aui_.AddPane(detail_panel_, wxAuiPaneInfo()
-        .Name("details").Caption("Details")
-        .Right().MinSize(200, -1).BestSize(300, -1)
+    aui_.AddPane(activity_panel_, wxAuiPaneInfo()
+        .Name("activity").Caption("Activity")
+        .Right().MinSize(280, -1).BestSize(420, -1)
         .CloseButton(true).PinButton(true));
 }
 
@@ -448,6 +448,7 @@ void LocusFrame::on_agent_session_reset(wxThreadEvent& /*evt*/)
 {
     SetStatusText("Conversation reset", 0);
     chat_panel_->on_session_reset();
+    if (activity_panel_) activity_panel_->clear();
 }
 
 void LocusFrame::on_agent_error(wxThreadEvent& evt)
@@ -464,6 +465,12 @@ void LocusFrame::on_agent_embedding_progress(wxThreadEvent& evt)
     int done = evt.GetInt();
     int total = static_cast<int>(evt.GetExtraLong());
     file_tree_panel_->set_embedding_progress(done, total);
+}
+
+void LocusFrame::on_agent_activity(wxThreadEvent& evt)
+{
+    auto ev = evt.GetPayload<ActivityEvent>();
+    if (activity_panel_) activity_panel_->append(ev);
 }
 
 } // namespace locus

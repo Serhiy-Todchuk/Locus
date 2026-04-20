@@ -38,7 +38,7 @@ data into context, and keeps the user in full transparent control of every step.
 
 ## Current Stage
 
-**M2 — Full Workspace Support in progress.** S2.1 complete (semantic search).
+**M2 — Full Workspace Support in progress.** S2.1 complete. S2.2 (Activity Details Panel) in progress.
 See [roadmap.md](roadmap.md) for full status.
 
 ---

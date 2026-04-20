@@ -30,6 +30,64 @@ AgentCore::AgentCore(ILLMClient& llm,
 
     // Seed conversation with the system message.
     history_.add({MessageRole::system, system_prompt_});
+
+    // Record initial system prompt as the first activity event so users can
+    // see what context was seeded and how many tokens it cost.
+    emit_activity(ActivityKind::system_prompt,
+                  "System prompt assembled (~" + std::to_string(sys_tokens) + " tokens)",
+                  system_prompt_,
+                  /*tokens_in=*/std::nullopt,
+                  /*tokens_out=*/std::nullopt,
+                  /*tokens_delta=*/sys_tokens);
+}
+
+// -- Activity emission -------------------------------------------------------
+
+void AgentCore::emit_activity(ActivityKind kind,
+                              std::string summary,
+                              std::string detail,
+                              std::optional<int> tokens_in,
+                              std::optional<int> tokens_out,
+                              std::optional<int> tokens_delta)
+{
+    ActivityEvent ev;
+    {
+        std::lock_guard lock(activity_mutex_);
+        ev.id = next_activity_id_++;
+        ev.timestamp = std::chrono::system_clock::now();
+        ev.kind = kind;
+        ev.summary = std::move(summary);
+        ev.detail = std::move(detail);
+        ev.tokens_in = tokens_in;
+        ev.tokens_out = tokens_out;
+        ev.tokens_delta = tokens_delta;
+
+        activity_buffer_.push_back(ev);
+        if (activity_buffer_.size() > k_activity_buffer_max) {
+            activity_buffer_.erase(
+                activity_buffer_.begin(),
+                activity_buffer_.begin() +
+                    (activity_buffer_.size() - k_activity_buffer_max));
+        }
+    }
+
+    frontends_.broadcast([&](IFrontend& fe) { fe.on_activity(ev); });
+}
+
+std::vector<ActivityEvent> AgentCore::get_activity(uint64_t since_id) const
+{
+    std::lock_guard lock(activity_mutex_);
+    std::vector<ActivityEvent> out;
+    out.reserve(activity_buffer_.size());
+    for (auto& ev : activity_buffer_)
+        if (ev.id > since_id)
+            out.push_back(ev);
+    return out;
+}
+
+void AgentCore::emit_index_event(const std::string& summary, const std::string& detail)
+{
+    emit_activity(ActivityKind::index_event, summary, detail);
 }
 
 AgentCore::~AgentCore()
@@ -162,6 +220,11 @@ void AgentCore::process_message(const std::string& content)
     }
 
     history_.add({MessageRole::user, content});
+
+    {
+        std::string sum = "User message (" + std::to_string(content.size()) + " chars)";
+        emit_activity(ActivityKind::user_message, std::move(sum), content);
+    }
 
     frontends_.broadcast([&](IFrontend& fe) {
         fe.on_context_meter(current_token_count(), llm_config_.context_limit);
@@ -332,6 +395,7 @@ bool AgentCore::run_llm_step()
         [&](const std::string& err) {
             had_error = true;
             frontends_.broadcast([&](IFrontend& fe) { fe.on_error(err); });
+            emit_activity(ActivityKind::error, "LLM error", err);
         },
         /* on_usage */
         [&](const CompletionUsage& u) {
@@ -343,6 +407,40 @@ bool AgentCore::run_llm_step()
 
     if (had_error)
         return false;
+
+    // Emit LLM-response activity with real usage numbers (if reported).
+    {
+        int p = 0, c = 0, total = 0;
+        // last_server_total_tokens_ was updated above when usage fired.
+        total = last_server_total_tokens_;
+        // Recover prompt/completion from the conversation's last assistant msg
+        // and the reported total: we don't have per-call p/c separately here,
+        // so fall back to reporting what we have.
+        int delta = total > 0 ? (total - prev_turn_total_tokens_) : 0;
+        std::string summary;
+        if (total > 0) {
+            summary = "LLM response (total=" + std::to_string(total);
+            if (delta > 0) summary += ", +" + std::to_string(delta);
+            summary += " tokens)";
+        } else {
+            summary = "LLM response (" + std::to_string(accumulated_text.size()) + " chars)";
+        }
+        std::string detail = accumulated_text;
+        if (!tool_call_requests.empty()) {
+            detail += "\n\n[tool_calls: ";
+            for (size_t i = 0; i < tool_call_requests.size(); ++i) {
+                if (i) detail += ", ";
+                detail += tool_call_requests[i].name;
+            }
+            detail += "]";
+        }
+        emit_activity(ActivityKind::llm_response, std::move(summary), std::move(detail),
+                      /*tokens_in=*/(total > 0 ? std::optional<int>(total) : std::nullopt),
+                      /*tokens_out=*/std::nullopt,
+                      /*tokens_delta=*/(delta != 0 ? std::optional<int>(delta) : std::nullopt));
+        if (total > 0) prev_turn_total_tokens_ = total;
+        (void)p; (void)c;
+    }
 
     // Add assistant message to history.
     ChatMessage assistant_msg;
@@ -374,6 +472,9 @@ bool AgentCore::run_llm_step()
             frontends_.broadcast([&](IFrontend& fe) {
                 fe.on_error("Unknown tool: " + call.tool_name);
             });
+            emit_activity(ActivityKind::error,
+                          "Unknown tool: " + call.tool_name,
+                          "LLM requested tool '" + call.tool_name + "' which is not registered.");
             continue;
         }
 
@@ -389,6 +490,10 @@ void AgentCore::process_tool_call(const ToolCall& call, ITool* tool)
 {
     spdlog::info("AgentCore: tool call '{}' id={}", call.tool_name, call.id);
     spdlog::trace("AgentCore: tool args: {}", call.args.dump());
+
+    emit_activity(ActivityKind::tool_call,
+                  "Tool call: " + call.tool_name,
+                  "id: " + call.id + "\nargs: " + call.args.dump(2));
 
     ToolCall effective_call = call;
 
@@ -452,6 +557,15 @@ void AgentCore::process_tool_call(const ToolCall& call, ITool* tool)
     spdlog::info("AgentCore: tool '{}' result: success={}, content={} chars",
                  call.tool_name, result.success, result.content.size());
     spdlog::trace("AgentCore: tool result content: {}", result.content);
+
+    {
+        std::string sum = "Tool result: " + call.tool_name;
+        sum += result.success ? " (ok)" : " (failed)";
+        sum += " — " + std::to_string(result.content.size()) + " chars";
+        emit_activity(result.success ? ActivityKind::tool_result : ActivityKind::error,
+                      std::move(sum),
+                      result.content);
+    }
 
     // Inject tool result into conversation.
     ChatMessage tool_msg;

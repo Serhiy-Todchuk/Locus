@@ -20,6 +20,7 @@ wxDECLARE_EVENT(EVT_AGENT_COMPACTION,    wxThreadEvent);
 wxDECLARE_EVENT(EVT_AGENT_SESSION_RESET, wxThreadEvent);
 wxDECLARE_EVENT(EVT_AGENT_ERROR,         wxThreadEvent);
 wxDECLARE_EVENT(EVT_AGENT_EMBEDDING_PROGRESS, wxThreadEvent);
+wxDECLARE_EVENT(EVT_AGENT_ACTIVITY,      wxThreadEvent);
 
 // Thread bridge: IFrontend callbacks (fired on the agent thread) are
 // marshalled to the wxWidgets main thread via wxQueueEvent + wxThreadEvent.
@@ -41,6 +42,7 @@ public:
     void on_session_reset() override;
     void on_error(const std::string& message) override;
     void on_embedding_progress(int done, int total) override;
+    void on_activity(const ActivityEvent& event) override;
 
 private:
     wxEvtHandler* handler_;

@@ -242,6 +242,12 @@ int main(int argc, char* argv[])
         locus::CliFrontend cli(agent);
         agent.register_frontend(&cli);
 
+        // Route indexer activity through the agent's event bus.
+        ws.indexer().on_activity =
+            [&agent](const std::string& s, const std::string& d) {
+                agent.emit_index_event(s, d);
+            };
+
         // Start the agent thread.
         agent.start();
 
