@@ -239,13 +239,18 @@ Personal documents (WS3) works end-to-end.
 - [x] Graceful skip: unreadable/encrypted files logged to spdlog, `files` table flagged as `is_binary=1`
 - [x] Catch2 tests: PDF, DOCX, XLSX, HTML — real sample files in `tests/sample_docs/` (W-9 + Apache POI samples)
 
-### S2.4 — Active Edit Context (F7)
-- [ ] `EditContext` struct: `file_path`, `line`, `col`, `selection_text`, `selection_start`, `selection_end`
-- [ ] `ILocusCore::set_edit_context(EditContext)` — stores in Core, associates with current session
-- [ ] Context injected into system prompt when non-empty: `[Editing: path:line — selection]`
-- [ ] User toggle: per-message checkbox "Include edit context" (default: on when context is set)
-- [ ] UI: visible "attached context" chip above input showing file + line; click to clear
-- [ ] Standalone attach: user can right-click a file in the file tree panel → "Attach to context"
+### S2.4 — Attach File to Context
+- [ ] `AttachedContext` struct in Core: `file_path` + optional short preview string
+- [ ] `ILocusCore::set_attached_context(AttachedContext)` / `clear_attached_context()` — stored on current session
+- [ ] Context injected into system prompt when non-empty: `[Attached: <path>]` + file outline summary (reuse `IndexQuery::get_file_outline`)
+- [ ] `FileTreePanel` interactions:
+  - Double-click on a file → open with the OS-default application via shell-execute (`ShellExecuteW` on Windows)
+  - Right-click on a file → context menu with: **Open** (same as double-click), **Attach to context**, **Show in Explorer** (`explorer.exe /select,<path>`)
+- [ ] UI: chip widget above `ChatPanel` input showing `📎 <filename>`; click chip to detach
+- [ ] Chip hidden when no context attached; reappears on next attach
+- [ ] Catch2 tests: attach/clear round-trips through Core, system-prompt injection
+
+Richer editor-driven context (line/col/selection) moves to **S3.6** once the VS Code shim is feeding it.
 
 ---
 
@@ -306,6 +311,11 @@ Personal documents (WS3) works end-to-end.
 - [ ] Extension settings: `locus.coreUrl` (default `http://127.0.0.1:7700`), `locus.token`
 - [ ] Status bar item: `$(locus-icon) Locus: Connected` / `Disconnected`; click to open settings
 - [ ] Activation: on workspace open; deactivation: clean up on VS Code close
+- [ ] Extend `AttachedContext` → `EditContext`: add `line`, `col`, `selection_text`, `selection_start`, `selection_end`
+- [ ] Core endpoint `POST /edit-context`: shim pushes editor state here
+- [ ] System-prompt injection upgraded to `[Editing: path:line — selection]` when selection fields present
+- [ ] Chip widget shows `📎 file.cpp:42` when line is set (reuse S2.4 chip)
+- [ ] Per-message checkbox "Include edit context" in ChatPanel footer (default: on when context is set)
 
 
 ---
@@ -328,5 +338,8 @@ Items from requirements Nice-to-Have — not scheduled yet:
 - Automated coding pipeline (plan → code → test → fix loop, user-supervised)
 - LaTeX math display in LLM chat (for formulas)
 - Symbol index: extract member variables / field declarations (C++ `field_declaration`, etc.)
+- Bundled `LlamaCppClient` as a second `ILLMClient` backend (optional). Reuses llama.cpp already linked for embeddings; gives zero-install first-run with a curated GGUF. Keeps LM Studio / Ollama / llama-server path as primary (any OpenAI-compatible endpoint). Costs: GPU-backend distribution (CPU + Vulkan realistic, CUDA adds hundreds of MB), per-model chat-template + tool-call parsing we currently get free from LM Studio, and model-management UX (picker, download, swap).
+- Open-citation UX: agent cites `file:line` or `file:page` → click opens the right thing per format. Shell-execute for PDF/DOCX/XLSX (native app), in-app render for ZIM articles + markdown + plain text (reuse existing WebView/md4c), hand off to VS Code for code files. Avoids building a universal file viewer while still letting the user verify what the agent saw. ZIM article rendering is the only hard requirement (no external viewer exists) and is implicitly needed by S3.2.
+- Lightweight chat UI: replace `wxWebView` with `wxHtmlWindow` (optional). Keeps md4c → HTML pipeline, drops the browser engine (tens of MB → hundreds of KB per instance, no cold-start cost). Loses: JS-powered features (Mermaid, KaTeX, interactive code views) — those would need WebView back for just those views.
 - CLI: raw-mode line editor (vendor replxx or similar) — suppresses visible `^[[200~` bracketed-paste markers on Windows, adds history, arrow-key editing. Current CLI uses line-mode stdin + terminal echo, which renders VT input sequences literally during paste. Non-blocking since desktop GUI is the primary frontend.
 

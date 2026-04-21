@@ -24,6 +24,7 @@ enum {
     ID_MENU_VIEW_FILES,
     ID_MENU_VIEW_ACTIVITY,
     ID_MENU_CLEAR_SESSIONS,
+    ID_TIMER_WATCHER,
     ID_MENU_RECENT_BASE         = wxID_HIGHEST + 300,  // 300..309 for recent workspaces
     ID_MENU_SESSION_OPEN_BASE   = wxID_HIGHEST + 400,  // 400..449 for session open
     ID_MENU_SESSION_DELETE_BASE = wxID_HIGHEST + 500,  // 500..549 for session delete
@@ -94,6 +95,12 @@ LocusFrame::LocusFrame(AgentCore& agent, Workspace& workspace)
     workspace_.indexer().on_progress = [this](int done, int total) {
         wx_frontend_->on_indexing_progress(done, total);
     };
+
+    // File-watcher pump: drain the watcher every 500 ms and batch events
+    // so rapid saves produce one merged index transaction + one Activity row.
+    watcher_timer_.SetOwner(this, ID_TIMER_WATCHER);
+    Bind(wxEVT_TIMER, &LocusFrame::on_watcher_timer, this, ID_TIMER_WATCHER);
+    watcher_timer_.Start(500);
 
     // Populate index stats in the file tree panel.
     refresh_index_stats();
@@ -386,7 +393,13 @@ void LocusFrame::setup_aui_layout()
 
     // Center chat panel.
     chat_panel_ = new ChatPanel(this,
-        [this](const std::string& msg) { agent_.send_message(msg); },
+        [this](const std::string& msg) {
+            // Flush any pending file-watcher events first so the agent's
+            // first tool call sees a fresh index (mirrors the CLI's
+            // pre-turn drain in main.cpp).
+            flush_pending_events();
+            agent_.send_message(msg);
+        },
         [this]() { show_compaction_dialog(); },
         [this]() { agent_.cancel_turn(); });
 
@@ -551,6 +564,16 @@ void LocusFrame::refresh_index_stats()
 
 void LocusFrame::on_close(wxCloseEvent& evt)
 {
+    // Stop the watcher pump first so no late tick fires into a
+    // half-destructed frame, then flush any pending events synchronously
+    // so edits made right before close still get indexed.
+    watcher_timer_.Stop();
+    try {
+        flush_pending_events();
+    } catch (const std::exception& ex) {
+        spdlog::warn("Final flush on close failed: {}", ex.what());
+    }
+
     // The embedding worker runs on its own thread and fires on_progress
     // callbacks into this frame.  Stop it here — before destruction — so no
     // callback can fire into freed memory.  stop() joins the thread.
@@ -565,6 +588,70 @@ void LocusFrame::on_close(wxCloseEvent& evt)
     tray_.reset();
 
     evt.Skip();  // proceed with destruction
+}
+
+// ---------------------------------------------------------------------------
+// File-watcher pump + batching
+// ---------------------------------------------------------------------------
+
+namespace {
+    constexpr auto k_quiet_period = std::chrono::milliseconds(1500);
+    constexpr auto k_hard_cap     = std::chrono::milliseconds(20000);
+}
+
+void LocusFrame::on_watcher_timer(wxTimerEvent& /*evt*/)
+{
+    // Pull any new events from the watcher queue.
+    std::vector<FileEvent> drained;
+    size_t n = workspace_.file_watcher().drain(drained);
+
+    auto now = std::chrono::steady_clock::now();
+
+    if (n > 0) {
+        if (!group_active_) {
+            group_start_ = now;
+            group_active_ = true;
+        }
+        last_event_time_ = now;
+        pending_events_.insert(pending_events_.end(),
+                               std::make_move_iterator(drained.begin()),
+                               std::make_move_iterator(drained.end()));
+        spdlog::trace("Watcher: +{} events (pending {})", n, pending_events_.size());
+    }
+
+    if (!group_active_) return;
+
+    auto idle  = now - last_event_time_;
+    auto total = now - group_start_;
+    if (idle >= k_quiet_period || total >= k_hard_cap) {
+        flush_pending_events();
+    }
+}
+
+void LocusFrame::flush_pending_events()
+{
+    if (pending_events_.empty()) {
+        group_active_ = false;
+        return;
+    }
+
+    spdlog::info("File watcher: flushing {} batched event(s)",
+                 pending_events_.size());
+
+    // Move into a local so a concurrent append (e.g. if a nested call path
+    // could somehow reenter) doesn't see a half-cleared vector. Unlikely
+    // here since everything is on the UI thread, but cheap insurance.
+    std::vector<FileEvent> batch = std::move(pending_events_);
+    pending_events_.clear();
+    group_active_ = false;
+
+    try {
+        workspace_.indexer().process_events(batch);
+    } catch (const std::exception& ex) {
+        spdlog::error("process_events failed: {}", ex.what());
+    }
+
+    refresh_index_stats();
 }
 
 void LocusFrame::on_iconize(wxIconizeEvent& evt)
