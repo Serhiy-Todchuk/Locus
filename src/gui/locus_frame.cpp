@@ -23,8 +23,13 @@ enum {
     ID_MENU_SETTINGS,
     ID_MENU_VIEW_FILES,
     ID_MENU_VIEW_ACTIVITY,
-    ID_MENU_RECENT_BASE = wxID_HIGHEST + 300,  // 300..309 for recent workspaces
+    ID_MENU_CLEAR_SESSIONS,
+    ID_MENU_RECENT_BASE         = wxID_HIGHEST + 300,  // 300..309 for recent workspaces
+    ID_MENU_SESSION_OPEN_BASE   = wxID_HIGHEST + 400,  // 400..449 for session open
+    ID_MENU_SESSION_DELETE_BASE = wxID_HIGHEST + 500,  // 500..549 for session delete
 };
+
+constexpr size_t k_max_sessions_in_menu = 50;
 
 wxBEGIN_EVENT_TABLE(LocusFrame, wxFrame)
     EVT_CLOSE(LocusFrame::on_close)
@@ -123,6 +128,18 @@ void LocusFrame::create_menu_bar()
     session_menu->Append(ID_MENU_RESET,        "Reset Conversation\tCtrl+R");
     session_menu->Append(ID_MENU_COMPACT,       "Compact Context");
     session_menu->Append(ID_MENU_SAVE_SESSION,  "Save Session\tCtrl+S");
+    sessions_menu_ = new wxMenu;
+    rebuild_sessions_menu();
+    session_menu->AppendSubMenu(sessions_menu_, "Saved Sessions");
+    session_menu->AppendSeparator();
+    session_menu->Append(ID_MENU_CLEAR_SESSIONS, "Clear All Sessions...");
+
+    // Rebuild the sessions submenu each time the Session menu opens, so newly
+    // saved or externally-removed sessions show up without restarting the app.
+    session_menu->Bind(wxEVT_MENU_OPEN, [this](wxMenuEvent& e) {
+        rebuild_sessions_menu();
+        e.Skip();
+    });
 
     auto* view_menu = new wxMenu;
     view_files_item_    = view_menu->AppendCheckItem(ID_MENU_VIEW_FILES,    "Files Panel");
@@ -163,7 +180,25 @@ void LocusFrame::create_menu_bar()
     Bind(wxEVT_MENU, [this](wxCommandEvent&) {
         auto id = agent_.save_session();
         SetStatusText(wxString::Format("Session saved: %s", id));
+        rebuild_sessions_menu();
     }, ID_MENU_SAVE_SESSION);
+    Bind(wxEVT_MENU, [this](wxCommandEvent&) {
+        auto sessions = agent_.sessions().list();
+        if (sessions.empty()) {
+            SetStatusText("No saved sessions to clear", 0);
+            return;
+        }
+        int answer = wxMessageBox(
+            wxString::Format("Delete all %zu saved sessions?\nThis cannot be undone.",
+                             sessions.size()),
+            "Clear All Sessions", wxYES_NO | wxICON_WARNING, this);
+        if (answer != wxYES) return;
+        size_t removed = 0;
+        for (const auto& s : sessions)
+            if (agent_.sessions().remove(s.id)) ++removed;
+        SetStatusText(wxString::Format("Deleted %zu session(s)", removed), 0);
+        rebuild_sessions_menu();
+    }, ID_MENU_CLEAR_SESSIONS);
     Bind(wxEVT_MENU, [this](wxCommandEvent&) {
         show_settings_dialog();
     }, ID_MENU_SETTINGS);
@@ -173,6 +208,14 @@ void LocusFrame::create_menu_bar()
     Bind(wxEVT_MENU, [this](wxCommandEvent& e) {
         toggle_pane("activity", e.IsChecked());
     }, ID_MENU_VIEW_ACTIVITY);
+
+    // Saved Sessions submenu: bind the whole ID range once.
+    Bind(wxEVT_MENU, &LocusFrame::on_session_open,   this,
+         ID_MENU_SESSION_OPEN_BASE,
+         ID_MENU_SESSION_OPEN_BASE + static_cast<int>(k_max_sessions_in_menu) - 1);
+    Bind(wxEVT_MENU, &LocusFrame::on_session_delete, this,
+         ID_MENU_SESSION_DELETE_BASE,
+         ID_MENU_SESSION_DELETE_BASE + static_cast<int>(k_max_sessions_in_menu) - 1);
     Bind(wxEVT_MENU, [this](wxCommandEvent&) {
         wxAboutDialogInfo info;
         info.SetName("Locus");
@@ -203,6 +246,79 @@ void LocusFrame::rebuild_recent_menu()
                 wxGetApp().open_workspace(path);
             });
         }, id);
+    }
+}
+
+void LocusFrame::rebuild_sessions_menu()
+{
+    if (!sessions_menu_) return;
+
+    while (sessions_menu_->GetMenuItemCount() > 0)
+        sessions_menu_->Delete(sessions_menu_->FindItemByPosition(0));
+
+    sessions_in_menu_.clear();
+
+    auto sessions = agent_.sessions().list();
+    if (sessions.empty()) {
+        sessions_menu_->Append(wxID_ANY, "(none)")->Enable(false);
+        return;
+    }
+
+    const size_t n = std::min(sessions.size(), k_max_sessions_in_menu);
+    sessions_in_menu_.reserve(n);
+    for (size_t i = 0; i < n; ++i) {
+        const auto& s = sessions[i];
+
+        std::string preview = s.first_user_message;
+        if (preview.size() > 48) preview = preview.substr(0, 45) + "...";
+        wxString label = wxString::Format(
+            "%s  %s  (%d msgs)",
+            wxString::FromUTF8(s.timestamp.empty() ? s.id : s.timestamp),
+            wxString::FromUTF8(preview),
+            s.message_count);
+
+        auto* entry_menu = new wxMenu;
+        entry_menu->Append(ID_MENU_SESSION_OPEN_BASE   + static_cast<int>(i), "Open");
+        entry_menu->Append(ID_MENU_SESSION_DELETE_BASE + static_cast<int>(i), "Delete");
+
+        sessions_menu_->AppendSubMenu(entry_menu, label);
+        sessions_in_menu_.push_back(s.id);
+    }
+
+    if (sessions.size() > k_max_sessions_in_menu) {
+        sessions_menu_->AppendSeparator();
+        sessions_menu_->Append(wxID_ANY,
+            wxString::Format("(%zu more not shown)", sessions.size() - k_max_sessions_in_menu))
+            ->Enable(false);
+    }
+}
+
+void LocusFrame::on_session_open(wxCommandEvent& evt)
+{
+    size_t i = static_cast<size_t>(evt.GetId() - ID_MENU_SESSION_OPEN_BASE);
+    if (i >= sessions_in_menu_.size()) return;
+    std::string id = sessions_in_menu_[i];
+    try {
+        agent_.load_session(id);
+        SetStatusText(wxString::Format("Loaded session: %s", id), 0);
+    } catch (const std::exception& ex) {
+        wxMessageBox(wxString::Format("Failed to load session:\n%s", ex.what()),
+                     "Load Session", wxOK | wxICON_ERROR, this);
+    }
+}
+
+void LocusFrame::on_session_delete(wxCommandEvent& evt)
+{
+    size_t i = static_cast<size_t>(evt.GetId() - ID_MENU_SESSION_DELETE_BASE);
+    if (i >= sessions_in_menu_.size()) return;
+    std::string id = sessions_in_menu_[i];
+    int answer = wxMessageBox(
+        wxString::Format("Delete session '%s'?\nThis cannot be undone.", id),
+        "Delete Session", wxYES_NO | wxICON_WARNING, this);
+    if (answer != wxYES) return;
+    if (agent_.sessions().remove(id)) {
+        SetStatusText(wxString::Format("Deleted session: %s", id), 0);
+        rebuild_sessions_menu();
     }
 }
 
@@ -318,7 +434,7 @@ void LocusFrame::show_compaction_dialog()
 
 void LocusFrame::show_settings_dialog()
 {
-    SettingsDialog dlg(this, workspace_.config());
+    SettingsDialog dlg(this, workspace_.config(), agent_.tools());
     if (dlg.ShowModal() == wxID_OK && dlg.config_changed()) {
         workspace_.save_config();
         SetStatusText("Settings saved", 0);

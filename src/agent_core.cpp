@@ -1,5 +1,6 @@
 #include "agent_core.h"
 #include "tool_registry.h"
+#include "workspace.h"
 
 #include <spdlog/spdlog.h>
 
@@ -514,7 +515,30 @@ void AgentCore::process_tool_call(const ToolCall& call, ITool* tool)
 
     ToolCall effective_call = call;
 
-    if (tool->approval_policy() == "auto") {
+    // Resolve the effective approval policy for this tool: per-workspace
+    // override (from WorkspaceConfig) wins over the tool's built-in default.
+    ToolApprovalPolicy policy = tool->approval_policy();
+    if (ws_context_.workspace) {
+        const auto& overrides = ws_context_.workspace->config().tool_approval_policies;
+        auto it = overrides.find(call.tool_name);
+        if (it != overrides.end())
+            policy = it->second;
+    }
+
+    if (policy == ToolApprovalPolicy::deny) {
+        spdlog::info("AgentCore: tool '{}' denied by workspace policy", call.tool_name);
+        ChatMessage denied_result;
+        denied_result.role = MessageRole::tool;
+        denied_result.tool_call_id = call.id;
+        denied_result.content = "Tool call denied by workspace approval policy.";
+        history_.add(std::move(denied_result));
+        frontends_.broadcast([&](IFrontend& fe) {
+            fe.on_tool_result(call.id, "[denied by policy]");
+        });
+        return;
+    }
+
+    if (policy == ToolApprovalPolicy::auto_approve) {
         spdlog::trace("AgentCore: auto-approve '{}'", call.tool_name);
     } else {
         // Needs user approval.

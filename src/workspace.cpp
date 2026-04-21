@@ -216,11 +216,25 @@ static WorkspaceConfig config_from_json(const json& j)
             cfg.llm_context_limit = llm["context_limit"].get<int>();
     }
 
+    if (j.contains("tool_approvals") && j["tool_approvals"].is_object()) {
+        for (auto it = j["tool_approvals"].begin();
+             it != j["tool_approvals"].end(); ++it) {
+            if (it.value().is_string()) {
+                cfg.tool_approval_policies[it.key()] =
+                    policy_from_string(it.value().get<std::string>());
+            }
+        }
+    }
+
     return cfg;
 }
 
 static json config_to_json(const WorkspaceConfig& cfg)
 {
+    json approvals = json::object();
+    for (const auto& [name, policy] : cfg.tool_approval_policies)
+        approvals[name] = to_string(policy);
+
     return {
         {"index", {
             {"exclude_patterns", cfg.exclude_patterns},
@@ -239,7 +253,8 @@ static json config_to_json(const WorkspaceConfig& cfg)
             {"model", cfg.llm_model},
             {"temperature", cfg.llm_temperature},
             {"context_limit", cfg.llm_context_limit}
-        }}
+        }},
+        {"tool_approvals", approvals}
     };
 }
 

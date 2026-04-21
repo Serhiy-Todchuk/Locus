@@ -1,8 +1,11 @@
 #pragma once
 
+#include "tool.h"  // for ToolApprovalPolicy
+
 #include <filesystem>
 #include <string>
 #include <memory>
+#include <unordered_map>
 
 namespace locus {
 
@@ -37,6 +40,10 @@ struct WorkspaceConfig {
     std::string llm_model;           // empty = server default
     double      llm_temperature = 0.7;
     int         llm_context_limit = 0; // 0 = auto-detect from server
+
+    // Per-workspace tool approval overrides: tool_name -> policy.
+    // Absent entries fall back to the tool's default (ITool::approval_policy()).
+    std::unordered_map<std::string, ToolApprovalPolicy> tool_approval_policies;
 };
 
 // Owns all workspace-level resources: config, database, file watcher, LOCUS.md.

@@ -12,6 +12,38 @@ class EmbeddingWorker;
 class IndexQuery;
 class Workspace;
 
+// -- Tool approval policy ---------------------------------------------------
+
+enum class ToolApprovalPolicy {
+    ask,           // "Ask Every Time" — show approval UI, require user decision
+    auto_approve,  // "Auto-Approve"   — execute immediately, no user prompt
+    deny           // "Deny"           — never execute, report rejection to the LLM
+};
+
+inline const char* to_string(ToolApprovalPolicy p) {
+    switch (p) {
+        case ToolApprovalPolicy::ask:          return "ask";
+        case ToolApprovalPolicy::auto_approve: return "auto";
+        case ToolApprovalPolicy::deny:         return "deny";
+    }
+    return "ask";
+}
+
+inline ToolApprovalPolicy policy_from_string(const std::string& s) {
+    if (s == "auto")  return ToolApprovalPolicy::auto_approve;
+    if (s == "deny")  return ToolApprovalPolicy::deny;
+    return ToolApprovalPolicy::ask;  // default / "ask" / unknown
+}
+
+inline const char* policy_display_name(ToolApprovalPolicy p) {
+    switch (p) {
+        case ToolApprovalPolicy::ask:          return "Ask Every Time";
+        case ToolApprovalPolicy::auto_approve: return "Auto-Approve";
+        case ToolApprovalPolicy::deny:         return "Deny";
+    }
+    return "Ask Every Time";
+}
+
 // -- Structs passed to/from tools -------------------------------------------
 
 struct ToolParam {
@@ -55,8 +87,9 @@ public:
     virtual ToolResult execute(const ToolCall& call,
                                const WorkspaceContext& ws) = 0;
 
-    // "always" = pause for user approval; "auto" = execute immediately
-    virtual std::string approval_policy() const { return "always"; }
+    // Default approval policy for this tool. User-configured overrides in
+    // WorkspaceConfig take precedence — see AgentCore::resolve_policy().
+    virtual ToolApprovalPolicy approval_policy() const { return ToolApprovalPolicy::ask; }
 
     // Human-readable preview of what this call will do (shown in approval UI)
     virtual std::string preview(const ToolCall& call) const { return ""; }
