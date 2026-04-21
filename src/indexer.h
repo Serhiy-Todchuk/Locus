@@ -26,8 +26,11 @@ struct WorkspaceConfig;
 // updates driven by FileWatcher events.
 class Indexer {
 public:
-    Indexer(Database& db, const fs::path& root, const WorkspaceConfig& config,
-           const ExtractorRegistry& extractors);
+    // `vectors_db` is optional: pass null when semantic search is disabled
+    // (no chunks / vectors will be written).
+    Indexer(Database& main_db, Database* vectors_db,
+            const fs::path& root, const WorkspaceConfig& config,
+            const ExtractorRegistry& extractors);
     ~Indexer();
 
     Indexer(const Indexer&) = delete;
@@ -81,7 +84,8 @@ private:
     void init_tree_sitter();
     const TSLanguage* ts_language_for(const std::string& language) const;
 
-    Database& db_;
+    Database& main_db_;
+    Database* vectors_db_;  // nullable — null when semantic disabled
     fs::path root_;
     const WorkspaceConfig& config_;
     const ExtractorRegistry& extractors_;

@@ -63,7 +63,9 @@ struct SearchOptions {
 // Wraps SQLite prepared statements for efficient repeated use.
 class IndexQuery {
 public:
-    explicit IndexQuery(Database& db);
+    // `vectors_db` is optional: pass null when semantic search is disabled.
+    // search_semantic / search_hybrid then return empty / fall back to BM25.
+    IndexQuery(Database& main_db, Database* vectors_db);
     ~IndexQuery();
 
     IndexQuery(const IndexQuery&) = delete;
@@ -94,14 +96,18 @@ public:
                                             const SearchOptions& opts = {}) const;
 
 private:
-    Database& db_;
+    Database& main_db_;
+    Database* vectors_db_;  // null when semantic search disabled
 
-    // Prepared statements (owned, finalized in destructor)
+    // Prepared statements on main_db_ (owned, finalized in destructor)
     sqlite3_stmt* stmt_search_text_ = nullptr;
     sqlite3_stmt* stmt_search_symbols_all_ = nullptr;
     sqlite3_stmt* stmt_outline_headings_ = nullptr;
     sqlite3_stmt* stmt_outline_symbols_ = nullptr;
     sqlite3_stmt* stmt_list_dir_ = nullptr;
+    sqlite3_stmt* stmt_path_by_file_id_ = nullptr;  // file_id -> path lookup
+
+    // Prepared statements on vectors_db_ (null when disabled)
     sqlite3_stmt* stmt_search_semantic_ = nullptr;
 };
 

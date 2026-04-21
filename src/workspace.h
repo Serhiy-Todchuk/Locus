@@ -68,7 +68,9 @@ public:
     // LOCUS.md content (empty string if file doesn't exist). Read-only.
     const std::string& locus_md() const { return locus_md_; }
 
-    Database& database() { return *db_; }
+    Database& database() { return *main_db_; }
+    // Semantic DB (chunks + chunk_vectors). Null when semantic search disabled.
+    Database* vectors_database() { return vectors_db_.get(); }
     ExtractorRegistry& extractors() { return *extractors_; }
     FileWatcher& file_watcher() { return *watcher_; }
     Indexer& indexer() { return *indexer_; }
@@ -91,7 +93,8 @@ private:
     fs::path locus_dir_;
     WorkspaceConfig config_;
     std::string locus_md_;
-    std::unique_ptr<Database> db_;
+    std::unique_ptr<Database> main_db_;
+    std::unique_ptr<Database> vectors_db_;  // null when semantic disabled
     std::unique_ptr<ExtractorRegistry> extractors_;
     std::unique_ptr<FileWatcher> watcher_;
     std::unique_ptr<Indexer> indexer_;

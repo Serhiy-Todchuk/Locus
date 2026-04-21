@@ -386,3 +386,63 @@ TEST_CASE("Incremental update handles file deletion", "[s0.3][indexer][increment
 
     cleanup(tmp);
 }
+
+// -- DB split tests (chunks + vectors live in vectors.db, not index.db) -------
+
+TEST_CASE("Main DB has skeleton tables only", "[s2.4][database][split]")
+{
+    auto tmp = make_test_dir("split_main");
+    write_file(tmp / "hello.txt", "some text");
+
+    {
+        locus::Workspace ws(tmp);
+        auto* db = ws.database().handle();
+
+        // Skeleton tables are present in main DB
+        REQUIRE(query_int(db,
+            "SELECT COUNT(*) FROM sqlite_master WHERE name='files'") == 1);
+        REQUIRE(query_int(db,
+            "SELECT COUNT(*) FROM sqlite_master WHERE name='files_fts'") == 1);
+        REQUIRE(query_int(db,
+            "SELECT COUNT(*) FROM sqlite_master WHERE name='symbols'") == 1);
+        REQUIRE(query_int(db,
+            "SELECT COUNT(*) FROM sqlite_master WHERE name='headings'") == 1);
+
+        // Semantic tables must NOT live in the main DB after the split
+        REQUIRE(query_int(db,
+            "SELECT COUNT(*) FROM sqlite_master WHERE name='chunks'") == 0);
+        REQUIRE(query_int(db,
+            "SELECT COUNT(*) FROM sqlite_master WHERE name='chunk_vectors'") == 0);
+    }
+
+    cleanup(tmp);
+}
+
+TEST_CASE("Legacy chunks/chunk_vectors in main DB are migrated on open",
+          "[s2.4][database][split][migration]")
+{
+    auto tmp = make_test_dir("split_migrate");
+
+    // Build a legacy-shape main DB: chunks table, but no chunk_vectors (vec0
+    // can only be created with the extension loaded; creating just the regular
+    // table is enough to trigger the migration path).
+    auto db_path = tmp / ".locus" / "index.db";
+    fs::create_directories(db_path.parent_path());
+    {
+        sqlite3* raw = nullptr;
+        sqlite3_open(db_path.string().c_str(), &raw);
+        sqlite3_exec(raw, "CREATE TABLE chunks (id INTEGER PRIMARY KEY)",
+                     nullptr, nullptr, nullptr);
+        sqlite3_close(raw);
+    }
+
+    // Opening Workspace should trigger drop_legacy_semantic_tables()
+    {
+        locus::Workspace ws(tmp);
+        auto* db = ws.database().handle();
+        REQUIRE(query_int(db,
+            "SELECT COUNT(*) FROM sqlite_master WHERE name='chunks'") == 0);
+    }
+
+    cleanup(tmp);
+}

@@ -177,15 +177,17 @@ static const std::vector<SymbolRule>& symbol_rules_for(const std::string& langua
 
 // -- Indexer ------------------------------------------------------------------
 
-Indexer::Indexer(Database& db, const fs::path& root, const WorkspaceConfig& config,
+Indexer::Indexer(Database& main_db, Database* vectors_db,
+                 const fs::path& root, const WorkspaceConfig& config,
                  const ExtractorRegistry& extractors)
-    : db_(db)
+    : main_db_(main_db)
+    , vectors_db_(vectors_db)
     , root_(root)
     , config_(config)
     , extractors_(extractors)
 {
-    // Prepare statements
-    stmt_upsert_file_ = db_.prepare(R"(
+    // Main DB: skeleton index (files, FTS, symbols, headings)
+    stmt_upsert_file_ = main_db_.prepare(R"(
         INSERT INTO files (path, abs_path, size_bytes, modified_at, ext, is_binary, language, indexed_at)
         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
         ON CONFLICT(path) DO UPDATE SET
@@ -193,31 +195,34 @@ Indexer::Indexer(Database& db, const fs::path& root, const WorkspaceConfig& conf
             is_binary=?6, language=?7, indexed_at=?8
     )");
 
-    stmt_delete_file_ = db_.prepare("DELETE FROM files WHERE path = ?1");
-    stmt_file_id_     = db_.prepare("SELECT id FROM files WHERE path = ?1");
+    stmt_delete_file_ = main_db_.prepare("DELETE FROM files WHERE path = ?1");
+    stmt_file_id_     = main_db_.prepare("SELECT id FROM files WHERE path = ?1");
 
-    stmt_insert_fts_  = db_.prepare("INSERT INTO files_fts (path, content) VALUES (?1, ?2)");
-    stmt_delete_fts_  = db_.prepare("DELETE FROM files_fts WHERE path = ?1");
+    stmt_insert_fts_  = main_db_.prepare("INSERT INTO files_fts (path, content) VALUES (?1, ?2)");
+    stmt_delete_fts_  = main_db_.prepare("DELETE FROM files_fts WHERE path = ?1");
 
-    stmt_insert_sym_  = db_.prepare(R"(
+    stmt_insert_sym_  = main_db_.prepare(R"(
         INSERT INTO symbols (file_id, kind, name, line_start, line_end, signature, parent_name)
         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
     )");
-    stmt_delete_syms_ = db_.prepare("DELETE FROM symbols WHERE file_id = ?1");
+    stmt_delete_syms_ = main_db_.prepare("DELETE FROM symbols WHERE file_id = ?1");
 
-    stmt_insert_head_ = db_.prepare(R"(
+    stmt_insert_head_ = main_db_.prepare(R"(
         INSERT INTO headings (file_id, level, text, line_number)
         VALUES (?1, ?2, ?3, ?4)
     )");
-    stmt_delete_heads_ = db_.prepare("DELETE FROM headings WHERE file_id = ?1");
+    stmt_delete_heads_ = main_db_.prepare("DELETE FROM headings WHERE file_id = ?1");
 
-    stmt_insert_chunk_ = db_.prepare(R"(
-        INSERT INTO chunks (file_id, chunk_index, start_line, end_line, content)
-        VALUES (?1, ?2, ?3, ?4, ?5)
-    )");
-    stmt_delete_chunks_ = db_.prepare("DELETE FROM chunks WHERE file_id = ?1");
-    stmt_delete_chunk_vecs_ = db_.prepare(
-        "DELETE FROM chunk_vectors WHERE chunk_id IN (SELECT id FROM chunks WHERE file_id = ?1)");
+    // Vectors DB: chunks + chunk_vectors live together in their own file.
+    if (vectors_db_) {
+        stmt_insert_chunk_ = vectors_db_->prepare(R"(
+            INSERT INTO chunks (file_id, chunk_index, start_line, end_line, content)
+            VALUES (?1, ?2, ?3, ?4, ?5)
+        )");
+        stmt_delete_chunks_ = vectors_db_->prepare("DELETE FROM chunks WHERE file_id = ?1");
+        stmt_delete_chunk_vecs_ = vectors_db_->prepare(
+            "DELETE FROM chunk_vectors WHERE chunk_id IN (SELECT id FROM chunks WHERE file_id = ?1)");
+    }
 
     init_tree_sitter();
 
@@ -555,7 +560,7 @@ void Indexer::index_file(const fs::path& rel_path)
     sqlite3_bind_int64(stmt_delete_heads_, 1, file_id);
     sqlite3_step(stmt_delete_heads_);
 
-    if (config_.semantic_search_enabled) {
+    if (vectors_db_ && config_.semantic_search_enabled) {
         sqlite3_reset(stmt_delete_chunk_vecs_);
         sqlite3_bind_int64(stmt_delete_chunk_vecs_, 1, file_id);
         sqlite3_step(stmt_delete_chunk_vecs_);
@@ -581,7 +586,7 @@ void Indexer::index_file(const fs::path& rel_path)
     }
 
     // Create semantic chunks (if enabled)
-    if (config_.semantic_search_enabled && !content.empty()) {
+    if (vectors_db_ && config_.semantic_search_enabled && !content.empty()) {
         std::vector<Chunk> chunks;
         if (!symbol_spans.empty()) {
             chunks = chunk_code(content, symbol_spans,
@@ -605,7 +610,7 @@ void Indexer::index_file(const fs::path& rel_path)
             sqlite3_bind_text(stmt_insert_chunk_, 5, chunk.content.c_str(), -1, SQLITE_TRANSIENT);
             sqlite3_step(stmt_insert_chunk_);
 
-            int64_t chunk_id = sqlite3_last_insert_rowid(db_.handle());
+            int64_t chunk_id = sqlite3_last_insert_rowid(vectors_db_->handle());
             chunk_ids.push_back(chunk_id);
         }
 
@@ -639,14 +644,16 @@ void Indexer::remove_file(const fs::path& rel_path)
         sqlite3_bind_int64(stmt_delete_heads_, 1, file_id);
         sqlite3_step(stmt_delete_heads_);
 
-        // Clean up chunks and their vectors
-        sqlite3_reset(stmt_delete_chunk_vecs_);
-        sqlite3_bind_int64(stmt_delete_chunk_vecs_, 1, file_id);
-        sqlite3_step(stmt_delete_chunk_vecs_);
+        // Clean up chunks and their vectors (in vectors.db)
+        if (vectors_db_) {
+            sqlite3_reset(stmt_delete_chunk_vecs_);
+            sqlite3_bind_int64(stmt_delete_chunk_vecs_, 1, file_id);
+            sqlite3_step(stmt_delete_chunk_vecs_);
 
-        sqlite3_reset(stmt_delete_chunks_);
-        sqlite3_bind_int64(stmt_delete_chunks_, 1, file_id);
-        sqlite3_step(stmt_delete_chunks_);
+            sqlite3_reset(stmt_delete_chunks_);
+            sqlite3_bind_int64(stmt_delete_chunks_, 1, file_id);
+            sqlite3_step(stmt_delete_chunks_);
+        }
     }
 
     delete_fts(rel_str);
@@ -665,7 +672,8 @@ void Indexer::build_initial()
     spdlog::info("Starting initial index build for {}", root_.string());
     auto t0 = std::chrono::steady_clock::now();
 
-    db_.exec("BEGIN TRANSACTION");
+    main_db_.exec("BEGIN TRANSACTION");
+    if (vectors_db_) vectors_db_->exec("BEGIN TRANSACTION");
 
     for (auto& entry : fs::recursive_directory_iterator(
              root_, fs::directory_options::skip_permission_denied))
@@ -678,7 +686,8 @@ void Indexer::build_initial()
         index_file(rel);
     }
 
-    db_.exec("COMMIT");
+    main_db_.exec("COMMIT");
+    if (vectors_db_) vectors_db_->exec("COMMIT");
 
     auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - t0);
@@ -706,7 +715,8 @@ void Indexer::process_events(const std::vector<FileEvent>& events)
 {
     if (events.empty()) return;
 
-    db_.exec("BEGIN TRANSACTION");
+    main_db_.exec("BEGIN TRANSACTION");
+    if (vectors_db_) vectors_db_->exec("BEGIN TRANSACTION");
 
     for (auto& ev : events) {
         if (is_excluded(ev.path)) continue;
@@ -726,7 +736,8 @@ void Indexer::process_events(const std::vector<FileEvent>& events)
         }
     }
 
-    db_.exec("COMMIT");
+    main_db_.exec("COMMIT");
+    if (vectors_db_) vectors_db_->exec("COMMIT");
 
     spdlog::trace("Processed {} file events", events.size());
 

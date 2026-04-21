@@ -54,9 +54,27 @@ This keeps it fast, accurate, and free from hallucination contamination.
 1. **FTS5** — keyword / BM25 ranked full-text search
 2. **sqlite-vec** — vector similarity search (semantic)
 
-Single `.locus/index.db` file. Zero server. C API — native C++ integration.
+Storage is **split across two files** in `.locus/`:
 
-### Schema
+- `index.db` — always present. Holds the deterministic skeleton: files, FTS5,
+  symbols, headings. Opened by the main `Database` connection.
+- `vectors.db` — present only when semantic search is enabled. Holds `chunks`
+  and the `vec0` virtual table `chunk_vectors`. Opened by a separate `Database`
+  connection; loads the sqlite-vec extension only here.
+
+The split gives three things:
+
+1. **Concurrent writes** — each file has its own SQLite WAL. The indexer's FTS /
+   symbols writes no longer serialise behind the embedding worker's vector
+   inserts. Background embedding can't stall foreground re-indexing.
+2. **A detachable cache** — vectors are derived from chunk text + embedding
+   model. Changing models or reclaiming disk is one `rm vectors.db`; the main
+   index is untouched.
+3. **Zero cost when semantic is off** — if `semantic_search.enabled = false`
+   (or the model file is missing), `vectors.db` is never created and the
+   sqlite-vec extension is never initialised.
+
+### Schema — `index.db`
 
 ```sql
 -- Core file registry
@@ -101,27 +119,34 @@ CREATE TABLE headings (
     text        TEXT,
     line_number INTEGER
 );
+```
 
--- Semantic chunks (units of text to be embedded)
--- One row per chunk; covers both code and document workspaces
+### Schema — `vectors.db` (optional)
+
+```sql
+-- Semantic chunks. file_id references files(id) in index.db — this is a
+-- cross-file logical reference, not a FK (orphaned chunks are acceptable
+-- since they'll be cleaned up on the next re-index of that file).
 CREATE TABLE chunks (
     id          INTEGER PRIMARY KEY,
-    file_id     INTEGER REFERENCES files(id),
-    kind        TEXT,       -- 'function' | 'class' | 'section' | 'paragraph' | 'window'
-    label       TEXT,       -- function name, heading text, etc. (shown in results)
-    line_start  INTEGER,
-    line_end    INTEGER,
-    text        TEXT        -- chunk content (stored to allow re-embedding on model change)
+    file_id     INTEGER NOT NULL,
+    chunk_index INTEGER,
+    start_line  INTEGER,
+    end_line    INTEGER,
+    content     TEXT NOT NULL
 );
 CREATE INDEX chunks_file ON chunks(file_id);
 
--- Vector table (sqlite-vec extension)
--- Dimension must match the embedding model configured for this workspace
+-- Vector table (sqlite-vec extension — loaded only on this DB).
 CREATE VIRTUAL TABLE chunk_vectors USING vec0(
     chunk_id    INTEGER PRIMARY KEY,
-    embedding   FLOAT[384]             -- dimension set at index creation from config
+    embedding   FLOAT[384]
 );
 ```
+
+Semantic search becomes a two-step read: query `vectors.db` for the top-K
+nearest `chunk_id` → `file_id`, then resolve `file_id` → `path` from
+`index.db`. Both lookups are cheap (tiny K, single-row PK fetches).
 
 ---
 

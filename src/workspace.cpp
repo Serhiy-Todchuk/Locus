@@ -45,8 +45,10 @@ Workspace::Workspace(const fs::path& root)
     load_config();
     load_locus_md();
 
-    spdlog::info("Opening database at {}", (locus_dir_ / "index.db").string());
-    db_ = std::make_unique<Database>(locus_dir_ / "index.db");
+    spdlog::info("Opening main database at {}", (locus_dir_ / "index.db").string());
+    main_db_ = std::make_unique<Database>(locus_dir_ / "index.db", DbKind::Main);
+    // One-time migration from the pre-split layout.
+    main_db_->drop_legacy_semantic_tables();
 
     spdlog::info("Starting file watcher on {}", root_.string());
     watcher_ = std::make_unique<FileWatcher>(root_, config_.exclude_patterns);
@@ -62,13 +64,14 @@ Workspace::Workspace(const fs::path& root)
     extractors_->register_extractor(".docx", std::make_unique<DocxExtractor>());
     extractors_->register_extractor(".xlsx", std::make_unique<XlsxExtractor>());
 
-    // Initialise semantic search if enabled
+    // Initialise semantic search if enabled (opens vectors.db on success)
     if (config_.semantic_search_enabled) {
         enable_semantic_search();
     }
 
     spdlog::info("Building workspace index");
-    indexer_ = std::make_unique<Indexer>(*db_, root_, config_, *extractors_);
+    indexer_ = std::make_unique<Indexer>(*main_db_, vectors_db_.get(),
+                                         root_, config_, *extractors_);
 
     // Wire chunking callback to embedding worker
     if (embedding_worker_) {
@@ -84,7 +87,7 @@ Workspace::Workspace(const fs::path& root)
         embedding_worker_->start();
     }
 
-    query_ = std::make_unique<IndexQuery>(*db_);
+    query_ = std::make_unique<IndexQuery>(*main_db_, vectors_db_.get());
 
     spdlog::info("Workspace opened: {}", root_.string());
 }
@@ -138,9 +141,15 @@ bool Workspace::enable_semantic_search()
     }
 
     try {
+        if (!vectors_db_) {
+            auto vpath = locus_dir_ / "vectors.db";
+            spdlog::info("Opening vectors database at {}", vpath.string());
+            vectors_db_ = std::make_unique<Database>(vpath, DbKind::Vectors);
+        }
+
         embedder_ = std::make_unique<Embedder>(model_path, config_.embedding_dimensions);
         embedding_worker_ = std::make_unique<EmbeddingWorker>(
-            *db_, *embedder_, config_.embedding_dimensions);
+            *vectors_db_, *embedder_, config_.embedding_dimensions);
 
         // Wire indexer callback
         if (indexer_) {
@@ -156,6 +165,7 @@ bool Workspace::enable_semantic_search()
         spdlog::error("Failed to initialise embedder: {}", e.what());
         embedder_.reset();
         embedding_worker_.reset();
+        vectors_db_.reset();
         return false;
     }
 }
@@ -167,6 +177,9 @@ void Workspace::disable_semantic_search()
         embedding_worker_.reset();
     }
     embedder_.reset();
+    // Keep vectors_db_ open so existing embeddings remain queryable even while
+    // no new ones are being produced.  Callers that want to reclaim disk can
+    // close + delete the file separately.
 
     if (indexer_)
         indexer_->on_chunks_created = nullptr;
