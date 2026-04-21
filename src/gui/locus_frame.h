@@ -38,6 +38,13 @@ private:
     void create_status_bar();
     void setup_aui_layout();
 
+    // Toggle visibility of a managed AUI pane by name, keeping its
+    // matching View-menu checkbox in sync.
+    void toggle_pane(const wxString& pane_name, bool show);
+
+    // Refresh View-menu checkboxes from the current AUI pane visibility.
+    void sync_view_menu();
+
     // Show the compaction dialog and apply the chosen strategy.
     void show_compaction_dialog();
 
@@ -53,6 +60,7 @@ private:
     // Event handlers: window lifecycle
     void on_close(wxCloseEvent& evt);
     void on_iconize(wxIconizeEvent& evt);
+    void on_aui_pane_close(wxAuiManagerEvent& evt);
 
     // Event handlers: agent thread events (via WxFrontend)
     void on_agent_turn_start(wxThreadEvent& evt);
@@ -83,6 +91,8 @@ private:
     ToolApprovalPanel* approval_panel_ = nullptr;   // tool approval (S1.4)
     ActivityPanel*     activity_panel_ = nullptr;   // activity log (S2.2)
     wxMenu*            recent_menu_    = nullptr;   // "Recent Workspaces" submenu (owned by menu bar)
+    wxMenuItem*        view_files_item_    = nullptr;
+    wxMenuItem*        view_activity_item_ = nullptr;
 
     wxDECLARE_EVENT_TABLE();
 };

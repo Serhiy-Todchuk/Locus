@@ -21,12 +21,15 @@ enum {
     ID_MENU_SAVE_SESSION,
     ID_MENU_OPEN_WORKSPACE,
     ID_MENU_SETTINGS,
+    ID_MENU_VIEW_FILES,
+    ID_MENU_VIEW_ACTIVITY,
     ID_MENU_RECENT_BASE = wxID_HIGHEST + 300,  // 300..309 for recent workspaces
 };
 
 wxBEGIN_EVENT_TABLE(LocusFrame, wxFrame)
     EVT_CLOSE(LocusFrame::on_close)
     EVT_ICONIZE(LocusFrame::on_iconize)
+    EVT_AUI_PANE_CLOSE(LocusFrame::on_aui_pane_close)
 wxEND_EVENT_TABLE()
 
 LocusFrame::LocusFrame(AgentCore& agent, Workspace& workspace)
@@ -121,11 +124,18 @@ void LocusFrame::create_menu_bar()
     session_menu->Append(ID_MENU_COMPACT,       "Compact Context");
     session_menu->Append(ID_MENU_SAVE_SESSION,  "Save Session\tCtrl+S");
 
+    auto* view_menu = new wxMenu;
+    view_files_item_    = view_menu->AppendCheckItem(ID_MENU_VIEW_FILES,    "Files Panel");
+    view_activity_item_ = view_menu->AppendCheckItem(ID_MENU_VIEW_ACTIVITY, "Activity Panel");
+    view_files_item_->Check(true);
+    view_activity_item_->Check(true);
+
     auto* help_menu = new wxMenu;
     help_menu->Append(ID_MENU_ABOUT, "About...");
 
     auto* menu_bar = new wxMenuBar;
     menu_bar->Append(file_menu,    "File");
+    menu_bar->Append(view_menu,    "View");
     menu_bar->Append(session_menu, "Session");
     menu_bar->Append(help_menu,    "Help");
     SetMenuBar(menu_bar);
@@ -157,6 +167,12 @@ void LocusFrame::create_menu_bar()
     Bind(wxEVT_MENU, [this](wxCommandEvent&) {
         show_settings_dialog();
     }, ID_MENU_SETTINGS);
+    Bind(wxEVT_MENU, [this](wxCommandEvent& e) {
+        toggle_pane("sidebar", e.IsChecked());
+    }, ID_MENU_VIEW_FILES);
+    Bind(wxEVT_MENU, [this](wxCommandEvent& e) {
+        toggle_pane("activity", e.IsChecked());
+    }, ID_MENU_VIEW_ACTIVITY);
     Bind(wxEVT_MENU, [this](wxCommandEvent&) {
         wxAboutDialogInfo info;
         info.SetName("Locus");
@@ -187,6 +203,30 @@ void LocusFrame::rebuild_recent_menu()
                 wxGetApp().open_workspace(path);
             });
         }, id);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// View menu / pane visibility
+// ---------------------------------------------------------------------------
+
+void LocusFrame::toggle_pane(const wxString& pane_name, bool show)
+{
+    auto& pane = aui_.GetPane(pane_name);
+    if (!pane.IsOk()) return;
+    pane.Show(show);
+    aui_.Update();
+}
+
+void LocusFrame::sync_view_menu()
+{
+    if (view_files_item_) {
+        auto& p = aui_.GetPane("sidebar");
+        if (p.IsOk()) view_files_item_->Check(p.IsShown());
+    }
+    if (view_activity_item_) {
+        auto& p = aui_.GetPane("activity");
+        if (p.IsOk()) view_activity_item_->Check(p.IsShown());
     }
 }
 
@@ -346,6 +386,18 @@ void LocusFrame::on_iconize(wxIconizeEvent& evt)
     if (evt.IsIconized()) {
         // Minimize to tray: hide the window, tray icon remains.
         Hide();
+    }
+    evt.Skip();
+}
+
+void LocusFrame::on_aui_pane_close(wxAuiManagerEvent& evt)
+{
+    // User clicked the pane's X — mirror the change in the View menu.
+    if (auto* pane = evt.GetPane()) {
+        if (pane->name == "sidebar" && view_files_item_)
+            view_files_item_->Check(false);
+        else if (pane->name == "activity" && view_activity_item_)
+            view_activity_item_->Check(false);
     }
     evt.Skip();
 }
