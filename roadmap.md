@@ -328,4 +328,5 @@ Items from requirements Nice-to-Have — not scheduled yet:
 - Automated coding pipeline (plan → code → test → fix loop, user-supervised)
 - LaTeX math display in LLM chat (for formulas)
 - Symbol index: extract member variables / field declarations (C++ `field_declaration`, etc.)
+- CLI: raw-mode line editor (vendor replxx or similar) — suppresses visible `^[[200~` bracketed-paste markers on Windows, adds history, arrow-key editing. Current CLI uses line-mode stdin + terminal echo, which renders VT input sequences literally during paste. Non-blocking since desktop GUI is the primary frontend.
 

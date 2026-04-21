@@ -63,7 +63,7 @@ struct LLMConfig {
     double      temperature   = 0.7;
     int         max_tokens    = 2048;
     int         context_limit = 8192;        // total context window size
-    int         timeout_ms    = 60000;       // per-request timeout
+    int         timeout_ms    = 60000;       // stream stall timeout: abort if no bytes flow for this long. Not a total-request cap — long reasoning streams are fine.
 };
 
 // ---- Model info (from /v1/models) -------------------------------------------

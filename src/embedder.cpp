@@ -144,16 +144,18 @@ std::vector<float> Embedder::embed(const std::string& text) const
         batch.pos[i]       = i;
         batch.n_seq_id[i]  = 1;
         batch.seq_id[i][0] = 0;
-        batch.logits[i]    = false;  // we want embeddings, not logits
+        batch.logits[i]    = true;   // for pooled embeddings, mark tokens as outputs
     }
     batch.n_tokens = static_cast<int32_t>(tokens.size());
 
     // Clear KV cache before each independent call so sequence 0 is reusable.
     llama_memory_clear(llama_get_memory(impl_->ctx), /*data*/ true);
 
-    if (llama_decode(impl_->ctx, batch) != 0) {
+    // Encoder-only embedding models (BERT-style) use llama_encode; calling
+    // llama_decode triggers a fallback warning on every call.
+    if (llama_encode(impl_->ctx, batch) != 0) {
         llama_batch_free(batch);
-        throw std::runtime_error("llama_decode failed");
+        throw std::runtime_error("llama_encode failed");
     }
 
     const float* pooled = llama_get_embeddings_seq(impl_->ctx, 0);
