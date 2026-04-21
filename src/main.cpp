@@ -39,6 +39,61 @@ static void signal_handler(int /*sig*/)
 }
 
 // ---------------------------------------------------------------------------
+// Bracketed paste: read one REPL line, but if the terminal wrapped a paste in
+// ESC[200~ ... ESC[201~, collect the whole block (across line breaks) as a
+// single message. Falls back to plain getline on terminals that don't support
+// bracketed paste (markers never arrive, the extra logic is a no-op).
+// ---------------------------------------------------------------------------
+
+static bool read_repl_line(std::string& out)
+{
+    out.clear();
+    if (!std::getline(std::cin, out))
+        return false;
+
+    static const std::string k_bp_start = "\x1b[200~";
+    static const std::string k_bp_end   = "\x1b[201~";
+
+    auto start_pos = out.find(k_bp_start);
+    if (start_pos == std::string::npos)
+        return true;
+
+    // Rebuild the line: [before-start] + [paste-body], then drain until we
+    // see the end marker. Any pre/post chars outside the markers are kept.
+    std::string body = out.substr(0, start_pos);
+    body += out.substr(start_pos + k_bp_start.size());
+
+    while (body.find(k_bp_end) == std::string::npos) {
+        std::string next;
+        if (!std::getline(std::cin, next))
+            break;
+        body += '\n';
+        body += next;
+    }
+
+    auto end_pos = body.find(k_bp_end);
+    if (end_pos != std::string::npos) {
+        // Splice out the end marker; keep anything trailing (rare).
+        body.erase(end_pos, k_bp_end.size());
+    }
+
+    // Normalise bare CR and CRLF (some terminals use CR inside paste) to LF.
+    std::string norm;
+    norm.reserve(body.size());
+    for (size_t i = 0; i < body.size(); ++i) {
+        if (body[i] == '\r') {
+            norm += '\n';
+            if (i + 1 < body.size() && body[i + 1] == '\n') ++i;
+        } else {
+            norm += body[i];
+        }
+    }
+
+    out = std::move(norm);
+    return true;
+}
+
+// ---------------------------------------------------------------------------
 // CLI arguments
 // ---------------------------------------------------------------------------
 
@@ -130,6 +185,13 @@ int main(int argc, char* argv[])
         DWORD mode = 0;
         if (GetConsoleMode(h_out, &mode))
             SetConsoleMode(h_out, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+    }
+    // Enable VT input so bracketed-paste markers pass through stdin verbatim.
+    HANDLE h_in = GetStdHandle(STD_INPUT_HANDLE);
+    if (h_in != INVALID_HANDLE_VALUE) {
+        DWORD mode = 0;
+        if (GetConsoleMode(h_in, &mode))
+            SetConsoleMode(h_in, mode | ENABLE_VIRTUAL_TERMINAL_INPUT);
     }
 #endif
     std::setlocale(LC_ALL, ".UTF-8");
@@ -254,13 +316,17 @@ int main(int argc, char* argv[])
         // REPL.
         std::cout << "Locus ready. Type a message, or /quit to exit.\n\n";
 
+        // Enable bracketed paste — lets us receive multi-line pastes as a
+        // single message instead of each line being submitted separately.
+        std::cout << "\x1b[?2004h" << std::flush;
+
         while (!g_shutdown_requested.load(std::memory_order_relaxed)) {
             // Prompt with context meter.
             std::cout << "[ctx: " << cli.last_used() << "/"
                       << cli.last_limit() << "] > " << std::flush;
 
             std::string line;
-            if (!std::getline(std::cin, line))
+            if (!read_repl_line(line))
                 break;  // EOF or closed stdin
 
             if (g_shutdown_requested.load(std::memory_order_relaxed))
@@ -374,6 +440,10 @@ int main(int argc, char* argv[])
             agent.send_message_sync(line);
             std::cout << "\n";
         }
+
+        // Disable bracketed paste before exit so the terminal doesn't leak
+        // the mode to whatever shell runs next.
+        std::cout << "\x1b[?2004l" << std::flush;
 
         agent.stop();
         agent.unregister_frontend(&cli);

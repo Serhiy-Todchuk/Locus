@@ -416,6 +416,12 @@ void LMStudioClient::do_stream(
         return true;
     }};
 
+    // Use a stall-based timeout, not a total-transfer cap: thinking models
+    // can emit reasoning tokens for minutes without exceeding the old
+    // cpr::Timeout. LowSpeed aborts only if fewer than 1 B/s flows for
+    // timeout_ms — i.e. the stream truly stopped.
+    const long stall_seconds =
+        std::max<long>(1, static_cast<long>(config_.timeout_ms) / 1000);
     cpr::Response response = cpr::Post(
         cpr::Url{url},
         cpr::Header{
@@ -423,7 +429,8 @@ void LMStudioClient::do_stream(
             {"Accept",       "text/event-stream"}
         },
         cpr::Body{body_str},
-        cpr::Timeout{static_cast<std::int32_t>(config_.timeout_ms)},
+        cpr::ConnectTimeout{10000},
+        cpr::LowSpeed{1, stall_seconds},
         std::move(write_cb)
     );
 
@@ -438,11 +445,13 @@ void LMStudioClient::do_stream(
                       " - is LM Studio running?";
         } else if (response.error.code == cpr::ErrorCode::OPERATION_TIMEDOUT) {
             if (!is_retry) {
-                spdlog::warn("LLM request timed out, retrying once...");
+                spdlog::warn("LLM stream stalled (no data for {}s), retrying once...",
+                             stall_seconds);
                 do_stream(body, callbacks, true);
                 return;
             }
-            err_msg = "LLM request timed out after retry";
+            err_msg = "LLM stream stalled after retry (no data for " +
+                      std::to_string(stall_seconds) + "s)";
         } else {
             err_msg = "LLM request failed: " + response.error.message;
         }

@@ -5,3 +5,6 @@ let's test ask_user tool, ask me anything. use your imagination
 Use search_semantic to find code related to embedding inference
 
 Use search_hybrid to find files about file watching and debouncing
+
+Add temperature control for LLM to settings dialog in src/gui. Default it to "0.1". Start by reading
+CLAUDE.md to get project context, then propose what to change.

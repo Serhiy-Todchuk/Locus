@@ -184,7 +184,13 @@
       "Bash(curl -sSL \"https://api.github.com/repos/apache/poi/contents/test-data/document?ref=trunk&page=2\")",
       "Bash(curl -sSL -o sample.docx \"https://raw.githubusercontent.com/apache/poi/trunk/test-data/document/SampleDoc.docx\")",
       "Bash(curl -sSL -o sample.xlsx \"https://raw.githubusercontent.com/apache/poi/trunk/test-data/spreadsheet/SampleSS.xlsx\")",
-      "Bash(./locus_tests.exe \"Incremental update handles file deletion\")"
+      "Bash(./locus_tests.exe \"Incremental update handles file deletion\")",
+      "Bash(cmake --build build --config Debug --target locus)",
+      "Bash(cmake --build d:/Projects/AICodeAss/build/debug --target locus)",
+      "Bash(awk 'NR>=66820 && NR<=66893' d:/Projects/AICodeAss/.locus/locus.log)",
+      "Bash(awk 'NR>=66890' d:/Projects/AICodeAss/.locus/locus.log)",
+      "Bash(awk 'NR>=66893' d:/Projects/AICodeAss/.locus/locus.log)",
+      "Bash(grep -n *)"
     ]
   }
 }
