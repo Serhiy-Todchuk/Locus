@@ -66,6 +66,10 @@ public:
     // Embedding progress update (from background worker thread).
     virtual void on_embedding_progress(int done, int total) = 0;
 
+    // Indexing progress update (fires during process_events batches).
+    // Default no-op so frontends that don't care can ignore it.
+    virtual void on_indexing_progress(int /*done*/, int /*total*/) {}
+
     // Activity log entry. All structured events (system prompts, user msgs,
     // LLM responses, tool calls, index events, warnings, errors) fan out
     // through this in addition to their specific callbacks. Frontends that

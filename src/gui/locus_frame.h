@@ -84,7 +84,11 @@ private:
     void on_agent_session_reset(wxThreadEvent& evt);
     void on_agent_error(wxThreadEvent& evt);
     void on_agent_embedding_progress(wxThreadEvent& evt);
+    void on_agent_indexing_progress(wxThreadEvent& evt);
     void on_agent_activity(wxThreadEvent& evt);
+
+    // Recompose pane 1 (right, ops status) from current progress state.
+    void refresh_ops_status();
 
     // Core references (not owned)
     AgentCore& agent_;
@@ -108,6 +112,13 @@ private:
     // Session IDs currently shown in the Saved Sessions submenu, indexed
     // by the offset from ID_MENU_SESSION_OPEN_BASE / _DELETE_BASE.
     std::vector<std::string> sessions_in_menu_;
+
+    // Background-op progress state. `total == 0` means the op is not running;
+    // `done == total` (both > 0) means it just completed and should be hidden.
+    int indexing_done_   = 0;
+    int indexing_total_  = 0;
+    int embedding_done_  = 0;
+    int embedding_total_ = 0;
 
     wxDECLARE_EVENT_TABLE();
 };

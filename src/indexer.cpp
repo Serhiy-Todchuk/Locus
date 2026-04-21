@@ -718,22 +718,28 @@ void Indexer::process_events(const std::vector<FileEvent>& events)
     main_db_.exec("BEGIN TRANSACTION");
     if (vectors_db_) vectors_db_->exec("BEGIN TRANSACTION");
 
-    for (auto& ev : events) {
-        if (is_excluded(ev.path)) continue;
+    const int total = static_cast<int>(events.size());
+    int done = 0;
+    if (on_progress) on_progress(0, total);
 
-        switch (ev.action) {
-            case FileAction::Added:
-            case FileAction::Modified:
-                index_file(ev.path);
-                break;
-            case FileAction::Deleted:
-                remove_file(ev.path);
-                break;
-            case FileAction::Moved:
-                remove_file(ev.old_path);
-                index_file(ev.path);
-                break;
+    for (auto& ev : events) {
+        if (!is_excluded(ev.path)) {
+            switch (ev.action) {
+                case FileAction::Added:
+                case FileAction::Modified:
+                    index_file(ev.path);
+                    break;
+                case FileAction::Deleted:
+                    remove_file(ev.path);
+                    break;
+                case FileAction::Moved:
+                    remove_file(ev.old_path);
+                    index_file(ev.path);
+                    break;
+            }
         }
+        ++done;
+        if (on_progress) on_progress(done, total);
     }
 
     main_db_.exec("COMMIT");

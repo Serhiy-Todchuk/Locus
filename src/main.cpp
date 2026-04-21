@@ -103,13 +103,12 @@ struct CliArgs {
     std::string model;   // empty = server default
     int         context  = 0;     // 0 = auto-detect from server, fallback 8192
     bool        verbose  = false;
-    bool        reindex  = false;
 };
 
 static CliArgs parse_args(int argc, char* argv[])
 {
     if (argc < 2) {
-        std::cerr << "Usage: locus <workspace_path> [--endpoint URL] [--model NAME] [--context N] [-verbose] [-reindex]\n";
+        std::cerr << "Usage: locus <workspace_path> [--endpoint URL] [--model NAME] [--context N] [-verbose]\n";
         std::exit(1);
     }
 
@@ -120,8 +119,6 @@ static CliArgs parse_args(int argc, char* argv[])
         std::string a = argv[i];
         if (a == "-verbose") {
             args.verbose = true;
-        } else if (a == "-reindex") {
-            args.reindex = true;
         } else if (a == "--endpoint" && i + 1 < argc) {
             args.endpoint = argv[++i];
         } else if (a == "--model" && i + 1 < argc) {
@@ -223,19 +220,6 @@ int main(int argc, char* argv[])
     spdlog::info("Workspace: {}", workspace_path.string());
     if (args.verbose)
         spdlog::trace("Verbose logging active");
-
-    // -reindex: delete existing index.db to force a full rebuild.
-    if (args.reindex) {
-        auto db_path = locus_dir / "index.db";
-        if (fs::exists(db_path)) {
-            fs::remove(db_path);
-            spdlog::info("Reindex: deleted existing index.db");
-        }
-        // Also remove WAL/SHM files if present.
-        std::error_code rm_ec;
-        fs::remove(locus_dir / "index.db-wal", rm_ec);
-        fs::remove(locus_dir / "index.db-shm", rm_ec);
-    }
 
     try {
         // Open workspace: config, DB, file watcher, index.

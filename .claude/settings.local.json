@@ -190,7 +190,11 @@
       "Bash(awk 'NR>=66820 && NR<=66893' d:/Projects/AICodeAss/.locus/locus.log)",
       "Bash(awk 'NR>=66890' d:/Projects/AICodeAss/.locus/locus.log)",
       "Bash(awk 'NR>=66893' d:/Projects/AICodeAss/.locus/locus.log)",
-      "Bash(grep -n *)"
+      "Bash(grep -n *)",
+      "Bash(cmake --build d:/Projects/AICodeAss/build/debug --config Debug --target locus)",
+      "Bash(cmake --build d:/Projects/AICodeAss/build/debug --config Debug --target locus_gui)",
+      "Bash(cmake --build build/Debug --config Debug --target locus)",
+      "Bash(cmake --build build/Debug --config Debug --target locus_gui)"
     ]
   }
 }

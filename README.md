@@ -82,7 +82,6 @@ before execution.
 | `--model NAME` | Model name (default: server default) |
 | `--context N` | Override context window size |
 | `-verbose` | Trace-level logging to stderr and `.locus/locus.log` |
-| `-reindex` | Delete and rebuild the workspace index |
 
 ### Workspace Data
 
