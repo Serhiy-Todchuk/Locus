@@ -22,6 +22,8 @@ find_package(Catch2 CONFIG REQUIRED)
 find_package(cpr CONFIG REQUIRED)
 find_package(unofficial-tree-sitter CONFIG REQUIRED)
 find_package(Llama CONFIG REQUIRED)
+find_package(miniz CONFIG REQUIRED)
+find_package(pugixml CONFIG REQUIRED)
 
 # -- Tree-sitter grammars (fetched at configure time) --------------------------
 
@@ -86,6 +88,25 @@ FetchContent_Declare(tree-sitter-c-sharp
     GIT_SHALLOW    ON
     SOURCE_SUBDIR  ${TS_NO_CMAKE}
 )
+
+# PDFium prebuilt binaries (BSD-3-Clause).  Not in vcpkg mainline; pulled
+# from bblanchon/pdfium-binaries as a pinned release.  Ships as a DLL +
+# import lib + headers.  The DLL is copied next to locus.exe at build time.
+FetchContent_Declare(pdfium
+    URL       https://github.com/bblanchon/pdfium-binaries/releases/download/chromium%2F6996/pdfium-win-x64.tgz
+    URL_HASH  SHA256=83e714c302ceacccf403826d5cb57ea39b77f393d83b8d5781283012774a9378
+    SOURCE_SUBDIR ${TS_NO_CMAKE}
+)
+FetchContent_MakeAvailable(pdfium)
+
+# PDFium imported target — headers, import lib, DLL path.
+add_library(pdfium SHARED IMPORTED)
+set_target_properties(pdfium PROPERTIES
+    IMPORTED_LOCATION             "${pdfium_SOURCE_DIR}/bin/pdfium.dll"
+    IMPORTED_IMPLIB               "${pdfium_SOURCE_DIR}/lib/pdfium.dll.lib"
+    INTERFACE_INCLUDE_DIRECTORIES "${pdfium_SOURCE_DIR}/include"
+)
+set(PDFIUM_DLL "${pdfium_SOURCE_DIR}/bin/pdfium.dll" CACHE INTERNAL "")
 
 FetchContent_MakeAvailable(
     tree-sitter-c
@@ -178,6 +199,10 @@ add_library(locus_core STATIC
     src/extractors/extractor_registry.cpp
     src/extractors/markdown_extractor.cpp
     src/extractors/html_extractor.cpp
+    src/extractors/pdf_extractor.cpp
+    src/extractors/docx_extractor.cpp
+    src/extractors/xlsx_extractor.cpp
+    src/extractors/zip_reader.cpp
     src/embedder.cpp
     src/chunker.cpp
     src/embedding_worker.cpp
@@ -195,6 +220,9 @@ target_link_libraries(locus_core PUBLIC
     cpr::cpr
     llama
     sqlite_vec
+    pdfium
+    miniz::miniz
+    pugixml::pugixml
 )
 
 # -- Main executable -----------------------------------------------------------
@@ -205,6 +233,12 @@ add_executable(locus
 
 target_link_libraries(locus PRIVATE
     locus_core
+)
+
+# Copy pdfium.dll next to locus.exe so it loads at runtime.
+add_custom_command(TARGET locus POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${PDFIUM_DLL}" "$<TARGET_FILE_DIR:locus>"
 )
 
 # -- GUI executable (wxWidgets) ------------------------------------------------
@@ -234,6 +268,11 @@ target_link_libraries(locus_gui PRIVATE
     wx::core wx::base wx::aui wx::stc wx::webview
     unofficial::webview2::webview2
     md4c::md4c-html
+)
+
+add_custom_command(TARGET locus_gui POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${PDFIUM_DLL}" "$<TARGET_FILE_DIR:locus_gui>"
 )
 
 # -- Tests ---------------------------------------------------------------------

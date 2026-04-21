@@ -17,6 +17,8 @@
             "features": ["webview"]
         },
         "md4c",
-        "llama-cpp"
+        "llama-cpp",
+        "miniz",
+        "pugixml"
     ]
 }

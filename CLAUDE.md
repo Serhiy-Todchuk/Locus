@@ -38,7 +38,7 @@ data into context, and keeps the user in full transparent control of every step.
 
 ## Current Stage
 
-**M2 — Full Workspace Support in progress.** S2.1 complete. S2.2 (Activity Details Panel) in progress.
+**M2 — Full Workspace Support in progress.** S2.1, S2.2, S2.3 complete. S2.4 (Active Edit Context / F7) next.
 See [roadmap.md](roadmap.md) for full status.
 
 ---
@@ -68,7 +68,9 @@ See [roadmap.md](roadmap.md) for full status.
 | Logging | **spdlog** | File sink + stderr, structured levels |
 | Threading | **std::thread + std::mutex/queue** | Explicit, no framework |
 | Tests | **Catch2** | Unit tests from day one, separate CMake target |
-| HTML parser | **gumbo-parser** | Google's C HTML5 parser, handles malformed HTML |
+| HTML parser | **gumbo-parser** | Google's C HTML5 parser, handles malformed HTML (planned for S3.1 web RAG; S2.3 uses a regex-based stripper) |
+| PDF extractor | **PDFium (bblanchon prebuilt, BSD-3-Clause)** | Fetched via `FetchContent` — not in vcpkg mainline. Ships as `pdfium.dll` alongside `locus.exe` |
+| DOCX/XLSX reader | **miniz + pugixml** | miniz unzips OOXML package; pugixml walks `word/document.xml` / sheet XML |
 | Index embedder | **llama.cpp (GGUF)** | CPU-only in-process inference; WordPiece vocab bundled in the GGUF; replaced ONNX Runtime which had MSVC-static-CRT schema-registration issues |
 | Web search API | **Brave Search (default)** | Clean JSON API, free tier, configurable |
 | License | **MIT** | Maximum permissive, community-friendly |
@@ -133,7 +135,11 @@ Core is a static lib (`locus_core`). Both `locus` (exe) and `locus_tests` link i
 | `src/extractors/text_extractor.h` | Base interface for file format extractors (no .cpp — pure abstract + structs). | `ITextExtractor`, `ExtractionResult`, `ExtractedHeading` |
 | `src/extractors/extractor_registry.h/cpp` | Maps file extension → `ITextExtractor`. Owned by `Workspace`. | `ExtractorRegistry` |
 | `src/extractors/markdown_extractor.h/cpp` | Extracts text + `#` headings from `.md` files. | `MarkdownExtractor` |
-| `src/extractors/html_extractor.h/cpp` | Extracts text + `<h1>`–`<h6>` headings from `.html` files. | `HtmlExtractor` |
+| `src/extractors/html_extractor.h/cpp` | Extracts text + `<h1>`–`<h6>` headings from `.html` files. Strips `<script>`/`<style>`, decodes entities. | `HtmlExtractor` |
+| `src/extractors/pdf_extractor.h/cpp` | Extracts text from `.pdf` files via PDFium. One pseudo-heading per page. Flags encrypted PDFs. | `PdfiumExtractor` |
+| `src/extractors/docx_extractor.h/cpp` | Extracts text + `HeadingN` headings from `.docx` (unzip + parse `word/document.xml`). | `DocxExtractor` |
+| `src/extractors/xlsx_extractor.h/cpp` | Extracts text from `.xlsx` sheets (resolves shared strings, emits one heading per sheet). | `XlsxExtractor` |
+| `src/extractors/zip_reader.h/cpp` | miniz helper: read a single named entry from a .zip (shared by docx + xlsx). | `read_zip_entry()` |
 | `src/glob_match.h` | Header-only glob pattern matching for exclude patterns. | `glob_match()` |
 | `src/frontend.h` | Frontend/core interfaces (no .cpp — pure abstract + enums). | `IFrontend`, `ILocusCore`, `ToolDecision`, `CompactionStrategy` |
 | `src/frontend_registry.h` | Thread-safe frontend registry with exception-isolated fan-out. Header-only. | `FrontendRegistry` |

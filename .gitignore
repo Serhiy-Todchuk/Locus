@@ -7,3 +7,4 @@ out/
 *.onnx
 *.user
 CMakeUserPresets.json
+third_party/pdfium_download/

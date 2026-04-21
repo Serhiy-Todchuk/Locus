@@ -174,7 +174,16 @@
       "Bash(cmake --build build --target locus_gui)",
       "Bash(cmake --build d:/Projects/AICodeAss/build/debug --target locus_gui)",
       "Bash(curl -s http://127.0.0.1:1234/v1/chat/completions -H \"Content-Type: application/json\" -d '{\"model\":\"google/gemma-4-26b-a4b\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":false}')",
-      "Bash(curl -s -N http://127.0.0.1:1234/v1/chat/completions -H \"Content-Type: application/json\" -d '{\"model\":\"google/gemma-4-26b-a4b\",\"messages\":[{\"role\":\"user\",\"content\":\"Hi\"}],\"stream\":true,\"max_tokens\":40}')"
+      "Bash(curl -s -N http://127.0.0.1:1234/v1/chat/completions -H \"Content-Type: application/json\" -d '{\"model\":\"google/gemma-4-26b-a4b\",\"messages\":[{\"role\":\"user\",\"content\":\"Hi\"}],\"stream\":true,\"max_tokens\":40}')",
+      "Bash(mkdir -p d:/Projects/AICodeAss/tests/sample_docs)",
+      "Bash(curl -sSL -o sample.pdf \"https://www.irs.gov/pub/irs-pdf/fw9.pdf\")",
+      "Bash(curl -sSL -o sample.docx \"https://github.com/apache/poi/raw/trunk/poi-ooxml/src/test/resources/org/apache/poi/xwpf/usermodel/SampleDoc.docx\")",
+      "Bash(curl -sSL -o sample.xlsx \"https://github.com/apache/poi/raw/trunk/poi-ooxml/src/test/resources/org/apache/poi/xssf/usermodel/SampleSS.xlsx\")",
+      "Bash(curl -sSL \"https://api.github.com/repos/apache/poi/contents/test-data/document?ref=trunk\")",
+      "Bash(curl -sSL \"https://api.github.com/repos/apache/poi/contents/test-data/spreadsheet?ref=trunk\")",
+      "Bash(curl -sSL \"https://api.github.com/repos/apache/poi/contents/test-data/document?ref=trunk&page=2\")",
+      "Bash(curl -sSL -o sample.docx \"https://raw.githubusercontent.com/apache/poi/trunk/test-data/document/SampleDoc.docx\")",
+      "Bash(curl -sSL -o sample.xlsx \"https://raw.githubusercontent.com/apache/poi/trunk/test-data/spreadsheet/SampleSS.xlsx\")"
     ]
   }
 }

@@ -2,9 +2,12 @@
 #include "database.h"
 #include "embedder.h"
 #include "embedding_worker.h"
+#include "extractors/docx_extractor.h"
 #include "extractors/extractor_registry.h"
 #include "extractors/html_extractor.h"
 #include "extractors/markdown_extractor.h"
+#include "extractors/pdf_extractor.h"
+#include "extractors/xlsx_extractor.h"
 #include "file_watcher.h"
 #include "index_query.h"
 #include "indexer.h"
@@ -55,6 +58,9 @@ Workspace::Workspace(const fs::path& root)
     extractors_->register_extractor(".markdown", std::make_unique<MarkdownExtractor>());
     extractors_->register_extractor(".html", std::make_unique<HtmlExtractor>());
     extractors_->register_extractor(".htm",  std::make_unique<HtmlExtractor>());
+    extractors_->register_extractor(".pdf",  std::make_unique<PdfiumExtractor>());
+    extractors_->register_extractor(".docx", std::make_unique<DocxExtractor>());
+    extractors_->register_extractor(".xlsx", std::make_unique<XlsxExtractor>());
 
     // Initialise semantic search if enabled
     if (config_.semantic_search_enabled) {
