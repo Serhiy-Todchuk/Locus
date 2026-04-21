@@ -91,7 +91,7 @@ TEST_CASE("Database creates index.db with WAL mode", "[s0.2][database]")
     fs::create_directories(tmp);
 
     {
-        locus::Database db(tmp / "test.db");
+        locus::Database db(tmp / "test.db", locus::DbKind::Main);
         REQUIRE(db.handle() != nullptr);
         REQUIRE(fs::exists(tmp / "test.db"));
     }
@@ -106,7 +106,7 @@ TEST_CASE("Database creates files table", "[s0.2][database]")
     fs::create_directories(tmp);
 
     {
-        locus::Database db(tmp / "test.db");
+        locus::Database db(tmp / "test.db", locus::DbKind::Main);
 
         // Insert a row into files to verify the table exists
         db.exec(R"(

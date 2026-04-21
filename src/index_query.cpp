@@ -83,12 +83,13 @@ static std::string extract_snippet(const std::string& content, int line, int con
 
 // -- Construction / Destruction -----------------------------------------------
 
-IndexQuery::IndexQuery(Database& db)
-    : db_(db)
+IndexQuery::IndexQuery(Database& main_db, Database* vectors_db)
+    : main_db_(main_db)
+    , vectors_db_(vectors_db)
 {
     // FTS5 search with BM25 ranking. Join with files to get abs_path for content reading.
     // bm25() returns negative values where more negative = better match.
-    stmt_search_text_ = db_.prepare(R"(
+    stmt_search_text_ = main_db_.prepare(R"(
         SELECT f.path, bm25(files_fts) AS rank, f.abs_path
         FROM files_fts
         JOIN files f ON f.path = files_fts.path
@@ -101,7 +102,7 @@ IndexQuery::IndexQuery(Database& db)
     // the point of prepared statements, so we use a single query that always
     // filters on name with LIKE and optionally on kind/language via CASE tricks.
     // Simpler approach: prepare a generous query; filter in C++ for kind/language.
-    stmt_search_symbols_all_ = db_.prepare(R"(
+    stmt_search_symbols_all_ = main_db_.prepare(R"(
         SELECT f.path, s.name, s.kind, f.language, s.line_start, s.line_end,
                s.signature, s.parent_name
         FROM symbols s
@@ -111,7 +112,7 @@ IndexQuery::IndexQuery(Database& db)
         LIMIT 200
     )");
 
-    stmt_outline_headings_ = db_.prepare(R"(
+    stmt_outline_headings_ = main_db_.prepare(R"(
         SELECT h.level, h.text, h.line_number
         FROM headings h
         JOIN files f ON f.id = h.file_id
@@ -119,7 +120,7 @@ IndexQuery::IndexQuery(Database& db)
         ORDER BY h.line_number
     )");
 
-    stmt_outline_symbols_ = db_.prepare(R"(
+    stmt_outline_symbols_ = main_db_.prepare(R"(
         SELECT s.kind, s.name, s.line_start, s.signature
         FROM symbols s
         JOIN files f ON f.id = s.file_id
@@ -127,20 +128,25 @@ IndexQuery::IndexQuery(Database& db)
         ORDER BY s.line_start
     )");
 
-    stmt_list_dir_ = db_.prepare(R"(
+    stmt_list_dir_ = main_db_.prepare(R"(
         SELECT path, size_bytes, modified_at, ext, language, is_binary
         FROM files
         ORDER BY path
     )");
 
-    stmt_search_semantic_ = db_.prepare(R"(
-        SELECT c.content, c.start_line, f.path, cv.distance
-        FROM chunk_vectors cv
-        JOIN chunks c ON c.id = cv.chunk_id
-        JOIN files f ON f.id = c.file_id
-        WHERE cv.embedding MATCH ?1 AND k = ?2
-        ORDER BY cv.distance
-    )");
+    // Semantic search: vectors.db knows chunks + embeddings but NOT file paths.
+    // We resolve file_id -> path in a second lookup on main_db_.
+    if (vectors_db_) {
+        stmt_search_semantic_ = vectors_db_->prepare(R"(
+            SELECT c.content, c.start_line, c.file_id, cv.distance
+            FROM chunk_vectors cv
+            JOIN chunks c ON c.id = cv.chunk_id
+            WHERE cv.embedding MATCH ?1 AND k = ?2
+            ORDER BY cv.distance
+        )");
+
+        stmt_path_by_file_id_ = main_db_.prepare("SELECT path FROM files WHERE id = ?1");
+    }
 
     spdlog::trace("IndexQuery initialised");
 }
@@ -155,6 +161,7 @@ IndexQuery::~IndexQuery()
     finalize(stmt_outline_headings_);
     finalize(stmt_outline_symbols_);
     finalize(stmt_list_dir_);
+    finalize(stmt_path_by_file_id_);
     finalize(stmt_search_semantic_);
 
     spdlog::trace("IndexQuery destroyed");
@@ -385,6 +392,16 @@ std::vector<SearchResult> IndexQuery::search_semantic(
 
     std::vector<SearchResult> results;
 
+    if (!stmt_search_semantic_) {
+        spdlog::trace("search_semantic: vectors DB not present, returning empty");
+        return results;
+    }
+
+    // Step 1: ask vectors.db for the top-K nearest chunks.
+    struct PendingHit { std::string snippet; int line; int64_t file_id; double distance; };
+    std::vector<PendingHit> hits;
+    hits.reserve(opts.max_results);
+
     sqlite3_reset(stmt_search_semantic_);
     sqlite3_bind_blob(stmt_search_semantic_, 1,
                       query_embedding.data(),
@@ -393,21 +410,34 @@ std::vector<SearchResult> IndexQuery::search_semantic(
     sqlite3_bind_int(stmt_search_semantic_, 2, opts.max_results);
 
     while (sqlite3_step(stmt_search_semantic_) == SQLITE_ROW) {
+        PendingHit h;
+        h.snippet  = col_text(stmt_search_semantic_, 0);
+        h.line     = sqlite3_column_int(stmt_search_semantic_, 1);
+        h.file_id  = sqlite3_column_int64(stmt_search_semantic_, 2);
+        h.distance = sqlite3_column_double(stmt_search_semantic_, 3);
+        hits.push_back(std::move(h));
+    }
+
+    // Step 2: resolve file_id -> path via main_db_.
+    for (auto& h : hits) {
         SearchResult r;
-        std::string chunk_text = col_text(stmt_search_semantic_, 0);
-        r.line = sqlite3_column_int(stmt_search_semantic_, 1);
-        r.path = col_text(stmt_search_semantic_, 2);
-        double distance = sqlite3_column_double(stmt_search_semantic_, 3);
+        r.line  = h.line;
+        r.score = 1.0 - h.distance;  // cosine similarity
 
-        // Convert distance to similarity score (1 - distance for cosine)
-        r.score = 1.0 - distance;
-
-        // Use chunk text as snippet (truncate if needed)
-        if (chunk_text.size() > 500) {
-            chunk_text.resize(500);
-            chunk_text += "...";
+        sqlite3_reset(stmt_path_by_file_id_);
+        sqlite3_bind_int64(stmt_path_by_file_id_, 1, h.file_id);
+        if (sqlite3_step(stmt_path_by_file_id_) == SQLITE_ROW) {
+            r.path = col_text(stmt_path_by_file_id_, 0);
+        } else {
+            // Orphan chunk: main DB no longer has this file. Skip.
+            continue;
         }
-        r.snippet = std::move(chunk_text);
+
+        if (h.snippet.size() > 500) {
+            h.snippet.resize(500);
+            h.snippet += "...";
+        }
+        r.snippet = std::move(h.snippet);
 
         results.push_back(std::move(r));
     }

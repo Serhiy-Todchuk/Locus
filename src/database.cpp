@@ -16,7 +16,8 @@ extern "C" {
 
 namespace locus {
 
-Database::Database(const fs::path& db_path)
+Database::Database(const fs::path& db_path, DbKind kind)
+    : kind_(kind)
 {
     int rc = sqlite3_open(db_path.string().c_str(), &db_);
     if (rc != SQLITE_OK) {
@@ -31,22 +32,14 @@ Database::Database(const fs::path& db_path)
     exec("PRAGMA synchronous=NORMAL");
     exec("PRAGMA foreign_keys=ON");
 
-    // Load sqlite-vec extension (compiled statically)
-    {
-        char* err_msg = nullptr;
-        int rc2 = sqlite3_vec_init(db_, &err_msg, nullptr);
-        if (rc2 != SQLITE_OK) {
-            std::string err = err_msg ? err_msg : "unknown error";
-            sqlite3_free(err_msg);
-            spdlog::warn("sqlite-vec init failed: {}", err);
-        } else {
-            spdlog::trace("sqlite-vec {} loaded", SQLITE_VEC_VERSION);
-        }
-    }
-
     spdlog::trace("SQLite opened: {}", db_path.string());
 
-    create_schema();
+    if (kind_ == DbKind::Main) {
+        create_main_schema();
+    } else {
+        load_sqlite_vec();
+        create_vectors_schema();
+    }
 }
 
 Database::~Database()
@@ -82,7 +75,20 @@ sqlite3_stmt* Database::prepare(const char* sql)
     return stmt;
 }
 
-void Database::create_schema()
+void Database::load_sqlite_vec()
+{
+    char* err_msg = nullptr;
+    int rc = sqlite3_vec_init(db_, &err_msg, nullptr);
+    if (rc != SQLITE_OK) {
+        std::string err = err_msg ? err_msg : "unknown error";
+        sqlite3_free(err_msg);
+        spdlog::warn("sqlite-vec init failed: {}", err);
+    } else {
+        spdlog::trace("sqlite-vec {} loaded", SQLITE_VEC_VERSION);
+    }
+}
+
+void Database::create_main_schema()
 {
     exec(R"(
         CREATE TABLE IF NOT EXISTS files (
@@ -135,11 +141,17 @@ void Database::create_schema()
     )");
     exec("CREATE INDEX IF NOT EXISTS headings_file ON headings(file_id)");
 
-    // Semantic search chunks
+    spdlog::trace("Main DB schema initialised");
+}
+
+void Database::create_vectors_schema()
+{
+    // Semantic chunks.  `file_id` is a plain integer — the referenced `files`
+    // row lives in a different database file so no FK constraint.
     exec(R"(
         CREATE TABLE IF NOT EXISTS chunks (
             id          INTEGER PRIMARY KEY,
-            file_id     INTEGER REFERENCES files(id),
+            file_id     INTEGER NOT NULL,
             chunk_index INTEGER,
             start_line  INTEGER,
             end_line    INTEGER,
@@ -156,7 +168,39 @@ void Database::create_schema()
         )
     )");
 
-    spdlog::trace("Database schema initialised");
+    spdlog::trace("Vectors DB schema initialised");
+}
+
+void Database::drop_legacy_semantic_tables()
+{
+    // Best-effort cleanup of the pre-split layout: if a Main DB still carries
+    // `chunks` / `chunk_vectors`, drop them so schema stays in sync with the
+    // new design.  vec0 virtual tables need the extension loaded to drop
+    // cleanly; if it's not loaded here, the DROP on chunk_vectors will fail
+    // silently and leave the shadow tables — acceptable because main DB never
+    // reads them anyway.
+    sqlite3_stmt* check = nullptr;
+    const char* sql =
+        "SELECT name FROM sqlite_master "
+        "WHERE type IN ('table','view') AND name IN ('chunks','chunk_vectors')";
+    if (sqlite3_prepare_v2(db_, sql, -1, &check, nullptr) != SQLITE_OK) return;
+
+    bool had_any = false;
+    while (sqlite3_step(check) == SQLITE_ROW) { had_any = true; break; }
+    sqlite3_finalize(check);
+
+    if (!had_any) return;
+
+    spdlog::info("Dropping legacy semantic tables from main index.db");
+
+    // Try to load sqlite-vec so DROP on chunk_vectors succeeds.
+    load_sqlite_vec();
+
+    char* err_msg = nullptr;
+    sqlite3_exec(db_, "DROP TABLE IF EXISTS chunk_vectors", nullptr, nullptr, &err_msg);
+    if (err_msg) { sqlite3_free(err_msg); err_msg = nullptr; }
+    sqlite3_exec(db_, "DROP TABLE IF EXISTS chunks", nullptr, nullptr, &err_msg);
+    if (err_msg) sqlite3_free(err_msg);
 }
 
 } // namespace locus

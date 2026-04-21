@@ -1,9 +1,7 @@
 - We have context info in chat window - no need to have it in the right corner of main window bottom bar. Better display there last indexing status (for example "indexed 3 files at 9:42", or similiar).
 - [Planning] Isn't the webview for chat UI an overkill? I mean it slightly conficts with Locus philosophy being effecient and eat system resources conservatively. Shall we consider simpler UI text control (which supports colors and bold font)? Is there any in wxWidgets?
-- temperature control in settings; default temperature value is 0.1
 - Are we going to have file viewer?
 - Create an app icon
 - Is it worth adding llama.cpp for directly running LLMs?
 - use direct github downloads instead of vcpkgs for third-parties? more cross-platform? more control over dependencies?
 - LSP (language server protocol)
-- Are we storing regular index of files and embedding info both in the index.db? Shall we split and store them in 2 separate files?

@@ -54,7 +54,7 @@ See [roadmap.md](roadmap.md) for full status.
 | Core language | **C++20** | User's native language, zero runtime overhead |
 | Build system | **CMake + vcpkg** | Standard C++ toolchain |
 | Compiler | **MSVC 19.50 (VS 2026)** | Generator: `Visual Studio 18 2026` |
-| Index database | **SQLite + FTS5** | Zero config, fast, native C API |
+| Index database | **SQLite + FTS5**, split into `.locus/index.db` (skeleton) + `.locus/vectors.db` (semantic, optional) | Zero config, native C API. Separate files + separate connections = independent WALs, so background embedding never blocks FTS/symbol writes. vectors.db is a detachable cache — delete it to reclaim disk or force re-embed. |
 | Code parser | **Tree-sitter** | C library, polyglot, battle-tested |
 | File watcher | **efsw** | Cross-platform wrapper (Win32/inotify/FSEvents) |
 | HTTP / LLM client | **cpr + SSE parsing** | Clean C++ libcurl wrapper, streaming |
@@ -119,11 +119,11 @@ Core is a static lib (`locus_core`). Both `locus` (exe) and `locus_tests` link i
 
 | File | What it owns | Key types |
 |---|---|---|
-| `src/workspace.h/cpp` | Opens a folder, owns DB + watcher + indexer + query. One per folder. | `Workspace`, `WorkspaceConfig` |
-| `src/database.h/cpp` | RAII SQLite wrapper. WAL mode. Schema creation. | `Database` |
+| `src/workspace.h/cpp` | Opens a folder, owns main_db (always) + vectors_db (optional) + watcher + indexer + query. One per folder. | `Workspace`, `WorkspaceConfig` |
+| `src/database.h/cpp` | RAII SQLite wrapper. WAL mode. Two schema kinds: `Main` (files/fts/symbols/headings) and `Vectors` (chunks + vec0 chunk_vectors; loads sqlite-vec only here). Includes legacy-table migration. | `Database`, `DbKind` |
 | `src/file_watcher.h/cpp` | efsw wrapper. Debounced `FileEvent` queue. | `FileWatcher`, `FileEvent` |
-| `src/indexer.h/cpp` | Initial traversal + incremental updates. Tree-sitter symbol parsing. Uses `ExtractorRegistry` for text/heading extraction. | `Indexer`, `Indexer::Stats` |
-| `src/index_query.h/cpp` | Read-only queries: FTS5 search, symbol lookup, outlines, dir listing. | `IndexQuery`, `SearchResult`, `SymbolResult`, `OutlineEntry`, `FileEntry` |
+| `src/indexer.h/cpp` | Initial traversal + incremental updates. Tree-sitter symbol parsing. Uses `ExtractorRegistry` for text/heading extraction. Writes skeleton to main_db, chunks to vectors_db — transactions open on both connections in parallel. | `Indexer`, `Indexer::Stats` |
+| `src/index_query.h/cpp` | Read-only queries: FTS5 search, symbol lookup, outlines, dir listing. Semantic search is a two-step read — vectors_db for top-K chunks, main_db to resolve file_id → path. | `IndexQuery`, `SearchResult`, `SymbolResult`, `OutlineEntry`, `FileEntry` |
 | `src/llm_client.h/cpp` | SSE streaming to OpenAI-compatible endpoints. Token estimation. | `ILLMClient`, `ChatMessage`, `ToolCallRequest`, `LLMConfig`, `StreamCallbacks` |
 | `src/sse_parser.h/cpp` | Low-level SSE `data:` line parser. | `SseParser` |
 | `src/tool.h` | Tool system interfaces (no .cpp — pure abstract + structs). | `ITool`, `IToolRegistry`, `ToolParam`, `ToolResult`, `ToolCall`, `WorkspaceContext` |
@@ -131,7 +131,7 @@ Core is a static lib (`locus_core`). Both `locus` (exe) and `locus_tests` link i
 | `src/tools.h/cpp` | All 12 built-in tools + `register_builtin_tools()` factory. | `ReadFileTool`, `WriteFileTool`, `CreateFileTool`, `DeleteFileTool`, `ListDirectoryTool`, `SearchTextTool`, `SearchSymbolsTool`, `GetFileOutlineTool`, `RunCommandTool`, `AskUserTool`, `SearchSemanticTool`, `SearchHybridTool` |
 | `src/embedder.h/cpp` | llama.cpp session wrapper. Loads a GGUF model, tokenises via the embedded vocab, runs inference, returns an L2-normalised embedding vector. | `Embedder` |
 | `src/chunker.h/cpp` | Content chunking: code (Tree-sitter boundaries), document (heading boundaries), sliding window fallback. | `Chunk`, `SymbolSpan`, `chunk_code()`, `chunk_document()`, `chunk_sliding_window()` |
-| `src/embedding_worker.h/cpp` | Background thread: consumes chunk queue, calls Embedder, writes embeddings to DB. | `EmbeddingWorker` |
+| `src/embedding_worker.h/cpp` | Background thread: consumes chunk queue, calls Embedder, writes embeddings to vectors_db (its own connection — no lock contention with the indexer writing to main_db). | `EmbeddingWorker` |
 | `src/extractors/text_extractor.h` | Base interface for file format extractors (no .cpp — pure abstract + structs). | `ITextExtractor`, `ExtractionResult`, `ExtractedHeading` |
 | `src/extractors/extractor_registry.h/cpp` | Maps file extension → `ITextExtractor`. Owned by `Workspace`. | `ExtractorRegistry` |
 | `src/extractors/markdown_extractor.h/cpp` | Extracts text + `#` headings from `.md` files. | `MarkdownExtractor` |
