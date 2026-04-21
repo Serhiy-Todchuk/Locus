@@ -374,15 +374,15 @@ TEST_CASE("Tool approval policies are correct", "[s0.6]")
     locus::register_builtin_tools(registry);
 
     // auto tools (read-only)
-    REQUIRE(registry.find("read_file")->approval_policy() == "auto");
-    REQUIRE(registry.find("list_directory")->approval_policy() == "auto");
-    REQUIRE(registry.find("search_text")->approval_policy() == "auto");
-    REQUIRE(registry.find("search_symbols")->approval_policy() == "auto");
-    REQUIRE(registry.find("get_file_outline")->approval_policy() == "auto");
+    REQUIRE(registry.find("read_file")->approval_policy() == locus::ToolApprovalPolicy::auto_approve);
+    REQUIRE(registry.find("list_directory")->approval_policy() == locus::ToolApprovalPolicy::auto_approve);
+    REQUIRE(registry.find("search_text")->approval_policy() == locus::ToolApprovalPolicy::auto_approve);
+    REQUIRE(registry.find("search_symbols")->approval_policy() == locus::ToolApprovalPolicy::auto_approve);
+    REQUIRE(registry.find("get_file_outline")->approval_policy() == locus::ToolApprovalPolicy::auto_approve);
 
-    // always tools (mutating)
-    REQUIRE(registry.find("write_file")->approval_policy() == "always");
-    REQUIRE(registry.find("create_file")->approval_policy() == "always");
-    REQUIRE(registry.find("delete_file")->approval_policy() == "always");
-    REQUIRE(registry.find("run_command")->approval_policy() == "always");
+    // ask tools (mutating)
+    REQUIRE(registry.find("write_file")->approval_policy() == locus::ToolApprovalPolicy::ask);
+    REQUIRE(registry.find("create_file")->approval_policy() == locus::ToolApprovalPolicy::ask);
+    REQUIRE(registry.find("delete_file")->approval_policy() == locus::ToolApprovalPolicy::ask);
+    REQUIRE(registry.find("run_command")->approval_policy() == locus::ToolApprovalPolicy::ask);
 }

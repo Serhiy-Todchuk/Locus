@@ -1,15 +1,11 @@
-- Add View menu where there are check boxes for closable panels such as File-tree or Details panels (so when I close any panel - I can open it again through this menu)
-- How do I open previously saved session in UI app? Add sub-menu to Session menu "Saved sessions" with delete buttons near each session?
 - We have context info in chat window - no need to have it in the right corner of main window bottom bar. Better display there last indexing status (for example "indexed 3 files at 9:42", or similiar).
 - [Planning] Isn't the webview for chat UI an overkill? I mean it slightly conficts with Locus philosophy being effecient and eat system resources conservatively. Shall we consider simpler UI text control (which supports colors and bold font)? Is there any in wxWidgets?
 - temperature control in settings; default temperature value is 0.1
-- If project is being built in debug config - add Debug menu to UI where there will be 1 items: "Stat" (you can change the name) with all the actions happened such as user sent message to LLM, LLM answered, LLM used tool search_symbols with argument "blabla" and the tool returned "blabla" and all of this with timestamps.
 - Are we going to have file viewer
-- Tool approval settings
 - Create an app icon
-- Make tools accessible to user through "/" in the chat window as well as other CLI-"/" commands. when user types "/" show suggestions, when user types more symbols after "/" - update suggestions.
+- Make tools accessible to user through "/" in the chat window as well as other CLI-"/" commands. when user types "/" show suggestions, when user types more symbols after "/" - update suggestions. Suggestion looks like drop down popup - user can use arrows to navigate through suggestions - if user removes focus (e.g. clicks outside) - hide suggestion. If user continues typing after / - show suggestion again.
 - Is it worth adding llama.cpp for directly running LLMs?
-- use direct guthub downloads instead of vcpkgs for third-parties? more cross-platform? more control over dependencies?
+- use direct github downloads instead of vcpkgs for third-parties? more cross-platform? more control over dependencies?
 - ask_user tool with predefined (by LLM) answers as a buttons.
 - fix 1 failing test in release:(Incremental update handles file deletion, SEGFAULT) is an [s0.3] indexer bug
 - LSP (language server protocol)
