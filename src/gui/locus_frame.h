@@ -10,11 +10,14 @@
 #include "tool_approval_panel.h"
 #include "wx_frontend.h"
 #include "../agent_core.h"
+#include "../file_watcher.h"
 #include "../workspace.h"
 
 #include <wx/wx.h>
 #include <wx/aui/aui.h>
+#include <wx/timer.h>
 
+#include <chrono>
 #include <memory>
 #include <string>
 #include <vector>
@@ -66,6 +69,12 @@ private:
 
     // Update file tree index stats from current workspace.
     void refresh_index_stats();
+
+    // File-watcher pump. Drains the watcher queue on a timer, accumulates
+    // events into pending_events_, and flushes (calls Indexer::process_events
+    // once for the whole group) after a quiet period or a hard cap.
+    void on_watcher_timer(wxTimerEvent& evt);
+    void flush_pending_events();
 
     // Event handlers: window lifecycle
     void on_close(wxCloseEvent& evt);
@@ -119,6 +128,13 @@ private:
     int indexing_total_  = 0;
     int embedding_done_  = 0;
     int embedding_total_ = 0;
+
+    // File-watcher batching state (see on_watcher_timer / flush_pending_events).
+    wxTimer                               watcher_timer_;
+    std::vector<FileEvent>                pending_events_;
+    std::chrono::steady_clock::time_point group_start_{};
+    std::chrono::steady_clock::time_point last_event_time_{};
+    bool                                  group_active_ = false;
 
     wxDECLARE_EVENT_TABLE();
 };
