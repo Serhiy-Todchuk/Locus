@@ -387,10 +387,19 @@ void ChatPanel::create_input()
     input_ = new wxTextCtrl(this, wxID_ANY, wxEmptyString,
                             wxDefaultPosition, wxSize(-1, 60),
                             wxTE_MULTILINE | wxTE_PROCESS_ENTER | wxTE_RICH2);
-    input_->SetHint("Type a message... (Enter to send, Shift+Enter for newline)");
+    input_->SetHint("Type a message... ('/' for commands, Enter to send, Shift+Enter for newline)");
     input_->SetBackgroundColour(theme::text_bg());
     input_->SetForegroundColour(theme::text_fg());
     input_->Bind(wxEVT_KEY_DOWN, &ChatPanel::on_input_key, this);
+    input_->Bind(wxEVT_TEXT, &ChatPanel::on_input_text, this);
+    // Hide the popup when the text control loses focus (e.g. user tabs away
+    // or clicks elsewhere in the window). Clicking the popup's listbox also
+    // triggers kill_focus, but by then on_accept has already fired on
+    // left-up, so dismissing here is safe.
+    input_->Bind(wxEVT_KILL_FOCUS, [this](wxFocusEvent& evt) {
+        hide_slash_popup();
+        evt.Skip();
+    });
 }
 
 void ChatPanel::create_footer()
@@ -628,28 +637,212 @@ void ChatPanel::on_flush_timer(wxTimerEvent& /*evt*/)
 
 void ChatPanel::on_input_key(wxKeyEvent& evt)
 {
-    if (evt.GetKeyCode() == WXK_RETURN && !evt.ShiftDown()) {
-        wxString text = input_->GetValue().Trim().Trim(false);
-        if (text.empty()) return;
+    const int key = evt.GetKeyCode();
 
-        input_->Clear();
+    // Route navigation keys to the slash popup while it is visible.
+    if (slash_popup_visible()) {
+        switch (key) {
+        case WXK_ESCAPE:
+            hide_slash_popup();
+            return;
+        case WXK_UP:
+            slash_popup_->move_up();
+            return;
+        case WXK_DOWN:
+            slash_popup_->move_down();
+            return;
+        case WXK_TAB: {
+            auto sel = slash_popup_->selected_command();
+            if (!sel.empty()) {
+                accept_slash_suggestion(sel);
+                return;
+            }
+            break;
+        }
+        case WXK_RETURN:
+        case WXK_NUMPAD_ENTER:
+            if (!evt.ShiftDown()) {
+                auto sel = slash_popup_->selected_command();
+                if (!sel.empty()) {
+                    accept_slash_suggestion(sel);
+                    return;
+                }
+            }
+            break;
+        default:
+            break;
+        }
+    }
 
-        // Add user message bubble.
-        ++message_id_;
-        run_script(wxString::Format(
-            "addMsg(%d, 'msg-user', %s);",
-            message_id_, "'" + js_escape(text) + "'"));
-
-        // Block typing while agent is working, but keep the dark styling.
-        // (Enable/Disable on Windows resets colours to the light system defaults.)
-        input_->SetEditable(false);
-
-        // Fire callback.
-        if (on_send_)
-            on_send_(text.ToStdString(wxConvUTF8));
+    if ((key == WXK_RETURN || key == WXK_NUMPAD_ENTER) && !evt.ShiftDown()) {
+        submit_current_input();
     } else {
         evt.Skip();
     }
+}
+
+void ChatPanel::on_input_text(wxCommandEvent& evt)
+{
+    update_slash_popup();
+    evt.Skip();
+}
+
+bool ChatPanel::submit_current_input()
+{
+    wxString text = input_->GetValue().Trim().Trim(false);
+    if (text.empty()) return false;
+
+    // If this is a known GUI slash command, dispatch it locally.
+    if (on_slash_command_ && !text.empty() && text[0] == '/') {
+        wxString body = text.Mid(1);  // drop leading '/'
+        // Split on first whitespace: name + rest.
+        auto is_ws = [](wxUniChar c) {
+            return c == ' ' || c == '\t' || c == '\n' || c == '\r';
+        };
+        size_t sp = 0;
+        while (sp < body.size() && !is_ws(body[sp])) ++sp;
+        std::string name = body.Left(sp).ToStdString();
+        std::string rest;
+        if (sp < body.size()) {
+            wxString r = body.Mid(sp);
+            r.Trim(false);
+            rest = r.ToStdString();
+        }
+        if (!name.empty() && on_slash_command_(name, rest)) {
+            input_->Clear();
+            hide_slash_popup();
+            return true;
+        }
+    }
+
+    input_->Clear();
+    hide_slash_popup();
+
+    // Add user message bubble.
+    ++message_id_;
+    run_script(wxString::Format(
+        "addMsg(%d, 'msg-user', %s);",
+        message_id_, "'" + js_escape(text) + "'"));
+
+    // Block typing while agent is working, but keep the dark styling.
+    // (Enable/Disable on Windows resets colours to the light system defaults.)
+    input_->SetEditable(false);
+
+    if (on_send_)
+        on_send_(text.ToStdString(wxConvUTF8));
+    return true;
+}
+
+// -- Slash popup -----------------------------------------------------------
+
+void ChatPanel::set_slash_commands(std::vector<SlashItem> items)
+{
+    slash_commands_ = std::move(items);
+    // Drop any existing popup; rebuild lazily on next '/'.
+    if (slash_popup_) {
+        if (slash_popup_shown_) slash_popup_->Dismiss();
+        slash_popup_.reset();
+        slash_popup_shown_ = false;
+    }
+}
+
+void ChatPanel::set_on_slash_command(
+    std::function<bool(const std::string&, const std::string&)> cb)
+{
+    on_slash_command_ = std::move(cb);
+}
+
+void ChatPanel::append_system_note(const wxString& html)
+{
+    ++message_id_;
+    run_script(wxString::Format(
+        "addMsg(%d, 'msg-tool', %s);",
+        message_id_, "'" + js_escape(html) + "'"));
+}
+
+wxString ChatPanel::active_slash_token() const
+{
+    // We trigger only when the input value starts with '/' and no whitespace
+    // has been typed after it yet. Simple, matches "/" as a command-mode
+    // indicator for the whole line.
+    wxString v = input_->GetValue();
+    if (v.empty() || v[0] != '/') return wxEmptyString;
+
+    // If the cursor has moved past a whitespace character, the user is
+    // filling in arguments — suggestions should be hidden.
+    wxString token;
+    for (size_t i = 1; i < v.size(); ++i) {
+        wxUniChar c = v[i];
+        if (c == ' ' || c == '\t' || c == '\n' || c == '\r')
+            return wxString("\x01");  // sentinel: stop suggesting
+        token += c;
+    }
+    return token;
+}
+
+bool ChatPanel::slash_popup_visible() const
+{
+    return slash_popup_ && slash_popup_shown_;
+}
+
+void ChatPanel::hide_slash_popup()
+{
+    if (slash_popup_ && slash_popup_shown_) {
+        slash_popup_shown_ = false;
+        slash_popup_->Dismiss();
+    }
+}
+
+void ChatPanel::update_slash_popup()
+{
+    if (slash_commands_.empty()) return;
+
+    wxString token = active_slash_token();
+    if (token.empty() || token == "\x01") {
+        hide_slash_popup();
+        return;
+    }
+
+    // Lazy-construct the popup on first use.
+    if (!slash_popup_) {
+        slash_popup_ = std::make_unique<SlashPopup>(this, slash_commands_);
+        slash_popup_->on_accept = [this](const std::string& name) {
+            accept_slash_suggestion(name);
+        };
+        slash_popup_->on_dismiss = [this]() {
+            slash_popup_shown_ = false;
+        };
+    }
+
+    bool any = slash_popup_->apply_filter(token);
+    if (!any) {
+        hide_slash_popup();
+        return;
+    }
+
+    // Anchor just above the input's top edge so the popup overlays the chat
+    // history (the input sits at the bottom of the window).
+    wxPoint anchor = input_->GetScreenPosition();
+    int w = input_->GetSize().GetWidth();
+    if (!slash_popup_shown_) {
+        slash_popup_->show_anchored(anchor, w);
+        slash_popup_shown_ = true;
+        input_->SetFocus();
+    } else {
+        // Already shown — reposition (size may have changed with filter).
+        slash_popup_->show_anchored(anchor, w);
+    }
+}
+
+void ChatPanel::accept_slash_suggestion(const std::string& cmd_name)
+{
+    if (cmd_name.empty()) return;
+    // Replace the input with the full command + trailing space, ready for args.
+    wxString new_text = "/" + wxString::FromUTF8(cmd_name) + " ";
+    input_->ChangeValue(new_text);  // ChangeValue does not fire wxEVT_TEXT
+    input_->SetInsertionPointEnd();
+    hide_slash_popup();
+    input_->SetFocus();
 }
 
 // ---------------------------------------------------------------------------

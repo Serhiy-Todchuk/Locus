@@ -1,13 +1,16 @@
 #pragma once
 
 #include "../frontend.h"
+#include "slash_popup.h"
 
 #include <wx/wx.h>
 #include <wx/webview.h>
 
 #include <functional>
+#include <memory>
 #include <mutex>
 #include <string>
+#include <vector>
 
 namespace locus {
 
@@ -49,6 +52,21 @@ public:
     void set_context_meter(int used, int limit);
     void set_locus_md_tokens(int tokens);
 
+    // Slash-command suggestions shown when the user types '/' in the input.
+    // Items are typically CLI commands (reset, compact, ...) plus tool names.
+    void set_slash_commands(std::vector<SlashItem> items);
+
+    // Dispatch callback for GUI slash commands. Invoked when the user sends
+    // a message that starts with '/' and the command name matches a known
+    // GUI command. Returns true if handled (input is cleared, message is
+    // NOT forwarded to the agent); false falls through to normal send.
+    // Signature: (command_name_without_slash, rest_of_text_after_command)
+    void set_on_slash_command(std::function<bool(const std::string&,
+                                                 const std::string&)> cb);
+
+    // Append a system-style note into the chat (used by /help).
+    void append_system_note(const wxString& html);
+
 private:
     void create_webview();
     void create_input();
@@ -69,12 +87,29 @@ private:
     // Input key handler: Enter=send, Shift+Enter=newline.
     void on_input_key(wxKeyEvent& evt);
 
+    // Text change handler: show/hide/filter the slash-command popup.
+    void on_input_text(wxCommandEvent& evt);
+
     // WebView navigation guard (block external URLs).
     void on_webview_navigating(wxWebViewEvent& evt);
+
+    // Slash popup management.
+    // The token in the input that triggers suggestions (e.g. "read" when the
+    // user has typed "/read"). Empty if no such token at the cursor.
+    wxString active_slash_token() const;
+    void     update_slash_popup();
+    void     hide_slash_popup();
+    void     accept_slash_suggestion(const std::string& cmd_name);
+    bool     slash_popup_visible() const;
+
+    // Send the message to the agent (or dispatch as a GUI slash command).
+    // Called from Enter-key handling. Returns true if handled.
+    bool submit_current_input();
 
     std::function<void(const std::string&)> on_send_;
     std::function<void()> on_compact_;
     std::function<void()> on_stop_;
+    std::function<bool(const std::string&, const std::string&)> on_slash_command_;
 
     wxWebView*    webview_       = nullptr;
     wxTextCtrl*   input_         = nullptr;
@@ -99,6 +134,11 @@ private:
     // WebView readiness: SetPage() is async in WebView2.
     bool                         page_ready_ = false;
     std::vector<wxString>        pending_scripts_;
+
+    // Slash-command suggestions.
+    std::vector<SlashItem>       slash_commands_;
+    std::unique_ptr<SlashPopup>  slash_popup_;
+    bool                         slash_popup_shown_ = false;
 };
 
 } // namespace locus
