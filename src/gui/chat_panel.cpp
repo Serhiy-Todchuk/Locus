@@ -387,7 +387,13 @@ void ChatPanel::create_input()
     input_ = new wxTextCtrl(this, wxID_ANY, wxEmptyString,
                             wxDefaultPosition, wxSize(-1, 60),
                             wxTE_MULTILINE | wxTE_PROCESS_ENTER | wxTE_RICH2);
-    input_->SetHint("Type a message... ('/' for commands, Enter to send, Shift+Enter for newline)");
+    // No SetHint() — wx's multiline+RICH2 hint seeds real text content on
+    // Windows rather than painting an overlay, so the "placeholder" becomes
+    // editable and has to be manually deleted. Use a tooltip instead for
+    // discoverability; the keystroke help lives in the status bar / footer.
+    input_->SetToolTip(
+        "Type a message and press Enter to send.\n"
+        "Shift+Enter inserts a newline. Type '/' for commands.");
     input_->SetBackgroundColour(theme::text_bg());
     input_->SetForegroundColour(theme::text_fg());
     input_->Bind(wxEVT_KEY_DOWN, &ChatPanel::on_input_key, this);

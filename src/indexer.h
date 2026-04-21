@@ -59,6 +59,11 @@ public:
     // Fired after build_initial completes and after each process_events batch.
     std::function<void(const std::string&, const std::string&)> on_activity;
 
+    // Progress hook — fires per file while `build_initial` or `process_events`
+    // is running. `done == total` signals end-of-batch. Fires on the thread
+    // driving the indexer; handler must be thread-safe.
+    std::function<void(int done, int total)> on_progress;
+
 private:
     // Index a single file (upsert files row, FTS5, symbols, headings).
     void index_file(const fs::path& rel_path);

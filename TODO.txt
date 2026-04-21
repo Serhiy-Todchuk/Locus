@@ -1,7 +1,9 @@
-- We have context info in chat window - no need to have it in the right corner of main window bottom bar. Better display there last indexing status (for example "indexed 3 files at 9:42", or similiar).
-- [Planning] Isn't the webview for chat UI an overkill? I mean it slightly conficts with Locus philosophy being effecient and eat system resources conservatively. Shall we consider simpler UI text control (which supports colors and bold font)? Is there any in wxWidgets?
+- [Planning] Isn't the webview for chat UI an overkill? I mean it slightly conficts with Locus philosophy being effecient and eat system resources conservatively. Shall we consider simpler UI text control (which supports colors and bold font)? Is there any in wxWidgets? I'm just investigating the options for improvement. I also like simplicity. But don't want to loose future oportunities.
 - Are we going to have file viewer?
 - Create an app icon
 - Is it worth adding llama.cpp for directly running LLMs?
-- use direct github downloads instead of vcpkgs for third-parties? more cross-platform? more control over dependencies?
+- use direct github downloads instead of vcpkgs for third-parties? more cross-platform? more control over dependencies? pros and cons
 - LSP (language server protocol)
+- S2.4 - how will user attach the context (UX) taking current functionality of the app into account?
+- Review current functionality... what other tech (non-UX) features do we lack to make Locus good, efficient, competitive coding agent? 
+- I have updated TODO.txt the file in the workspace while Locus was running - it didn't reindex it. At least it wan't obvious from UI. Is it expected behaviour?

@@ -7,6 +7,7 @@
 #include "../index_query.h"
 #include "../system_prompt.h"
 
+#include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/rotating_file_sink.h>
 
@@ -14,6 +15,7 @@
 #include <wx/stdpaths.h>
 
 #include <filesystem>
+#include <fstream>
 #include <thread>
 #include <chrono>
 #include <clocale>
@@ -28,6 +30,36 @@ namespace locus {
 
 // wxWidgets macro: defines WinMain and creates the LocusApp instance.
 wxIMPLEMENT_APP(LocusApp);
+
+// If opening a folder that has no .locus/config.json yet, ask the user whether
+// to enable semantic search. Write a minimal config.json capturing the choice
+// so Workspace picks it up during construction. No-op when config.json already
+// exists (not a first-time open).
+static void prompt_semantic_search_if_first_open(const fs::path& locus_dir)
+{
+    auto cfg_path = locus_dir / "config.json";
+    if (fs::exists(cfg_path))
+        return;
+
+    int reply = wxMessageBox(
+        "Enable semantic search for this workspace?\n\n"
+        "Semantic search uses a local embedding model to find files by meaning, "
+        "not just keywords. It takes extra CPU and disk during indexing.\n\n"
+        "You can change this later in Settings.",
+        "Locus \u2014 New Workspace",
+        wxYES_NO | wxICON_QUESTION);
+
+    bool enabled = (reply == wxYES);
+
+    try {
+        nlohmann::json j;
+        j["index"]["semantic_search"]["enabled"] = enabled;
+        std::ofstream f(cfg_path);
+        f << j.dump(2) << '\n';
+    } catch (const std::exception& ex) {
+        spdlog::warn("Failed to pre-seed config.json: {}", ex.what());
+    }
+}
 
 bool LocusApp::OnInit()
 {
@@ -113,6 +145,8 @@ bool LocusApp::OnInit()
 
     spdlog::info("Locus GUI starting");
     spdlog::info("Workspace: {}", ws_path.string());
+
+    prompt_semantic_search_if_first_open(locus_dir);
 
     try {
         // Open workspace.
@@ -235,6 +269,8 @@ void LocusApp::open_workspace(const std::string& path)
         return;
     }
     init_logging(locus_dir);
+
+    prompt_semantic_search_if_first_open(locus_dir);
 
     try {
         workspace_ = std::make_unique<Workspace>(ws_path);

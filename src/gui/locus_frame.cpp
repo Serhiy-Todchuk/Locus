@@ -71,6 +71,7 @@ LocusFrame::LocusFrame(AgentCore& agent, Workspace& workspace)
     Bind(EVT_AGENT_SESSION_RESET, &LocusFrame::on_agent_session_reset, this);
     Bind(EVT_AGENT_ERROR,         &LocusFrame::on_agent_error,         this);
     Bind(EVT_AGENT_EMBEDDING_PROGRESS, &LocusFrame::on_agent_embedding_progress, this);
+    Bind(EVT_AGENT_INDEXING_PROGRESS,  &LocusFrame::on_agent_indexing_progress,  this);
     Bind(EVT_AGENT_ACTIVITY,      &LocusFrame::on_agent_activity,      this);
 
     // Show LOCUS.md token cost if present.
@@ -87,6 +88,13 @@ LocusFrame::LocusFrame(AgentCore& agent, Workspace& workspace)
         };
     }
 
+    // Wire indexer progress to the WxFrontend thread bridge. Initial build
+    // runs before the frame exists; this catches subsequent `process_events`
+    // batches from the file watcher.
+    workspace_.indexer().on_progress = [this](int done, int total) {
+        wx_frontend_->on_indexing_progress(done, total);
+    };
+
     // Populate index stats in the file tree panel.
     refresh_index_stats();
 
@@ -101,6 +109,7 @@ LocusFrame::~LocusFrame()
     // progress events after the frame starts destructing.
     if (workspace_.embedding_worker())
         workspace_.embedding_worker()->on_progress = nullptr;
+    workspace_.indexer().on_progress = nullptr;
 
     agent_.unregister_frontend(wx_frontend_.get());
     aui_.UnInit();
@@ -353,8 +362,12 @@ void LocusFrame::sync_view_menu()
 void LocusFrame::create_status_bar()
 {
     CreateStatusBar(2);
+    // Right pane (background ops) wider than left pane (general status).
+    // Negative values are proportional — left takes 1 share, right takes 3.
+    const int widths[] = { -1, -3 };
+    SetStatusWidths(2, widths);
     SetStatusText("Ready", 0);
-    SetStatusText("ctx: 0/0", 1);
+    SetStatusText("", 1);
 }
 
 // ---------------------------------------------------------------------------
@@ -666,7 +679,6 @@ void LocusFrame::on_agent_context_meter(wxThreadEvent& evt)
 {
     int used  = evt.GetInt();
     int limit = static_cast<int>(evt.GetExtraLong());
-    SetStatusText(wxString::Format("ctx: %d/%d", used, limit), 1);
     chat_panel_->set_context_meter(used, limit);
 }
 
@@ -696,6 +708,42 @@ void LocusFrame::on_agent_embedding_progress(wxThreadEvent& evt)
     int done = evt.GetInt();
     int total = static_cast<int>(evt.GetExtraLong());
     file_tree_panel_->set_embedding_progress(done, total);
+
+    embedding_done_  = done;
+    embedding_total_ = (total > 0 && done >= total) ? 0 : total;
+    refresh_ops_status();
+}
+
+void LocusFrame::on_agent_indexing_progress(wxThreadEvent& evt)
+{
+    int done = evt.GetInt();
+    int total = static_cast<int>(evt.GetExtraLong());
+
+    indexing_done_  = done;
+    indexing_total_ = (total > 0 && done >= total) ? 0 : total;
+    refresh_ops_status();
+}
+
+void LocusFrame::refresh_ops_status()
+{
+    wxString out;
+    auto append = [&out](const wxString& s) {
+        if (!out.empty()) out += "  |  ";
+        out += s;
+    };
+
+    if (indexing_total_ > 0) {
+        double pct = 100.0 * indexing_done_ / indexing_total_;
+        append(wxString::Format("indexing %d/%d files %.1f%%",
+                                indexing_done_, indexing_total_, pct));
+    }
+    if (embedding_total_ > 0) {
+        double pct = 100.0 * embedding_done_ / embedding_total_;
+        append(wxString::Format("embedding %d/%d chunks %.1f%%",
+                                embedding_done_, embedding_total_, pct));
+    }
+
+    SetStatusText(out, 1);
 }
 
 void LocusFrame::on_agent_activity(wxThreadEvent& evt)
