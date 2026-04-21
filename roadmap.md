@@ -215,28 +215,29 @@ Personal documents (WS3) works end-to-end.
 - [x] Per-workspace toggle: `semantic_search.enabled` in config; UI toggle in settings
 - [x] Catch2 tests: RRF merge correctness, chunking boundary detection
 
-### S2.2 — Activity Details Panel
+### S2.2 — Activity Details Panel ✔
 
-- [ ] `ActivityEvent` struct in `src/activity_event.h`: `id`, `timestamp`, `kind` enum (`system_prompt`, `user_message`, `llm_response`, `tool_call`, `tool_result`, `index_event`, `warning`, `error`), `summary` (one-line), `detail` (full text), optional `tokens_in`/`tokens_out`/`tokens_delta`
-- [ ] Extend `IFrontend` with `on_activity(const ActivityEvent&)` — all activity fans out through this
-- [ ] `AgentCore` emits events at hook points: after `SystemPromptBuilder::build()`, on `send_message` entry, on LLM stream complete (attach `CompletionUsage`), on each tool_call pending/result, on errors
-- [ ] `Indexer` + `EmbeddingWorker`: emit through a core-provided callback ("indexed 12 files", "embedded 47 chunks") routed via `AgentCore` so they reach all frontends uniformly
-- [ ] Plumb real token counts: capture `CompletionUsage` in agent loop; compute per-message delta against prior turn; attach to `llm_response` events
-- [ ] In-memory ring buffer (last N=1000) owned by `AgentCore`; query API `get_activity(since_id)` for late-joining frontends
-- [ ] CLI frontend: `on_activity` → `spdlog::trace` (no console spam)
-- [ ] `ActivityPanel : wxPanel` replacing the Details panel dummy: virtual `wxListCtrl` (time, kind icon, summary, tokens), row click expands inline `wxStyledTextCtrl` detail (read-only, selectable, JSON lexer for tool args), hover → `wxRichToolTip`, filter chips per kind + search box, severity colors
-- [ ] Persistence: append events to `.locus/activity/<session_id>.jsonl`; load on session load
-- [ ] Settings: max ring buffer size, enable/disable persistence
-- [ ] Catch2 tests: event emission order on a mocked agent turn, ring buffer eviction, token delta accounting
+- [x] `ActivityEvent` struct in `src/activity_event.h`: `id`, `timestamp`, `kind` enum (`system_prompt`, `user_message`, `llm_response`, `tool_call`, `tool_result`, `index_event`, `warning`, `error`), `summary` (one-line), `detail` (full text), optional `tokens_in`/`tokens_out`/`tokens_delta`
+- [x] Extend `IFrontend` with `on_activity(const ActivityEvent&)` — all activity fans out through this
+- [x] `AgentCore` emits events at hook points: after `SystemPromptBuilder::build()`, on `send_message` entry, on LLM stream complete (attach `CompletionUsage`), on each tool_call pending/result, on errors
+- [x] `Indexer` + `EmbeddingWorker`: emit through a core-provided callback ("indexed 12 files", "embedded 47 chunks") routed via `AgentCore` so they reach all frontends uniformly
+- [x] Plumb real token counts: capture `CompletionUsage` in agent loop; compute per-message delta against prior turn; attach to `llm_response` events
+- [x] In-memory ring buffer (last N=1000) owned by `AgentCore`; query API `get_activity(since_id)` for late-joining frontends
+- [x] CLI frontend: `on_activity` → `spdlog::trace` (no console spam)
+- [x] `ActivityPanel : wxPanel` replacing the Details panel dummy: virtual `wxListCtrl` (time, kind icon, summary, tokens), row click expands inline `wxStyledTextCtrl` detail (read-only, selectable, JSON lexer for tool args), hover → `wxRichToolTip`, filter chips per kind + search box, severity colors
+- [x] Persistence: append events to `.locus/activity/<session_id>.jsonl`; load on session load
+- [x] Settings: max ring buffer size, enable/disable persistence
+- [x] Catch2 tests: event emission order on a mocked agent turn, ring buffer eviction, token delta accounting
+- [x] Reasoning-channel split: route `reasoning_content` separately from `content`; ChatPanel renders collapsible "Thoughts" block; `reasoning_tokens` surfaced in activity summary
 
-### S2.3 — Document Text Extraction
-- [ ] pdfium vcpkg dependency; `PdfiumExtractor`: extract text per page, detect encrypted
-- [ ] miniz + pugixml: `DocxExtractor` (unzip → parse `word/document.xml`)
-- [ ] miniz + pugixml: `XlsxExtractor` (unzip → parse `xl/sharedStrings.xml` + sheets)
-- [ ] HTML extractor: strip tags, preserve whitespace structure
-- [ ] Extractor registry: map file extension → extractor; unknown → skip
-- [ ] Graceful skip: unreadable/encrypted files logged to spdlog, `files` table flagged as `is_binary=1`
-- [ ] Catch2 tests: PDF extraction round-trip, DOCX heading extraction
+### S2.3 — Document Text Extraction ✔
+- [x] PDFium via `FetchContent` (bblanchon prebuilt binaries — BSD-3-Clause; vcpkg mainline has no pdfium port). `PdfiumExtractor`: extract text per page, detect encrypted via `FPDF_ERR_PASSWORD`
+- [x] miniz + pugixml: `DocxExtractor` (unzip → parse `word/document.xml`, detect `Heading1`..`Heading6` styles)
+- [x] miniz + pugixml: `XlsxExtractor` (unzip → parse `xl/sharedStrings.xml` + per-sheet via `xl/_rels/workbook.xml.rels`)
+- [x] HTML extractor: strip `<script>`/`<style>` blocks, strip tags, decode entities, collapse whitespace
+- [x] Extractor registry: map file extension → extractor; unknown → skip
+- [x] Graceful skip: unreadable/encrypted files logged to spdlog, `files` table flagged as `is_binary=1`
+- [x] Catch2 tests: PDF, DOCX, XLSX, HTML — real sample files in `tests/sample_docs/` (W-9 + Apache POI samples)
 
 ### S2.4 — Active Edit Context (F7)
 - [ ] `EditContext` struct: `file_path`, `line`, `col`, `selection_text`, `selection_start`, `selection_end`
