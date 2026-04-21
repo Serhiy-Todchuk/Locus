@@ -74,6 +74,9 @@ public:
     // Direct access to session manager for listing etc.
     SessionManager& sessions() { return sessions_; }
 
+    // Direct access to the tool registry (used by the settings UI).
+    IToolRegistry& tools() { return tools_; }
+
     // -- Accessors ------------------------------------------------------------
 
     const ConversationHistory& history() const { return history_; }

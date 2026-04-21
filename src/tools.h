@@ -20,7 +20,7 @@ public:
             {"length", "integer", "Number of lines to read (default 100)", false},
         };
     }
-    std::string approval_policy() const override { return "auto"; }
+    ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::auto_approve; }
     std::string preview(const ToolCall& call) const override;
     ToolResult  execute(const ToolCall& call, const WorkspaceContext& ws) override;
 };
@@ -38,7 +38,7 @@ public:
             {"depth", "integer", "Depth of listing: 0 = immediate children (default), 1+ = recurse", false},
         };
     }
-    std::string approval_policy() const override { return "auto"; }
+    ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::auto_approve; }
     ToolResult  execute(const ToolCall& call, const WorkspaceContext& ws) override;
 };
 
@@ -54,7 +54,7 @@ public:
             {"max_results", "integer", "Maximum results to return (default 20)", false},
         };
     }
-    std::string approval_policy() const override { return "auto"; }
+    ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::auto_approve; }
     ToolResult  execute(const ToolCall& call, const WorkspaceContext& ws) override;
 };
 
@@ -72,7 +72,7 @@ public:
             {"language", "string", "Filter by language (optional)", false},
         };
     }
-    std::string approval_policy() const override { return "auto"; }
+    ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::auto_approve; }
     ToolResult  execute(const ToolCall& call, const WorkspaceContext& ws) override;
 };
 
@@ -88,7 +88,7 @@ public:
             {"path", "string", "Relative path from workspace root", true},
         };
     }
-    std::string approval_policy() const override { return "auto"; }
+    ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::auto_approve; }
     ToolResult  execute(const ToolCall& call, const WorkspaceContext& ws) override;
 };
 
@@ -174,7 +174,7 @@ public:
             {"max_results", "integer", "Maximum results to return (default 10)", false},
         };
     }
-    std::string approval_policy() const override { return "auto"; }
+    ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::auto_approve; }
     ToolResult  execute(const ToolCall& call, const WorkspaceContext& ws) override;
 };
 
@@ -192,7 +192,7 @@ public:
             {"max_results", "integer", "Maximum results to return (default 10)", false},
         };
     }
-    std::string approval_policy() const override { return "auto"; }
+    ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::auto_approve; }
     ToolResult  execute(const ToolCall& call, const WorkspaceContext& ws) override;
 };
 
@@ -214,7 +214,7 @@ public:
     // Goes through the approval gate — the frontend shows the question
     // and provides a response input. The user's answer is injected via
     // tool_decision(modify, {"question": "...", "response": "user answer"}).
-    std::string approval_policy() const override { return "always"; }
+    ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::ask; }
     std::string preview(const ToolCall& call) const override;
     ToolResult  execute(const ToolCall& call, const WorkspaceContext& ws) override;
 };

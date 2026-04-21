@@ -1,16 +1,22 @@
 #include "settings_dialog.h"
 
+#include "../tool.h"
+
+#include <wx/scrolwin.h>
 #include <spdlog/spdlog.h>
 
+#include <algorithm>
 #include <sstream>
 
 namespace locus {
 
-SettingsDialog::SettingsDialog(wxWindow* parent, WorkspaceConfig& config)
+SettingsDialog::SettingsDialog(wxWindow* parent, WorkspaceConfig& config,
+                               IToolRegistry& tools)
     : wxDialog(parent, wxID_ANY, "Settings",
-               wxDefaultPosition, wxSize(480, 420),
+               wxDefaultPosition, wxSize(560, 640),
                wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER)
     , config_(config)
+    , tools_(tools)
 {
     auto* main_sizer = new wxBoxSizer(wxVERTICAL);
 
@@ -92,6 +98,64 @@ SettingsDialog::SettingsDialog(wxWindow* parent, WorkspaceConfig& config)
 
     main_sizer->Add(idx_box, 1, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
 
+    // -- Tool Approvals section ----------------------------------------------
+    auto* approval_box = new wxStaticBoxSizer(wxVERTICAL, this, "Tool Approvals");
+
+    // Scrolled inner window so long tool lists don't blow out the dialog.
+    auto* scroll = new wxScrolledWindow(this, wxID_ANY,
+        wxDefaultPosition, wxSize(-1, 180),
+        wxVSCROLL | wxBORDER_SIMPLE);
+    scroll->SetScrollRate(0, 12);
+
+    auto* scroll_sizer = new wxFlexGridSizer(2, wxSize(8, 4));
+    scroll_sizer->AddGrowableCol(0, 1);
+
+    // Collect tools in a stable alphabetical order so the UI doesn't shuffle.
+    std::vector<ITool*> sorted_tools = tools.all();
+    std::sort(sorted_tools.begin(), sorted_tools.end(),
+              [](ITool* a, ITool* b) { return a->name() < b->name(); });
+
+    wxArrayString policy_labels;
+    policy_labels.Add(policy_display_name(ToolApprovalPolicy::ask));
+    policy_labels.Add(policy_display_name(ToolApprovalPolicy::auto_approve));
+    policy_labels.Add(policy_display_name(ToolApprovalPolicy::deny));
+
+    tool_names_.reserve(sorted_tools.size());
+    approval_choices_.reserve(sorted_tools.size());
+
+    for (auto* tool : sorted_tools) {
+        const std::string& tname = tool->name();
+
+        // Resolve effective starting policy: override if present, else default.
+        ToolApprovalPolicy effective = tool->approval_policy();
+        auto it = config.tool_approval_policies.find(tname);
+        if (it != config.tool_approval_policies.end())
+            effective = it->second;
+
+        auto* label = new wxStaticText(scroll, wxID_ANY, wxString::FromUTF8(tname));
+        auto* choice = new wxChoice(scroll, wxID_ANY,
+            wxDefaultPosition, wxDefaultSize, policy_labels);
+        int sel = 0;
+        switch (effective) {
+            case ToolApprovalPolicy::ask:          sel = 0; break;
+            case ToolApprovalPolicy::auto_approve: sel = 1; break;
+            case ToolApprovalPolicy::deny:         sel = 2; break;
+        }
+        choice->SetSelection(sel);
+
+        scroll_sizer->Add(label, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, 4);
+        scroll_sizer->Add(choice, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
+
+        tool_names_.push_back(tname);
+        approval_choices_.push_back(choice);
+    }
+
+    scroll->SetSizer(scroll_sizer);
+    scroll->FitInside();
+
+    approval_box->Add(scroll, 1, wxEXPAND | wxALL, 4);
+    main_sizer->Add(approval_box, 1, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
+
     // -- Buttons --------------------------------------------------------------
     auto* btn_sizer = CreateStdDialogButtonSizer(wxOK | wxCANCEL);
     main_sizer->Add(btn_sizer, 0, wxEXPAND | wxALL, 8);
@@ -138,7 +202,25 @@ void SettingsDialog::on_ok(wxCommandEvent& evt)
         new_sem_model != config_.embedding_model)
         semantic_changed_ = true;
 
-    changed_ = llm_changed_ || index_changed_ || semantic_changed_;
+    // Collect new tool approval overrides. Only persist entries that
+    // differ from the tool's built-in default — keeps config.json tidy.
+    std::unordered_map<std::string, ToolApprovalPolicy> new_approvals;
+    for (size_t i = 0; i < tool_names_.size(); ++i) {
+        int sel = approval_choices_[i]->GetSelection();
+        ToolApprovalPolicy chosen = ToolApprovalPolicy::ask;
+        if (sel == 1) chosen = ToolApprovalPolicy::auto_approve;
+        else if (sel == 2) chosen = ToolApprovalPolicy::deny;
+
+        ITool* tool = tools_.find(tool_names_[i]);
+        ToolApprovalPolicy default_policy = tool ? tool->approval_policy()
+                                                 : ToolApprovalPolicy::ask;
+        if (chosen != default_policy)
+            new_approvals[tool_names_[i]] = chosen;
+    }
+
+    bool approvals_changed = (new_approvals != config_.tool_approval_policies);
+
+    changed_ = llm_changed_ || index_changed_ || semantic_changed_ || approvals_changed;
 
     if (changed_) {
         config_.llm_endpoint      = new_endpoint;
@@ -148,9 +230,10 @@ void SettingsDialog::on_ok(wxCommandEvent& evt)
         config_.exclude_patterns  = new_patterns;
         config_.semantic_search_enabled = new_semantic;
         config_.embedding_model   = new_sem_model;
+        config_.tool_approval_policies = std::move(new_approvals);
 
-        spdlog::info("Settings changed (llm={}, index={}, semantic={})",
-                     llm_changed_, index_changed_, semantic_changed_);
+        spdlog::info("Settings changed (llm={}, index={}, semantic={}, approvals={})",
+                     llm_changed_, index_changed_, semantic_changed_, approvals_changed);
     }
 
     evt.Skip();  // let wxDialog handle EndModal(wxID_OK)

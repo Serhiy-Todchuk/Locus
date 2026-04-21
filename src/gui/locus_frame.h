@@ -16,6 +16,8 @@
 #include <wx/aui/aui.h>
 
 #include <memory>
+#include <string>
+#include <vector>
 
 namespace locus {
 
@@ -54,6 +56,14 @@ private:
     // Rebuild the "Recent Workspaces" submenu from disk.
     void rebuild_recent_menu();
 
+    // Rebuild the "Saved Sessions" submenu from disk.
+    void rebuild_sessions_menu();
+
+    // Handlers for the "Saved Sessions" submenu — bound once over an ID
+    // range; the index into sessions_in_menu_ identifies the target session.
+    void on_session_open(wxCommandEvent& evt);
+    void on_session_delete(wxCommandEvent& evt);
+
     // Update file tree index stats from current workspace.
     void refresh_index_stats();
 
@@ -91,8 +101,13 @@ private:
     ToolApprovalPanel* approval_panel_ = nullptr;   // tool approval (S1.4)
     ActivityPanel*     activity_panel_ = nullptr;   // activity log (S2.2)
     wxMenu*            recent_menu_    = nullptr;   // "Recent Workspaces" submenu (owned by menu bar)
+    wxMenu*            sessions_menu_  = nullptr;   // "Saved Sessions" submenu (owned by menu bar)
     wxMenuItem*        view_files_item_    = nullptr;
     wxMenuItem*        view_activity_item_ = nullptr;
+
+    // Session IDs currently shown in the Saved Sessions submenu, indexed
+    // by the offset from ID_MENU_SESSION_OPEN_BASE / _DELETE_BASE.
+    std::vector<std::string> sessions_in_menu_;
 
     wxDECLARE_EVENT_TABLE();
 };
