@@ -377,6 +377,63 @@ void LocusFrame::setup_aui_layout()
         [this]() { show_compaction_dialog(); },
         [this]() { agent_.cancel_turn(); });
 
+    // Slash-command suggestions: CLI-style commands + all registered tools.
+    {
+        std::vector<SlashItem> items = {
+            {"help",     "Show available slash commands",         false},
+            {"reset",    "Start a fresh conversation",            false},
+            {"compact",  "Open the context compaction dialog",    false},
+            {"save",     "Save the current session to disk",      false},
+            {"settings", "Open the Settings dialog",              false},
+            {"clear",    "Alias for /reset",                      false},
+        };
+        for (auto* t : agent_.tools().all()) {
+            items.push_back({ t->name(), t->description(), true });
+        }
+        chat_panel_->set_slash_commands(std::move(items));
+    }
+
+    chat_panel_->set_on_slash_command(
+        [this](const std::string& name, const std::string& rest) -> bool {
+            if (name == "reset" || name == "clear") {
+                agent_.reset_conversation();
+                return true;
+            }
+            if (name == "compact") {
+                show_compaction_dialog();
+                return true;
+            }
+            if (name == "save") {
+                auto id = agent_.save_session();
+                SetStatusText(wxString::Format("Session saved: %s", id));
+                rebuild_sessions_menu();
+                return true;
+            }
+            if (name == "settings") {
+                show_settings_dialog();
+                return true;
+            }
+            if (name == "help") {
+                wxString html =
+                    "<span class=\"tool-name\">Slash commands</span><br>"
+                    "<span class=\"tool-preview\">"
+                    "/help&nbsp;&nbsp;— show this help<br>"
+                    "/reset | /clear&nbsp;&nbsp;— reset conversation<br>"
+                    "/compact&nbsp;&nbsp;— compact context<br>"
+                    "/save&nbsp;&nbsp;— save session<br>"
+                    "/settings&nbsp;&nbsp;— open settings<br>"
+                    "/&lt;tool&gt; &lt;args&gt;&nbsp;&nbsp;— type a tool name"
+                    " to describe a call to the agent"
+                    "</span>";
+                chat_panel_->append_system_note(html);
+                return true;
+            }
+            // Tool names (and unknown commands): fall through to a normal
+            // user message so the agent/LLM can decide what to do.
+            (void)rest;
+            return false;
+        });
+
     // Tool approval panel — slides in when a tool call needs approval.
     approval_panel_ = new ToolApprovalPanel(this,
         [this](const std::string& call_id, ToolDecision decision,

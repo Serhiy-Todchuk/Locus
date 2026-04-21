@@ -254,6 +254,7 @@ add_executable(locus_gui WIN32
     src/gui/wx_frontend.cpp
     src/gui/activity_panel.cpp
     src/gui/chat_panel.cpp
+    src/gui/slash_popup.cpp
     src/gui/tool_approval_panel.cpp
     src/gui/ask_user_dialog.cpp
     src/gui/compaction_dialog.cpp
