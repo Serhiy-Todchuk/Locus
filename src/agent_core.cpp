@@ -1,4 +1,5 @@
 #include "agent_core.h"
+#include "core/workspace_services.h"
 #include "index_query.h"
 #include "tool_registry.h"
 #include "workspace.h"
@@ -13,14 +14,14 @@ namespace locus {
 
 AgentCore::AgentCore(ILLMClient& llm,
                      IToolRegistry& tools,
-                     const WorkspaceContext& ws_context,
+                     IWorkspaceServices& services,
                      const std::string& locus_md,
                      const WorkspaceMetadata& ws_meta,
                      const LLMConfig& llm_config,
                      const std::filesystem::path& sessions_dir)
     : llm_(llm)
     , tools_(tools)
-    , ws_context_(ws_context)
+    , services_(services)
     , llm_config_(llm_config)
     , sessions_(sessions_dir)
 {
@@ -110,9 +111,9 @@ std::string AgentCore::compose_system_prompt() const
     ss << "[Attached: " << ctx->file_path << "]\n";
 
     // Outline (headings + symbols) — read-only, may be empty.
-    if (ws_context_.index) {
+    if (auto* idx = services_.index()) {
         try {
-            auto entries = ws_context_.index->get_file_outline(ctx->file_path);
+            auto entries = idx->get_file_outline(ctx->file_path);
             if (!entries.empty()) {
                 ss << "\nOutline:\n";
                 for (const auto& e : entries) {
@@ -621,8 +622,8 @@ void AgentCore::process_tool_call(const ToolCall& call, ITool* tool)
     // Resolve the effective approval policy for this tool: per-workspace
     // override (from WorkspaceConfig) wins over the tool's built-in default.
     ToolApprovalPolicy policy = tool->approval_policy();
-    if (ws_context_.workspace) {
-        const auto& overrides = ws_context_.workspace->config().tool_approval_policies;
+    if (auto* ws = services_.workspace()) {
+        const auto& overrides = ws->config().tool_approval_policies;
         auto it = overrides.find(call.tool_name);
         if (it != overrides.end())
             policy = it->second;
@@ -696,7 +697,7 @@ void AgentCore::process_tool_call(const ToolCall& call, ITool* tool)
     }
 
     // Execute.
-    auto result = tool->execute(effective_call, ws_context_);
+    auto result = tool->execute(effective_call, services_);
 
     spdlog::info("AgentCore: tool '{}' result: success={}, content={} chars",
                  call.tool_name, result.success, result.content.size());
@@ -927,7 +928,7 @@ bool AgentCore::try_slash_command(const std::string& content)
     spdlog::info("Slash command: /{} args={}", tool_name, args.dump());
 
     auto t0 = std::chrono::steady_clock::now();
-    auto result = tool->execute(call, ws_context_);
+    auto result = tool->execute(call, services_);
     auto t1 = std::chrono::steady_clock::now();
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
 

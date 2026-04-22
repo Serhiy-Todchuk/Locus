@@ -8,9 +8,7 @@
 
 namespace locus {
 
-class EmbeddingWorker;
-class IndexQuery;
-class Workspace;
+class IWorkspaceServices;
 
 // -- Tool approval policy ---------------------------------------------------
 
@@ -65,15 +63,6 @@ struct ToolCall {
     nlohmann::json args;
 };
 
-// Lightweight context passed to every tool execution.
-// Tools use this to resolve paths, query the index, etc.
-struct WorkspaceContext {
-    std::filesystem::path root;
-    IndexQuery*           index = nullptr;     // may be null if index unavailable
-    EmbeddingWorker*      embedder = nullptr;  // may be null if semantic search disabled
-    Workspace*            workspace = nullptr;  // for dynamic state (e.g. hot-toggled features)
-};
-
 // -- ITool interface --------------------------------------------------------
 
 class ITool {
@@ -85,7 +74,7 @@ public:
     virtual std::vector<ToolParam>   params()      const = 0;
 
     virtual ToolResult execute(const ToolCall& call,
-                               const WorkspaceContext& ws) = 0;
+                               IWorkspaceServices& ws) = 0;
 
     // Default approval policy for this tool. User-configured overrides in
     // WorkspaceConfig take precedence — see AgentCore::resolve_policy().

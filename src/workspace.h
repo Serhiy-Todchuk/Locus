@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/workspace_services.h"
 #include "tool.h"  // for ToolApprovalPolicy
 
 #include <filesystem>
@@ -47,18 +48,25 @@ struct WorkspaceConfig {
 };
 
 // Owns all workspace-level resources: config, database, file watcher, LOCUS.md.
-// One Workspace instance per open folder.
-class Workspace {
+// One Workspace instance per open folder. Implements `IWorkspaceServices` so it
+// can be passed directly to `AgentCore` and tools — no adapter wrapper needed.
+class Workspace : public IWorkspaceServices {
 public:
     // Opens a workspace at the given path. Creates .locus/ if absent.
     // Throws std::runtime_error on failure.
     explicit Workspace(const fs::path& root);
-    ~Workspace();
+    ~Workspace() override;
 
     Workspace(const Workspace&) = delete;
     Workspace& operator=(const Workspace&) = delete;
 
-    const fs::path& root() const { return root_; }
+    // -- IWorkspaceServices ---------------------------------------------------
+    const fs::path&  root() const override { return root_; }
+    IndexQuery*      index() override      { return query_.get(); }
+    EmbeddingWorker* embedder() override   { return embedding_worker_.get(); }
+    Workspace*       workspace() override  { return this; }
+
+    // -- Workspace-specific ---------------------------------------------------
     const fs::path& locus_dir() const { return locus_dir_; }
 
     const WorkspaceConfig& config() const { return config_; }
@@ -76,8 +84,6 @@ public:
     Indexer& indexer() { return *indexer_; }
     IndexQuery& query() { return *query_; }
 
-    // Semantic search (may be null if disabled)
-    Embedder* embedder() { return embedder_.get(); }
     EmbeddingWorker* embedding_worker() { return embedding_worker_.get(); }
 
     // Hot-toggle semantic search at runtime (creates/destroys embedder + worker).

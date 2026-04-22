@@ -12,6 +12,8 @@ add_executable(locus_tests
     test_attached_context.cpp
 )
 
+target_include_directories(locus_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
 target_link_libraries(locus_tests PRIVATE
     Catch2::Catch2WithMain
     locus_core

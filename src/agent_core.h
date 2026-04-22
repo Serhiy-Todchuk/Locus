@@ -1,6 +1,7 @@
 #pragma once
 
 #include "conversation.h"
+#include "core/workspace_services.h"
 #include "frontend.h"
 #include "frontend_registry.h"
 #include "llm_client.h"
@@ -36,7 +37,7 @@ class AgentCore : public ILocusCore {
 public:
     AgentCore(ILLMClient& llm,
               IToolRegistry& tools,
-              const WorkspaceContext& ws_context,
+              IWorkspaceServices& services,
               const std::string& locus_md,
               const WorkspaceMetadata& ws_meta,
               const LLMConfig& llm_config,
@@ -147,10 +148,10 @@ private:
     void refresh_system_prompt();
 
     // Members
-    ILLMClient&      llm_;
-    IToolRegistry&   tools_;
-    WorkspaceContext  ws_context_;
-    LLMConfig        llm_config_;
+    ILLMClient&         llm_;
+    IToolRegistry&      tools_;
+    IWorkspaceServices& services_;
+    LLMConfig           llm_config_;
     ConversationHistory history_;
     std::string      base_system_prompt_;  // built once from LOCUS.md + tools
     std::string      system_prompt_;       // base + attached-context section
