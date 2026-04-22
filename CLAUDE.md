@@ -185,10 +185,12 @@ Core is a static lib (`locus_core`). Both `locus` (exe) and `locus_tests` link i
 | [DIFFERENTIATORS.md](DIFFERENTIATORS.md) | Who this is for, what makes it different |
 | [requirements.md](requirements.md) | Full feature list — reference when scoping work |
 | [architecture/overview.md](architecture/overview.md) | System component map, data flow, context strategy |
+| [architecture/agent-loop.md](architecture/agent-loop.md) | AgentCore turn orchestration — threading, phases, sequence diagrams, M3/M4 hook points |
 | [architecture/tool-protocol.md](architecture/tool-protocol.md) | ITool interface, approval flow, adding tools |
 | [architecture/workspace-index.md](architecture/workspace-index.md) | Index subsystem: schema, update strategy, query API |
 | [architecture/tech-stack.md](architecture/tech-stack.md) | Tech stack — decided choices and future frontend options |
 | [architecture/web-retrieval.md](architecture/web-retrieval.md) | Web RAG: fetch → index → search pipeline, token budget strategy |
+| [architecture/decisions/](architecture/decisions/) | ADRs — *why* behind non-trivial architectural shifts (one file per decision) |
 
 ---
 
@@ -229,7 +231,14 @@ No accumulated debt, no "we'll debug it later."
 **After every completed stage/task — mandatory bookkeeping:**
 1. Update `roadmap.md`: mark completed tasks `[x]`, add ✔ to the stage header
 2. Update `CLAUDE.md` "Current Stage" line to reflect the new state
-3. Do this immediately after verification passes, before moving on
+3. **If the stage included a non-trivial architectural change** (replaced a technology,
+   restructured a subsystem, rejected an obvious alternative for a non-obvious reason):
+   write an ADR at [architecture/decisions/NNNN-title.md](architecture/decisions/) and
+   update the "Key Decisions Made" table above. See
+   [architecture/decisions/README.md](architecture/decisions/README.md) for format. If
+   you're unsure whether a change qualifies, ask. Do **not** write ADRs for routine
+   implementation work.
+4. Do this immediately after verification passes, before moving on
 
 ---
 
