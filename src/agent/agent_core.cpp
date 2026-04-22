@@ -34,6 +34,7 @@ AgentCore::AgentCore(ILLMClient& llm,
     loop_       = std::make_unique<AgentLoop>(llm_, tools_, *activity_, *budget_, frontends_);
     dispatcher_ = std::make_unique<ToolDispatcher>(tools_, services_, *activity_,
                                                    frontends_, cancel_requested_);
+    slash_      = std::make_unique<SlashCommandDispatcher>(tools_, services_);
 
     int sys_tokens = ILLMClient::estimate_tokens(system_prompt_);
     spdlog::info("AgentCore: system prompt ~{} tokens, context limit {}",
@@ -446,151 +447,19 @@ int AgentCore::current_token_count() const
 }
 
 // -- Slash commands (direct tool invocation) ---------------------------------
-// Kept here until S3.J extracts the tokenizer + dispatcher.
+// Parsing + execution live in SlashCommandDispatcher (S3.J). AgentCore only
+// routes the output to frontends.
 
 bool AgentCore::try_slash_command(const std::string& content)
 {
-    if (content.empty() || content[0] != '/')
-        return false;
-
-    std::istringstream iss(content.substr(1));
-    std::string tool_name;
-    iss >> tool_name;
-
-    if (tool_name.empty())
-        return false;
-
-    if (tool_name == "help") {
-        std::string help = "Available /commands (direct tool invocation):\n\n";
-        for (auto* t : tools_.all()) {
-            help += "  /" + t->name();
-            for (auto& p : t->params()) {
-                if (p.required)
-                    help += " <" + p.name + ">";
-                else
-                    help += " [" + p.name + "=" + p.type + "]";
-            }
-            help += "\n    " + t->description() + "\n\n";
-        }
-        help += "  /help\n    Show this help\n";
-        frontends_.broadcast([&](IFrontend& fe) { fe.on_token(help); });
-        return true;
-    }
-
-    auto* tool = tools_.find(tool_name);
-    if (!tool) {
-        std::string err = "Unknown command '/" + tool_name + "'. Type /help for available commands.";
-        frontends_.broadcast([&](IFrontend& fe) { fe.on_error(err); });
-        return true;
-    }
-
-    std::string rest;
-    if (iss.tellg() != -1)
-        rest = content.substr(static_cast<size_t>(iss.tellg()) + 1);
-
-    auto trim_start = rest.find_first_not_of(" \t");
-    if (trim_start != std::string::npos)
-        rest = rest.substr(trim_start);
-    else
-        rest.clear();
-
-    auto tool_params = tool->params();
-    nlohmann::json args = nlohmann::json::object();
-
-    std::vector<std::string> tokens;
-    {
-        size_t i = 0;
-        while (i < rest.size()) {
-            while (i < rest.size() && rest[i] == ' ') ++i;
-            if (i >= rest.size()) break;
-
-            std::string tok;
-            if (rest[i] == '"') {
-                ++i;
-                while (i < rest.size() && rest[i] != '"')
-                    tok += rest[i++];
-                if (i < rest.size()) ++i;
-            } else {
-                while (i < rest.size() && rest[i] != ' ') {
-                    if (rest[i] == '"') {
-                        ++i;
-                        while (i < rest.size() && rest[i] != '"')
-                            tok += rest[i++];
-                        if (i < rest.size()) ++i;
-                    } else {
-                        tok += rest[i++];
-                    }
-                }
-            }
-            tokens.push_back(std::move(tok));
-        }
-    }
-
-    std::vector<std::string> positional;
-    for (auto& tok : tokens) {
-        auto eq = tok.find('=');
-        if (eq != std::string::npos && eq > 0) {
-            std::string key = tok.substr(0, eq);
-            std::string val = tok.substr(eq + 1);
-            bool found = false;
-            for (auto& p : tool_params) {
-                if (p.name == key) {
-                    if (p.type == "integer")
-                        args[key] = std::stoi(val);
-                    else if (p.type == "boolean")
-                        args[key] = (val == "true" || val == "1");
-                    else
-                        args[key] = val;
-                    found = true;
-                    break;
-                }
-            }
-            if (!found)
-                args[key] = val;
-        } else {
-            positional.push_back(tok);
-        }
-    }
-
-    size_t pos_idx = 0;
-    for (auto& p : tool_params) {
-        if (args.contains(p.name)) continue;
-        if (pos_idx < positional.size()) {
-            if (p.type == "integer")
-                args[p.name] = std::stoi(positional[pos_idx]);
-            else if (p.type == "boolean")
-                args[p.name] = (positional[pos_idx] == "true" || positional[pos_idx] == "1");
-            else
-                args[p.name] = positional[pos_idx];
-            ++pos_idx;
-        }
-    }
-
-    ToolCall call;
-    call.id = "slash_" + tool_name;
-    call.tool_name = tool_name;
-    call.args = args;
-
-    spdlog::info("Slash command: /{} args={}", tool_name, args.dump());
-
-    auto t0 = std::chrono::steady_clock::now();
-    auto result = tool->execute(call, services_);
-    auto t1 = std::chrono::steady_clock::now();
-    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
-
-    std::string output = "**/" + tool_name + "** ";
-    if (result.success)
-        output += "(OK, " + std::to_string(ms) + "ms)\n\n";
-    else
-        output += "(FAILED, " + std::to_string(ms) + "ms)\n\n";
-
-    if (!result.display.empty())
-        output += result.display;
-    else
-        output += result.content;
-
-    frontends_.broadcast([&](IFrontend& fe) { fe.on_token(output); });
-    return true;
+    return slash_->try_dispatch(
+        content,
+        [this](std::string s) {
+            frontends_.broadcast([&](IFrontend& fe) { fe.on_token(s); });
+        },
+        [this](std::string s) {
+            frontends_.broadcast([&](IFrontend& fe) { fe.on_error(s); });
+        });
 }
 
 } // namespace locus

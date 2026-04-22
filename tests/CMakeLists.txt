@@ -10,6 +10,7 @@ add_executable(locus_tests
     test_semantic.cpp
     test_extractors.cpp
     test_attached_context.cpp
+    test_slash_commands.cpp
 )
 
 target_include_directories(locus_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
