@@ -4,6 +4,7 @@
 
 #include <filesystem>
 #include <functional>
+#include <mutex>
 #include <string>
 #include <vector>
 #include <unordered_map>
@@ -113,6 +114,11 @@ private:
     // Tree-sitter
     TSParser* ts_parser_ = nullptr;
     std::unordered_map<std::string, const TSLanguage*> ts_languages_;
+
+    // Serialises process_events callers (WatcherPump background thread vs
+    // synchronous test calls). Prepared statements are not safe under
+    // concurrent use.
+    std::mutex process_mutex_;
 };
 
 } // namespace locus
