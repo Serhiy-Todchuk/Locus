@@ -18,6 +18,7 @@ wxDEFINE_EVENT(EVT_AGENT_ERROR,         wxThreadEvent);
 wxDEFINE_EVENT(EVT_AGENT_EMBEDDING_PROGRESS, wxThreadEvent);
 wxDEFINE_EVENT(EVT_AGENT_INDEXING_PROGRESS,  wxThreadEvent);
 wxDEFINE_EVENT(EVT_AGENT_ACTIVITY,      wxThreadEvent);
+wxDEFINE_EVENT(EVT_AGENT_ATTACHED_CONTEXT, wxThreadEvent);
 
 WxFrontend::WxFrontend(wxEvtHandler* handler)
     : handler_(handler)
@@ -125,6 +126,15 @@ void WxFrontend::on_activity(const ActivityEvent& event)
 {
     auto* evt = new wxThreadEvent(EVT_AGENT_ACTIVITY);
     evt->SetPayload(event);
+    wxQueueEvent(handler_, evt);
+}
+
+void WxFrontend::on_attached_context_changed(
+    const std::optional<AttachedContext>& ctx)
+{
+    auto* evt = new wxThreadEvent(EVT_AGENT_ATTACHED_CONTEXT);
+    // Empty string means "detached"; otherwise carry the workspace-relative path.
+    evt->SetString(ctx ? wxString::FromUTF8(ctx->file_path) : wxString{});
     wxQueueEvent(handler_, evt);
 }
 

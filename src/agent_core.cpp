@@ -1,4 +1,5 @@
 #include "agent_core.h"
+#include "index_query.h"
 #include "tool_registry.h"
 #include "workspace.h"
 
@@ -23,7 +24,8 @@ AgentCore::AgentCore(ILLMClient& llm,
     , llm_config_(llm_config)
     , sessions_(sessions_dir)
 {
-    system_prompt_ = SystemPromptBuilder::build(locus_md, ws_meta, tools);
+    base_system_prompt_ = SystemPromptBuilder::build(locus_md, ws_meta, tools);
+    system_prompt_ = base_system_prompt_;  // no attachment yet
 
     int sys_tokens = ILLMClient::estimate_tokens(system_prompt_);
     spdlog::info("AgentCore: system prompt ~{} tokens, context limit {}",
@@ -89,6 +91,105 @@ std::vector<ActivityEvent> AgentCore::get_activity(uint64_t since_id) const
 void AgentCore::emit_index_event(const std::string& summary, const std::string& detail)
 {
     emit_activity(ActivityKind::index_event, summary, detail);
+}
+
+// -- Attached file context (S2.4) -------------------------------------------
+
+std::string AgentCore::compose_system_prompt() const
+{
+    std::optional<AttachedContext> ctx;
+    {
+        std::lock_guard lock(attached_mutex_);
+        ctx = attached_context_;
+    }
+    if (!ctx) return base_system_prompt_;
+
+    std::ostringstream ss;
+    ss << base_system_prompt_;
+    ss << "\n## Attached File\n";
+    ss << "[Attached: " << ctx->file_path << "]\n";
+
+    // Outline (headings + symbols) — read-only, may be empty.
+    if (ws_context_.index) {
+        try {
+            auto entries = ws_context_.index->get_file_outline(ctx->file_path);
+            if (!entries.empty()) {
+                ss << "\nOutline:\n";
+                for (const auto& e : entries) {
+                    ss << "- L" << e.line << " ";
+                    if (e.type == OutlineEntry::Heading) {
+                        ss << std::string(static_cast<size_t>(std::max(1, e.level)), '#')
+                           << " " << e.text;
+                    } else {
+                        ss << "[" << (e.kind.empty() ? "symbol" : e.kind) << "] "
+                           << e.text;
+                        if (!e.signature.empty())
+                            ss << " " << e.signature;
+                    }
+                    ss << "\n";
+                }
+            }
+        } catch (const std::exception& ex) {
+            spdlog::warn("Attached-context outline lookup failed for '{}': {}",
+                         ctx->file_path, ex.what());
+        }
+    }
+    if (!ctx->preview.empty())
+        ss << "\nPreview: " << ctx->preview << "\n";
+    return ss.str();
+}
+
+void AgentCore::refresh_system_prompt()
+{
+    system_prompt_ = compose_system_prompt();
+    // Replace the seed system message in history (always at index 0).
+    if (!history_.empty() &&
+        history_.messages().front().role == MessageRole::system) {
+        history_.replace_system_prompt(system_prompt_);
+    }
+}
+
+void AgentCore::set_attached_context(AttachedContext ctx)
+{
+    {
+        std::lock_guard lock(attached_mutex_);
+        attached_context_ = ctx;
+    }
+    refresh_system_prompt();
+    spdlog::info("AgentCore: attached context set to '{}'", ctx.file_path);
+    emit_activity(ActivityKind::index_event,
+                  "Attached file: " + ctx.file_path,
+                  "Pinned to system prompt; outline injected on next turn.");
+
+    auto snapshot = std::optional<AttachedContext>{ctx};
+    frontends_.broadcast([&](IFrontend& fe) {
+        fe.on_attached_context_changed(snapshot);
+    });
+}
+
+void AgentCore::clear_attached_context()
+{
+    bool had_value = false;
+    {
+        std::lock_guard lock(attached_mutex_);
+        had_value = attached_context_.has_value();
+        attached_context_.reset();
+    }
+    if (!had_value) return;
+
+    refresh_system_prompt();
+    spdlog::info("AgentCore: attached context cleared");
+    emit_activity(ActivityKind::index_event, "Detached file from context", "");
+
+    frontends_.broadcast([&](IFrontend& fe) {
+        fe.on_attached_context_changed(std::nullopt);
+    });
+}
+
+std::optional<AttachedContext> AgentCore::attached_context() const
+{
+    std::lock_guard lock(attached_mutex_);
+    return attached_context_;
 }
 
 AgentCore::~AgentCore()
@@ -333,6 +434,8 @@ void AgentCore::compact_context(CompactionStrategy strategy, int n)
 void AgentCore::reset_conversation()
 {
     history_.clear();
+    // Recompose so a still-attached file's outline reflects the latest index.
+    system_prompt_ = compose_system_prompt();
     history_.add({MessageRole::system, system_prompt_});
     last_server_total_tokens_ = 0;
     spdlog::info("AgentCore: conversation reset");

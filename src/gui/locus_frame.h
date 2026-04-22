@@ -95,6 +95,7 @@ private:
     void on_agent_embedding_progress(wxThreadEvent& evt);
     void on_agent_indexing_progress(wxThreadEvent& evt);
     void on_agent_activity(wxThreadEvent& evt);
+    void on_agent_attached_context(wxThreadEvent& evt);
 
     // Recompose pane 1 (right, ops status) from current progress state.
     void refresh_ops_status();

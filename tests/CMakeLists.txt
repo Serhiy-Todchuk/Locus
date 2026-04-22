@@ -9,6 +9,7 @@ add_executable(locus_tests
     test_s1_1.cpp
     test_semantic.cpp
     test_extractors.cpp
+    test_attached_context.cpp
 )
 
 target_link_libraries(locus_tests PRIVATE

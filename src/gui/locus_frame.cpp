@@ -74,6 +74,7 @@ LocusFrame::LocusFrame(AgentCore& agent, Workspace& workspace)
     Bind(EVT_AGENT_EMBEDDING_PROGRESS, &LocusFrame::on_agent_embedding_progress, this);
     Bind(EVT_AGENT_INDEXING_PROGRESS,  &LocusFrame::on_agent_indexing_progress,  this);
     Bind(EVT_AGENT_ACTIVITY,      &LocusFrame::on_agent_activity,      this);
+    Bind(EVT_AGENT_ATTACHED_CONTEXT, &LocusFrame::on_agent_attached_context, this);
 
     // Show LOCUS.md token cost if present.
     if (!workspace_.locus_md().empty()) {
@@ -389,6 +390,11 @@ void LocusFrame::setup_aui_layout()
         [this](const std::string& path) {
             spdlog::trace("File selected in tree: {}", path);
             SetStatusText(wxString::FromUTF8(path), 0);
+        },
+        // Right-click → "Attach to context" hands the workspace-relative path
+        // to AgentCore; the chip update fans back via on_attached_context_changed.
+        [this](const std::string& path) {
+            agent_.set_attached_context({path, /*preview*/{}});
         });
 
     // Center chat panel.
@@ -402,6 +408,11 @@ void LocusFrame::setup_aui_layout()
         },
         [this]() { show_compaction_dialog(); },
         [this]() { agent_.cancel_turn(); });
+
+    // Chip "✕" → detach the pinned file from the conversation context.
+    chat_panel_->set_on_detach([this]() {
+        agent_.clear_attached_context();
+    });
 
     // Slash-command suggestions: CLI-style commands + all registered tools.
     {
@@ -837,6 +848,12 @@ void LocusFrame::on_agent_activity(wxThreadEvent& evt)
 {
     auto ev = evt.GetPayload<ActivityEvent>();
     if (activity_panel_) activity_panel_->append(ev);
+}
+
+void LocusFrame::on_agent_attached_context(wxThreadEvent& evt)
+{
+    if (chat_panel_)
+        chat_panel_->set_attached_chip(evt.GetString());
 }
 
 } // namespace locus

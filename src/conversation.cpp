@@ -16,6 +16,16 @@ void ConversationHistory::clear()
     messages_.clear();
 }
 
+void ConversationHistory::replace_system_prompt(std::string content)
+{
+    if (!messages_.empty() && messages_.front().role == MessageRole::system) {
+        messages_.front().content = std::move(content);
+    } else {
+        messages_.insert(messages_.begin(),
+                         ChatMessage{MessageRole::system, std::move(content)});
+    }
+}
+
 int ConversationHistory::estimate_tokens() const
 {
     return ILLMClient::estimate_tokens(messages_);

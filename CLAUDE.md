@@ -38,7 +38,7 @@ data into context, and keeps the user in full transparent control of every step.
 
 ## Current Stage
 
-**M2 — Full Workspace Support in progress.** S2.1, S2.2, S2.3 complete. S2.4 (Active Edit Context / F7) next.
+**M2 — Full Workspace Support complete.** S2.1, S2.2, S2.3, S2.4 done. M3 (Refactoring) next. See [roadmap/M2.md](roadmap/M2.md) for the task list.
 
 **M3 is now Refactoring** (not Agent Quality). Old M3 → M4 (Agent Quality), old M4 → M5 (Connected). Per-stage docs live under [roadmap/M3/](roadmap/M3/), [roadmap/M4/](roadmap/M4/), [roadmap/M5/](roadmap/M5/). [roadmap.md](roadmap.md) is the index.
 
@@ -175,7 +175,8 @@ Core is a static lib (`locus_core`). Both `locus` (exe) and `locus_tests` link i
 | File | When to read |
 |---|---|
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Code style, build/run/test instructions for humans |
-| [roadmap.md](roadmap.md) | Roadmap index — milestones M0–M5, current status. M0–M2 inline; M3/M4/M5 link to per-stage files. |
+| [roadmap.md](roadmap.md) | Roadmap index — milestones M0–M5 with one-table summaries. Real detail lives in `roadmap/`. |
+| [roadmap/M0.md](roadmap/M0.md), [M1.md](roadmap/M1.md), [M2.md](roadmap/M2.md) | Completed/in-progress milestones — full task lists, one file per milestone |
 | [roadmap/M3/](roadmap/M3/) | M3 Refactoring — one file per stage (S3.A–S3.K) |
 | [roadmap/M4/](roadmap/M4/) | M4 Agent Quality — one file per stage (S4.A–S4.V) |
 | [roadmap/M5/](roadmap/M5/) | M5 Connected — one file per stage (S5.1–S5.6) |

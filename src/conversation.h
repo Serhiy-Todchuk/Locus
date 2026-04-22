@@ -14,6 +14,11 @@ public:
     void add(ChatMessage msg);
     void clear();
 
+    // Overwrite the leading system message's content (or insert one if the
+    // history is empty / does not start with a system role). Used when the
+    // attached-context section of the system prompt is added or removed.
+    void replace_system_prompt(std::string content);
+
     const std::vector<ChatMessage>& messages() const { return messages_; }
     size_t size() const { return messages_.size(); }
     bool   empty() const { return messages_.empty(); }

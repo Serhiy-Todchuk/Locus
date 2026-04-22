@@ -17,10 +17,14 @@ namespace locus {
 class FileTreePanel : public wxPanel {
 public:
     using FileSelectedCallback = std::function<void(const std::string& path)>;
+    // Fired from the right-click "Attach to context" menu item. The path is
+    // workspace-relative (matching the FileEntry::path stored in the index).
+    using AttachCallback       = std::function<void(const std::string& path)>;
 
     FileTreePanel(wxWindow* parent, IndexQuery& query,
                   const std::string& workspace_root,
-                  FileSelectedCallback on_select = {});
+                  FileSelectedCallback on_select = {},
+                  AttachCallback       on_attach = {});
 
     // Rebuild the tree from scratch (e.g. after workspace change or re-index).
     void rebuild();
@@ -41,10 +45,17 @@ private:
     void on_item_expanding(wxTreeEvent& evt);
     void on_item_activated(wxTreeEvent& evt);
     void on_selection_changed(wxTreeEvent& evt);
+    void on_item_menu(wxTreeEvent& evt);
+
+    // Open the file with the OS-default application (ShellExecuteW on Win32).
+    void open_with_os(const std::string& rel_path);
+    // Reveal the file in the OS file manager (Explorer on Windows).
+    void show_in_explorer(const std::string& rel_path);
 
     IndexQuery& query_;
     std::string workspace_root_;
     FileSelectedCallback on_select_;
+    AttachCallback       on_attach_;
 
     wxTreeCtrl*   tree_     = nullptr;
     wxStaticText* stats_label_ = nullptr;
