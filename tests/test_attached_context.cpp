@@ -4,6 +4,7 @@
 #include "frontend.h"
 #include "tool_registry.h"
 #include "tools.h"
+#include "support/fake_workspace_services.h"
 
 #include <filesystem>
 #include <optional>
@@ -57,13 +58,12 @@ AgentCore make_core()
         register_builtin_tools(reg);
         registered = true;
     }
-    WorkspaceContext ws_ctx;
-    ws_ctx.root = std::filesystem::temp_directory_path();
     // index/embedder/workspace deliberately null — outline lookup is skipped.
+    static test::FakeWorkspaceServices services{std::filesystem::temp_directory_path()};
     WorkspaceMetadata meta;
-    meta.root = ws_ctx.root;
+    meta.root = services.root();
     LLMConfig cfg;
-    return AgentCore(llm, reg, ws_ctx, /*locus_md=*/"", meta, cfg,
+    return AgentCore(llm, reg, services, /*locus_md=*/"", meta, cfg,
                      std::filesystem::temp_directory_path());
 }
 

@@ -7,6 +7,7 @@
 #include "tools.h"
 #include "workspace.h"
 #include "index_query.h"
+#include "support/fake_workspace_services.h"
 
 #include <filesystem>
 #include <fstream>
@@ -107,7 +108,7 @@ TEST_CASE("ReadFileTool: basic read returns line-numbered content", "[s0.6]")
     auto tmp = make_temp_workspace();
     write_test_file(tmp, "hello.txt", "line1\nline2\nline3\nline4\nline5\n");
 
-    locus::WorkspaceContext ws{tmp, nullptr};
+    locus::test::FakeWorkspaceServices ws{tmp};
     locus::ReadFileTool tool;
     locus::ToolCall call{"c1", "read_file", {{"path", "hello.txt"}}};
 
@@ -128,7 +129,7 @@ TEST_CASE("ReadFileTool: pagination with offset and length", "[s0.6]")
         content += "line " + std::to_string(i) + "\n";
     write_test_file(tmp, "big.txt", content);
 
-    locus::WorkspaceContext ws{tmp, nullptr};
+    locus::test::FakeWorkspaceServices ws{tmp};
     locus::ReadFileTool tool;
 
     // Read lines 10-14
@@ -155,7 +156,7 @@ TEST_CASE("ReadFileTool: rejects path traversal", "[s0.6]")
     auto tmp = make_temp_workspace();
     write_test_file(tmp, "ok.txt", "ok");
 
-    locus::WorkspaceContext ws{tmp, nullptr};
+    locus::test::FakeWorkspaceServices ws{tmp};
     locus::ReadFileTool tool;
     locus::ToolCall call{"c1", "read_file",
         {{"path", "../../etc/passwd"}}};
@@ -173,7 +174,7 @@ TEST_CASE("WriteFileTool: overwrites existing file", "[s0.6]")
     auto tmp = make_temp_workspace();
     write_test_file(tmp, "target.txt", "original content");
 
-    locus::WorkspaceContext ws{tmp, nullptr};
+    locus::test::FakeWorkspaceServices ws{tmp};
     locus::WriteFileTool tool;
     locus::ToolCall call{"c1", "write_file",
         {{"path", "target.txt"}, {"content", "new content"}}};
@@ -189,7 +190,7 @@ TEST_CASE("WriteFileTool: fails for nonexistent file", "[s0.6]")
 {
     auto tmp = make_temp_workspace();
 
-    locus::WorkspaceContext ws{tmp, nullptr};
+    locus::test::FakeWorkspaceServices ws{tmp};
     locus::WriteFileTool tool;
     locus::ToolCall call{"c1", "write_file",
         {{"path", "nope.txt"}, {"content", "data"}}};
@@ -206,7 +207,7 @@ TEST_CASE("CreateFileTool: creates new file with directories", "[s0.6]")
 {
     auto tmp = make_temp_workspace();
 
-    locus::WorkspaceContext ws{tmp, nullptr};
+    locus::test::FakeWorkspaceServices ws{tmp};
     locus::CreateFileTool tool;
     locus::ToolCall call{"c1", "create_file",
         {{"path", "subdir/new.txt"}, {"content", "hello"}}};
@@ -224,7 +225,7 @@ TEST_CASE("CreateFileTool: fails if file exists", "[s0.6]")
     auto tmp = make_temp_workspace();
     write_test_file(tmp, "exists.txt", "old");
 
-    locus::WorkspaceContext ws{tmp, nullptr};
+    locus::test::FakeWorkspaceServices ws{tmp};
     locus::CreateFileTool tool;
     locus::ToolCall call{"c1", "create_file",
         {{"path", "exists.txt"}, {"content", "new"}}};
@@ -242,7 +243,7 @@ TEST_CASE("DeleteFileTool: deletes existing file", "[s0.6]")
     auto tmp = make_temp_workspace();
     write_test_file(tmp, "doomed.txt", "goodbye");
 
-    locus::WorkspaceContext ws{tmp, nullptr};
+    locus::test::FakeWorkspaceServices ws{tmp};
     locus::DeleteFileTool tool;
     locus::ToolCall call{"c1", "delete_file", {{"path", "doomed.txt"}}};
 
@@ -270,7 +271,7 @@ TEST_CASE("DeleteFileTool: preview contains warning", "[s0.6]")
 TEST_CASE("RunCommandTool: captures exit code 0", "[s0.6]")
 {
     auto tmp = make_temp_workspace();
-    locus::WorkspaceContext ws{tmp, nullptr};
+    locus::test::FakeWorkspaceServices ws{tmp};
     locus::RunCommandTool tool;
     locus::ToolCall call{"c1", "run_command",
         {{"command", "echo hello"}}};
@@ -286,7 +287,7 @@ TEST_CASE("RunCommandTool: captures exit code 0", "[s0.6]")
 TEST_CASE("RunCommandTool: captures nonzero exit code", "[s0.6]")
 {
     auto tmp = make_temp_workspace();
-    locus::WorkspaceContext ws{tmp, nullptr};
+    locus::test::FakeWorkspaceServices ws{tmp};
     locus::RunCommandTool tool;
     locus::ToolCall call{"c1", "run_command",
         {{"command", "exit /b 42"}}};
@@ -301,7 +302,7 @@ TEST_CASE("RunCommandTool: captures nonzero exit code", "[s0.6]")
 TEST_CASE("RunCommandTool: timeout kills process", "[s0.6]")
 {
     auto tmp = make_temp_workspace();
-    locus::WorkspaceContext ws{tmp, nullptr};
+    locus::test::FakeWorkspaceServices ws{tmp};
     locus::RunCommandTool tool;
     // ping with -w 1000 -n 120 will take ~120 seconds; we kill it after 1.5s
     locus::ToolCall call{"c1", "run_command",
@@ -332,7 +333,7 @@ TEST_CASE("ListDirectoryTool: returns indexed files at root with '.'", "[s0.6][s
     {
         // Build a real index so ListDirectoryTool has data to query.
         locus::Workspace ws(tmp);
-        locus::WorkspaceContext ws_ctx{tmp, &ws.query()};
+        locus::IWorkspaceServices& ws_ctx = ws;
 
         locus::ListDirectoryTool tool;
 

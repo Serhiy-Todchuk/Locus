@@ -1,4 +1,5 @@
 #include "tools.h"
+#include "core/workspace_services.h"
 #include "embedding_worker.h"
 #include "index_query.h"
 #include "workspace.h"
@@ -25,18 +26,18 @@ namespace fs = std::filesystem;
 
 // Resolve a relative path safely within the workspace root.
 // Returns empty path if the resolved path escapes the workspace.
-static fs::path resolve_path(const WorkspaceContext& ws, const std::string& rel)
+static fs::path resolve_path(IWorkspaceServices& ws, const std::string& rel)
 {
     std::error_code ec;
-    fs::path full = fs::canonical(ws.root / rel, ec);
+    fs::path full = fs::canonical(ws.root() / rel, ec);
     if (ec) {
         // canonical failed (file may not exist yet) — try weakly_canonical
-        full = fs::weakly_canonical(ws.root / rel, ec);
+        full = fs::weakly_canonical(ws.root() / rel, ec);
         if (ec) return {};
     }
 
     // Ensure the resolved path is inside the workspace root
-    auto root_str = ws.root.string();
+    auto root_str = ws.root().string();
     auto full_str = full.string();
     if (full_str.size() < root_str.size() ||
         full_str.compare(0, root_str.size(), root_str) != 0) {
@@ -45,9 +46,9 @@ static fs::path resolve_path(const WorkspaceContext& ws, const std::string& rel)
     return full;
 }
 
-static std::string make_relative(const WorkspaceContext& ws, const fs::path& p)
+static std::string make_relative(IWorkspaceServices& ws, const fs::path& p)
 {
-    return fs::relative(p, ws.root).string();
+    return fs::relative(p, ws.root()).string();
 }
 
 static ToolResult error_result(const std::string& msg)
@@ -66,7 +67,7 @@ std::string ReadFileTool::preview(const ToolCall& call) const
            std::to_string(offset + length - 1);
 }
 
-ToolResult ReadFileTool::execute(const ToolCall& call, const WorkspaceContext& ws)
+ToolResult ReadFileTool::execute(const ToolCall& call, IWorkspaceServices& ws)
 {
     std::string rel_path = call.args.value("path", "");
     int offset = call.args.value("offset", 1);
@@ -131,7 +132,7 @@ std::string WriteFileTool::preview(const ToolCall& call) const
     return "Overwrite " + path + " (" + std::to_string(content_len) + " bytes)";
 }
 
-ToolResult WriteFileTool::execute(const ToolCall& call, const WorkspaceContext& ws)
+ToolResult WriteFileTool::execute(const ToolCall& call, IWorkspaceServices& ws)
 {
     std::string rel_path = call.args.value("path", "");
     std::string content  = call.args.value("content", "");
@@ -168,7 +169,7 @@ std::string CreateFileTool::preview(const ToolCall& call) const
     return "Create new file: " + path;
 }
 
-ToolResult CreateFileTool::execute(const ToolCall& call, const WorkspaceContext& ws)
+ToolResult CreateFileTool::execute(const ToolCall& call, IWorkspaceServices& ws)
 {
     std::string rel_path = call.args.value("path", "");
     std::string content  = call.args.value("content", "");
@@ -211,7 +212,7 @@ std::string DeleteFileTool::preview(const ToolCall& call) const
     return "WARNING: Permanently delete " + path;
 }
 
-ToolResult DeleteFileTool::execute(const ToolCall& call, const WorkspaceContext& ws)
+ToolResult DeleteFileTool::execute(const ToolCall& call, IWorkspaceServices& ws)
 {
     std::string rel_path = call.args.value("path", "");
 
@@ -241,7 +242,7 @@ ToolResult DeleteFileTool::execute(const ToolCall& call, const WorkspaceContext&
 
 // -- ListDirectoryTool ------------------------------------------------------
 
-ToolResult ListDirectoryTool::execute(const ToolCall& call, const WorkspaceContext& ws)
+ToolResult ListDirectoryTool::execute(const ToolCall& call, IWorkspaceServices& ws)
 {
     std::string path = call.args.value("path", "");
     int depth = call.args.value("depth", 0);
@@ -249,10 +250,11 @@ ToolResult ListDirectoryTool::execute(const ToolCall& call, const WorkspaceConte
     // Normalize: "." means root, same as empty.
     if (path == "." || path == "./") path.clear();
 
-    if (!ws.index)
+    auto* idx = ws.index();
+    if (!idx)
         return error_result("Error: workspace index not available");
 
-    auto entries = ws.index->list_directory(path, depth);
+    auto entries = idx->list_directory(path, depth);
 
     std::ostringstream content;
     std::string display_path = path.empty() ? "." : path;
@@ -277,7 +279,7 @@ ToolResult ListDirectoryTool::execute(const ToolCall& call, const WorkspaceConte
 
 // -- SearchTextTool ---------------------------------------------------------
 
-ToolResult SearchTextTool::execute(const ToolCall& call, const WorkspaceContext& ws)
+ToolResult SearchTextTool::execute(const ToolCall& call, IWorkspaceServices& ws)
 {
     std::string query = call.args.value("query", "");
     int max_results = call.args.value("max_results", 20);
@@ -285,13 +287,14 @@ ToolResult SearchTextTool::execute(const ToolCall& call, const WorkspaceContext&
     if (query.empty())
         return error_result("Error: 'query' parameter is required");
 
-    if (!ws.index)
+    auto* idx = ws.index();
+    if (!idx)
         return error_result("Error: workspace index not available");
 
     SearchOptions opts;
     opts.max_results = max_results;
 
-    auto results = ws.index->search_text(query, opts);
+    auto results = idx->search_text(query, opts);
 
     std::ostringstream content;
     content << results.size() << " results for \"" << query << "\"\n";
@@ -310,7 +313,7 @@ ToolResult SearchTextTool::execute(const ToolCall& call, const WorkspaceContext&
 
 // -- SearchSymbolsTool ------------------------------------------------------
 
-ToolResult SearchSymbolsTool::execute(const ToolCall& call, const WorkspaceContext& ws)
+ToolResult SearchSymbolsTool::execute(const ToolCall& call, IWorkspaceServices& ws)
 {
     std::string name_query = call.args.value("name", "");
     std::string kind     = call.args.value("kind", "");
@@ -319,10 +322,11 @@ ToolResult SearchSymbolsTool::execute(const ToolCall& call, const WorkspaceConte
     if (name_query.empty())
         return error_result("Error: 'name' parameter is required");
 
-    if (!ws.index)
+    auto* idx = ws.index();
+    if (!idx)
         return error_result("Error: workspace index not available");
 
-    auto results = ws.index->search_symbols(name_query, kind, language);
+    auto results = idx->search_symbols(name_query, kind, language);
 
     std::ostringstream content;
     content << results.size() << " symbols matching \"" << name_query << "\"\n";
@@ -344,17 +348,18 @@ ToolResult SearchSymbolsTool::execute(const ToolCall& call, const WorkspaceConte
 
 // -- GetFileOutlineTool -----------------------------------------------------
 
-ToolResult GetFileOutlineTool::execute(const ToolCall& call, const WorkspaceContext& ws)
+ToolResult GetFileOutlineTool::execute(const ToolCall& call, IWorkspaceServices& ws)
 {
     std::string path = call.args.value("path", "");
 
     if (path.empty())
         return error_result("Error: 'path' parameter is required");
 
-    if (!ws.index)
+    auto* idx = ws.index();
+    if (!idx)
         return error_result("Error: workspace index not available");
 
-    auto entries = ws.index->get_file_outline(path);
+    auto entries = idx->get_file_outline(path);
 
     std::ostringstream content;
     content << "[" << path << "] outline (" << entries.size() << " entries)\n";
@@ -385,7 +390,7 @@ std::string RunCommandTool::preview(const ToolCall& call) const
 
 #ifdef _WIN32
 
-ToolResult RunCommandTool::execute(const ToolCall& call, const WorkspaceContext& ws)
+ToolResult RunCommandTool::execute(const ToolCall& call, IWorkspaceServices& ws)
 {
     std::string command = call.args.value("command", "");
     int timeout_ms = call.args.value("timeout_ms", 30000);
@@ -427,7 +432,7 @@ ToolResult RunCommandTool::execute(const ToolCall& call, const WorkspaceContext&
         TRUE,           // inherit handles
         CREATE_NO_WINDOW,
         nullptr,
-        ws.root.string().c_str(),   // working directory
+        ws.root().string().c_str(),   // working directory
         &si, &pi
     );
 
@@ -491,7 +496,7 @@ ToolResult RunCommandTool::execute(const ToolCall& call, const WorkspaceContext&
 
 #else
 
-ToolResult RunCommandTool::execute(const ToolCall& call, const WorkspaceContext& ws)
+ToolResult RunCommandTool::execute(const ToolCall& call, IWorkspaceServices& ws)
 {
     // POSIX stub — not implemented for Windows-first development
     return error_result("Error: run_command not implemented on this platform");
@@ -506,7 +511,7 @@ std::string AskUserTool::preview(const ToolCall& call) const
     return call.args.value("question", "");
 }
 
-ToolResult AskUserTool::execute(const ToolCall& call, const WorkspaceContext& /*ws*/)
+ToolResult AskUserTool::execute(const ToolCall& call, IWorkspaceServices& /*ws*/)
 {
     // The frontend injects the user's response into args["response"] via the
     // modify flow in tool_decision(). If no response was provided (direct
@@ -521,16 +526,15 @@ ToolResult AskUserTool::execute(const ToolCall& call, const WorkspaceContext& /*
 
 // -- SearchSemanticTool -------------------------------------------------------
 
-ToolResult SearchSemanticTool::execute(const ToolCall& call, const WorkspaceContext& ws)
+ToolResult SearchSemanticTool::execute(const ToolCall& call, IWorkspaceServices& ws)
 {
-    // Resolve embedder: prefer direct pointer, fall back to workspace (hot-toggled)
-    auto* emb = ws.embedder;
-    if (!emb && ws.workspace)
-        emb = ws.workspace->embedding_worker();
+    // Services::embedder() returns the live worker — picks up hot-toggled state.
+    auto* emb = ws.embedder();
     if (!emb)
         return error_result("Error: semantic search is not enabled. "
                             "Enable it in Settings > Index > Semantic Search.");
-    if (!ws.index)
+    auto* idx = ws.index();
+    if (!idx)
         return error_result("Error: workspace index not available");
 
     std::string query = call.args.value("query", "");
@@ -543,7 +547,7 @@ ToolResult SearchSemanticTool::execute(const ToolCall& call, const WorkspaceCont
 
     SearchOptions opts;
     opts.max_results = max_results;
-    auto results = ws.index->search_semantic(embedding, opts);
+    auto results = idx->search_semantic(embedding, opts);
 
     if (results.empty())
         return {true, "No semantic matches found.", "No semantic matches found."};
@@ -563,15 +567,14 @@ ToolResult SearchSemanticTool::execute(const ToolCall& call, const WorkspaceCont
 
 // -- SearchHybridTool --------------------------------------------------------
 
-ToolResult SearchHybridTool::execute(const ToolCall& call, const WorkspaceContext& ws)
+ToolResult SearchHybridTool::execute(const ToolCall& call, IWorkspaceServices& ws)
 {
-    auto* emb = ws.embedder;
-    if (!emb && ws.workspace)
-        emb = ws.workspace->embedding_worker();
+    auto* emb = ws.embedder();
     if (!emb)
         return error_result("Error: semantic search is not enabled. "
                             "Enable it in Settings > Index > Semantic Search.");
-    if (!ws.index)
+    auto* idx = ws.index();
+    if (!idx)
         return error_result("Error: workspace index not available");
 
     std::string query = call.args.value("query", "");
@@ -584,7 +587,7 @@ ToolResult SearchHybridTool::execute(const ToolCall& call, const WorkspaceContex
 
     SearchOptions opts;
     opts.max_results = max_results;
-    auto results = ws.index->search_hybrid(query, embedding, opts);
+    auto results = idx->search_hybrid(query, embedding, opts);
 
     if (results.empty())
         return {true, "No matches found.", "No matches found."};

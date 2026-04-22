@@ -54,7 +54,7 @@ public:
 
     // Execution — called only after user approval (if required)
     virtual ToolResult execute(const ToolCall& call,
-                               const WorkspaceContext& ws) = 0;
+                               IWorkspaceServices& ws) = 0;
 
     // Approval policy
     // "always"  — pause for user before every execution (default)
@@ -158,7 +158,7 @@ public:
     }
     std::string approval_policy() const override { return "auto"; }
 
-    ToolResult execute(const ToolCall& call, const WorkspaceContext& ws) override {
+    ToolResult execute(const ToolCall& call, IWorkspaceServices& ws) override {
         // ... read the file, return paginated content
     }
 };

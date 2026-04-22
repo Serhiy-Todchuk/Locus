@@ -8,15 +8,13 @@ has to re-derive it six months later.
 
 ## When to write one
 
-Write an ADR when:
+The bar is **high**. Only when all three hold:
 
-- A previously-committed technology or approach is replaced (ONNX → llama.cpp, ImGui → wxWidgets)
-- The shape of a subsystem changes (one DB file → two)
-- A decision rejects an obvious alternative for a non-obvious reason
-- Something would otherwise make a future reader ask "why is it this way?"
+1. Crosses a system boundary — technology swap, subsystem reshape, ownership/threading/data-format change. Not interface tidy-ups or file moves.
+2. Rejects a reasonable alternative for a non-obvious reason (past incident, subtle constraint, measured tradeoff). "Cleaner code" doesn't count.
+3. The reasoning isn't already in the stage doc, `tech-stack.md`, CLAUDE.md, or an inline comment.
 
-Do **not** write an ADR for routine implementation choices that are already obvious from the code,
-or for decisions already fully captured in `tech-stack.md` with rationale.
+Cleared the bar: ONNX → llama.cpp (0002), ImGui → wxWidgets (0003), split index DB (0001). When in doubt, don't — ask first.
 
 ## Format
 

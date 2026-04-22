@@ -38,7 +38,7 @@ data into context, and keeps the user in full transparent control of every step.
 
 ## Current Stage
 
-**M2 — Full Workspace Support complete.** S2.1, S2.2, S2.3, S2.4 done. M3 (Refactoring) next. See [roadmap/M2.md](roadmap/M2.md) for the task list.
+**M3 — Refactoring in progress.** S3.C (`IWorkspaceServices` interface) done. See [roadmap/M3/](roadmap/M3/) for the task list.
 
 **M3 is now Refactoring** (not Agent Quality). Old M3 → M4 (Agent Quality), old M4 → M5 (Connected). Per-stage docs live under [roadmap/M3/](roadmap/M3/), [roadmap/M4/](roadmap/M4/), [roadmap/M5/](roadmap/M5/). [roadmap.md](roadmap.md) is the index.
 
@@ -127,7 +127,8 @@ Core is a static lib (`locus_core`). Both `locus` (exe) and `locus_tests` link i
 | `src/index_query.h/cpp` | Read-only queries: FTS5 search, symbol lookup, outlines, dir listing. Semantic search is a two-step read — vectors_db for top-K chunks, main_db to resolve file_id → path. | `IndexQuery`, `SearchResult`, `SymbolResult`, `OutlineEntry`, `FileEntry` |
 | `src/llm_client.h/cpp` | SSE streaming to OpenAI-compatible endpoints. Token estimation. | `ILLMClient`, `ChatMessage`, `ToolCallRequest`, `LLMConfig`, `StreamCallbacks` |
 | `src/sse_parser.h/cpp` | Low-level SSE `data:` line parser. | `SseParser` |
-| `src/tool.h` | Tool system interfaces (no .cpp — pure abstract + structs). | `ITool`, `IToolRegistry`, `ToolParam`, `ToolResult`, `ToolCall`, `WorkspaceContext` |
+| `src/core/workspace_services.h` | `IWorkspaceServices` interface — tool-facing surface over a workspace (no .cpp — pure abstract). `Workspace` implements it; tests use `tests/support/fake_workspace_services.h`. | `IWorkspaceServices` |
+| `src/tool.h` | Tool system interfaces (no .cpp — pure abstract + structs). | `ITool`, `IToolRegistry`, `ToolParam`, `ToolResult`, `ToolCall` |
 | `src/tool_registry.h/cpp` | Concrete registry. Schema JSON builder. ToolCall parser. | `ToolRegistry` |
 | `src/tools.h/cpp` | All 12 built-in tools + `register_builtin_tools()` factory. | `ReadFileTool`, `WriteFileTool`, `CreateFileTool`, `DeleteFileTool`, `ListDirectoryTool`, `SearchTextTool`, `SearchSymbolsTool`, `GetFileOutlineTool`, `RunCommandTool`, `AskUserTool`, `SearchSemanticTool`, `SearchHybridTool` |
 | `src/embedder.h/cpp` | llama.cpp session wrapper. Loads a GGUF model, tokenises via the embedded vocab, runs inference, returns an L2-normalised embedding vector. | `Embedder` |
@@ -164,7 +165,7 @@ Core is a static lib (`locus_core`). Both `locus` (exe) and `locus_tests` link i
 
 **Test files** follow `tests/test_<topic>.cpp` — one per subsystem, tagged by stage.
 
-**Data flow**: `main` → `Workspace` (owns `Database`, `ExtractorRegistry`, `FileWatcher`, `Indexer`, `IndexQuery`) → `AgentCore` (owns `ConversationHistory`, `SessionManager`, bridges `ILLMClient` + `IToolRegistry` + `WorkspaceContext`) → frontends receive events via `IFrontend` through `FrontendRegistry`.
+**Data flow**: `main` → `Workspace` (owns `Database`, `ExtractorRegistry`, `FileWatcher`, `Indexer`, `IndexQuery`; implements `IWorkspaceServices`) → `AgentCore` (owns `ConversationHistory`, `SessionManager`, bridges `ILLMClient` + `IToolRegistry` + `IWorkspaceServices&`) → frontends receive events via `IFrontend` through `FrontendRegistry`.
 
 **Adding a new file format extractor**: Create `src/extractors/<format>_extractor.h/cpp` implementing `ITextExtractor`. Register it in `Workspace::Workspace()` (`workspace.cpp`) with `extractors_->register_extractor(".ext", ...)`. Add the `.cpp` to `locus_core` in `CMakeLists.txt`. No changes to `indexer.cpp` needed.
 
@@ -231,13 +232,14 @@ No accumulated debt, no "we'll debug it later."
 **After every completed stage/task — mandatory bookkeeping:**
 1. Update `roadmap.md`: mark completed tasks `[x]`, add ✔ to the stage header
 2. Update `CLAUDE.md` "Current Stage" line to reflect the new state
-3. **If the stage included a non-trivial architectural change** (replaced a technology,
-   restructured a subsystem, rejected an obvious alternative for a non-obvious reason):
-   write an ADR at [architecture/decisions/NNNN-title.md](architecture/decisions/) and
-   update the "Key Decisions Made" table above. See
-   [architecture/decisions/README.md](architecture/decisions/README.md) for format. If
-   you're unsure whether a change qualifies, ask. Do **not** write ADRs for routine
-   implementation work.
+3. **ADRs are rare.** Only write one if the stage crossed a system boundary
+   (technology swap, subsystem reshape, ownership/threading/data-format change) **and**
+   rejected a reasonable alternative for a non-obvious reason **and** that reasoning
+   isn't already captured in the stage doc or an inline comment. Interface
+   refactors, file moves, and ergonomic choices do **not** qualify — the stage doc's
+   "Implementation notes" section is the right home for those. See
+   [architecture/decisions/README.md](architecture/decisions/README.md) for the full
+   bar. When in doubt, don't write one — ask first.
 4. Do this immediately after verification passes, before moving on
 
 ---

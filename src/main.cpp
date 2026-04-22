@@ -273,7 +273,6 @@ int main(int argc, char* argv[])
         spdlog::info("Tools: {} registered", tool_registry.all().size());
 
         // Agent core.
-        locus::WorkspaceContext ws_ctx{workspace_path, &ws.query(), ws.embedding_worker(), &ws};
         locus::WorkspaceMetadata ws_meta;
         ws_meta.root          = workspace_path;
         ws_meta.file_count    = static_cast<int>(st.files_total);
@@ -281,7 +280,7 @@ int main(int argc, char* argv[])
         ws_meta.heading_count = static_cast<int>(st.headings_total);
 
         fs::path sessions_dir = locus_dir / "sessions";
-        locus::AgentCore agent(*llm, tool_registry, ws_ctx,
+        locus::AgentCore agent(*llm, tool_registry, ws,
                                ws.locus_md(), ws_meta, llm_cfg, sessions_dir);
 
         // CLI frontend.

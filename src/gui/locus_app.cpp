@@ -238,7 +238,6 @@ bool LocusApp::OnInit()
         spdlog::info("Tools: {} registered", tools_->all().size());
 
         // Agent core.
-        WorkspaceContext ws_ctx{ws_path, &workspace_->query(), workspace_->embedding_worker(), workspace_.get()};
         WorkspaceMetadata ws_meta;
         ws_meta.root          = ws_path;
         ws_meta.file_count    = static_cast<int>(st.files_total);
@@ -247,7 +246,7 @@ bool LocusApp::OnInit()
 
         fs::path sessions_dir = locus_dir / "sessions";
         agent_ = std::make_unique<AgentCore>(
-            *llm_, *tools_, ws_ctx,
+            *llm_, *tools_, *workspace_,
             workspace_->locus_md(), ws_meta, llm_cfg, sessions_dir);
 
         workspace_->indexer().on_activity =
@@ -371,7 +370,6 @@ void LocusApp::open_workspace(const std::string& path)
         register_builtin_tools(*tools_);
         spdlog::info("Tools: {} registered", tools_->all().size());
 
-        WorkspaceContext ws_ctx{ws_path, &workspace_->query(), workspace_->embedding_worker(), workspace_.get()};
         WorkspaceMetadata ws_meta;
         ws_meta.root          = ws_path;
         ws_meta.file_count    = static_cast<int>(st.files_total);
@@ -380,7 +378,7 @@ void LocusApp::open_workspace(const std::string& path)
 
         fs::path sessions_dir = locus_dir / "sessions";
         agent_ = std::make_unique<AgentCore>(
-            *llm_, *tools_, ws_ctx,
+            *llm_, *tools_, *workspace_,
             workspace_->locus_md(), ws_meta, llm_cfg, sessions_dir);
 
         workspace_->indexer().on_activity =

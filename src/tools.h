@@ -22,7 +22,7 @@ public:
     }
     ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::auto_approve; }
     std::string preview(const ToolCall& call) const override;
-    ToolResult  execute(const ToolCall& call, const WorkspaceContext& ws) override;
+    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws) override;
 };
 
 class ListDirectoryTool : public ITool {
@@ -39,7 +39,7 @@ public:
         };
     }
     ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::auto_approve; }
-    ToolResult  execute(const ToolCall& call, const WorkspaceContext& ws) override;
+    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws) override;
 };
 
 class SearchTextTool : public ITool {
@@ -55,7 +55,7 @@ public:
         };
     }
     ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::auto_approve; }
-    ToolResult  execute(const ToolCall& call, const WorkspaceContext& ws) override;
+    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws) override;
 };
 
 class SearchSymbolsTool : public ITool {
@@ -73,7 +73,7 @@ public:
         };
     }
     ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::auto_approve; }
-    ToolResult  execute(const ToolCall& call, const WorkspaceContext& ws) override;
+    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws) override;
 };
 
 class GetFileOutlineTool : public ITool {
@@ -89,7 +89,7 @@ public:
         };
     }
     ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::auto_approve; }
-    ToolResult  execute(const ToolCall& call, const WorkspaceContext& ws) override;
+    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws) override;
 };
 
 // -- Mutating tools (approval: always) ---------------------------------------
@@ -107,7 +107,7 @@ public:
         };
     }
     std::string preview(const ToolCall& call) const override;
-    ToolResult  execute(const ToolCall& call, const WorkspaceContext& ws) override;
+    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws) override;
 };
 
 class CreateFileTool : public ITool {
@@ -123,7 +123,7 @@ public:
         };
     }
     std::string preview(const ToolCall& call) const override;
-    ToolResult  execute(const ToolCall& call, const WorkspaceContext& ws) override;
+    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws) override;
 };
 
 class DeleteFileTool : public ITool {
@@ -138,7 +138,7 @@ public:
         };
     }
     std::string preview(const ToolCall& call) const override;
-    ToolResult  execute(const ToolCall& call, const WorkspaceContext& ws) override;
+    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws) override;
 };
 
 class RunCommandTool : public ITool {
@@ -155,7 +155,7 @@ public:
         };
     }
     std::string preview(const ToolCall& call) const override;
-    ToolResult  execute(const ToolCall& call, const WorkspaceContext& ws) override;
+    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws) override;
 };
 
 // -- Semantic search tools (approval: auto) ----------------------------------
@@ -175,7 +175,7 @@ public:
         };
     }
     ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::auto_approve; }
-    ToolResult  execute(const ToolCall& call, const WorkspaceContext& ws) override;
+    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws) override;
 };
 
 class SearchHybridTool : public ITool {
@@ -193,7 +193,7 @@ public:
         };
     }
     ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::auto_approve; }
-    ToolResult  execute(const ToolCall& call, const WorkspaceContext& ws) override;
+    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws) override;
 };
 
 // -- Interactive tools -------------------------------------------------------
@@ -216,7 +216,7 @@ public:
     // tool_decision(modify, {"question": "...", "response": "user answer"}).
     ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::ask; }
     std::string preview(const ToolCall& call) const override;
-    ToolResult  execute(const ToolCall& call, const WorkspaceContext& ws) override;
+    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws) override;
 };
 
 // -- Factory: populate a registry with all built-in tools --------------------
