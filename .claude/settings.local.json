@@ -194,7 +194,13 @@
       "Bash(cmake --build d:/Projects/AICodeAss/build/debug --config Debug --target locus)",
       "Bash(cmake --build d:/Projects/AICodeAss/build/debug --config Debug --target locus_gui)",
       "Bash(cmake --build build/Debug --config Debug --target locus)",
-      "Bash(cmake --build build/Debug --config Debug --target locus_gui)"
+      "Bash(cmake --build build/Debug --config Debug --target locus_gui)",
+      "Bash(cmake --build d:/Projects/AICodeAss/build/debug --config Debug --target locus_core)",
+      "Bash(d:/Projects/AICodeAss/build/debug/tests/Debug/locus_tests.exe \"[s2.4]\")",
+      "Bash(d:/Projects/AICodeAss/build/debug/Debug/locus.exe d:/Projects/AICodeAss --help)",
+      "Bash(cmake --build build --config Release --target locus -- /nologo /verbosity:minimal)",
+      "Bash(cmake --build d:/Projects/AICodeAss/build/release --config Release --target locus)",
+      "Bash(cmake --build d:/Projects/AICodeAss/build/release --config Release --target locus_gui)"
     ]
   }
 }

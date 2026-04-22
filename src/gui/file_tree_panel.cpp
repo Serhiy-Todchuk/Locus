@@ -3,8 +3,18 @@
 #include <spdlog/spdlog.h>
 
 #include <wx/artprov.h>
+#include <wx/menu.h>
 
 #include <algorithm>
+#include <filesystem>
+
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+#include <shellapi.h>
+#include <shlobj.h>
+#endif
 
 namespace locus {
 
@@ -25,11 +35,13 @@ wxEND_EVENT_TABLE()
 
 FileTreePanel::FileTreePanel(wxWindow* parent, IndexQuery& query,
                              const std::string& workspace_root,
-                             FileSelectedCallback on_select)
+                             FileSelectedCallback on_select,
+                             AttachCallback       on_attach)
     : wxPanel(parent, wxID_ANY)
     , query_(query)
     , workspace_root_(workspace_root)
     , on_select_(std::move(on_select))
+    , on_attach_(std::move(on_attach))
 {
     auto* sizer = new wxBoxSizer(wxVERTICAL);
 
@@ -62,6 +74,7 @@ FileTreePanel::FileTreePanel(wxWindow* parent, IndexQuery& query,
     tree_->Bind(wxEVT_TREE_ITEM_EXPANDING, &FileTreePanel::on_item_expanding, this);
     tree_->Bind(wxEVT_TREE_ITEM_ACTIVATED, &FileTreePanel::on_item_activated, this);
     tree_->Bind(wxEVT_TREE_SEL_CHANGED, &FileTreePanel::on_selection_changed, this);
+    tree_->Bind(wxEVT_TREE_ITEM_MENU,    &FileTreePanel::on_item_menu,        this);
 
     rebuild();
 }
@@ -173,20 +186,122 @@ void FileTreePanel::on_item_activated(wxTreeEvent& evt)
     auto item = evt.GetItem();
     if (!item.IsOk()) return;
 
-    // If directory, toggle expand. If file, fire callback.
+    // Directory: toggle expansion.
     if (tree_->ItemHasChildren(item)) {
         tree_->Toggle(item);
-    } else if (on_select_) {
-        auto* data = dynamic_cast<TreePathData*>(tree_->GetItemData(item));
-        if (data) {
-            on_select_(data->path());
-        }
+        return;
     }
+
+    auto* data = dynamic_cast<TreePathData*>(tree_->GetItemData(item));
+    if (!data) return;
+
+    // File: open with the OS-default application; also notify on_select_ so
+    // the status bar reflects what the user just acted on.
+    if (on_select_) on_select_(data->path());
+    open_with_os(data->path());
 }
 
 void FileTreePanel::on_selection_changed(wxTreeEvent& /*evt*/)
 {
     // Future: could show file details in the right panel.
+}
+
+// ---------------------------------------------------------------------------
+// Right-click context menu
+// ---------------------------------------------------------------------------
+
+void FileTreePanel::on_item_menu(wxTreeEvent& evt)
+{
+    auto item = evt.GetItem();
+    if (!item.IsOk()) return;
+
+    // Make sure the item is selected so the user sees what they're acting on.
+    tree_->SelectItem(item);
+
+    auto* data = dynamic_cast<TreePathData*>(tree_->GetItemData(item));
+    if (!data) return;
+
+    const std::string rel_path = data->path();
+    const bool is_dir = tree_->ItemHasChildren(item);
+
+    enum { ID_OPEN = wxID_HIGHEST + 1, ID_ATTACH, ID_SHOW };
+
+    wxMenu menu;
+    menu.Append(ID_OPEN, is_dir ? "Open Folder" : "Open");
+    if (!is_dir)
+        menu.Append(ID_ATTACH, "Attach to context");
+    menu.AppendSeparator();
+    menu.Append(ID_SHOW, "Show in Explorer");
+
+    // Disable Attach if the host hasn't wired a handler.
+    if (!is_dir && !on_attach_)
+        menu.Enable(ID_ATTACH, false);
+
+    int picked = GetPopupMenuSelectionFromUser(menu, evt.GetPoint());
+    switch (picked) {
+    case ID_OPEN:
+        open_with_os(rel_path);
+        break;
+    case ID_ATTACH:
+        if (on_attach_) on_attach_(rel_path);
+        break;
+    case ID_SHOW:
+        show_in_explorer(rel_path);
+        break;
+    default:
+        break;  // wxID_NONE — user dismissed the menu
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Shell integration
+// ---------------------------------------------------------------------------
+
+void FileTreePanel::open_with_os(const std::string& rel_path)
+{
+    std::filesystem::path abs = std::filesystem::path(workspace_root_) / rel_path;
+    abs = abs.lexically_normal();
+    abs.make_preferred();
+#ifdef _WIN32
+    std::wstring w = abs.wstring();
+    HINSTANCE r = ShellExecuteW(nullptr, L"open", w.c_str(),
+                                nullptr, nullptr, SW_SHOWNORMAL);
+    if (reinterpret_cast<INT_PTR>(r) <= 32) {
+        spdlog::warn("FileTreePanel: ShellExecute open failed for '{}' (code {})",
+                     abs.string(), reinterpret_cast<INT_PTR>(r));
+    }
+#else
+    spdlog::warn("FileTreePanel: open_with_os not implemented on this platform");
+    (void)abs;
+#endif
+}
+
+void FileTreePanel::show_in_explorer(const std::string& rel_path)
+{
+    std::filesystem::path abs = std::filesystem::path(workspace_root_) / rel_path;
+    abs = abs.lexically_normal();
+    abs.make_preferred();  // forward slashes -> backslashes on Win32
+#ifdef _WIN32
+    // SHOpenFolderAndSelectItems is the recommended API for this — it handles
+    // path normalization, quoting, and UNC paths internally. Passing a string
+    // via `explorer.exe /select,...` is brittle: mixed separators cause it to
+    // silently open the user's Documents folder instead.
+    PIDLIST_ABSOLUTE pidl = ILCreateFromPathW(abs.wstring().c_str());
+    if (!pidl) {
+        spdlog::warn("FileTreePanel: ILCreateFromPathW failed for '{}'",
+                     abs.string());
+        return;
+    }
+    HRESULT hr = SHOpenFolderAndSelectItems(pidl, 0, nullptr, 0);
+    ILFree(pidl);
+    if (FAILED(hr)) {
+        spdlog::warn("FileTreePanel: SHOpenFolderAndSelectItems failed for '{}' (hr=0x{:x})",
+                     abs.string(), static_cast<unsigned>(hr));
+    }
+#else
+    spdlog::warn("FileTreePanel: show_in_explorer not implemented on this platform");
+    (void)abs;
+#endif
 }
 
 void FileTreePanel::set_index_stats(int files, int symbols, int headings)

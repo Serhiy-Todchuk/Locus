@@ -1,3 +1,4 @@
 - Create an app icon
 - LSP (language server protocol)
-- Memory bank
+- Memory bank 
+- Add smoke test that I will start manually (or ask you to start) - which will test all the tech-non-UI-features with connecting to LLM as a real usage scenario. This could be separate project - executable within the solution - that would reference locus core. It should fail if no LLM is up and running in LM Studio. Use this folder as testing workspace. This test should include some prompts sent to LLM, asking LLM to read file, find something using semantic/non-semantic search etc. - you think out more test cases.

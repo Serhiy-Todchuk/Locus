@@ -4,6 +4,7 @@
 #include "tool.h"
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -17,6 +18,16 @@ enum class ToolDecision { approve, reject, modify };
 enum class CompactionStrategy {
     drop_tool_results,  // B: strip tool_result content from history
     drop_oldest         // C: remove N oldest turns
+};
+
+// -- AttachedContext ----------------------------------------------------------
+// A workspace-relative file the user has pinned to the conversation. When set,
+// AgentCore injects "[Attached: <path>]" plus the file outline into the
+// system prompt so the LLM is aware of it without any extra tool call.
+
+struct AttachedContext {
+    std::string file_path;   // workspace-relative
+    std::string preview;     // optional one-line summary (currently unused by core)
 };
 
 // -- IFrontend ----------------------------------------------------------------
@@ -75,6 +86,11 @@ public:
     // through this in addition to their specific callbacks. Frontends that
     // don't care can ignore it.
     virtual void on_activity(const ActivityEvent& event) = 0;
+
+    // Attached-context state changed (set or cleared). Empty when detached.
+    // Frontends use this to show/hide a "📎 file" chip near the input.
+    virtual void on_attached_context_changed(
+        const std::optional<AttachedContext>& /*ctx*/) {}
 };
 
 // -- ILocusCore ---------------------------------------------------------------
@@ -121,6 +137,13 @@ public:
     // Snapshot of buffered activity events with id > since_id. Used by
     // late-joining frontends (e.g. web clients) to catch up.
     virtual std::vector<ActivityEvent> get_activity(uint64_t since_id = 0) const = 0;
+
+    // Pin a workspace file to the conversation. The file's path + outline are
+    // injected into the system prompt so the LLM is aware of it on every turn.
+    // clear_attached_context() removes the pin.
+    virtual void set_attached_context(AttachedContext ctx) = 0;
+    virtual void clear_attached_context() = 0;
+    virtual std::optional<AttachedContext> attached_context() const = 0;
 };
 
 } // namespace locus

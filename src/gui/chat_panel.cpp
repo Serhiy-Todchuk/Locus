@@ -341,9 +341,27 @@ ChatPanel::ChatPanel(wxWindow* parent,
     create_input();
     create_footer();
 
+    // Attached-context chip row (between chat history and input).
+    attach_panel_ = new wxPanel(this, wxID_ANY);
+    attach_label_ = new wxStaticText(attach_panel_, wxID_ANY, "");
+    // U+1F4CE PAPERCLIP. Use a font with emoji coverage on Windows.
+    attach_close_ = new wxButton(attach_panel_, wxID_ANY, "x",
+                                 wxDefaultPosition, wxSize(22, 22),
+                                 wxBU_EXACTFIT);
+    attach_close_->SetToolTip("Detach file from conversation context");
+    attach_close_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
+        if (on_detach_) on_detach_();
+    });
+    auto* attach_sizer = new wxBoxSizer(wxHORIZONTAL);
+    attach_sizer->Add(attach_label_, 1, wxALIGN_CENTER_VERTICAL | wxLEFT, 6);
+    attach_sizer->Add(attach_close_, 0, wxALIGN_CENTER_VERTICAL | wxLEFT | wxRIGHT, 4);
+    attach_panel_->SetSizer(attach_sizer);
+    attach_panel_->Hide();  // shown when set_attached_chip() is called
+
     // Main vertical layout.
     auto* sizer = new wxBoxSizer(wxVERTICAL);
     sizer->Add(webview_, 1, wxEXPAND);
+    sizer->Add(attach_panel_, 0, wxEXPAND | wxTOP | wxBOTTOM, 2);
     sizer->Add(input_,   0, wxEXPAND | wxTOP, 2);
 
     // Footer bar.
@@ -599,6 +617,29 @@ void ChatPanel::set_locus_md_tokens(int tokens)
         locus_chip_->SetLabel(wxString::Format("[LOCUS.md: %d tk]", tokens));
     else
         locus_chip_->SetLabel("");
+}
+
+void ChatPanel::set_attached_chip(const wxString& file_path)
+{
+    if (file_path.empty()) {
+        if (attach_panel_->IsShown()) {
+            attach_panel_->Hide();
+            Layout();
+        }
+        attach_label_->SetLabel("");
+        return;
+    }
+    attach_label_->SetLabel(wxString("Attached: ") + file_path);
+    attach_label_->SetToolTip(file_path);
+    if (!attach_panel_->IsShown()) {
+        attach_panel_->Show();
+        Layout();
+    }
+}
+
+void ChatPanel::set_on_detach(std::function<void()> cb)
+{
+    on_detach_ = std::move(cb);
 }
 
 // ---------------------------------------------------------------------------

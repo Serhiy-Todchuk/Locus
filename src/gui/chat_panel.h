@@ -52,6 +52,11 @@ public:
     void set_context_meter(int used, int limit);
     void set_locus_md_tokens(int tokens);
 
+    // Attached-context chip (above input). Empty path hides it.
+    // on_detach is invoked when the user clicks the chip's "✕" to detach.
+    void set_attached_chip(const wxString& file_path);
+    void set_on_detach(std::function<void()> cb);
+
     // Slash-command suggestions shown when the user types '/' in the input.
     // Items are typically CLI commands (reset, compact, ...) plus tool names.
     void set_slash_commands(std::vector<SlashItem> items);
@@ -118,6 +123,12 @@ private:
     wxButton*     compact_btn_   = nullptr;
     wxButton*     stop_btn_      = nullptr;
     wxStaticText* locus_chip_    = nullptr;
+
+    // Attached-context chip row (sits between webview and input).
+    wxPanel*      attach_panel_  = nullptr;  // the row container
+    wxStaticText* attach_label_  = nullptr;  // "📎 path/to/file"
+    wxButton*     attach_close_  = nullptr;  // small "✕" to detach
+    std::function<void()> on_detach_;
 
     wxTimer       flush_timer_;
 

@@ -96,6 +96,11 @@ public:
     void emit_index_event(const std::string& summary,
                           const std::string& detail = {});
 
+    // -- Attached file context (S2.4) ----------------------------------------
+    void set_attached_context(AttachedContext ctx) override;
+    void clear_attached_context() override;
+    std::optional<AttachedContext> attached_context() const override;
+
 private:
     // Build + broadcast + buffer a new activity event.
     void emit_activity(ActivityKind kind,
@@ -133,13 +138,22 @@ private:
     // otherwise falls back to heuristic estimate.
     int current_token_count() const;
 
+    // Compose system prompt from base + (optional) attached-context section.
+    // Caller must hold attached_mutex_ when reading attached_context_.
+    std::string compose_system_prompt() const;
+
+    // Recompute system_prompt_ and overwrite the seed system message in
+    // history_ in place. Called whenever the attached context changes.
+    void refresh_system_prompt();
+
     // Members
     ILLMClient&      llm_;
     IToolRegistry&   tools_;
     WorkspaceContext  ws_context_;
     LLMConfig        llm_config_;
     ConversationHistory history_;
-    std::string      system_prompt_;
+    std::string      base_system_prompt_;  // built once from LOCUS.md + tools
+    std::string      system_prompt_;       // base + attached-context section
 
     // Last server-reported token usage (0 if server doesn't report it).
     int last_server_total_tokens_ = 0;
@@ -169,6 +183,10 @@ private:
 
     // Compaction threshold (fraction of context_limit).
     static constexpr double k_compaction_threshold = 0.80;
+
+    // Attached file context (S2.4). Protected by attached_mutex_.
+    mutable std::mutex             attached_mutex_;
+    std::optional<AttachedContext> attached_context_;
 
     // Activity ring buffer (protected by activity_mutex_).
     mutable std::mutex         activity_mutex_;
