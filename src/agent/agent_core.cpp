@@ -1,5 +1,5 @@
 #include "agent_core.h"
-#include "core/workspace_services.h"
+
 #include "index_query.h"
 #include "tool_registry.h"
 #include "workspace.h"
@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <chrono>
 #include <sstream>
+#include <utility>
 
 namespace locus {
 
@@ -26,75 +27,46 @@ AgentCore::AgentCore(ILLMClient& llm,
     , sessions_(sessions_dir)
 {
     base_system_prompt_ = SystemPromptBuilder::build(locus_md, ws_meta, tools);
-    system_prompt_ = base_system_prompt_;  // no attachment yet
+    system_prompt_ = base_system_prompt_;
+
+    activity_   = std::make_unique<ActivityLog>(frontends_);
+    budget_     = std::make_unique<ContextBudget>(llm_config_.context_limit, frontends_);
+    loop_       = std::make_unique<AgentLoop>(llm_, tools_, *activity_, *budget_, frontends_);
+    dispatcher_ = std::make_unique<ToolDispatcher>(tools_, services_, *activity_,
+                                                   frontends_, cancel_requested_);
 
     int sys_tokens = ILLMClient::estimate_tokens(system_prompt_);
     spdlog::info("AgentCore: system prompt ~{} tokens, context limit {}",
                  sys_tokens, llm_config_.context_limit);
 
-    // Seed conversation with the system message.
     history_.add({MessageRole::system, system_prompt_});
 
-    // Record initial system prompt as the first activity event so users can
-    // see what context was seeded and how many tokens it cost.
-    emit_activity(ActivityKind::system_prompt,
-                  "System prompt assembled (~" + std::to_string(sys_tokens) + " tokens)",
-                  system_prompt_,
-                  /*tokens_in=*/std::nullopt,
-                  /*tokens_out=*/std::nullopt,
-                  /*tokens_delta=*/sys_tokens);
+    activity_->emit(ActivityKind::system_prompt,
+                    "System prompt assembled (~" + std::to_string(sys_tokens) + " tokens)",
+                    system_prompt_,
+                    /*tokens_in=*/std::nullopt,
+                    /*tokens_out=*/std::nullopt,
+                    /*tokens_delta=*/sys_tokens);
 }
 
-// -- Activity emission -------------------------------------------------------
-
-void AgentCore::emit_activity(ActivityKind kind,
-                              std::string summary,
-                              std::string detail,
-                              std::optional<int> tokens_in,
-                              std::optional<int> tokens_out,
-                              std::optional<int> tokens_delta)
+AgentCore::~AgentCore()
 {
-    ActivityEvent ev;
-    {
-        std::lock_guard lock(activity_mutex_);
-        ev.id = next_activity_id_++;
-        ev.timestamp = std::chrono::system_clock::now();
-        ev.kind = kind;
-        ev.summary = std::move(summary);
-        ev.detail = std::move(detail);
-        ev.tokens_in = tokens_in;
-        ev.tokens_out = tokens_out;
-        ev.tokens_delta = tokens_delta;
-
-        activity_buffer_.push_back(ev);
-        if (activity_buffer_.size() > k_activity_buffer_max) {
-            activity_buffer_.erase(
-                activity_buffer_.begin(),
-                activity_buffer_.begin() +
-                    (activity_buffer_.size() - k_activity_buffer_max));
-        }
-    }
-
-    frontends_.broadcast([&](IFrontend& fe) { fe.on_activity(ev); });
+    stop();
 }
+
+// -- Activity catch-up / external emit ---------------------------------------
 
 std::vector<ActivityEvent> AgentCore::get_activity(uint64_t since_id) const
 {
-    std::lock_guard lock(activity_mutex_);
-    std::vector<ActivityEvent> out;
-    out.reserve(activity_buffer_.size());
-    for (auto& ev : activity_buffer_)
-        if (ev.id > since_id)
-            out.push_back(ev);
-    return out;
+    return activity_->get_since(since_id);
 }
 
 void AgentCore::emit_index_event(const std::string& summary, const std::string& detail)
 {
-    emit_activity(ActivityKind::index_event, summary, detail);
+    activity_->emit_index_event(summary, detail);
 }
 
-// -- Attached file context (S2.4) -------------------------------------------
+// -- Attached file context (S2.4) --------------------------------------------
 
 std::string AgentCore::compose_system_prompt() const
 {
@@ -110,7 +82,6 @@ std::string AgentCore::compose_system_prompt() const
     ss << "\n## Attached File\n";
     ss << "[Attached: " << ctx->file_path << "]\n";
 
-    // Outline (headings + symbols) — read-only, may be empty.
     if (auto* idx = services_.index()) {
         try {
             auto entries = idx->get_file_outline(ctx->file_path);
@@ -143,7 +114,6 @@ std::string AgentCore::compose_system_prompt() const
 void AgentCore::refresh_system_prompt()
 {
     system_prompt_ = compose_system_prompt();
-    // Replace the seed system message in history (always at index 0).
     if (!history_.empty() &&
         history_.messages().front().role == MessageRole::system) {
         history_.replace_system_prompt(system_prompt_);
@@ -158,9 +128,9 @@ void AgentCore::set_attached_context(AttachedContext ctx)
     }
     refresh_system_prompt();
     spdlog::info("AgentCore: attached context set to '{}'", ctx.file_path);
-    emit_activity(ActivityKind::index_event,
-                  "Attached file: " + ctx.file_path,
-                  "Pinned to system prompt; outline injected on next turn.");
+    activity_->emit(ActivityKind::index_event,
+                    "Attached file: " + ctx.file_path,
+                    "Pinned to system prompt; outline injected on next turn.");
 
     auto snapshot = std::optional<AttachedContext>{ctx};
     frontends_.broadcast([&](IFrontend& fe) {
@@ -180,7 +150,7 @@ void AgentCore::clear_attached_context()
 
     refresh_system_prompt();
     spdlog::info("AgentCore: attached context cleared");
-    emit_activity(ActivityKind::index_event, "Detached file from context", "");
+    activity_->emit(ActivityKind::index_event, "Detached file from context", "");
 
     frontends_.broadcast([&](IFrontend& fe) {
         fe.on_attached_context_changed(std::nullopt);
@@ -193,12 +163,7 @@ std::optional<AttachedContext> AgentCore::attached_context() const
     return attached_context_;
 }
 
-AgentCore::~AgentCore()
-{
-    stop();
-}
-
-// -- Start / Stop -------------------------------------------------------------
+// -- Start / Stop ------------------------------------------------------------
 
 void AgentCore::start()
 {
@@ -218,10 +183,8 @@ void AgentCore::stop()
     running_.store(false);
     cancel_requested_.store(true);
 
-    // Wake the agent thread so it can exit.
     queue_cv_.notify_one();
-    // Also wake decision wait in case it's blocked on tool approval.
-    decision_cv_.notify_one();
+    dispatcher_->wake();
 
     if (agent_thread_.joinable())
         agent_thread_.join();
@@ -229,7 +192,7 @@ void AgentCore::stop()
     spdlog::info("AgentCore: agent thread stopped");
 }
 
-// -- Agent thread -------------------------------------------------------------
+// -- Agent thread ------------------------------------------------------------
 
 void AgentCore::agent_thread_func()
 {
@@ -253,7 +216,6 @@ void AgentCore::agent_thread_func()
 
         process_message(message);
 
-        // Signal sync waiters that the turn is done.
         {
             std::lock_guard lock(sync_mutex_);
             sync_turn_done_ = true;
@@ -276,7 +238,7 @@ void AgentCore::unregister_frontend(IFrontend* fe)
     frontends_.unregister_frontend(fe);
 }
 
-// -- send_message (non-blocking) ----------------------------------------------
+// -- send_message (non-blocking) ---------------------------------------------
 
 void AgentCore::send_message(const std::string& content)
 {
@@ -289,7 +251,7 @@ void AgentCore::send_message(const std::string& content)
     queue_cv_.notify_one();
 }
 
-// -- send_message_sync (blocking, for CLI) ------------------------------------
+// -- send_message_sync (blocking, for CLI) -----------------------------------
 
 void AgentCore::send_message_sync(const std::string& content)
 {
@@ -304,7 +266,7 @@ void AgentCore::send_message_sync(const std::string& content)
     sync_cv_.wait(lock, [&] { return sync_turn_done_; });
 }
 
-// -- process_message (runs on agent thread) -----------------------------------
+// -- process_message (runs on agent thread) ----------------------------------
 
 void AgentCore::process_message(const std::string& content)
 {
@@ -315,7 +277,6 @@ void AgentCore::process_message(const std::string& content)
 
     frontends_.broadcast([](IFrontend& fe) { fe.on_turn_start(); });
 
-    // Check for /slash commands (direct tool invocation).
     if (try_slash_command(content)) {
         frontends_.broadcast([](IFrontend& fe) { fe.on_turn_complete(); });
         busy_.store(false);
@@ -324,16 +285,14 @@ void AgentCore::process_message(const std::string& content)
 
     history_.add({MessageRole::user, content});
 
-    {
-        std::string sum = "User message (" + std::to_string(content.size()) + " chars)";
-        emit_activity(ActivityKind::user_message, std::move(sum), content);
-    }
+    activity_->emit(ActivityKind::user_message,
+                    "User message (" + std::to_string(content.size()) + " chars)",
+                    content);
 
     frontends_.broadcast([&](IFrontend& fe) {
         fe.on_context_meter(current_token_count(), llm_config_.context_limit);
     });
 
-    // Agent loop: call LLM, handle tool calls, repeat until text-only response.
     int round = 0;
     static constexpr int k_max_rounds = 20;
 
@@ -349,17 +308,32 @@ void AgentCore::process_message(const std::string& content)
         ++round;
         spdlog::trace("AgentCore: LLM round {}", round);
 
-        if (check_context_overflow())
+        if (budget_->check_overflow(current_token_count()))
             break;
 
-        bool has_tool_calls = run_llm_step();
+        auto step = loop_->run_step(history_);
 
         frontends_.broadcast([&](IFrontend& fe) {
             fe.on_context_meter(current_token_count(), llm_config_.context_limit);
         });
 
-        if (!has_tool_calls)
+        if (step.had_error)
             break;
+
+        history_.add(std::move(step.assistant_msg));
+
+        if (step.tool_calls.empty())
+            break;
+
+        for (auto& call : step.tool_calls) {
+            if (cancel_requested_.load()) {
+                spdlog::info("AgentCore: skipping remaining tool calls (cancelled)");
+                break;
+            }
+            dispatcher_->dispatch(call, [this](ChatMessage m) {
+                history_.add(std::move(m));
+            });
+        }
     }
 
     if (round >= k_max_rounds) {
@@ -373,7 +347,7 @@ void AgentCore::process_message(const std::string& content)
     busy_.store(false);
 }
 
-// -- is_busy / cancel_turn ----------------------------------------------------
+// -- is_busy / cancel_turn ---------------------------------------------------
 
 bool AgentCore::is_busy() const
 {
@@ -384,8 +358,7 @@ void AgentCore::cancel_turn()
 {
     if (busy_.load()) {
         cancel_requested_.store(true);
-        // Wake decision wait so we don't hang on tool approval.
-        decision_cv_.notify_one();
+        dispatcher_->wake();
         spdlog::info("AgentCore: cancellation requested");
     }
 }
@@ -396,10 +369,7 @@ void AgentCore::tool_decision(const std::string& call_id,
                               ToolDecision decision,
                               const nlohmann::json& modified_args)
 {
-    std::lock_guard lock(decision_mutex_);
-    pending_decision_ = decision;
-    pending_modified_args_ = modified_args;
-    decision_cv_.notify_one();
+    dispatcher_->submit_decision(decision, modified_args);
     spdlog::trace("AgentCore: tool_decision for {} = {}",
                   call_id,
                   decision == ToolDecision::approve ? "approve" :
@@ -435,10 +405,9 @@ void AgentCore::compact_context(CompactionStrategy strategy, int n)
 void AgentCore::reset_conversation()
 {
     history_.clear();
-    // Recompose so a still-attached file's outline reflects the latest index.
     system_prompt_ = compose_system_prompt();
     history_.add({MessageRole::system, system_prompt_});
-    last_server_total_tokens_ = 0;
+    budget_->reset();
     spdlog::info("AgentCore: conversation reset");
 
     frontends_.broadcast([&](IFrontend& fe) {
@@ -447,7 +416,7 @@ void AgentCore::reset_conversation()
     frontends_.broadcast([](IFrontend& fe) { fe.on_session_reset(); });
 }
 
-// -- save_session / load_session -----------------------------------------------
+// -- save_session / load_session ---------------------------------------------
 
 std::string AgentCore::save_session()
 {
@@ -459,7 +428,7 @@ std::string AgentCore::save_session()
 void AgentCore::load_session(const std::string& session_id)
 {
     history_ = sessions_.load(session_id);
-    last_server_total_tokens_ = 0;
+    budget_->reset();
     spdlog::info("AgentCore: loaded session '{}' ({} messages)",
                  session_id, history_.size());
 
@@ -469,336 +438,28 @@ void AgentCore::load_session(const std::string& session_id)
     frontends_.broadcast([](IFrontend& fe) { fe.on_session_reset(); });
 }
 
-// -- run_llm_step -------------------------------------------------------------
-
-bool AgentCore::run_llm_step()
-{
-    auto tool_schemas = build_tool_schemas();
-
-    std::string accumulated_text;
-    std::string accumulated_reasoning;
-    std::vector<ToolCallRequest> tool_call_requests;
-    bool has_tool_calls = false;
-    bool had_error = false;
-    int reasoning_tokens_reported = 0;
-
-    llm_.stream_completion(history_.messages(), tool_schemas, {
-        /* on_token */
-        [&](const std::string& token) {
-            accumulated_text += token;
-            frontends_.broadcast([&](IFrontend& fe) { fe.on_token(token); });
-        },
-        /* on_reasoning_token */
-        [&](const std::string& token) {
-            accumulated_reasoning += token;
-            frontends_.broadcast([&](IFrontend& fe) { fe.on_reasoning_token(token); });
-        },
-        /* on_tool_calls */
-        [&](const std::vector<ToolCallRequest>& calls) {
-            has_tool_calls = true;
-            tool_call_requests = calls;
-        },
-        /* on_complete */
-        [&]() {
-            spdlog::trace("AgentCore: LLM step complete, text={} chars, "
-                          "reasoning={} chars, tool_calls={}",
-                          accumulated_text.size(), accumulated_reasoning.size(),
-                          tool_call_requests.size());
-        },
-        /* on_error */
-        [&](const std::string& err) {
-            had_error = true;
-            frontends_.broadcast([&](IFrontend& fe) { fe.on_error(err); });
-            emit_activity(ActivityKind::error, "LLM error", err);
-        },
-        /* on_usage */
-        [&](const CompletionUsage& u) {
-            last_server_total_tokens_ = u.total_tokens;
-            reasoning_tokens_reported = u.reasoning_tokens;
-            spdlog::trace("AgentCore: server reports {} total tokens "
-                          "(prompt={}, completion={}, reasoning={})",
-                          u.total_tokens, u.prompt_tokens, u.completion_tokens,
-                          u.reasoning_tokens);
-        }
-    });
-
-    if (had_error)
-        return false;
-
-    // Emit LLM-response activity with token accounting. Prefer server-reported
-    // usage; if the backend (e.g. older LM Studio) omits it, fall back to the
-    // heuristic estimate of the full conversation so the column is never empty.
-    {
-        int total = last_server_total_tokens_;
-        bool from_server = (total > 0);
-        if (!from_server)
-            total = history_.estimate_tokens();
-
-        int delta = total - prev_turn_total_tokens_;
-
-        std::string summary = "LLM response (total=" + std::to_string(total);
-        if (delta != 0)
-            summary += (delta > 0 ? ", +" : ", ") + std::to_string(delta);
-        summary += from_server ? " tokens" : " tokens est.";
-        if (reasoning_tokens_reported > 0)
-            summary += ", reasoning=" + std::to_string(reasoning_tokens_reported);
-        summary += ")";
-
-        std::string detail;
-        if (!accumulated_reasoning.empty()) {
-            detail += "[thinking]\n" + accumulated_reasoning + "\n\n";
-        }
-        detail += accumulated_text;
-        if (!tool_call_requests.empty()) {
-            detail += "\n\n[tool_calls: ";
-            for (size_t i = 0; i < tool_call_requests.size(); ++i) {
-                if (i) detail += ", ";
-                detail += tool_call_requests[i].name;
-            }
-            detail += "]";
-        }
-        emit_activity(ActivityKind::llm_response, std::move(summary), std::move(detail),
-                      /*tokens_in=*/total,
-                      /*tokens_out=*/std::nullopt,
-                      /*tokens_delta=*/delta);
-        prev_turn_total_tokens_ = total;
-    }
-
-    // Add assistant message to history.
-    ChatMessage assistant_msg;
-    assistant_msg.role = MessageRole::assistant;
-    assistant_msg.content = accumulated_text;
-    assistant_msg.tool_calls = tool_call_requests;
-    history_.add(std::move(assistant_msg));
-
-    if (!has_tool_calls)
-        return false;
-
-    // Process each tool call.
-    for (auto& tc_req : tool_call_requests) {
-        if (cancel_requested_.load()) {
-            spdlog::info("AgentCore: skipping remaining tool calls (cancelled)");
-            break;
-        }
-
-        auto call = ToolRegistry::parse_tool_call(tc_req.id, tc_req.name, tc_req.arguments);
-        auto* tool = tools_.find(call.tool_name);
-
-        if (!tool) {
-            spdlog::warn("AgentCore: unknown tool '{}'", call.tool_name);
-            ChatMessage err_result;
-            err_result.role = MessageRole::tool;
-            err_result.tool_call_id = call.id;
-            err_result.content = "Error: unknown tool '" + call.tool_name + "'";
-            history_.add(std::move(err_result));
-            frontends_.broadcast([&](IFrontend& fe) {
-                fe.on_error("Unknown tool: " + call.tool_name);
-            });
-            emit_activity(ActivityKind::error,
-                          "Unknown tool: " + call.tool_name,
-                          "LLM requested tool '" + call.tool_name + "' which is not registered.");
-            continue;
-        }
-
-        process_tool_call(call, tool);
-    }
-
-    return true;
-}
-
-// -- process_tool_call --------------------------------------------------------
-
-void AgentCore::process_tool_call(const ToolCall& call, ITool* tool)
-{
-    spdlog::info("AgentCore: tool call '{}' id={}", call.tool_name, call.id);
-    spdlog::trace("AgentCore: tool args: {}", call.args.dump());
-
-    emit_activity(ActivityKind::tool_call,
-                  "Tool call: " + call.tool_name,
-                  "id: " + call.id + "\nargs: " + call.args.dump(2));
-
-    ToolCall effective_call = call;
-
-    // Resolve the effective approval policy for this tool: per-workspace
-    // override (from WorkspaceConfig) wins over the tool's built-in default.
-    ToolApprovalPolicy policy = tool->approval_policy();
-    if (auto* ws = services_.workspace()) {
-        const auto& overrides = ws->config().tool_approval_policies;
-        auto it = overrides.find(call.tool_name);
-        if (it != overrides.end())
-            policy = it->second;
-    }
-
-    if (policy == ToolApprovalPolicy::deny) {
-        spdlog::info("AgentCore: tool '{}' denied by workspace policy", call.tool_name);
-        ChatMessage denied_result;
-        denied_result.role = MessageRole::tool;
-        denied_result.tool_call_id = call.id;
-        denied_result.content = "Tool call denied by workspace approval policy.";
-        history_.add(std::move(denied_result));
-        frontends_.broadcast([&](IFrontend& fe) {
-            fe.on_tool_result(call.id, "[denied by policy]");
-        });
-        return;
-    }
-
-    if (policy == ToolApprovalPolicy::auto_approve) {
-        spdlog::trace("AgentCore: auto-approve '{}'", call.tool_name);
-    } else {
-        // Needs user approval.
-        std::string preview = tool->preview(call);
-        frontends_.broadcast([&](IFrontend& fe) {
-            fe.on_tool_call_pending(call, preview);
-        });
-
-        // Wait for decision (or cancellation).
-        std::unique_lock lock(decision_mutex_);
-        decision_cv_.wait(lock, [&] {
-            return pending_decision_.has_value() || cancel_requested_.load();
-        });
-
-        if (cancel_requested_.load() && !pending_decision_.has_value()) {
-            // Cancelled while waiting for approval — treat as reject.
-            lock.unlock();
-            ChatMessage reject_result;
-            reject_result.role = MessageRole::tool;
-            reject_result.tool_call_id = call.id;
-            reject_result.content = "Tool call cancelled.";
-            history_.add(std::move(reject_result));
-            frontends_.broadcast([&](IFrontend& fe) {
-                fe.on_tool_result(call.id, "[cancelled]");
-            });
-            return;
-        }
-
-        ToolDecision decision = *pending_decision_;
-        nlohmann::json mod_args = pending_modified_args_;
-        pending_decision_.reset();
-        pending_modified_args_ = {};
-        lock.unlock();
-
-        if (decision == ToolDecision::reject) {
-            spdlog::info("AgentCore: tool '{}' rejected by user", call.tool_name);
-            ChatMessage reject_result;
-            reject_result.role = MessageRole::tool;
-            reject_result.tool_call_id = call.id;
-            reject_result.content = "Tool call rejected by user.";
-            history_.add(std::move(reject_result));
-            frontends_.broadcast([&](IFrontend& fe) {
-                fe.on_tool_result(call.id, "[rejected]");
-            });
-            return;
-        }
-
-        if (decision == ToolDecision::modify && !mod_args.empty()) {
-            effective_call.args = mod_args;
-            spdlog::info("AgentCore: tool '{}' args modified by user", call.tool_name);
-        }
-    }
-
-    // Execute.
-    auto result = tool->execute(effective_call, services_);
-
-    spdlog::info("AgentCore: tool '{}' result: success={}, content={} chars",
-                 call.tool_name, result.success, result.content.size());
-    spdlog::trace("AgentCore: tool result content: {}", result.content);
-
-    {
-        std::string sum = "Tool result: " + call.tool_name;
-        sum += result.success ? " (ok)" : " (failed)";
-        sum += " — " + std::to_string(result.content.size()) + " chars";
-        emit_activity(result.success ? ActivityKind::tool_result : ActivityKind::error,
-                      std::move(sum),
-                      result.content);
-    }
-
-    // Inject tool result into conversation.
-    ChatMessage tool_msg;
-    tool_msg.role = MessageRole::tool;
-    tool_msg.tool_call_id = call.id;
-    tool_msg.content = result.content;
-    history_.add(std::move(tool_msg));
-
-    frontends_.broadcast([&](IFrontend& fe) {
-        fe.on_tool_result(call.id, result.display);
-    });
-}
-
-// -- build_tool_schemas -------------------------------------------------------
-
-std::vector<ToolSchema> AgentCore::build_tool_schemas() const
-{
-    std::vector<ToolSchema> schemas;
-    auto schema_json = tools_.build_schema_json();
-
-    for (auto& entry : schema_json) {
-        if (!entry.contains("function")) continue;
-        auto& fn = entry["function"];
-        ToolSchema ts;
-        ts.name        = fn.value("name", "");
-        ts.description = fn.value("description", "");
-        ts.parameters  = fn.value("parameters", nlohmann::json::object());
-        schemas.push_back(std::move(ts));
-    }
-
-    return schemas;
-}
-
-// -- Token count --------------------------------------------------------------
+// -- Token accounting --------------------------------------------------------
 
 int AgentCore::current_token_count() const
 {
-    // Prefer server-reported usage when available.
-    if (last_server_total_tokens_ > 0)
-        return last_server_total_tokens_;
-    return history_.estimate_tokens();
+    return budget_->current(history_.estimate_tokens());
 }
 
-// -- Context overflow check ---------------------------------------------------
-
-bool AgentCore::check_context_overflow()
-{
-    int used = current_token_count();
-    int limit = llm_config_.context_limit;
-    double ratio = static_cast<double>(used) / limit;
-
-    if (ratio >= 1.0) {
-        spdlog::warn("AgentCore: context FULL ({}/{} tokens, {:.0f}%)",
-                     used, limit, ratio * 100);
-        frontends_.broadcast([&](IFrontend& fe) {
-            fe.on_compaction_needed(used, limit);
-        });
-        return true;
-    }
-
-    if (ratio >= k_compaction_threshold) {
-        spdlog::warn("AgentCore: context at {:.0f}% ({}/{} tokens)",
-                     ratio * 100, used, limit);
-        frontends_.broadcast([&](IFrontend& fe) {
-            fe.on_compaction_needed(used, limit);
-        });
-    }
-
-    return false;
-}
-
-// -- Slash commands (direct tool invocation) ----------------------------------
+// -- Slash commands (direct tool invocation) ---------------------------------
+// Kept here until S3.J extracts the tokenizer + dispatcher.
 
 bool AgentCore::try_slash_command(const std::string& content)
 {
     if (content.empty() || content[0] != '/')
         return false;
 
-    // Parse: /tool_name [positional_arg] [key=value ...]
-    // Special: /help lists all available tools.
-    std::istringstream iss(content.substr(1));  // skip '/'
+    std::istringstream iss(content.substr(1));
     std::string tool_name;
     iss >> tool_name;
 
     if (tool_name.empty())
         return false;
 
-    // /help — list all available slash commands.
     if (tool_name == "help") {
         std::string help = "Available /commands (direct tool invocation):\n\n";
         for (auto* t : tools_.all()) {
@@ -816,7 +477,6 @@ bool AgentCore::try_slash_command(const std::string& content)
         return true;
     }
 
-    // Find the tool.
     auto* tool = tools_.find(tool_name);
     if (!tool) {
         std::string err = "Unknown command '/" + tool_name + "'. Type /help for available commands.";
@@ -824,26 +484,19 @@ bool AgentCore::try_slash_command(const std::string& content)
         return true;
     }
 
-    // Parse remaining args: first collect the rest of the line.
     std::string rest;
     if (iss.tellg() != -1)
-        rest = content.substr(static_cast<size_t>(iss.tellg()) + 1);  // +1 for '/'
+        rest = content.substr(static_cast<size_t>(iss.tellg()) + 1);
 
-    // Trim leading whitespace.
     auto trim_start = rest.find_first_not_of(" \t");
     if (trim_start != std::string::npos)
         rest = rest.substr(trim_start);
     else
         rest.clear();
 
-    // Build args JSON.
-    // Tokenizer: respects "quoted strings" for multi-word values.
-    // Syntax:  /tool positional_arg key=value key="multi word value"
-    //          /tool "positional with spaces" key=value
     auto tool_params = tool->params();
     nlohmann::json args = nlohmann::json::object();
 
-    // Tokenize rest into shell-like tokens (handles double quotes).
     std::vector<std::string> tokens;
     {
         size_t i = 0;
@@ -853,16 +506,13 @@ bool AgentCore::try_slash_command(const std::string& content)
 
             std::string tok;
             if (rest[i] == '"') {
-                // Quoted token: consume until closing quote.
                 ++i;
                 while (i < rest.size() && rest[i] != '"')
                     tok += rest[i++];
-                if (i < rest.size()) ++i;  // skip closing quote
+                if (i < rest.size()) ++i;
             } else {
-                // Unquoted token: consume until space or key="...
                 while (i < rest.size() && rest[i] != ' ') {
                     if (rest[i] == '"') {
-                        // key="value with spaces"
                         ++i;
                         while (i < rest.size() && rest[i] != '"')
                             tok += rest[i++];
@@ -876,14 +526,12 @@ bool AgentCore::try_slash_command(const std::string& content)
         }
     }
 
-    // Separate into named (key=value) and positional args.
     std::vector<std::string> positional;
     for (auto& tok : tokens) {
         auto eq = tok.find('=');
         if (eq != std::string::npos && eq > 0) {
             std::string key = tok.substr(0, eq);
             std::string val = tok.substr(eq + 1);
-            // Match param type for proper JSON conversion.
             bool found = false;
             for (auto& p : tool_params) {
                 if (p.name == key) {
@@ -904,7 +552,6 @@ bool AgentCore::try_slash_command(const std::string& content)
         }
     }
 
-    // Map positional args to params in declaration order.
     size_t pos_idx = 0;
     for (auto& p : tool_params) {
         if (args.contains(p.name)) continue;
@@ -919,7 +566,6 @@ bool AgentCore::try_slash_command(const std::string& content)
         }
     }
 
-    // Execute with timing.
     ToolCall call;
     call.id = "slash_" + tool_name;
     call.tool_name = tool_name;
@@ -932,14 +578,12 @@ bool AgentCore::try_slash_command(const std::string& content)
     auto t1 = std::chrono::steady_clock::now();
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
 
-    // Format output.
     std::string output = "**/" + tool_name + "** ";
     if (result.success)
         output += "(OK, " + std::to_string(ms) + "ms)\n\n";
     else
         output += "(FAILED, " + std::to_string(ms) + "ms)\n\n";
 
-    // Prefer display text, fall back to content.
     if (!result.display.empty())
         output += result.display;
     else

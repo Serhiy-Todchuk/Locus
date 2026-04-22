@@ -4,7 +4,7 @@
 #include "../tools.h"
 #include "../indexer.h"
 #include "../index_query.h"
-#include "../system_prompt.h"
+#include "../agent/system_prompt.h"
 
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>

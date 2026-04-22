@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../conversation.h"
+#include "../agent/conversation.h"
 #include "../frontend.h"
 
 #include <wx/wx.h>

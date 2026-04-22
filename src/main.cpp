@@ -4,7 +4,7 @@
 #include "llm_client.h"
 #include "tool_registry.h"
 #include "tools.h"
-#include "agent_core.h"
+#include "agent/agent_core.h"
 #include "frontends/cli_frontend.h"
 
 #include <spdlog/spdlog.h>
