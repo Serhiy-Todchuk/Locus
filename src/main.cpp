@@ -1,5 +1,5 @@
 #include "workspace.h"
-#include "file_watcher.h"
+#include "core/watcher_pump.h"
 #include "indexer.h"
 #include "llm_client.h"
 #include "tool_registry.h"
@@ -16,9 +16,6 @@
 #include <filesystem>
 #include <iostream>
 #include <string>
-#include <vector>
-#include <thread>
-#include <chrono>
 #include <atomic>
 
 #ifdef _WIN32
@@ -228,15 +225,6 @@ int main(int argc, char* argv[])
         if (!ws.locus_md().empty())
             spdlog::info("LOCUS.md loaded ({} bytes)", ws.locus_md().size());
 
-        // Drain startup file events.
-        std::this_thread::sleep_for(std::chrono::milliseconds(300));
-        std::vector<locus::FileEvent> events;
-        size_t n = ws.file_watcher().drain(events);
-        if (n > 0) {
-            spdlog::info("File watcher: drained {} events, updating index", n);
-            ws.indexer().process_events(events);
-        }
-
         auto& st = ws.indexer().stats();
         spdlog::info("Index: {} files ({} text, {} binary), {} symbols, {} headings",
                      st.files_total, st.files_indexed, st.files_binary,
@@ -410,13 +398,9 @@ int main(int argc, char* argv[])
                 continue;
             }
 
-            // Drain incremental file events before each turn.
-            events.clear();
-            n = ws.file_watcher().drain(events);
-            if (n > 0) {
-                spdlog::trace("Pre-turn: {} file events, updating index", n);
-                ws.indexer().process_events(events);
-            }
+            // Flush any pending file-watcher events before each turn so the
+            // first tool call sees a fresh index.
+            ws.watcher_pump().flush_now();
 
             // Send message to agent (blocks until turn completes).
             std::cout << "\n";

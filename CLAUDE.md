@@ -38,7 +38,7 @@ data into context, and keeps the user in full transparent control of every step.
 
 ## Current Stage
 
-**M3 — Refactoring in progress.** S3.C (`IWorkspaceServices` interface) done. See [roadmap/M3/](roadmap/M3/) for the task list.
+**M3 — Refactoring in progress.** S3.C (`IWorkspaceServices` interface) and S3.F (`WatcherPump` + `LocusFrame` split) done. See [roadmap/M3/](roadmap/M3/) for the task list.
 
 **M3 is now Refactoring** (not Agent Quality). Old M3 → M4 (Agent Quality), old M4 → M5 (Connected). Per-stage docs live under [roadmap/M3/](roadmap/M3/), [roadmap/M4/](roadmap/M4/), [roadmap/M5/](roadmap/M5/). [roadmap.md](roadmap.md) is the index.
 
@@ -120,7 +120,7 @@ Core is a static lib (`locus_core`). Both `locus` (exe) and `locus_tests` link i
 
 | File | What it owns | Key types |
 |---|---|---|
-| `src/workspace.h/cpp` | Opens a folder, owns main_db (always) + vectors_db (optional) + watcher + indexer + query. One per folder. | `Workspace`, `WorkspaceConfig` |
+| `src/workspace.h/cpp` | Opens a folder, owns main_db (always) + vectors_db (optional) + watcher + indexer + query + watcher_pump. One per folder. | `Workspace`, `WorkspaceConfig` |
 | `src/database.h/cpp` | RAII SQLite wrapper. WAL mode. Two schema kinds: `Main` (files/fts/symbols/headings) and `Vectors` (chunks + vec0 chunk_vectors; loads sqlite-vec only here). Includes legacy-table migration. | `Database`, `DbKind` |
 | `src/file_watcher.h/cpp` | efsw wrapper. Debounced `FileEvent` queue. | `FileWatcher`, `FileEvent` |
 | `src/indexer.h/cpp` | Initial traversal + incremental updates. Tree-sitter symbol parsing. Uses `ExtractorRegistry` for text/heading extraction. Writes skeleton to main_db, chunks to vectors_db — transactions open on both connections in parallel. | `Indexer`, `Indexer::Stats` |
@@ -128,6 +128,7 @@ Core is a static lib (`locus_core`). Both `locus` (exe) and `locus_tests` link i
 | `src/llm_client.h/cpp` | SSE streaming to OpenAI-compatible endpoints. Token estimation. | `ILLMClient`, `ChatMessage`, `ToolCallRequest`, `LLMConfig`, `StreamCallbacks` |
 | `src/sse_parser.h/cpp` | Low-level SSE `data:` line parser. | `SseParser` |
 | `src/core/workspace_services.h` | `IWorkspaceServices` interface — tool-facing surface over a workspace (no .cpp — pure abstract). `Workspace` implements it; tests use `tests/support/fake_workspace_services.h`. | `IWorkspaceServices` |
+| `src/core/watcher_pump.h/cpp` | Background thread that drains FileWatcher, batches by quiet-period (1.5s) + hard-cap (20s), calls `Indexer::process_events`. Owned by `Workspace` — replaces the pump that used to live duplicated in main.cpp / locus_app.cpp / locus_frame.cpp. Provides `flush_now()` for synchronous external flush. | `WatcherPump` |
 | `src/tool.h` | Tool system interfaces (no .cpp — pure abstract + structs). | `ITool`, `IToolRegistry`, `ToolParam`, `ToolResult`, `ToolCall` |
 | `src/tool_registry.h/cpp` | Concrete registry. Schema JSON builder. ToolCall parser. | `ToolRegistry` |
 | `src/tools.h/cpp` | All 12 built-in tools + `register_builtin_tools()` factory. | `ReadFileTool`, `WriteFileTool`, `CreateFileTool`, `DeleteFileTool`, `ListDirectoryTool`, `SearchTextTool`, `SearchSymbolsTool`, `GetFileOutlineTool`, `RunCommandTool`, `AskUserTool`, `SearchSemanticTool`, `SearchHybridTool` |
@@ -152,7 +153,9 @@ Core is a static lib (`locus_core`). Both `locus` (exe) and `locus_tests` link i
 | `src/frontends/cli_frontend.h/cpp` | Terminal frontend: token streaming, y/n/e tool approval, context meter, compaction prompts. | `CliFrontend` |
 | `src/main.cpp` | CLI entry point. Arg parsing, logging init, REPL loop, Ctrl+C handler. | `CliArgs` |
 | `src/gui/locus_app.h/cpp` | wxApp entry point. Owns Workspace, LLM, Agent lifetime. Single-instance check. | `LocusApp` |
-| `src/gui/locus_frame.h/cpp` | Main window. wxAuiManager 3-pane layout, menu bar, status bar. Binds agent events. | `LocusFrame` |
+| `src/gui/locus_frame.h/cpp` | Main window. wxAuiManager 3-pane layout, status bar, agent-event routing. Delegates menu bar to `MenuController`, status-pane composition to `OpsStatusView`. | `LocusFrame` |
+| `src/gui/menu_controller.h/cpp` | Owns the wxMenuBar and its dynamic submenus (Recent Workspaces, Saved Sessions). All actions run through `Hooks` callbacks supplied by `LocusFrame`. | `MenuController` |
+| `src/gui/ops_status_view.h/cpp` | Composes the right-pane status text from indexing/embedding progress counters. No wx dependencies beyond wxString. | `OpsStatusView` |
 | `src/gui/chat_panel.h/cpp` | Chat UI: wxWebView (HTML/CSS), wxTextCtrl input, context meter footer. Streaming via wxTimer + md4c. | `ChatPanel` |
 | `src/gui/markdown.h/cpp` | md4c wrapper: markdown → HTML (GitHub-flavored dialect). | `markdown_to_html()` |
 | `src/gui/locus_tray.h/cpp` | System tray icon. State display (idle/active/error), right-click menu, minimize-to-tray. | `LocusTray` |

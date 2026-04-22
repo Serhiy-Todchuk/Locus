@@ -3,7 +3,6 @@
 #include "recent_workspaces.h"
 #include "../tools.h"
 #include "../indexer.h"
-#include "../file_watcher.h"
 #include "../index_query.h"
 #include "../system_prompt.h"
 
@@ -14,10 +13,9 @@
 #include <wx/cmdline.h>
 #include <wx/stdpaths.h>
 
+#include <chrono>
 #include <filesystem>
 #include <fstream>
-#include <thread>
-#include <chrono>
 #include <clocale>
 #include <cstdlib>
 
@@ -197,15 +195,6 @@ bool LocusApp::OnInit()
         if (!workspace_->locus_md().empty())
             spdlog::info("LOCUS.md loaded ({} bytes)", workspace_->locus_md().size());
 
-        // Drain startup file events.
-        std::this_thread::sleep_for(std::chrono::milliseconds(300));
-        std::vector<FileEvent> events;
-        size_t n = workspace_->file_watcher().drain(events);
-        if (n > 0) {
-            spdlog::info("File watcher: drained {} events, updating index", n);
-            workspace_->indexer().process_events(events);
-        }
-
         auto& st = workspace_->indexer().stats();
         spdlog::info("Index: {} files ({} text, {} binary), {} symbols, {} headings",
                      st.files_total, st.files_indexed, st.files_binary,
@@ -323,15 +312,6 @@ void LocusApp::open_workspace(const std::string& path)
 
         if (!workspace_->locus_md().empty())
             spdlog::info("LOCUS.md loaded ({} bytes)", workspace_->locus_md().size());
-
-        // Drain startup file events.
-        std::this_thread::sleep_for(std::chrono::milliseconds(300));
-        std::vector<FileEvent> events;
-        size_t n = workspace_->file_watcher().drain(events);
-        if (n > 0) {
-            spdlog::info("File watcher: drained {} events, updating index", n);
-            workspace_->indexer().process_events(events);
-        }
 
         auto& st = workspace_->indexer().stats();
         spdlog::info("Index: {} files ({} text, {} binary), {} symbols, {} headings",

@@ -1,4 +1,5 @@
 #include "workspace.h"
+#include "core/watcher_pump.h"
 #include "database.h"
 #include "embedder.h"
 #include "embedding_worker.h"
@@ -89,11 +90,24 @@ Workspace::Workspace(const fs::path& root)
 
     query_ = std::make_unique<IndexQuery>(*main_db_, vectors_db_.get());
 
+    // Watcher pump: drains the FileWatcher on a background thread and
+    // batches events into Indexer::process_events. Replaces the per-frontend
+    // pumps that used to live in main.cpp / locus_app.cpp / locus_frame.cpp.
+    watcher_pump_ = std::make_unique<WatcherPump>(*watcher_, *indexer_);
+    watcher_pump_->start();
+
     spdlog::info("Workspace opened: {}", root_.string());
 }
 
 Workspace::~Workspace()
 {
+    // Stop the pump first so no late tick fires into a half-destructed
+    // indexer. The pump's stop() also performs a final synchronous flush so
+    // edits made right before close still get indexed.
+    if (watcher_pump_) {
+        watcher_pump_->stop();
+        watcher_pump_.reset();
+    }
     if (embedding_worker_) {
         embedding_worker_->stop();
     }

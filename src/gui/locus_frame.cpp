@@ -1,7 +1,7 @@
 #include "locus_frame.h"
 #include "locus_app.h"
-#include "recent_workspaces.h"
 
+#include "../core/watcher_pump.h"
 #include "../embedding_worker.h"
 #include "../indexer.h"
 
@@ -12,25 +12,6 @@
 #include <wx/stdpaths.h>
 
 namespace locus {
-
-enum {
-    ID_MENU_QUIT = wxID_EXIT,
-    ID_MENU_ABOUT = wxID_ABOUT,
-    ID_MENU_RESET = wxID_HIGHEST + 200,
-    ID_MENU_COMPACT,
-    ID_MENU_SAVE_SESSION,
-    ID_MENU_OPEN_WORKSPACE,
-    ID_MENU_SETTINGS,
-    ID_MENU_VIEW_FILES,
-    ID_MENU_VIEW_ACTIVITY,
-    ID_MENU_CLEAR_SESSIONS,
-    ID_TIMER_WATCHER,
-    ID_MENU_RECENT_BASE         = wxID_HIGHEST + 300,  // 300..309 for recent workspaces
-    ID_MENU_SESSION_OPEN_BASE   = wxID_HIGHEST + 400,  // 400..449 for session open
-    ID_MENU_SESSION_DELETE_BASE = wxID_HIGHEST + 500,  // 500..549 for session delete
-};
-
-constexpr size_t k_max_sessions_in_menu = 50;
 
 wxBEGIN_EVENT_TABLE(LocusFrame, wxFrame)
     EVT_CLOSE(LocusFrame::on_close)
@@ -47,7 +28,81 @@ LocusFrame::LocusFrame(AgentCore& agent, Workspace& workspace)
     // AUI manager
     aui_.SetManagedWindow(this);
 
-    create_menu_bar();
+    // Menu bar — owned by MenuController; LocusFrame supplies action hooks.
+    MenuController::Hooks hooks;
+    hooks.on_quit                  = [this] { Close(false); };
+    hooks.on_open_workspace_dialog = [this] {
+        wxDirDialog dlg(this, "Select workspace folder",
+            wxStandardPaths::Get().GetDocumentsDir(),
+            wxDD_DEFAULT_STYLE | wxDD_DIR_MUST_EXIST);
+        if (dlg.ShowModal() == wxID_OK) {
+            std::string path = dlg.GetPath().ToStdString();
+            // Defer the switch so this handler returns before the frame is destroyed.
+            CallAfter([path] { wxGetApp().open_workspace(path); });
+        }
+    };
+    hooks.on_open_recent = [this](std::string path) {
+        CallAfter([path] { wxGetApp().open_workspace(path); });
+    };
+    hooks.on_settings           = [this] { show_settings_dialog(); };
+    hooks.on_reset_conversation = [this] { agent_.reset_conversation(); };
+    hooks.on_compact            = [this] { show_compaction_dialog(); };
+    hooks.on_save_session       = [this] {
+        auto id = agent_.save_session();
+        SetStatusText(wxString::Format("Session saved: %s", id));
+        if (menu_) menu_->rebuild_sessions_menu(agent_.sessions().list());
+    };
+    hooks.on_clear_sessions = [this] {
+        auto sessions = agent_.sessions().list();
+        if (sessions.empty()) {
+            SetStatusText("No saved sessions to clear", 0);
+            return;
+        }
+        int answer = wxMessageBox(
+            wxString::Format("Delete all %zu saved sessions?\nThis cannot be undone.",
+                             sessions.size()),
+            "Clear All Sessions", wxYES_NO | wxICON_WARNING, this);
+        if (answer != wxYES) return;
+        size_t removed = 0;
+        for (const auto& s : sessions)
+            if (agent_.sessions().remove(s.id)) ++removed;
+        SetStatusText(wxString::Format("Deleted %zu session(s)", removed), 0);
+        if (menu_) menu_->rebuild_sessions_menu(agent_.sessions().list());
+    };
+    hooks.on_load_session = [this](std::string id) {
+        try {
+            agent_.load_session(id);
+            SetStatusText(wxString::Format("Loaded session: %s", id), 0);
+        } catch (const std::exception& ex) {
+            wxMessageBox(wxString::Format("Failed to load session:\n%s", ex.what()),
+                         "Load Session", wxOK | wxICON_ERROR, this);
+        }
+    };
+    hooks.on_delete_session = [this](std::string id) {
+        int answer = wxMessageBox(
+            wxString::Format("Delete session '%s'?\nThis cannot be undone.", id),
+            "Delete Session", wxYES_NO | wxICON_WARNING, this);
+        if (answer != wxYES) return;
+        if (agent_.sessions().remove(id)) {
+            SetStatusText(wxString::Format("Deleted session: %s", id), 0);
+            if (menu_) menu_->rebuild_sessions_menu(agent_.sessions().list());
+        }
+    };
+    hooks.on_toggle_files_pane    = [this](bool show) { toggle_pane("sidebar",  show); };
+    hooks.on_toggle_activity_pane = [this](bool show) { toggle_pane("activity", show); };
+    hooks.on_about = [this] {
+        wxAboutDialogInfo info;
+        info.SetName("Locus");
+        info.SetVersion("0.1.0");
+        info.SetDescription("Local LLM Agent Assistant");
+        info.SetCopyright("MIT License");
+        wxAboutBox(info, this);
+    };
+    hooks.provide_sessions = [this] { return agent_.sessions().list(); };
+
+    menu_ = std::make_unique<MenuController>(this, std::move(hooks));
+    menu_->install();
+
     create_status_bar();
     setup_aui_layout();
 
@@ -92,16 +147,10 @@ LocusFrame::LocusFrame(AgentCore& agent, Workspace& workspace)
 
     // Wire indexer progress to the WxFrontend thread bridge. Initial build
     // runs before the frame exists; this catches subsequent `process_events`
-    // batches from the file watcher.
+    // batches from the WatcherPump (which lives in the workspace).
     workspace_.indexer().on_progress = [this](int done, int total) {
         wx_frontend_->on_indexing_progress(done, total);
     };
-
-    // File-watcher pump: drain the watcher every 500 ms and batch events
-    // so rapid saves produce one merged index transaction + one Activity row.
-    watcher_timer_.SetOwner(this, ID_TIMER_WATCHER);
-    Bind(wxEVT_TIMER, &LocusFrame::on_watcher_timer, this, ID_TIMER_WATCHER);
-    watcher_timer_.Start(500);
 
     // Populate index stats in the file tree panel.
     refresh_index_stats();
@@ -124,222 +173,6 @@ LocusFrame::~LocusFrame()
 }
 
 // ---------------------------------------------------------------------------
-// Menu bar
-// ---------------------------------------------------------------------------
-
-void LocusFrame::create_menu_bar()
-{
-    auto* file_menu = new wxMenu;
-    file_menu->Append(ID_MENU_OPEN_WORKSPACE, "Open Workspace...\tCtrl+O");
-
-    // Recent Workspaces submenu.
-    recent_menu_ = new wxMenu;
-    rebuild_recent_menu();
-    file_menu->AppendSubMenu(recent_menu_, "Recent Workspaces");
-
-    file_menu->Append(ID_MENU_SETTINGS,       "Settings...\tCtrl+,");
-    file_menu->AppendSeparator();
-    file_menu->Append(ID_MENU_QUIT, "Quit\tCtrl+Q");
-
-    auto* session_menu = new wxMenu;
-    session_menu->Append(ID_MENU_RESET,        "Reset Conversation\tCtrl+R");
-    session_menu->Append(ID_MENU_COMPACT,       "Compact Context");
-    session_menu->Append(ID_MENU_SAVE_SESSION,  "Save Session\tCtrl+S");
-    sessions_menu_ = new wxMenu;
-    rebuild_sessions_menu();
-    session_menu->AppendSubMenu(sessions_menu_, "Saved Sessions");
-    session_menu->AppendSeparator();
-    session_menu->Append(ID_MENU_CLEAR_SESSIONS, "Clear All Sessions...");
-
-    // Rebuild the sessions submenu each time the Session menu opens, so newly
-    // saved or externally-removed sessions show up without restarting the app.
-    session_menu->Bind(wxEVT_MENU_OPEN, [this](wxMenuEvent& e) {
-        rebuild_sessions_menu();
-        e.Skip();
-    });
-
-    auto* view_menu = new wxMenu;
-    view_files_item_    = view_menu->AppendCheckItem(ID_MENU_VIEW_FILES,    "Files Panel");
-    view_activity_item_ = view_menu->AppendCheckItem(ID_MENU_VIEW_ACTIVITY, "Activity Panel");
-    view_files_item_->Check(true);
-    view_activity_item_->Check(true);
-
-    auto* help_menu = new wxMenu;
-    help_menu->Append(ID_MENU_ABOUT, "About...");
-
-    auto* menu_bar = new wxMenuBar;
-    menu_bar->Append(file_menu,    "File");
-    menu_bar->Append(view_menu,    "View");
-    menu_bar->Append(session_menu, "Session");
-    menu_bar->Append(help_menu,    "Help");
-    SetMenuBar(menu_bar);
-
-    // Menu event handlers.
-    Bind(wxEVT_MENU, [this](wxCommandEvent&) { Close(false); }, ID_MENU_QUIT);
-    Bind(wxEVT_MENU, [this](wxCommandEvent&) {
-        wxDirDialog dlg(this, "Select workspace folder",
-            wxStandardPaths::Get().GetDocumentsDir(),
-            wxDD_DEFAULT_STYLE | wxDD_DIR_MUST_EXIST);
-        if (dlg.ShowModal() == wxID_OK) {
-            std::string path = dlg.GetPath().ToStdString();
-            // Defer the switch so this handler returns before the frame is destroyed.
-            CallAfter([path]() {
-                wxGetApp().open_workspace(path);
-            });
-        }
-    }, ID_MENU_OPEN_WORKSPACE);
-    Bind(wxEVT_MENU, [this](wxCommandEvent&) {
-        agent_.reset_conversation();
-    }, ID_MENU_RESET);
-    Bind(wxEVT_MENU, [this](wxCommandEvent&) {
-        show_compaction_dialog();
-    }, ID_MENU_COMPACT);
-    Bind(wxEVT_MENU, [this](wxCommandEvent&) {
-        auto id = agent_.save_session();
-        SetStatusText(wxString::Format("Session saved: %s", id));
-        rebuild_sessions_menu();
-    }, ID_MENU_SAVE_SESSION);
-    Bind(wxEVT_MENU, [this](wxCommandEvent&) {
-        auto sessions = agent_.sessions().list();
-        if (sessions.empty()) {
-            SetStatusText("No saved sessions to clear", 0);
-            return;
-        }
-        int answer = wxMessageBox(
-            wxString::Format("Delete all %zu saved sessions?\nThis cannot be undone.",
-                             sessions.size()),
-            "Clear All Sessions", wxYES_NO | wxICON_WARNING, this);
-        if (answer != wxYES) return;
-        size_t removed = 0;
-        for (const auto& s : sessions)
-            if (agent_.sessions().remove(s.id)) ++removed;
-        SetStatusText(wxString::Format("Deleted %zu session(s)", removed), 0);
-        rebuild_sessions_menu();
-    }, ID_MENU_CLEAR_SESSIONS);
-    Bind(wxEVT_MENU, [this](wxCommandEvent&) {
-        show_settings_dialog();
-    }, ID_MENU_SETTINGS);
-    Bind(wxEVT_MENU, [this](wxCommandEvent& e) {
-        toggle_pane("sidebar", e.IsChecked());
-    }, ID_MENU_VIEW_FILES);
-    Bind(wxEVT_MENU, [this](wxCommandEvent& e) {
-        toggle_pane("activity", e.IsChecked());
-    }, ID_MENU_VIEW_ACTIVITY);
-
-    // Saved Sessions submenu: bind the whole ID range once.
-    Bind(wxEVT_MENU, &LocusFrame::on_session_open,   this,
-         ID_MENU_SESSION_OPEN_BASE,
-         ID_MENU_SESSION_OPEN_BASE + static_cast<int>(k_max_sessions_in_menu) - 1);
-    Bind(wxEVT_MENU, &LocusFrame::on_session_delete, this,
-         ID_MENU_SESSION_DELETE_BASE,
-         ID_MENU_SESSION_DELETE_BASE + static_cast<int>(k_max_sessions_in_menu) - 1);
-    Bind(wxEVT_MENU, [this](wxCommandEvent&) {
-        wxAboutDialogInfo info;
-        info.SetName("Locus");
-        info.SetVersion("0.1.0");
-        info.SetDescription("Local LLM Agent Assistant");
-        info.SetCopyright("MIT License");
-        wxAboutBox(info, this);
-    }, ID_MENU_ABOUT);
-}
-
-void LocusFrame::rebuild_recent_menu()
-{
-    // Clear existing items.
-    while (recent_menu_->GetMenuItemCount() > 0)
-        recent_menu_->Delete(recent_menu_->FindItemByPosition(0));
-
-    auto entries = RecentWorkspaces::load();
-    if (entries.empty()) {
-        recent_menu_->Append(wxID_ANY, "(none)")->Enable(false);
-        return;
-    }
-
-    int id = ID_MENU_RECENT_BASE;
-    for (size_t i = 0; i < entries.size() && i < RecentWorkspaces::k_max_entries; ++i, ++id) {
-        recent_menu_->Append(id, wxString::FromUTF8(entries[i]));
-        Bind(wxEVT_MENU, [this, path = entries[i]](wxCommandEvent&) {
-            CallAfter([path]() {
-                wxGetApp().open_workspace(path);
-            });
-        }, id);
-    }
-}
-
-void LocusFrame::rebuild_sessions_menu()
-{
-    if (!sessions_menu_) return;
-
-    while (sessions_menu_->GetMenuItemCount() > 0)
-        sessions_menu_->Delete(sessions_menu_->FindItemByPosition(0));
-
-    sessions_in_menu_.clear();
-
-    auto sessions = agent_.sessions().list();
-    if (sessions.empty()) {
-        sessions_menu_->Append(wxID_ANY, "(none)")->Enable(false);
-        return;
-    }
-
-    const size_t n = std::min(sessions.size(), k_max_sessions_in_menu);
-    sessions_in_menu_.reserve(n);
-    for (size_t i = 0; i < n; ++i) {
-        const auto& s = sessions[i];
-
-        std::string preview = s.first_user_message;
-        if (preview.size() > 48) preview = preview.substr(0, 45) + "...";
-        wxString label = wxString::Format(
-            "%s  %s  (%d msgs)",
-            wxString::FromUTF8(s.timestamp.empty() ? s.id : s.timestamp),
-            wxString::FromUTF8(preview),
-            s.message_count);
-
-        auto* entry_menu = new wxMenu;
-        entry_menu->Append(ID_MENU_SESSION_OPEN_BASE   + static_cast<int>(i), "Open");
-        entry_menu->Append(ID_MENU_SESSION_DELETE_BASE + static_cast<int>(i), "Delete");
-
-        sessions_menu_->AppendSubMenu(entry_menu, label);
-        sessions_in_menu_.push_back(s.id);
-    }
-
-    if (sessions.size() > k_max_sessions_in_menu) {
-        sessions_menu_->AppendSeparator();
-        sessions_menu_->Append(wxID_ANY,
-            wxString::Format("(%zu more not shown)", sessions.size() - k_max_sessions_in_menu))
-            ->Enable(false);
-    }
-}
-
-void LocusFrame::on_session_open(wxCommandEvent& evt)
-{
-    size_t i = static_cast<size_t>(evt.GetId() - ID_MENU_SESSION_OPEN_BASE);
-    if (i >= sessions_in_menu_.size()) return;
-    std::string id = sessions_in_menu_[i];
-    try {
-        agent_.load_session(id);
-        SetStatusText(wxString::Format("Loaded session: %s", id), 0);
-    } catch (const std::exception& ex) {
-        wxMessageBox(wxString::Format("Failed to load session:\n%s", ex.what()),
-                     "Load Session", wxOK | wxICON_ERROR, this);
-    }
-}
-
-void LocusFrame::on_session_delete(wxCommandEvent& evt)
-{
-    size_t i = static_cast<size_t>(evt.GetId() - ID_MENU_SESSION_DELETE_BASE);
-    if (i >= sessions_in_menu_.size()) return;
-    std::string id = sessions_in_menu_[i];
-    int answer = wxMessageBox(
-        wxString::Format("Delete session '%s'?\nThis cannot be undone.", id),
-        "Delete Session", wxYES_NO | wxICON_WARNING, this);
-    if (answer != wxYES) return;
-    if (agent_.sessions().remove(id)) {
-        SetStatusText(wxString::Format("Deleted session: %s", id), 0);
-        rebuild_sessions_menu();
-    }
-}
-
-// ---------------------------------------------------------------------------
 // View menu / pane visibility
 // ---------------------------------------------------------------------------
 
@@ -349,18 +182,6 @@ void LocusFrame::toggle_pane(const wxString& pane_name, bool show)
     if (!pane.IsOk()) return;
     pane.Show(show);
     aui_.Update();
-}
-
-void LocusFrame::sync_view_menu()
-{
-    if (view_files_item_) {
-        auto& p = aui_.GetPane("sidebar");
-        if (p.IsOk()) view_files_item_->Check(p.IsShown());
-    }
-    if (view_activity_item_) {
-        auto& p = aui_.GetPane("activity");
-        if (p.IsOk()) view_activity_item_->Check(p.IsShown());
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -401,9 +222,9 @@ void LocusFrame::setup_aui_layout()
     chat_panel_ = new ChatPanel(this,
         [this](const std::string& msg) {
             // Flush any pending file-watcher events first so the agent's
-            // first tool call sees a fresh index (mirrors the CLI's
-            // pre-turn drain in main.cpp).
-            flush_pending_events();
+            // first tool call sees a fresh index.
+            workspace_.watcher_pump().flush_now();
+            refresh_index_stats();
             agent_.send_message(msg);
         },
         [this]() { show_compaction_dialog(); },
@@ -443,7 +264,7 @@ void LocusFrame::setup_aui_layout()
             if (name == "save") {
                 auto id = agent_.save_session();
                 SetStatusText(wxString::Format("Session saved: %s", id));
-                rebuild_sessions_menu();
+                if (menu_) menu_->rebuild_sessions_menu(agent_.sessions().list());
                 return true;
             }
             if (name == "settings") {
@@ -575,16 +396,6 @@ void LocusFrame::refresh_index_stats()
 
 void LocusFrame::on_close(wxCloseEvent& evt)
 {
-    // Stop the watcher pump first so no late tick fires into a
-    // half-destructed frame, then flush any pending events synchronously
-    // so edits made right before close still get indexed.
-    watcher_timer_.Stop();
-    try {
-        flush_pending_events();
-    } catch (const std::exception& ex) {
-        spdlog::warn("Final flush on close failed: {}", ex.what());
-    }
-
     // The embedding worker runs on its own thread and fires on_progress
     // callbacks into this frame.  Stop it here — before destruction — so no
     // callback can fire into freed memory.  stop() joins the thread.
@@ -602,68 +413,8 @@ void LocusFrame::on_close(wxCloseEvent& evt)
 }
 
 // ---------------------------------------------------------------------------
-// File-watcher pump + batching
+// Window state
 // ---------------------------------------------------------------------------
-
-namespace {
-    constexpr auto k_quiet_period = std::chrono::milliseconds(1500);
-    constexpr auto k_hard_cap     = std::chrono::milliseconds(20000);
-}
-
-void LocusFrame::on_watcher_timer(wxTimerEvent& /*evt*/)
-{
-    // Pull any new events from the watcher queue.
-    std::vector<FileEvent> drained;
-    size_t n = workspace_.file_watcher().drain(drained);
-
-    auto now = std::chrono::steady_clock::now();
-
-    if (n > 0) {
-        if (!group_active_) {
-            group_start_ = now;
-            group_active_ = true;
-        }
-        last_event_time_ = now;
-        pending_events_.insert(pending_events_.end(),
-                               std::make_move_iterator(drained.begin()),
-                               std::make_move_iterator(drained.end()));
-        spdlog::trace("Watcher: +{} events (pending {})", n, pending_events_.size());
-    }
-
-    if (!group_active_) return;
-
-    auto idle  = now - last_event_time_;
-    auto total = now - group_start_;
-    if (idle >= k_quiet_period || total >= k_hard_cap) {
-        flush_pending_events();
-    }
-}
-
-void LocusFrame::flush_pending_events()
-{
-    if (pending_events_.empty()) {
-        group_active_ = false;
-        return;
-    }
-
-    spdlog::info("File watcher: flushing {} batched event(s)",
-                 pending_events_.size());
-
-    // Move into a local so a concurrent append (e.g. if a nested call path
-    // could somehow reenter) doesn't see a half-cleared vector. Unlikely
-    // here since everything is on the UI thread, but cheap insurance.
-    std::vector<FileEvent> batch = std::move(pending_events_);
-    pending_events_.clear();
-    group_active_ = false;
-
-    try {
-        workspace_.indexer().process_events(batch);
-    } catch (const std::exception& ex) {
-        spdlog::error("process_events failed: {}", ex.what());
-    }
-
-    refresh_index_stats();
-}
 
 void LocusFrame::on_iconize(wxIconizeEvent& evt)
 {
@@ -677,11 +428,11 @@ void LocusFrame::on_iconize(wxIconizeEvent& evt)
 void LocusFrame::on_aui_pane_close(wxAuiManagerEvent& evt)
 {
     // User clicked the pane's X — mirror the change in the View menu.
-    if (auto* pane = evt.GetPane()) {
-        if (pane->name == "sidebar" && view_files_item_)
-            view_files_item_->Check(false);
-        else if (pane->name == "activity" && view_activity_item_)
-            view_activity_item_->Check(false);
+    if (auto* pane = evt.GetPane(); pane && menu_) {
+        if (pane->name == "sidebar")
+            menu_->set_files_pane_visible(false);
+        else if (pane->name == "activity")
+            menu_->set_activity_pane_visible(false);
     }
     evt.Skip();
 }
@@ -807,8 +558,7 @@ void LocusFrame::on_agent_embedding_progress(wxThreadEvent& evt)
     int total = static_cast<int>(evt.GetExtraLong());
     file_tree_panel_->set_embedding_progress(done, total);
 
-    embedding_done_  = done;
-    embedding_total_ = (total > 0 && done >= total) ? 0 : total;
+    ops_status_.set_embedding(done, total);
     refresh_ops_status();
 }
 
@@ -817,31 +567,17 @@ void LocusFrame::on_agent_indexing_progress(wxThreadEvent& evt)
     int done = evt.GetInt();
     int total = static_cast<int>(evt.GetExtraLong());
 
-    indexing_done_  = done;
-    indexing_total_ = (total > 0 && done >= total) ? 0 : total;
+    ops_status_.set_indexing(done, total);
     refresh_ops_status();
+
+    // Batch finished — pull fresh totals into the file tree footer.
+    if (total > 0 && done >= total)
+        refresh_index_stats();
 }
 
 void LocusFrame::refresh_ops_status()
 {
-    wxString out;
-    auto append = [&out](const wxString& s) {
-        if (!out.empty()) out += "  |  ";
-        out += s;
-    };
-
-    if (indexing_total_ > 0) {
-        double pct = 100.0 * indexing_done_ / indexing_total_;
-        append(wxString::Format("indexing %d/%d files %.1f%%",
-                                indexing_done_, indexing_total_, pct));
-    }
-    if (embedding_total_ > 0) {
-        double pct = 100.0 * embedding_done_ / embedding_total_;
-        append(wxString::Format("embedding %d/%d chunks %.1f%%",
-                                embedding_done_, embedding_total_, pct));
-    }
-
-    SetStatusText(out, 1);
+    SetStatusText(ops_status_.compose(), 1);
 }
 
 void LocusFrame::on_agent_activity(wxThreadEvent& evt)

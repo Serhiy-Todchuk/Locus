@@ -214,6 +214,7 @@ set_target_properties(sqlite_vec PROPERTIES
 
 add_library(locus_core STATIC
     src/workspace.cpp
+    src/core/watcher_pump.cpp
     src/database.cpp
     src/file_watcher.cpp
     src/indexer.cpp
@@ -282,6 +283,8 @@ add_executable(locus_gui WIN32
     src/gui/locus_app.cpp
     src/gui/locus_frame.cpp
     src/gui/locus_tray.cpp
+    src/gui/menu_controller.cpp
+    src/gui/ops_status_view.cpp
     src/gui/wx_frontend.cpp
     src/gui/activity_panel.cpp
     src/gui/chat_panel.cpp

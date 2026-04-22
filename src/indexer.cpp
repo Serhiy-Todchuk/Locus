@@ -715,6 +715,8 @@ void Indexer::process_events(const std::vector<FileEvent>& events)
 {
     if (events.empty()) return;
 
+    std::lock_guard<std::mutex> serial(process_mutex_);
+
     main_db_.exec("BEGIN TRANSACTION");
     if (vectors_db_) vectors_db_->exec("BEGIN TRANSACTION");
 

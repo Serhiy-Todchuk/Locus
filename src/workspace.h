@@ -19,6 +19,7 @@ class ExtractorRegistry;
 class FileWatcher;
 class IndexQuery;
 class Indexer;
+class WatcherPump;
 
 struct WorkspaceConfig {
     // Index settings
@@ -83,6 +84,7 @@ public:
     FileWatcher& file_watcher() { return *watcher_; }
     Indexer& indexer() { return *indexer_; }
     IndexQuery& query() { return *query_; }
+    WatcherPump& watcher_pump() { return *watcher_pump_; }
 
     EmbeddingWorker* embedding_worker() { return embedding_worker_.get(); }
 
@@ -107,6 +109,9 @@ private:
     std::unique_ptr<IndexQuery> query_;
     std::unique_ptr<Embedder> embedder_;
     std::unique_ptr<EmbeddingWorker> embedding_worker_;
+    // Owned after `indexer_` so it stops + joins before the indexer is torn
+    // down (the pump's background thread feeds events into the indexer).
+    std::unique_ptr<WatcherPump> watcher_pump_;
 };
 
 } // namespace locus
