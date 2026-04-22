@@ -35,3 +35,5 @@
 9. **S3.I**, **S3.K** (docs) — opportunistic, touch when adjacent code changes.
 
 None of the stages are hard-blocked on another; ordering is about *opportunity cost* not dependency.
+
+Update the Code Map in CLAUDE.md after each refactor.
