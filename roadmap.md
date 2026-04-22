@@ -29,7 +29,11 @@ Default (`info`) logs only errors, warnings, and stage transitions.
 | **M0 — CLI Prototype** | Prove the hard parts work before any UI | WS1 (Locus project) |
 | **M1 — Desktop App** | Usable standalone tool with wxWidgets UI | WS1 |
 | **M2 — Full Workspace Support** | All 3 test workspaces functional | WS1, WS2 (Wikipedia), WS3 (Docs) |
-| **M3 — Connected** | Remote access, VS Code shim, web frontend | All, from any device |
+| **M3 — Refactoring** | Pay down architectural debt before the next big feature push (split god-classes, regularize layering, document threading model) | WS1 |
+| **M4 — Agent Quality** | Close the gap vs RooCode/Aider/Cline/OpenCode/Claude Code on the tech fundamentals of a coding agent (editing, verification, undo, planning, extensibility, retrieval quality) | WS1 |
+| **M5 — Connected** | Remote access, VS Code shim, web frontend | All, from any device |
+
+Per-stage detail for M3, M4, M5 lives in [roadmap/M3/](roadmap/M3/), [roadmap/M4/](roadmap/M4/), [roadmap/M5/](roadmap/M5/) — one markdown file per stage so each stays individually greppable as it moves from planned → scoping → in-progress.
 
 ---
 
@@ -250,77 +254,83 @@ Personal documents (WS3) works end-to-end.
 - [ ] Chip hidden when no context attached; reappears on next attach
 - [ ] Catch2 tests: attach/clear round-trips through Core, system-prompt injection
 
-Richer editor-driven context (line/col/selection) moves to **S3.6** once the VS Code shim is feeding it.
+Richer editor-driven context (line/col/selection) moves to **[S5.6](roadmap/M5/S5.6-vscode-shim.md)** once the VS Code shim is feeding it.
 
 ---
 
-## M3 — Connected
+## M3 — Refactoring
 
-**Goal**: Core accessible over LAN. VS Code sends editor context. Browser frontend works. Wikipedia works end-to-end
+**Goal**: Pay down architectural debt before the next big feature push (M4 Agent Quality, M5 Connected). Split the god-classes that are about to collide with every new feature, regularize folder layout, document threading and the agent loop. Low-risk, high-future-value.
 
-### S3.1 — Web Retrieval (RAG)
-- [ ] `gumbo` vcpkg dependency added; HTML → plain text extractor (skip script/style/nav/footer)
-- [ ] `web_pages`, `web_fts`, `web_headings` tables in index.db schema
-- [ ] `WebSearchTool`: call configurable search API (Brave default), return titles + URLs + snippets
-- [ ] `WebFetchTool`: HTTP GET via cpr → gumbo extract → store in web_fts → return outline only
-- [ ] `WebReadTool`: read a section of a fetched page by heading or line range (like `read_file` for web)
-- [ ] `search_text` extended: optional `sources` param to include web_fts alongside files_fts
-- [ ] Web cache: per-session scoping, TTL eviction, configurable size cap (default 50 MB)
-- [ ] Web config in `.locus/config.json`: enabled, provider, api_key, api_url, cache settings
-- [ ] Per-workspace toggle: `web.enabled` (default false)
-- [ ] Catch2 tests: HTML extraction, web_fts indexing, cache eviction
+Per-stage detail: [roadmap/M3/](roadmap/M3/) — see [README](roadmap/M3/README.md) for the suggested ordering.
 
-### S3.2 — ZIM Reader (Wikipedia / Kiwix)
-- [ ] libzim vcpkg dependency added; `zim::Archive` opens a `.zim` file
-- [ ] `ZimWorkspace` wraps a `.zim` as a virtual workspace; articles are virtual "files"
-- [ ] Article iterator feeds indexer: title → path, HTML content → stripped plain text
-- [ ] `list_directory` maps to ZIM namespace/category browsing
-- [ ] `read_file` returns stripped article text (HTML tags removed)
-- [ ] Index build progress for large ZIM (English Wikipedia ~21M articles takes hours; shown in UI)
-- [ ] Catch2 tests: open a small test ZIM, verify article retrieval and FTS search
-
-### S3.3 — CrowServer Frontend
-- [ ] `CrowFrontend : IFrontend` in `src/frontends/crow/` — registers with Core, serves external clients
-- [ ] Crow server starts on Core init, binds to `127.0.0.1:PORT` (default 7700)
-- [ ] WebSocket: translates Core callbacks → JSON messages, routes incoming → `ILocusCore` calls
-- [ ] HTTP REST: `GET /workspaces`, `POST /workspaces/open`, `GET /sessions`, `GET /status`
-- [ ] Protocol version header on all responses; mismatch → `426 Upgrade Required`
-
-### S3.4 — Remote Access
-- [ ] Crow: optional bind to `0.0.0.0:PORT` (off by default; toggle in settings)
-- [ ] Bearer token: generate random 32-byte token on first run, store in `.locus/auth.token`
-- [ ] Token display: shown in settings panel with copy button; used by remote clients
-- [ ] Auth middleware: skip for `127.0.0.1`; require `Authorization: Bearer <token>` for all others
-- [ ] Self-signed TLS cert: generate with mbedTLS or similar on first LAN-mode enable, store in `.locus/`
-- [ ] Trust-on-first-use: remote client shows cert fingerprint, user confirms once
-- [ ] Tray icon tooltip: show active remote connections count
-
-### S3.5 — Web / Browser Frontend
-- [ ] Single HTML file + inline CSS + vanilla JS (no build step, no framework)
-- [ ] WebSocket client: connect to CrowServer, handle all message types
-- [ ] Chat UI: streaming token append, tool approval buttons, context meter bar
-- [ ] Served by Crow as a static file at `GET /`
-- [ ] PWA: `manifest.json` (name, icon, `display: standalone`)
-- [ ] `Service Worker`: cache static assets for offline load after first visit
-- [ ] Mobile-responsive layout: works on phone browser connected to PC over LAN
-
-### S3.6 — VS Code Shim
-- [ ] TypeScript VS Code extension project: `package.json`, `tsconfig.json`, `src/extension.ts`
-- [ ] On `vscode.window.onDidChangeTextEditorSelection`: build `EditContext`, POST to Core `/edit-context`
-- [ ] On `vscode.workspace.onDidChangeTextDocument`: throttle, update context
-- [ ] Extension settings: `locus.coreUrl` (default `http://127.0.0.1:7700`), `locus.token`
-- [ ] Status bar item: `$(locus-icon) Locus: Connected` / `Disconnected`; click to open settings
-- [ ] Activation: on workspace open; deactivation: clean up on VS Code close
-- [ ] Extend `AttachedContext` → `EditContext`: add `line`, `col`, `selection_text`, `selection_start`, `selection_end`
-- [ ] Core endpoint `POST /edit-context`: shim pushes editor state here
-- [ ] System-prompt injection upgraded to `[Editing: path:line — selection]` when selection fields present
-- [ ] Chip widget shows `📎 file.cpp:42` when line is set (reuse S2.4 chip)
-- [ ] Per-message checkbox "Include edit context" in ChatPanel footer (default: on when context is set)
-
+| Stage | Title |
+|---|---|
+| [S3.A](roadmap/M3/S3.A-agent-core-split.md) | Split `AgentCore` (850 LOC) into agent_loop / tool_dispatcher / activity_log / context_budget / session_store collaborators |
+| [S3.B](roadmap/M3/S3.B-llm-client-split.md) | Split `ILLMClient` / `do_stream` into transport + stream decoder + token counter; multi-format + multi-endpoint ready |
+| [S3.C](roadmap/M3/S3.C-workspace-services.md) | Replace `WorkspaceContext` raw-pointer struct with `IWorkspaceServices` interface |
+| [S3.D](roadmap/M3/S3.D-indexer-split.md) | Apply extractor-registry pattern to Tree-sitter; extract symbol rules + grammars + prepared-statements holder |
+| [S3.E](roadmap/M3/S3.E-tools-folder.md) | Split `tools.cpp` (21 KB / 12 tools) into `src/tools/` subfolder by family |
+| [S3.F](roadmap/M3/S3.F-locus-frame-split.md) | Slim `LocusFrame` (900 LOC); move file-watcher pump from GUI into `Workspace` (deduplicate 3 copies) |
+| [S3.G](roadmap/M3/S3.G-locus-session.md) | Bundle Workspace + LLM + ToolRegistry + AgentCore into `LocusSession` with single ctor/dtor |
+| [S3.H](roadmap/M3/S3.H-src-layering.md) | Consistent `src/{core,agent,llm,index,tools,extractors,frontends,util}/` layout |
+| [S3.I](roadmap/M3/S3.I-threading-model.md) | Document threads + ownership rules + cross-thread invariants |
+| [S3.J](roadmap/M3/S3.J-slash-commands.md) | Extract slash-command tokenizer + dispatcher from `AgentCore` into its own module |
+| [S3.K](roadmap/M3/S3.K-docs.md) | Add `agent-loop.md`, `threading-model.md`; introduce ADR trail under `architecture/decisions/` |
 
 ---
 
-## Deferred (Post-M3)
+## M4 — Agent Quality
+
+**Goal**: Close the gap against leading agents (RooCode, Cline, Aider, OpenCode, Claude Code) on the tech fundamentals that make a coding agent actually usable day-to-day: precise edits, verification loops, undo, planning, extensibility, and retrieval quality. Not UX polish — the engine underneath.
+
+Per-stage detail: [roadmap/M4/](roadmap/M4/) — see [README](roadmap/M4/README.md) for ordering and M3 prerequisites.
+
+| Stage | Title |
+|---|---|
+| [S4.A](roadmap/M4/S4.A-diff-editing.md) | Diff-Based Editing |
+| [S4.B](roadmap/M4/S4.B-checkpoint-undo.md) | Checkpoint & Undo |
+| [S4.C](roadmap/M4/S4.C-auto-verify.md) | Auto-Verify Feedback Loop |
+| [S4.D](roadmap/M4/S4.D-plan-mode.md) | Plan Mode |
+| [S4.E](roadmap/M4/S4.E-lsp.md) | LSP Integration |
+| [S4.F](roadmap/M4/S4.F-kv-cache.md) | KV / Prompt Cache Preservation |
+| [S4.G](roadmap/M4/S4.G-mcp.md) | MCP (Model Context Protocol) Client |
+| [S4.H](roadmap/M4/S4.H-parallel-tools.md) | Parallel Tool Calls |
+| [S4.I](roadmap/M4/S4.I-background-commands.md) | Background / Long-Running Commands |
+| [S4.J](roadmap/M4/S4.J-embeddings-reranker.md) | Better Embeddings + Reranker |
+| [S4.K](roadmap/M4/S4.K-retrieval-eval.md) | Retrieval Evaluation Harness |
+| [S4.L](roadmap/M4/S4.L-git-native.md) | Git-Native Features |
+| [S4.M](roadmap/M4/S4.M-ast-search.md) | Tree-Sitter Query Tool (Structural Grep) |
+| [S4.N](roadmap/M4/S4.N-tool-call-robustness.md) | Tool-Call Robustness Across Model Families |
+| [S4.O](roadmap/M4/S4.O-streaming-tool-results.md) | Streaming / Partial Tool Results |
+| [S4.P](roadmap/M4/S4.P-grep.md) | Grep Tool (Regex over Raw Content) |
+| [S4.Q](roadmap/M4/S4.Q-multi-model.md) | Multi-Model Split (Weak + Strong) |
+| [S4.R](roadmap/M4/S4.R-memory-bank.md) | Memory Bank / Session Scratchpad |
+| [S4.S](roadmap/M4/S4.S-telemetry.md) | Telemetry & Agent Performance Metrics |
+| [S4.T](roadmap/M4/S4.T-file-change-awareness.md) | File-Change Awareness Between Turns |
+| [S4.U](roadmap/M4/S4.U-subagents.md) | Subagent / Task Delegation |
+| [S4.V](roadmap/M4/S4.V-misc-gaps.md) | Miscellaneous Smaller Gaps |
+
+---
+
+## M5 — Connected
+
+**Goal**: Core accessible over LAN. VS Code sends editor context. Browser frontend works. Wikipedia works end-to-end.
+
+Per-stage detail: [roadmap/M5/](roadmap/M5/) — see [README](roadmap/M5/README.md).
+
+| Stage | Title |
+|---|---|
+| [S5.1](roadmap/M5/S5.1-web-retrieval.md) | Web Retrieval (RAG) |
+| [S5.2](roadmap/M5/S5.2-zim-reader.md) | ZIM Reader (Wikipedia / Kiwix) |
+| [S5.3](roadmap/M5/S5.3-crow-frontend.md) | CrowServer Frontend |
+| [S5.4](roadmap/M5/S5.4-remote-access.md) | Remote Access |
+| [S5.5](roadmap/M5/S5.5-web-frontend.md) | Web / Browser Frontend |
+| [S5.6](roadmap/M5/S5.6-vscode-shim.md) | VS Code Shim |
+
+---
+
+## Deferred (Post-M5)
 
 Items from requirements Nice-to-Have — not scheduled yet:
 
@@ -339,7 +349,6 @@ Items from requirements Nice-to-Have — not scheduled yet:
 - LaTeX math display in LLM chat (for formulas)
 - Symbol index: extract member variables / field declarations (C++ `field_declaration`, etc.)
 - Bundled `LlamaCppClient` as a second `ILLMClient` backend (optional). Reuses llama.cpp already linked for embeddings; gives zero-install first-run with a curated GGUF. Keeps LM Studio / Ollama / llama-server path as primary (any OpenAI-compatible endpoint). Costs: GPU-backend distribution (CPU + Vulkan realistic, CUDA adds hundreds of MB), per-model chat-template + tool-call parsing we currently get free from LM Studio, and model-management UX (picker, download, swap).
-- Open-citation UX: agent cites `file:line` or `file:page` → click opens the right thing per format. Shell-execute for PDF/DOCX/XLSX (native app), in-app render for ZIM articles + markdown + plain text (reuse existing WebView/md4c), hand off to VS Code for code files. Avoids building a universal file viewer while still letting the user verify what the agent saw. ZIM article rendering is the only hard requirement (no external viewer exists) and is implicitly needed by S3.2.
+- Open-citation UX: agent cites `file:line` or `file:page` → click opens the right thing per format. Shell-execute for PDF/DOCX/XLSX (native app), in-app render for ZIM articles + markdown + plain text (reuse existing WebView/md4c), hand off to VS Code for code files. Avoids building a universal file viewer while still letting the user verify what the agent saw. ZIM article rendering is the only hard requirement (no external viewer exists) and is implicitly needed by [S5.2](roadmap/M5/S5.2-zim-reader.md).
 - Lightweight chat UI: replace `wxWebView` with `wxHtmlWindow` (optional). Keeps md4c → HTML pipeline, drops the browser engine (tens of MB → hundreds of KB per instance, no cold-start cost). Loses: JS-powered features (Mermaid, KaTeX, interactive code views) — those would need WebView back for just those views.
 - CLI: raw-mode line editor (vendor replxx or similar) — suppresses visible `^[[200~` bracketed-paste markers on Windows, adds history, arrow-key editing. Current CLI uses line-mode stdin + terminal echo, which renders VT input sequences literally during paste. Non-blocking since desktop GUI is the primary frontend.
-

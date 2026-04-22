@@ -39,7 +39,8 @@ data into context, and keeps the user in full transparent control of every step.
 ## Current Stage
 
 **M2 — Full Workspace Support in progress.** S2.1, S2.2, S2.3 complete. S2.4 (Active Edit Context / F7) next.
-See [roadmap.md](roadmap.md) for full status.
+
+**M3 is now Refactoring** (not Agent Quality). Old M3 → M4 (Agent Quality), old M4 → M5 (Connected). Per-stage docs live under [roadmap/M3/](roadmap/M3/), [roadmap/M4/](roadmap/M4/), [roadmap/M5/](roadmap/M5/). [roadmap.md](roadmap.md) is the index.
 
 ---
 
@@ -68,7 +69,7 @@ See [roadmap.md](roadmap.md) for full status.
 | Logging | **spdlog** | File sink + stderr, structured levels |
 | Threading | **std::thread + std::mutex/queue** | Explicit, no framework |
 | Tests | **Catch2** | Unit tests from day one, separate CMake target |
-| HTML parser | **gumbo-parser** | Google's C HTML5 parser, handles malformed HTML (planned for S3.1 web RAG; S2.3 uses a regex-based stripper) |
+| HTML parser | **gumbo-parser** | Google's C HTML5 parser, handles malformed HTML (planned for S4.1 web RAG; S2.3 uses a regex-based stripper) |
 | PDF extractor | **PDFium (bblanchon prebuilt, BSD-3-Clause)** | Fetched via `FetchContent` — not in vcpkg mainline. Ships as `pdfium.dll` alongside `locus.exe` |
 | DOCX/XLSX reader | **miniz + pugixml** | miniz unzips OOXML package; pugixml walks `word/document.xml` / sheet XML |
 | Index embedder | **llama.cpp (GGUF)** | CPU-only in-process inference; WordPiece vocab bundled in the GGUF; replaced ONNX Runtime which had MSVC-static-CRT schema-registration issues |
@@ -174,7 +175,10 @@ Core is a static lib (`locus_core`). Both `locus` (exe) and `locus_tests` link i
 | File | When to read |
 |---|---|
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Code style, build/run/test instructions for humans |
-| [roadmap.md](roadmap.md) | Full roadmap — milestones, stages, tasks. Current status of build. |
+| [roadmap.md](roadmap.md) | Roadmap index — milestones M0–M5, current status. M0–M2 inline; M3/M4/M5 link to per-stage files. |
+| [roadmap/M3/](roadmap/M3/) | M3 Refactoring — one file per stage (S3.A–S3.K) |
+| [roadmap/M4/](roadmap/M4/) | M4 Agent Quality — one file per stage (S4.A–S4.V) |
+| [roadmap/M5/](roadmap/M5/) | M5 Connected — one file per stage (S5.1–S5.6) |
 | [test-workspaces.md](test-workspaces.md) | Three concrete test cases — read when scoping features |
 | [vision.md](vision.md) | Understanding the *why* behind any design decision |
 | [DIFFERENTIATORS.md](DIFFERENTIATORS.md) | Who this is for, what makes it different |
