@@ -19,14 +19,28 @@
 #include <thread>
 #include <chrono>
 #include <clocale>
+#include <cstdlib>
 
 #ifdef _WIN32
 #include <windows.h>
+#if defined(_DEBUG)
+#define _CRTDBG_MAP_ALLOC
+#include <crtdbg.h>
+#endif
 #endif
 
 namespace fs = std::filesystem;
 
 namespace locus {
+
+#if defined(_WIN32) && defined(_DEBUG)
+// Baseline snapshot taken after OnInit completes. At shutdown we only dump
+// allocations made *after* this checkpoint, so lazy one-shot statics from the
+// STL/ICU (std::chrono::tzdb, locale data, etc.) and from wxWidgets internals
+// don't drown out real leaks.
+static _CrtMemState s_startup_mem_state{};
+static bool         s_startup_checkpoint_taken = false;
+#endif
 
 // wxWidgets macro: defines WinMain and creates the LocusApp instance.
 wxIMPLEMENT_APP(LocusApp);
@@ -65,6 +79,34 @@ bool LocusApp::OnInit()
 {
     if (!wxApp::OnInit())
         return false;
+
+#if defined(_WIN32) && defined(_DEBUG)
+    // Disable the CRT's automatic leak dump at exit; we emit our own dump
+    // filtered against a post-init checkpoint (see OnExit).
+    {
+        int flags = _CrtSetDbgFlag(_CRTDBG_REPORT_FLAG);
+        flags &= ~_CRTDBG_LEAK_CHECK_DF;
+        _CrtSetDbgFlag(flags);
+    }
+    // Force lazy IANA tzdb load now so its ~90 never-freed blocks land before
+    // the checkpoint rather than after, where they'd masquerade as leaks.
+    try { (void)std::chrono::current_zone(); } catch (...) {}
+    // LOCUS_BREAK_ALLOC=<n> breaks in the debugger at CRT allocation number n,
+    // so the call stack pinpoints the leaking caller. Comma-separated for
+    // multiple targets (only the last one sticks, so iterate).
+    if (const char* env = std::getenv("LOCUS_BREAK_ALLOC")) {
+        long n = 0;
+        for (const char* p = env; *p; ) {
+            char* end = nullptr;
+            long v = std::strtol(p, &end, 10);
+            if (end == p) break;
+            if (v > 0) { n = v; _CrtSetBreakAlloc(v); }
+            p = (*end == ',') ? end + 1 : end;
+        }
+        if (n > 0)
+            spdlog::info("Debug: break on CRT allocation #{}", n);
+    }
+#endif
 
     // Follow OS light/dark theme (Windows 10+).
     MSWEnableDarkMode();
@@ -226,6 +268,11 @@ bool LocusApp::OnInit()
         return false;
     }
 
+#if defined(_WIN32) && defined(_DEBUG)
+    _CrtMemCheckpoint(&s_startup_mem_state);
+    s_startup_checkpoint_taken = true;
+#endif
+
     return true;
 }
 
@@ -368,7 +415,23 @@ int LocusApp::OnExit()
     workspace_.reset();
 
     spdlog::shutdown();
-    return wxApp::OnExit();
+    int rc = wxApp::OnExit();
+
+#if defined(_WIN32) && defined(_DEBUG)
+    if (s_startup_checkpoint_taken) {
+        _CrtMemState now{}, diff{};
+        _CrtMemCheckpoint(&now);
+        if (_CrtMemDifference(&diff, &s_startup_mem_state, &now)) {
+            OutputDebugStringA("Locus: leaks since post-init checkpoint:\n");
+            _CrtMemDumpStatistics(&diff);
+            _CrtMemDumpAllObjectsSince(&s_startup_mem_state);
+        } else {
+            OutputDebugStringA("Locus: no leaks since post-init checkpoint.\n");
+        }
+    }
+#endif
+
+    return rc;
 }
 
 void LocusApp::init_logging(const std::filesystem::path& locus_dir)

@@ -25,6 +25,37 @@ find_package(Llama CONFIG REQUIRED)
 find_package(miniz CONFIG REQUIRED)
 find_package(pugixml CONFIG REQUIRED)
 
+# llama-cpp / ggml upstream CMake configs use find_library with a single
+# IMPORTED_LOCATION, which breaks multi-config generators (VS picks the
+# debug .lib for Release builds → MTd/MT CRT mismatch). Patch each target
+# with IMPORTED_LOCATION_{DEBUG,RELEASE} derived from the vcpkg layout.
+foreach(_llama_tgt llama ggml::ggml ggml::ggml-base ggml::ggml-cpu)
+    if(NOT TARGET ${_llama_tgt})
+        continue()
+    endif()
+    get_target_property(_loc ${_llama_tgt} IMPORTED_LOCATION)
+    if(NOT _loc)
+        continue()
+    endif()
+    if(_loc MATCHES "/debug/lib/")
+        set(_debug_loc "${_loc}")
+        string(REPLACE "/debug/lib/" "/lib/" _release_loc "${_loc}")
+    else()
+        set(_release_loc "${_loc}")
+        string(REPLACE "/lib/" "/debug/lib/" _debug_loc "${_loc}")
+    endif()
+    if(EXISTS "${_release_loc}" AND EXISTS "${_debug_loc}")
+        set_property(TARGET ${_llama_tgt} PROPERTY IMPORTED_LOCATION)
+        set_target_properties(${_llama_tgt} PROPERTIES
+            IMPORTED_CONFIGURATIONS "RELEASE;DEBUG"
+            IMPORTED_LOCATION_RELEASE        "${_release_loc}"
+            IMPORTED_LOCATION_RELWITHDEBINFO "${_release_loc}"
+            IMPORTED_LOCATION_MINSIZEREL     "${_release_loc}"
+            IMPORTED_LOCATION_DEBUG          "${_debug_loc}"
+        )
+    endif()
+endforeach()
+
 # -- Tree-sitter grammars (fetched at configure time) --------------------------
 
 include(FetchContent)
