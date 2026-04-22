@@ -10,9 +10,9 @@
 
 | Stage | File | Summary |
 |---|---|---|
-| S3.A | [agent-core-split](S3.A-agent-core-split.md) | Split 850-LOC `AgentCore` into loop / dispatcher / activity / budget collaborators |
+| S3.A ✔ | [agent-core-split](S3.A-agent-core-split.md) | Split 850-LOC `AgentCore` into loop / dispatcher / activity / budget collaborators |
 | S3.B | [llm-client-split](S3.B-llm-client-split.md) | Split transport / stream-decoder / token-counter; prepare for multi-format + weak/strong |
-| S3.C | [workspace-services](S3.C-workspace-services.md) | Replace `WorkspaceContext` raw-pointer struct with `IWorkspaceServices` interface |
+| S3.C ✔ | [workspace-services](S3.C-workspace-services.md) | Replace `WorkspaceContext` raw-pointer struct with `IWorkspaceServices` interface |
 | S3.D | [indexer-split](S3.D-indexer-split.md) | Extract Tree-sitter symbol rules + language registry + prepared-statement holder |
 | S3.E | [tools-folder](S3.E-tools-folder.md) | Split `tools.cpp` into `src/tools/` subfolder by family |
 | S3.F ✔ | [locus-frame-split](S3.F-locus-frame-split.md) | Extract menu controller; move file-watcher pump into Core |

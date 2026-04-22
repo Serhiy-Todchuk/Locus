@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../workspace.h"
-#include "../agent_core.h"
+#include "../agent/agent_core.h"
 #include "../llm_client.h"
 #include "../tool_registry.h"
 

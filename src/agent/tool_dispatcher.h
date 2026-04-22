@@ -1,0 +1,63 @@
+#pragma once
+
+#include "core/workspace_services.h"
+#include "frontend.h"
+#include "frontend_registry.h"
+#include "llm_client.h"
+#include "tool.h"
+
+#include <atomic>
+#include <condition_variable>
+#include <functional>
+#include <mutex>
+#include <nlohmann/json.hpp>
+#include <optional>
+#include <string>
+
+namespace locus {
+
+class ActivityLog;
+
+// Runs a single tool call through the approval gate, executes it, and
+// injects the tool-result message back into conversation via the supplied
+// append callback. Owns the decision condvar/mutex and is the sole reader
+// of the shared cancel flag when blocked on approval.
+//
+// The dispatcher does not touch ConversationHistory directly — callers pass
+// an `AppendFn` so the agent thread remains the only writer.
+class ToolDispatcher {
+public:
+    using AppendFn = std::function<void(ChatMessage)>;
+
+    ToolDispatcher(IToolRegistry& tools,
+                   IWorkspaceServices& services,
+                   ActivityLog& activity,
+                   FrontendRegistry& frontends,
+                   std::atomic<bool>& cancel_flag);
+
+    // Look up, gate, execute, and inject one tool call.
+    // The unknown-tool case is handled here — a tool-error result is
+    // appended and an error event is emitted.
+    void dispatch(const ToolCall& call, const AppendFn& append_result);
+
+    // Submit a user decision (called from any thread).
+    void submit_decision(ToolDecision decision,
+                         nlohmann::json modified_args = {});
+
+    // Wake a dispatch that is blocked on approval (used by cancel).
+    void wake();
+
+private:
+    IToolRegistry&      tools_;
+    IWorkspaceServices& services_;
+    ActivityLog&        activity_;
+    FrontendRegistry&   frontends_;
+    std::atomic<bool>&  cancel_flag_;
+
+    std::mutex                  decision_mutex_;
+    std::condition_variable     decision_cv_;
+    std::optional<ToolDecision> pending_decision_;
+    nlohmann::json              pending_modified_args_;
+};
+
+} // namespace locus

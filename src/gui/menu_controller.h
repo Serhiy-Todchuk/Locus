@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../session_manager.h"
+#include "../agent/session_manager.h"
 
 #include <wx/wx.h>
 

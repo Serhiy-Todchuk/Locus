@@ -1,6 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include "agent_core.h"
+#include "agent/agent_core.h"
 #include "frontend.h"
 #include "tool_registry.h"
 #include "tools.h"

@@ -223,10 +223,14 @@ add_library(locus_core STATIC
     src/llm_client.cpp
     src/tool_registry.cpp
     src/tools.cpp
-    src/conversation.cpp
-    src/system_prompt.cpp
-    src/agent_core.cpp
-    src/session_manager.cpp
+    src/agent/conversation.cpp
+    src/agent/system_prompt.cpp
+    src/agent/activity_log.cpp
+    src/agent/context_budget.cpp
+    src/agent/tool_dispatcher.cpp
+    src/agent/agent_loop.cpp
+    src/agent/agent_core.cpp
+    src/agent/session_manager.cpp
     src/frontends/cli_frontend.cpp
     src/extractors/extractor_registry.cpp
     src/extractors/markdown_extractor.cpp

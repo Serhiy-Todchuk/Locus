@@ -38,7 +38,7 @@ data into context, and keeps the user in full transparent control of every step.
 
 ## Current Stage
 
-**M3 — Refactoring in progress.** S3.C (`IWorkspaceServices` interface) and S3.F (`WatcherPump` + `LocusFrame` split) done. See [roadmap/M3/](roadmap/M3/) for the task list.
+**M3 — Refactoring in progress.** S3.C (`IWorkspaceServices`), S3.F (`WatcherPump` + `LocusFrame` split) and S3.A (`AgentCore` split into `AgentLoop` / `ToolDispatcher` / `ActivityLog` / `ContextBudget`; agent sources moved to `src/agent/`) done. See [roadmap/M3/](roadmap/M3/) for the task list.
 
 **M3 is now Refactoring** (not Agent Quality). Old M3 → M4 (Agent Quality), old M4 → M5 (Connected). Per-stage docs live under [roadmap/M3/](roadmap/M3/), [roadmap/M4/](roadmap/M4/), [roadmap/M5/](roadmap/M5/). [roadmap.md](roadmap.md) is the index.
 
@@ -146,10 +146,14 @@ Core is a static lib (`locus_core`). Both `locus` (exe) and `locus_tests` link i
 | `src/glob_match.h` | Header-only glob pattern matching for exclude patterns. | `glob_match()` |
 | `src/frontend.h` | Frontend/core interfaces (no .cpp — pure abstract + enums). | `IFrontend`, `ILocusCore`, `ToolDecision`, `CompactionStrategy` |
 | `src/frontend_registry.h` | Thread-safe frontend registry with exception-isolated fan-out. Header-only. | `FrontendRegistry` |
-| `src/conversation.h/cpp` | Conversation history with JSON serialization and compaction. | `ConversationHistory` |
-| `src/system_prompt.h/cpp` | Assembles system prompt from base + LOCUS.md + metadata + tools. | `SystemPromptBuilder`, `WorkspaceMetadata` |
-| `src/session_manager.h/cpp` | Save/load/list conversation sessions to `.locus/sessions/`. | `SessionManager`, `SessionInfo` |
-| `src/agent_core.h/cpp` | Agent loop on dedicated thread: LLM → stream → tool calls → approval → execute → resume. | `AgentCore` |
+| `src/agent/conversation.h/cpp` | Conversation history with JSON serialization and compaction. | `ConversationHistory` |
+| `src/agent/system_prompt.h/cpp` | Assembles system prompt from base + LOCUS.md + metadata + tools. | `SystemPromptBuilder`, `WorkspaceMetadata` |
+| `src/agent/session_manager.h/cpp` | Save/load/list conversation sessions to `.locus/sessions/`. | `SessionManager`, `SessionInfo` |
+| `src/agent/activity_log.h/cpp` | Thread-safe activity ring buffer: assigns monotonic ids, broadcasts each event via `FrontendRegistry`, and serves `get_since()` for late-joining frontends. Extracted from `AgentCore` in S3.A. | `ActivityLog` |
+| `src/agent/context_budget.h/cpp` | Token accounting + overflow policy. Tracks last server-reported usage and previous-turn total for delta reporting; fires `on_compaction_needed` at the 80% soft threshold and 100% hard limit. Extracted from `AgentCore` in S3.A. | `ContextBudget` |
+| `src/agent/tool_dispatcher.h/cpp` | Tool approval gate + execute + result injection. Resolves per-workspace approval policy, waits on the decision condvar, and writes the tool-result message through an `AppendFn` so `AgentCore` stays the sole writer of `ConversationHistory`. Extracted from `AgentCore` in S3.A. | `ToolDispatcher` |
+| `src/agent/agent_loop.h/cpp` | One LLM round trip: builds the tool schema, streams tokens/reasoning/tool-call fragments, emits the `llm_response` activity event, returns a parsed `AgentStepResult` for the orchestrator. No knowledge of tool execution. Extracted from `AgentCore` in S3.A. | `AgentLoop`, `AgentStepResult` |
+| `src/agent/agent_core.h/cpp` | Orchestrator: agent thread + message queue + lifecycle, composing `AgentLoop` / `ToolDispatcher` / `ActivityLog` / `ContextBudget`. Owns `ConversationHistory` (only writer) and the attached-context state; slash-command handling stays here until S3.J. | `AgentCore` |
 | `src/frontends/cli_frontend.h/cpp` | Terminal frontend: token streaming, y/n/e tool approval, context meter, compaction prompts. | `CliFrontend` |
 | `src/main.cpp` | CLI entry point. Arg parsing, logging init, REPL loop, Ctrl+C handler. | `CliArgs` |
 | `src/gui/locus_app.h/cpp` | wxApp entry point. Owns Workspace, LLM, Agent lifetime. Single-instance check. | `LocusApp` |

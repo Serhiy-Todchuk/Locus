@@ -1,10 +1,10 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include "conversation.h"
-#include "system_prompt.h"
+#include "agent/conversation.h"
+#include "agent/system_prompt.h"
 #include "tool_registry.h"
 #include "tools.h"
-#include "agent_core.h"
+#include "agent/agent_core.h"
 #include "llm_client.h"
 
 using namespace locus;
