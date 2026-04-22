@@ -245,8 +245,11 @@ void LocusFrame::setup_aui_layout()
             {"settings", "Open the Settings dialog",              false},
             {"clear",    "Alias for /reset",                      false},
         };
-        for (auto* t : agent_.tools().all()) {
-            items.push_back({ t->name(), t->description(), true });
+        for (const auto& c : agent_.slash_dispatcher().complete("")) {
+            std::string desc = c.signature.empty()
+                ? c.description
+                : c.signature + "  -  " + c.description;
+            items.push_back({ c.name, std::move(desc), true });
         }
         chat_panel_->set_slash_commands(std::move(items));
     }

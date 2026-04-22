@@ -9,6 +9,7 @@
 #include "frontend_registry.h"
 #include "llm_client.h"
 #include "session_manager.h"
+#include "slash_commands.h"
 #include "system_prompt.h"
 #include "tool.h"
 #include "tool_dispatcher.h"
@@ -106,8 +107,15 @@ private:
     void process_message(const std::string& content);
 
     // Try to handle a /slash command (direct tool invocation). Returns true
-    // if the input was a slash command. Kept here until S3.J extracts it.
+    // if the input was a slash command. Delegates to slash_.
     bool try_slash_command(const std::string& content);
+
+public:
+    // Exposed so frontends can build autocomplete lists from the same
+    // registry + parser the agent uses at dispatch time.
+    SlashCommandDispatcher& slash_dispatcher() { return *slash_; }
+
+private:
 
     // Compose system prompt from base + (optional) attached-context section.
     std::string compose_system_prompt() const;
@@ -131,10 +139,11 @@ private:
     FrontendRegistry frontends_;
     SessionManager   sessions_;
 
-    std::unique_ptr<ActivityLog>    activity_;
-    std::unique_ptr<ContextBudget>  budget_;
-    std::unique_ptr<AgentLoop>      loop_;
-    std::unique_ptr<ToolDispatcher> dispatcher_;
+    std::unique_ptr<ActivityLog>           activity_;
+    std::unique_ptr<ContextBudget>         budget_;
+    std::unique_ptr<AgentLoop>             loop_;
+    std::unique_ptr<ToolDispatcher>        dispatcher_;
+    std::unique_ptr<SlashCommandDispatcher> slash_;
 
     // Agent thread + message queue.
     std::thread              agent_thread_;
