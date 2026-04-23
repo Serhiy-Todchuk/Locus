@@ -46,6 +46,12 @@ struct WorkspaceConfig {
     // Per-workspace tool approval overrides: tool_name -> policy.
     // Absent entries fall back to the tool's default (ITool::approval_policy()).
     std::unordered_map<std::string, ToolApprovalPolicy> tool_approval_policies;
+
+    // S3.L — token-cost guardrail. AgentCore logs the per-turn tool-manifest
+    // size at info level every turn; emits a warning when the manifest crosses
+    // this threshold. 4000 ≈ 12% of a 32K context — a reasonable "we've grown
+    // too much" signal once M4 adds ~20 more tools.
+    int tool_manifest_warn_tokens = 4000;
 };
 
 // Owns all workspace-level resources: config, database, file watcher, LOCUS.md.

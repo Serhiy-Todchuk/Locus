@@ -42,6 +42,18 @@ inline const char* policy_display_name(ToolApprovalPolicy p) {
     return "Ask Every Time";
 }
 
+// -- Tool visibility context ------------------------------------------------
+
+// Context in which tool schemas are assembled. Individual tools opt in via
+// ITool::visible_in_mode(). Defaults keep today's behavior: every tool is
+// visible in `agent` mode and hidden from `plan` / `subagent` (S3.L — the
+// plan/subagent modes themselves land in M4, but the plumbing ships now).
+enum class ToolMode {
+    agent,     // normal interactive turn (default)
+    plan,      // planning pass — execute-side tools (write, delete, run) hidden
+    subagent   // delegated subtask — role-specific subset
+};
+
 // -- Structs passed to/from tools -------------------------------------------
 
 struct ToolParam {
@@ -82,6 +94,18 @@ public:
 
     // Human-readable preview of what this call will do (shown in approval UI)
     virtual std::string preview(const ToolCall& call) const { return ""; }
+
+    // -- Context gating (S3.L) -----------------------------------------------
+    // Whether this tool can run against the given workspace right now. Default
+    // is always-available; override to hide tools whose substrate is missing
+    // (e.g. git tools when no `.git/`, LSP tools when no server attached).
+    // Filtered out of the per-turn manifest when false.
+    virtual bool available(IWorkspaceServices& /*ws*/) const { return true; }
+
+    // Whether this tool is exposed to the LLM in the given mode. Default
+    // `agent` only — execute-side tools stay hidden from plan/subagent modes
+    // unless they opt in.
+    virtual bool visible_in_mode(ToolMode mode) const { return mode == ToolMode::agent; }
 };
 
 // -- IToolRegistry interface ------------------------------------------------
@@ -95,7 +119,15 @@ public:
     virtual std::vector<ITool*> all() const = 0;
 
     // Builds OpenAI function-calling schema JSON array for the system prompt.
+    // Unfiltered variant: returns an entry for every registered tool (used by
+    // tests and the system-prompt text builder where filtering is irrelevant).
     virtual nlohmann::json build_schema_json() const = 0;
+
+    // Filtered variant (S3.L): applies `ITool::available(ws)` and
+    // `ITool::visible_in_mode(mode)` so the per-turn manifest only exposes
+    // tools that actually work in the current workspace + mode.
+    virtual nlohmann::json build_schema_json(IWorkspaceServices& ws,
+                                             ToolMode mode) const = 0;
 };
 
 } // namespace locus

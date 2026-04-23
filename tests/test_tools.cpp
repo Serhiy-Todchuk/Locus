@@ -49,7 +49,20 @@ TEST_CASE("ToolRegistry: build_schema_json produces valid OpenAI schema", "[s0.6
     auto schema = registry.build_schema_json();
 
     REQUIRE(schema.is_array());
-    REQUIRE(schema.size() == 12);  // 9 built-in tools
+    // S3.L: 4 search tools collapsed into a single unified `search` face,
+    // so the manifest now holds 9 entries (was 12).
+    REQUIRE(schema.size() == 9);
+
+    // One `search` entry, no split search_* tools.
+    bool has_search = false;
+    for (auto& entry : schema) {
+        if (entry["function"]["name"] == "search") has_search = true;
+        REQUIRE(entry["function"]["name"] != "search_text");
+        REQUIRE(entry["function"]["name"] != "search_symbols");
+        REQUIRE(entry["function"]["name"] != "search_semantic");
+        REQUIRE(entry["function"]["name"] != "search_hybrid");
+    }
+    REQUIRE(has_search);
 
     for (auto& entry : schema) {
         REQUIRE(entry.contains("type"));
@@ -81,7 +94,7 @@ TEST_CASE("ToolRegistry: all returns all tools", "[s0.6]")
     locus::register_builtin_tools(registry);
 
     auto all = registry.all();
-    REQUIRE(all.size() == 12);
+    REQUIRE(all.size() == 9);
 }
 
 TEST_CASE("ToolRegistry: parse_tool_call handles valid and empty JSON", "[s0.6]")
@@ -369,6 +382,95 @@ TEST_CASE("ListDirectoryTool: returns indexed files at root with '.'", "[s0.6][s
 
 // -- Approval policy checks -------------------------------------------------
 
+// -- S3.L: context-gated tool exposure --------------------------------------
+
+namespace {
+
+// Stub tool for gating tests. Configurable predicates; no real execute path.
+class StubGatedTool : public locus::ITool {
+public:
+    StubGatedTool(std::string name, bool available, locus::ToolMode visible_mode)
+        : name_(std::move(name)), available_(available), visible_mode_(visible_mode) {}
+
+    std::string name()        const override { return name_; }
+    std::string description() const override { return "stub"; }
+    std::vector<locus::ToolParam> params() const override { return {}; }
+    locus::ToolResult execute(const locus::ToolCall&, locus::IWorkspaceServices&) override {
+        return {true, "", ""};
+    }
+
+    bool available(locus::IWorkspaceServices&) const override { return available_; }
+    bool visible_in_mode(locus::ToolMode mode) const override { return mode == visible_mode_; }
+
+private:
+    std::string     name_;
+    bool            available_;
+    locus::ToolMode visible_mode_;
+};
+
+} // namespace
+
+TEST_CASE("ToolRegistry: build_schema_json filters by available() predicate", "[s3.l]")
+{
+    locus::ToolRegistry registry;
+    registry.register_tool(std::make_unique<StubGatedTool>(
+        "always_here", true, locus::ToolMode::agent));
+    registry.register_tool(std::make_unique<StubGatedTool>(
+        "never_here", false, locus::ToolMode::agent));
+
+    locus::test::FakeWorkspaceServices ws{fs::temp_directory_path()};
+
+    // Unfiltered overload still sees both — backward compatibility for tests.
+    REQUIRE(registry.build_schema_json().size() == 2);
+
+    // Filtered overload drops the unavailable one.
+    auto filtered = registry.build_schema_json(ws, locus::ToolMode::agent);
+    REQUIRE(filtered.size() == 1);
+    REQUIRE(filtered[0]["function"]["name"] == "always_here");
+}
+
+TEST_CASE("ToolRegistry: build_schema_json filters by visible_in_mode()", "[s3.l]")
+{
+    locus::ToolRegistry registry;
+    registry.register_tool(std::make_unique<StubGatedTool>(
+        "agent_only",    true, locus::ToolMode::agent));
+    registry.register_tool(std::make_unique<StubGatedTool>(
+        "plan_only",     true, locus::ToolMode::plan));
+    registry.register_tool(std::make_unique<StubGatedTool>(
+        "subagent_only", true, locus::ToolMode::subagent));
+
+    locus::test::FakeWorkspaceServices ws{fs::temp_directory_path()};
+
+    auto agent    = registry.build_schema_json(ws, locus::ToolMode::agent);
+    auto plan     = registry.build_schema_json(ws, locus::ToolMode::plan);
+    auto subagent = registry.build_schema_json(ws, locus::ToolMode::subagent);
+
+    REQUIRE(agent.size()    == 1);
+    REQUIRE(plan.size()     == 1);
+    REQUIRE(subagent.size() == 1);
+    REQUIRE(agent[0]["function"]["name"]    == "agent_only");
+    REQUIRE(plan[0]["function"]["name"]     == "plan_only");
+    REQUIRE(subagent[0]["function"]["name"] == "subagent_only");
+}
+
+TEST_CASE("ITool defaults: available()=true, visible_in_mode only in agent", "[s3.l]")
+{
+    // Built-in tools use the default predicates — verify the defaults match
+    // today's behavior so existing callers don't silently change.
+    locus::ToolRegistry registry;
+    locus::register_builtin_tools(registry);
+
+    locus::test::FakeWorkspaceServices ws{fs::temp_directory_path()};
+
+    auto agent = registry.build_schema_json(ws, locus::ToolMode::agent);
+    auto plan  = registry.build_schema_json(ws, locus::ToolMode::plan);
+
+    REQUIRE(agent.size() == 9);
+    REQUIRE(plan.size()  == 0);  // defaults hide everything in plan mode
+}
+
+// -- Approval policies ------------------------------------------------------
+
 TEST_CASE("Tool approval policies are correct", "[s0.6]")
 {
     locus::ToolRegistry registry;
@@ -377,8 +479,7 @@ TEST_CASE("Tool approval policies are correct", "[s0.6]")
     // auto tools (read-only)
     REQUIRE(registry.find("read_file")->approval_policy() == locus::ToolApprovalPolicy::auto_approve);
     REQUIRE(registry.find("list_directory")->approval_policy() == locus::ToolApprovalPolicy::auto_approve);
-    REQUIRE(registry.find("search_text")->approval_policy() == locus::ToolApprovalPolicy::auto_approve);
-    REQUIRE(registry.find("search_symbols")->approval_policy() == locus::ToolApprovalPolicy::auto_approve);
+    REQUIRE(registry.find("search")->approval_policy() == locus::ToolApprovalPolicy::auto_approve);
     REQUIRE(registry.find("get_file_outline")->approval_policy() == locus::ToolApprovalPolicy::auto_approve);
 
     // ask tools (mutating)
