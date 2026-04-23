@@ -14,6 +14,8 @@ public:
     ITool* find(const std::string& name) const override;
     std::vector<ITool*> all() const override;
     nlohmann::json build_schema_json() const override;
+    nlohmann::json build_schema_json(IWorkspaceServices& ws,
+                                     ToolMode mode) const override;
 
     // Parse a ToolCall from an LLM ToolCallRequest (id + name + JSON args string).
     static ToolCall parse_tool_call(const std::string& id,

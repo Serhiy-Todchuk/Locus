@@ -102,7 +102,7 @@ Per-stage detail: [roadmap/M3/](roadmap/M3/) — see [README](roadmap/M3/README.
 | [S3.I](roadmap/M3/S3.I-threading-model.md) ✔ | Document threads + ownership rules + cross-thread invariants |
 | [S3.J](roadmap/M3/S3.J-slash-commands.md) | Extract slash-command tokenizer + dispatcher from `AgentCore` into its own module |
 | [S3.K](roadmap/M3/S3.K-docs.md) ✔ | Add `agent-loop.md`, `threading-model.md`; introduce ADR trail under `architecture/decisions/` |
-| [S3.L](roadmap/M3/S3.L-tool-catalog-hygiene.md) | Tool-catalog hygiene: consolidate search family into `search(mode=…)`; add `available()` / `visible_in_mode()` gating hooks; log per-turn manifest size with threshold warning |
+| [S3.L](roadmap/M3/S3.L-tool-catalog-hygiene.md) ✔ | Tool-catalog hygiene: consolidate search family into `search(mode=…)`; add `available()` / `visible_in_mode()` gating hooks; log per-turn manifest size with threshold warning |
 
 ---
 

@@ -31,7 +31,8 @@ AgentCore::AgentCore(ILLMClient& llm,
 
     activity_   = std::make_unique<ActivityLog>(frontends_);
     budget_     = std::make_unique<ContextBudget>(llm_config_.context_limit, frontends_);
-    loop_       = std::make_unique<AgentLoop>(llm_, tools_, *activity_, *budget_, frontends_);
+    loop_       = std::make_unique<AgentLoop>(llm_, tools_, services_,
+                                               *activity_, *budget_, frontends_);
     dispatcher_ = std::make_unique<ToolDispatcher>(tools_, services_, *activity_,
                                                    frontends_, cancel_requested_);
     slash_      = std::make_unique<SlashCommandDispatcher>(tools_, services_);
