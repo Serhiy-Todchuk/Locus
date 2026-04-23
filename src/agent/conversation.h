@@ -2,7 +2,9 @@
 
 #include "llm_client.h"
 
+#include <atomic>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace locus {
@@ -11,6 +13,12 @@ namespace locus {
 // estimation, and compaction helpers.
 class ConversationHistory {
 public:
+    ConversationHistory() = default;
+    ConversationHistory(const ConversationHistory& other);
+    ConversationHistory(ConversationHistory&& other) noexcept;
+    ConversationHistory& operator=(const ConversationHistory& other);
+    ConversationHistory& operator=(ConversationHistory&& other) noexcept;
+
     void add(ChatMessage msg);
     void clear();
 
@@ -41,8 +49,39 @@ public:
     nlohmann::json to_json() const;
     static ConversationHistory from_json(const nlohmann::json& j);
 
+    // -- Thread ownership (S3.I) ------------------------------------------
+    // When an owner thread is set, every mutating call asserts it is on that
+    // thread (spdlog::error + debug abort). AgentCore sets the owner around
+    // each in-turn call to process_message; between turns the owner is
+    // cleared so inter-turn operations (CLI REPL /reset etc.) run on any
+    // thread without tripping the fence. Tests may set/clear the owner
+    // directly when simulating the agent thread.
+    void set_owner_thread(std::thread::id id);
+    void clear_owner_thread();
+    void assert_owner_thread(const char* op) const;
+
 private:
-    std::vector<ChatMessage> messages_;
+    std::vector<ChatMessage>     messages_;
+    std::atomic<std::thread::id> owner_thread_id_{};
+};
+
+// RAII helper: set ConversationHistory's owner thread to the caller for the
+// duration of the scope, then restore (clear). Used by AgentCore to gate each
+// process_message() run to the agent thread.
+class ConversationOwnerScope {
+public:
+    explicit ConversationOwnerScope(ConversationHistory& h)
+        : history_(h)
+    {
+        history_.set_owner_thread(std::this_thread::get_id());
+    }
+    ~ConversationOwnerScope() { history_.clear_owner_thread(); }
+
+    ConversationOwnerScope(const ConversationOwnerScope&) = delete;
+    ConversationOwnerScope& operator=(const ConversationOwnerScope&) = delete;
+
+private:
+    ConversationHistory& history_;
 };
 
 } // namespace locus

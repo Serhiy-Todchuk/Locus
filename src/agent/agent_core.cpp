@@ -215,7 +215,12 @@ void AgentCore::agent_thread_func()
             message_queue_.pop();
         }
 
-        process_message(message);
+        // Gate the history to this thread for the duration of the turn. S3.I:
+        // inter-turn mutations (e.g. CLI REPL /reset) run with owner cleared.
+        {
+            ConversationOwnerScope owner_scope(history_);
+            process_message(message);
+        }
 
         {
             std::lock_guard lock(sync_mutex_);

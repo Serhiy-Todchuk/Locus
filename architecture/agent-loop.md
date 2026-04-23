@@ -6,7 +6,9 @@ into.
 
 This is a cross-cutting guide. For the owned data structures see
 [src/agent/agent_core.h](../src/agent/agent_core.h); for tool execution mechanics see
-[tool-protocol.md](tool-protocol.md); for the full system picture see [overview.md](overview.md).
+[tool-protocol.md](tool-protocol.md); for the full system picture see
+[overview.md](overview.md); for process-wide thread inventory and invariants see
+[threading-model.md](threading-model.md).
 
 ---
 
