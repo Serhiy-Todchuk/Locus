@@ -21,6 +21,7 @@
 | S3.I ✔ | [threading-model](S3.I-threading-model.md) | Document threads, ownership, cross-thread invariants |
 | S3.J ✔ | [slash-commands](S3.J-slash-commands.md) | Extract slash-command tokenizer + dispatcher into its own module |
 | S3.K ✔ | [docs](S3.K-docs.md) | `agent-loop.md`, `threading-model.md`, ADR trail under `architecture/decisions/` |
+| S3.L | [tool-catalog-hygiene](S3.L-tool-catalog-hygiene.md) | Consolidate search family into one `search(mode=…)` tool; `available()` / `visible_in_mode()` gating hooks; per-turn manifest-size log + threshold warning |
 
 ## Suggested order
 
@@ -29,10 +30,11 @@
 3. *S3.A (agent-core split) — ~3 days; the single biggest unblock for M4.*
 4. *S3.J (slash commands) — falls out of S3.A naturally.*
 5. **S3.D**, **S3.E** — when the relevant M4 stage triggers them. Do not do both up-front.
-6. **S3.B** — defer until M4 S4.N (tool-format robustness) or S4.Q (weak/strong) starts.
-7. **S3.G** (LocusSession) — when M4 S4.B (checkpoint store) starts; the first new lifecycle subsystem is the natural moment.
-8. **S3.H** (src layering) — emerges from S3.A/S3.D/S3.E; do not big-bang.
-9. **S3.I**, **S3.K** (docs) — opportunistic, touch when adjacent code changes.
+6. **S3.L** — before the first M4 stage that adds new tools (realistically S4.A). Gating hooks + search consolidation should exist before M4 starts piling tools onto the catalog.
+7. **S3.B** — defer until M4 S4.N (tool-format robustness) or S4.Q (weak/strong) starts.
+8. **S3.G** (LocusSession) — when M4 S4.B (checkpoint store) starts; the first new lifecycle subsystem is the natural moment.
+9. **S3.H** (src layering) — emerges from S3.A/S3.D/S3.E; do not big-bang.
+10. **S3.I**, **S3.K** (docs) — opportunistic, touch when adjacent code changes.
 
 None of the stages are hard-blocked on another; ordering is about *opportunity cost* not dependency.
 
