@@ -222,7 +222,13 @@ add_library(locus_core STATIC
     src/sse_parser.cpp
     src/llm_client.cpp
     src/tool_registry.cpp
-    src/tools.cpp
+    src/tools/shared.cpp
+    src/tools/file_tools.cpp
+    src/tools/search_tools.cpp
+    src/tools/index_tools.cpp
+    src/tools/process_tools.cpp
+    src/tools/interactive_tools.cpp
+    src/tools/tools.cpp
     src/agent/conversation.cpp
     src/agent/system_prompt.cpp
     src/agent/activity_log.cpp

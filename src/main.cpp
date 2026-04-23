@@ -3,7 +3,7 @@
 #include "indexer.h"
 #include "llm_client.h"
 #include "tool_registry.h"
-#include "tools.h"
+#include "tools/tools.h"
 #include "agent/agent_core.h"
 #include "frontends/cli_frontend.h"
 

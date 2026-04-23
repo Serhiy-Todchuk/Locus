@@ -3,7 +3,7 @@
 #include "agent/agent_core.h"
 #include "frontend.h"
 #include "tool_registry.h"
-#include "tools.h"
+#include "tools/tools.h"
 #include "support/fake_workspace_services.h"
 
 #include <filesystem>

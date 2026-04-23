@@ -14,7 +14,7 @@
 | S3.B | [llm-client-split](S3.B-llm-client-split.md) | Split transport / stream-decoder / token-counter; prepare for multi-format + weak/strong |
 | S3.C ✔ | [workspace-services](S3.C-workspace-services.md) | Replace `WorkspaceContext` raw-pointer struct with `IWorkspaceServices` interface |
 | S3.D | [indexer-split](S3.D-indexer-split.md) | Extract Tree-sitter symbol rules + language registry + prepared-statement holder |
-| S3.E | [tools-folder](S3.E-tools-folder.md) | Split `tools.cpp` into `src/tools/` subfolder by family |
+| S3.E ✔ | [tools-folder](S3.E-tools-folder.md) | Split `tools.cpp` into `src/tools/` subfolder by family |
 | S3.F ✔ | [locus-frame-split](S3.F-locus-frame-split.md) | Extract menu controller; move file-watcher pump into Core |
 | S3.G | [locus-session](S3.G-locus-session.md) | Bundle Workspace + LLM + ToolRegistry + AgentCore into `LocusSession` |
 | S3.H | [src-layering](S3.H-src-layering.md) | Consistent `src/{core,agent,llm,index,tools,frontends,util}/` layout |
@@ -24,10 +24,10 @@
 
 ## Suggested order
 
-1. **S3.C** (workspace-services) — ~1 day; cheap; unblocks tool authors immediately.
-2. **S3.F** (file-watcher pump into Core) — ~½ day; removes 3-way duplication before M5 adds a 4th.
-3. **S3.A** (agent-core split) — ~3 days; the single biggest unblock for M4.
-4. **S3.J** (slash commands) — falls out of S3.A naturally.
+1. *S3.C (workspace-services) — ~1 day; cheap; unblocks tool authors immediately.*
+2. *S3.F (file-watcher pump into Core) — ~½ day; removes 3-way duplication before M5 adds a 4th.*
+3. *S3.A (agent-core split) — ~3 days; the single biggest unblock for M4.*
+4. *S3.J (slash commands) — falls out of S3.A naturally.*
 5. **S3.D**, **S3.E** — when the relevant M4 stage triggers them. Do not do both up-front.
 6. **S3.B** — defer until M4 S4.N (tool-format robustness) or S4.Q (weak/strong) starts.
 7. **S3.G** (LocusSession) — when M4 S4.B (checkpoint store) starts; the first new lifecycle subsystem is the natural moment.

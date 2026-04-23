@@ -95,7 +95,7 @@ Per-stage detail: [roadmap/M3/](roadmap/M3/) — see [README](roadmap/M3/README.
 | [S3.B](roadmap/M3/S3.B-llm-client-split.md) | Split `ILLMClient` / `do_stream` into transport + stream decoder + token counter; multi-format + multi-endpoint ready |
 | [S3.C](roadmap/M3/S3.C-workspace-services.md) | Replace `WorkspaceContext` raw-pointer struct with `IWorkspaceServices` interface |
 | [S3.D](roadmap/M3/S3.D-indexer-split.md) | Apply extractor-registry pattern to Tree-sitter; extract symbol rules + grammars + prepared-statements holder |
-| [S3.E](roadmap/M3/S3.E-tools-folder.md) | Split `tools.cpp` (21 KB / 12 tools) into `src/tools/` subfolder by family |
+| [S3.E](roadmap/M3/S3.E-tools-folder.md) ✔ | Split `tools.cpp` (21 KB / 12 tools) into `src/tools/` subfolder by family |
 | [S3.F](roadmap/M3/S3.F-locus-frame-split.md) | Slim `LocusFrame` (900 LOC); move file-watcher pump from GUI into `Workspace` (deduplicate 3 copies) |
 | [S3.G](roadmap/M3/S3.G-locus-session.md) | Bundle Workspace + LLM + ToolRegistry + AgentCore into `LocusSession` with single ctor/dtor |
 | [S3.H](roadmap/M3/S3.H-src-layering.md) | Consistent `src/{core,agent,llm,index,tools,extractors,frontends,util}/` layout |
