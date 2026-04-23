@@ -55,6 +55,57 @@ public:
     ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws) override;
 };
 
+// Exact string-match edit (Claude-Code-style: find `old_string` in the file,
+// replace with `new_string`). Uniqueness check fails if `old_string` occurs
+// more than once and `replace_all` is false — the LLM is expected to widen
+// the match with extra surrounding context and retry. Requires a prior
+// `read_file` on the same path in this process (S4.A).
+class EditFileTool : public ITool {
+public:
+    std::string name()        const override { return "edit_file"; }
+    std::string description() const override {
+        return "Edit a file by exact string replacement. Prefer this over write_file — "
+               "it is faster, cheaper, and immune to drift. `old_string` must match "
+               "exactly (including whitespace) and must be unique in the file unless "
+               "`replace_all` is true. You must have read the file earlier in this "
+               "session before editing it.";
+    }
+    std::vector<ToolParam> params() const override {
+        return {
+            {"path",        "string",  "Relative path from workspace root", true},
+            {"old_string",  "string",  "Exact text to find. Must be unique unless replace_all=true.", true},
+            {"new_string",  "string",  "Replacement text.",                  true},
+            {"replace_all", "boolean", "Replace every occurrence (default false).", false},
+        };
+    }
+    std::string preview(const ToolCall& call) const override;
+    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws) override;
+};
+
+// Atomic batch of edits on a single file. Either every edit applies, or the
+// file is left untouched. Each edit is applied in order to the running
+// buffer; later edits see the results of earlier edits. Uniqueness is
+// checked per edit just like `edit_file`.
+class MultiEditFileTool : public ITool {
+public:
+    std::string name()        const override { return "multi_edit_file"; }
+    std::string description() const override {
+        return "Apply an atomic list of (old_string, new_string) edits to a single file. "
+               "Edits apply in order; either all succeed or none are written. Use when "
+               "one logical change needs several related replacements.";
+    }
+    std::vector<ToolParam> params() const override {
+        return {
+            {"path",  "string", "Relative path from workspace root", true},
+            {"edits", "array",
+             "Array of edits. Each item: "
+             "{\"old_string\": str, \"new_string\": str, \"replace_all\"?: bool}.", true},
+        };
+    }
+    std::string preview(const ToolCall& call) const override;
+    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws) override;
+};
+
 class DeleteFileTool : public ITool {
 public:
     std::string name()        const override { return "delete_file"; }

@@ -4,6 +4,7 @@
 #include "context_budget.h"
 #include "frontend.h"
 #include "tool_registry.h"
+#include "workspace.h"
 
 #include <spdlog/spdlog.h>
 
@@ -11,20 +12,34 @@ namespace locus {
 
 AgentLoop::AgentLoop(ILLMClient& llm,
                      IToolRegistry& tools,
+                     IWorkspaceServices& services,
                      ActivityLog& activity,
                      ContextBudget& budget,
                      FrontendRegistry& frontends)
     : llm_(llm)
     , tools_(tools)
+    , services_(services)
     , activity_(activity)
     , budget_(budget)
     , frontends_(frontends)
 {}
 
+int AgentLoop::manifest_warn_tokens() const
+{
+    if (auto* ws = services_.workspace())
+        return ws->config().tool_manifest_warn_tokens;
+    return 4000;  // default if no Workspace (tests, embedded use)
+}
+
 std::vector<ToolSchema> AgentLoop::build_tool_schemas() const
 {
+    // S3.L: filter the manifest to tools that are available in this workspace
+    // and visible in the current mode. ToolMode::agent is the only mode the
+    // loop runs in today — plan/subagent land in M4 (S4.A / S4.S).
+    auto schema_json = tools_.build_schema_json(services_, ToolMode::agent);
+
     std::vector<ToolSchema> schemas;
-    auto schema_json = tools_.build_schema_json();
+    schemas.reserve(schema_json.size());
 
     for (auto& entry : schema_json) {
         if (!entry.contains("function")) continue;
@@ -34,6 +49,20 @@ std::vector<ToolSchema> AgentLoop::build_tool_schemas() const
         ts.description = fn.value("description", "");
         ts.parameters  = fn.value("parameters", nlohmann::json::object());
         schemas.push_back(std::move(ts));
+    }
+
+    // Token-cost guardrail: log the manifest footprint every turn, warn when
+    // it exceeds the configured threshold. Serialised JSON length is a close
+    // proxy for what the backend actually sends as the tools parameter.
+    int manifest_tokens = ILLMClient::estimate_tokens(schema_json.dump());
+    int threshold = manifest_warn_tokens();
+    if (manifest_tokens > threshold) {
+        spdlog::warn("Tool manifest: {} tools, ~{} tokens (threshold {}). "
+                     "Consider trimming or splitting by mode.",
+                     schemas.size(), manifest_tokens, threshold);
+    } else {
+        spdlog::info("Tool manifest: {} tools, ~{} tokens",
+                     schemas.size(), manifest_tokens);
     }
 
     return schemas;

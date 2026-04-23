@@ -42,6 +42,12 @@ private:
     void layout_normal();    // standard tool approval layout
     void layout_ask_user();  // ask_user: question + text input
 
+    // S4.A: render args_stc_ as a red/green unified-diff view when the pending
+    // call is edit_file or multi_edit_file. Returns true if the diff view was
+    // used (caller falls back to JSON view when false).
+    bool render_diff_view();
+    void render_json_view();
+
     void on_approve(wxCommandEvent& evt);
     void on_reject(wxCommandEvent& evt);
     void on_modify(wxCommandEvent& evt);
