@@ -101,7 +101,7 @@ Per-stage detail: [roadmap/M3/](roadmap/M3/) — see [README](roadmap/M3/README.
 | [S3.H](roadmap/M3/S3.H-src-layering.md) | Consistent `src/{core,agent,llm,index,tools,extractors,frontends,util}/` layout |
 | [S3.I](roadmap/M3/S3.I-threading-model.md) | Document threads + ownership rules + cross-thread invariants |
 | [S3.J](roadmap/M3/S3.J-slash-commands.md) | Extract slash-command tokenizer + dispatcher from `AgentCore` into its own module |
-| [S3.K](roadmap/M3/S3.K-docs.md) | Add `agent-loop.md`, `threading-model.md`; introduce ADR trail under `architecture/decisions/` |
+| [S3.K](roadmap/M3/S3.K-docs.md) ✔ | Add `agent-loop.md`, `threading-model.md`; introduce ADR trail under `architecture/decisions/` |
 
 ---
 

@@ -20,7 +20,7 @@
 | S3.H | [src-layering](S3.H-src-layering.md) | Consistent `src/{core,agent,llm,index,tools,frontends,util}/` layout |
 | S3.I | [threading-model](S3.I-threading-model.md) | Document threads, ownership, cross-thread invariants |
 | S3.J ✔ | [slash-commands](S3.J-slash-commands.md) | Extract slash-command tokenizer + dispatcher into its own module |
-| S3.K | [docs](S3.K-docs.md) | `agent-loop.md`, `threading-model.md`, ADR trail under `architecture/decisions/` |
+| S3.K ✔ | [docs](S3.K-docs.md) | `agent-loop.md`, `threading-model.md`, ADR trail under `architecture/decisions/` |
 
 ## Suggested order
 
