@@ -22,7 +22,16 @@ std::string SystemPromptBuilder::build(const std::string& locus_md,
           "- Summarize tool results concisely before responding.\n"
           "- When modifying files, show the user what you plan to do before executing.\n"
           "- Do not execute destructive operations (delete, overwrite) without explicit confirmation.\n"
-          "- Be concise. Do not repeat information the user already has.\n\n";
+          "- Be concise. Do not repeat information the user already has.\n\n"
+          "## Editing files\n"
+          "- Prefer `edit_file` (exact string replace) or `multi_edit_file` (atomic batch) over `write_file`. "
+          "They are faster, cheaper, and do not risk truncating or corrupting the file.\n"
+          "- Use `write_file` only for full rewrites or when the whole file is being regenerated; "
+          "use `create_file` for new files that do not yet exist.\n"
+          "- Before calling `edit_file` or `multi_edit_file`, call `read_file` on the same path in this session — "
+          "the editor refuses edits on files it has not seen to prevent hallucinated changes.\n"
+          "- `old_string` must match byte-for-byte (including indentation and trailing whitespace) and must be "
+          "unique in the file; widen the match with surrounding context if it is not.\n\n";
 
     // -- Workspace metadata ---------------------------------------------------
     ss << "## Workspace\n"

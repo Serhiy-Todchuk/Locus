@@ -4,6 +4,40 @@
 
 namespace locus {
 
+// S3.L: unified search face. Replaces the four individual search tools in the
+// exposed manifest — dispatches to the same underlying index calls via an
+// internal `mode` parameter. Registered by `register_builtin_tools()`.
+class SearchTool : public ITool {
+public:
+    std::string name()        const override { return "search"; }
+    std::string description() const override {
+        return "Unified workspace search. `mode` selects the backend: "
+               "text (FTS5 keyword, default), symbols (code definitions), "
+               "semantic (vector similarity), hybrid (BM25 + vector). "
+               "Semantic and hybrid require semantic search to be enabled.";
+    }
+    std::vector<ToolParam> params() const override {
+        return {
+            {"query",       "string",  "Search query. Keywords for text/hybrid, "
+                                       "symbol name/prefix for symbols, "
+                                       "natural language for semantic.", true},
+            {"mode",        "string",  "One of: text, symbols, semantic, hybrid. "
+                                       "Defaults to text.", false},
+            {"max_results", "integer", "Maximum results (default 20 for text/symbols, "
+                                       "10 for semantic/hybrid).", false},
+            {"kind",        "string",  "symbols mode only: filter by kind "
+                                       "(function, class, struct, method).", false},
+            {"language",    "string",  "symbols mode only: filter by language.", false},
+        };
+    }
+    ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::auto_approve; }
+    ToolResult execute(const ToolCall& call, IWorkspaceServices& ws) override;
+};
+
+// The four individual search tools below remain available as direct `ITool`s
+// (e.g. for slash-command testing) but are NOT registered by
+// `register_builtin_tools()` since S3.L — the LLM sees a single `search` face.
+
 class SearchTextTool : public ITool {
 public:
     std::string name()        const override { return "search_text"; }

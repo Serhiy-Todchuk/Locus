@@ -31,43 +31,62 @@ std::vector<ITool*> ToolRegistry::all() const
     return result;
 }
 
-nlohmann::json ToolRegistry::build_schema_json() const
+namespace {
+
+// Build one OpenAI function-calling entry for a tool:
+//   { "type": "function", "function": { "name", "description", "parameters" } }
+nlohmann::json build_entry(const ITool& t)
 {
-    // Builds the OpenAI function-calling "tools" array:
-    // [{ "type": "function", "function": { "name", "description", "parameters" } }, ...]
-    nlohmann::json arr = nlohmann::json::array();
+    nlohmann::json props = nlohmann::json::object();
+    nlohmann::json required_list = nlohmann::json::array();
 
-    for (auto& t : tools_) {
-        nlohmann::json props = nlohmann::json::object();
-        nlohmann::json required_list = nlohmann::json::array();
-
-        for (auto& p : t->params()) {
-            nlohmann::json prop;
-            prop["type"] = p.type;
-            prop["description"] = p.description;
-            props[p.name] = prop;
-            if (p.required)
-                required_list.push_back(p.name);
-        }
-
-        nlohmann::json parameters;
-        parameters["type"] = "object";
-        parameters["properties"] = props;
-        if (!required_list.empty())
-            parameters["required"] = required_list;
-
-        nlohmann::json func;
-        func["name"] = t->name();
-        func["description"] = t->description();
-        func["parameters"] = parameters;
-
-        nlohmann::json entry;
-        entry["type"] = "function";
-        entry["function"] = func;
-
-        arr.push_back(entry);
+    for (auto& p : t.params()) {
+        nlohmann::json prop;
+        prop["type"] = p.type;
+        prop["description"] = p.description;
+        props[p.name] = prop;
+        if (p.required)
+            required_list.push_back(p.name);
     }
 
+    nlohmann::json parameters;
+    parameters["type"] = "object";
+    parameters["properties"] = props;
+    if (!required_list.empty())
+        parameters["required"] = required_list;
+
+    nlohmann::json func;
+    func["name"] = t.name();
+    func["description"] = t.description();
+    func["parameters"] = parameters;
+
+    nlohmann::json entry;
+    entry["type"] = "function";
+    entry["function"] = func;
+    return entry;
+}
+
+} // namespace
+
+nlohmann::json ToolRegistry::build_schema_json() const
+{
+    // Unfiltered: one entry per registered tool. Used by tests and by the
+    // system-prompt text builder where gating doesn't apply.
+    nlohmann::json arr = nlohmann::json::array();
+    for (auto& t : tools_)
+        arr.push_back(build_entry(*t));
+    return arr;
+}
+
+nlohmann::json ToolRegistry::build_schema_json(IWorkspaceServices& ws,
+                                               ToolMode mode) const
+{
+    nlohmann::json arr = nlohmann::json::array();
+    for (auto& t : tools_) {
+        if (!t->visible_in_mode(mode)) continue;
+        if (!t->available(ws))         continue;
+        arr.push_back(build_entry(*t));
+    }
     return arr;
 }
 

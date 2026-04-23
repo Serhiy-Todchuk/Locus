@@ -36,4 +36,30 @@ ToolResult error_result(const std::string& msg)
     return {false, msg, msg};
 }
 
+// -- ReadTracker ------------------------------------------------------------
+
+ReadTracker& ReadTracker::instance()
+{
+    static ReadTracker s_tracker;
+    return s_tracker;
+}
+
+void ReadTracker::mark_read(const fs::path& canonical_path)
+{
+    std::lock_guard lock(mu_);
+    seen_.insert(canonical_path.string());
+}
+
+bool ReadTracker::was_read(const fs::path& canonical_path) const
+{
+    std::lock_guard lock(mu_);
+    return seen_.count(canonical_path.string()) > 0;
+}
+
+void ReadTracker::clear()
+{
+    std::lock_guard lock(mu_);
+    seen_.clear();
+}
+
 } // namespace locus::tools

@@ -243,6 +243,12 @@ static WorkspaceConfig config_from_json(const json& j)
             cfg.llm_context_limit = llm["context_limit"].get<int>();
     }
 
+    if (j.contains("agent")) {
+        auto& ag = j["agent"];
+        if (ag.contains("tool_manifest_warn_tokens"))
+            cfg.tool_manifest_warn_tokens = ag["tool_manifest_warn_tokens"].get<int>();
+    }
+
     if (j.contains("tool_approvals") && j["tool_approvals"].is_object()) {
         for (auto it = j["tool_approvals"].begin();
              it != j["tool_approvals"].end(); ++it) {
@@ -280,6 +286,9 @@ static json config_to_json(const WorkspaceConfig& cfg)
             {"model", cfg.llm_model},
             {"temperature", cfg.llm_temperature},
             {"context_limit", cfg.llm_context_limit}
+        }},
+        {"agent", {
+            {"tool_manifest_warn_tokens", cfg.tool_manifest_warn_tokens}
         }},
         {"tool_approvals", approvals}
     };

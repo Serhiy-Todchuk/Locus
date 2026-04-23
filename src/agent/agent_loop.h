@@ -1,6 +1,7 @@
 #pragma once
 
 #include "conversation.h"
+#include "core/workspace_services.h"
 #include "frontend_registry.h"
 #include "llm_client.h"
 #include "tool.h"
@@ -29,6 +30,7 @@ class AgentLoop {
 public:
     AgentLoop(ILLMClient& llm,
               IToolRegistry& tools,
+              IWorkspaceServices& services,
               ActivityLog& activity,
               ContextBudget& budget,
               FrontendRegistry& frontends);
@@ -36,13 +38,19 @@ public:
     AgentStepResult run_step(const ConversationHistory& history);
 
 private:
+    // Builds the filtered per-turn tool manifest (S3.L) and logs its token
+    // footprint. Returns the ToolSchema vector the LLM client consumes.
     std::vector<ToolSchema> build_tool_schemas() const;
 
-    ILLMClient&       llm_;
-    IToolRegistry&    tools_;
-    ActivityLog&      activity_;
-    ContextBudget&    budget_;
-    FrontendRegistry& frontends_;
+    // Per-workspace threshold above which we warn about manifest bloat.
+    int manifest_warn_tokens() const;
+
+    ILLMClient&         llm_;
+    IToolRegistry&      tools_;
+    IWorkspaceServices& services_;
+    ActivityLog&        activity_;
+    ContextBudget&      budget_;
+    FrontendRegistry&   frontends_;
 };
 
 } // namespace locus

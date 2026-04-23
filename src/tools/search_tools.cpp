@@ -15,6 +15,44 @@ namespace locus {
 
 using tools::error_result;
 
+// -- SearchTool (unified face) ----------------------------------------------
+// Dispatches on `mode` to one of the four implementations below. Keeps the
+// exposed tool catalog small (S3.L) without duplicating search logic.
+
+ToolResult SearchTool::execute(const ToolCall& call, IWorkspaceServices& ws)
+{
+    std::string mode = call.args.value("mode", "text");
+
+    // Rewrite args so the delegate sees exactly what it expects.
+    ToolCall sub = call;
+
+    if (mode == "text") {
+        SearchTextTool impl;
+        return impl.execute(sub, ws);
+    }
+    if (mode == "symbols") {
+        // SearchSymbolsTool expects `name` rather than `query` — translate.
+        if (!sub.args.contains("name") && sub.args.contains("query"))
+            sub.args["name"] = sub.args["query"];
+        SearchSymbolsTool impl;
+        return impl.execute(sub, ws);
+    }
+    if (mode == "semantic") {
+        SearchSemanticTool impl;
+        return impl.execute(sub, ws);
+    }
+    if (mode == "hybrid") {
+        SearchHybridTool impl;
+        return impl.execute(sub, ws);
+    }
+    if (mode == "regex" || mode == "ast") {
+        return error_result("Error: mode '" + mode + "' is not yet implemented "
+                            "(planned for M4).");
+    }
+    return error_result("Error: unknown search mode '" + mode +
+                        "'. Supported: text, symbols, semantic, hybrid.");
+}
+
 // -- SearchTextTool ---------------------------------------------------------
 
 ToolResult SearchTextTool::execute(const ToolCall& call, IWorkspaceServices& ws)
