@@ -89,15 +89,23 @@ ToolResult ReadFileTool::execute(const ToolCall& call, IWorkspaceServices& ws)
 
 std::string WriteFileTool::preview(const ToolCall& call) const
 {
+    // No workspace access from inside preview() — surface the intent as the
+    // LLM declared it. The execute path is what actually enforces create-vs-
+    // overwrite based on the real file state.
     std::string path = call.args.value("path", "");
-    int content_len = call.args.value("content", "").size();
-    return "Overwrite " + path + " (" + std::to_string(content_len) + " bytes)";
+    size_t new_len   = call.args.value("content", "").size();
+    bool overwrite   = call.args.value("overwrite", false);
+
+    std::string head = overwrite ? "Write (overwrite allowed): "
+                                 : "Create new: ";
+    return head + path + " (" + std::to_string(new_len) + " bytes)";
 }
 
 ToolResult WriteFileTool::execute(const ToolCall& call, IWorkspaceServices& ws)
 {
     std::string rel_path = call.args.value("path", "");
     std::string content  = call.args.value("content", "");
+    bool overwrite       = call.args.value("overwrite", false);
 
     if (rel_path.empty())
         return error_result("Error: 'path' parameter is required");
@@ -106,62 +114,31 @@ ToolResult WriteFileTool::execute(const ToolCall& call, IWorkspaceServices& ws)
     if (full.empty())
         return error_result("Error: path resolves outside workspace");
 
-    if (!fs::exists(full))
-        return error_result("Error: file does not exist: " + rel_path +
-                            " (use create_file for new files)");
-
-    std::ofstream out(full, std::ios::trunc);
-    if (!out.is_open())
-        return error_result("Error: cannot write to file: " + rel_path);
-
-    out << content;
-    out.close();
-
-    spdlog::trace("write_file: {} ({} bytes)", rel_path, content.size());
-
-    std::string msg = "Wrote " + std::to_string(content.size()) + " bytes to " + rel_path;
-    return {true, msg, msg};
-}
-
-// -- CreateFileTool ---------------------------------------------------------
-
-std::string CreateFileTool::preview(const ToolCall& call) const
-{
-    std::string path = call.args.value("path", "");
-    return "Create new file: " + path;
-}
-
-ToolResult CreateFileTool::execute(const ToolCall& call, IWorkspaceServices& ws)
-{
-    std::string rel_path = call.args.value("path", "");
-    std::string content  = call.args.value("content", "");
-
-    if (rel_path.empty())
-        return error_result("Error: 'path' parameter is required");
-
-    fs::path full = resolve_path(ws, rel_path);
-    if (full.empty())
-        return error_result("Error: path resolves outside workspace");
-
-    if (fs::exists(full))
+    bool exists = fs::exists(full);
+    if (exists && !overwrite)
         return error_result("Error: file already exists: " + rel_path +
-                            " (use write_file to overwrite)");
+                            " (set overwrite=true to replace it, or use edit_file "
+                            "for partial changes)");
 
+    // Make sure the containing directory exists — covers both fresh files and
+    // rewrites whose directory got removed since the path was chosen.
     std::error_code ec;
     fs::create_directories(full.parent_path(), ec);
     if (ec)
         return error_result("Error: cannot create directories: " + ec.message());
 
-    std::ofstream out(full);
+    std::ofstream out(full, std::ios::trunc | std::ios::binary);
     if (!out.is_open())
-        return error_result("Error: cannot create file: " + rel_path);
+        return error_result("Error: cannot write to file: " + rel_path);
 
-    out << content;
+    out.write(content.data(), static_cast<std::streamsize>(content.size()));
     out.close();
 
-    spdlog::trace("create_file: {} ({} bytes)", rel_path, content.size());
+    spdlog::trace("write_file: {} ({}, {} bytes)", rel_path,
+                  exists ? "overwrote" : "created", content.size());
 
-    std::string msg = "Created " + rel_path + " (" + std::to_string(content.size()) + " bytes)";
+    std::string msg = (exists ? "Overwrote " : "Created ") + rel_path +
+                      " (" + std::to_string(content.size()) + " bytes)";
     return {true, msg, msg};
 }
 
@@ -291,66 +268,13 @@ std::string make_edit_preview(const std::string& old_s, const std::string& new_s
 
 std::string EditFileTool::preview(const ToolCall& call) const
 {
-    std::string path  = call.args.value("path", "");
-    std::string old_s = call.args.value("old_string", "");
-    std::string new_s = call.args.value("new_string", "");
-    bool all          = call.args.value("replace_all", false);
-    std::string head  = "Edit " + path + (all ? " (replace_all)" : "") + "\n";
-    return head + make_edit_preview(old_s, new_s);
-}
-
-ToolResult EditFileTool::execute(const ToolCall& call, IWorkspaceServices& ws)
-{
-    std::string rel_path = call.args.value("path", "");
-    std::string old_s    = call.args.value("old_string", "");
-    std::string new_s    = call.args.value("new_string", "");
-    bool replace_all     = call.args.value("replace_all", false);
-
-    if (rel_path.empty())
-        return error_result("Error: 'path' parameter is required");
-
-    fs::path full = resolve_path(ws, rel_path);
-    if (full.empty())
-        return error_result("Error: path resolves outside workspace");
-    if (!fs::exists(full))
-        return error_result("Error: file does not exist: " + rel_path +
-                            " (use create_file for new files)");
-
-    if (!ReadTracker::instance().was_read(full))
-        return error_result("Error: read the file first. Call read_file on '" +
-                            rel_path +
-                            "' before edit_file so the exact content is confirmed.");
-
-    std::string buf;
-    if (!slurp(full, buf))
-        return error_result("Error: cannot open file for read: " + rel_path);
-
-    std::string err = apply_single_edit(buf, old_s, new_s, replace_all, rel_path);
-    if (!err.empty()) return error_result(err);
-
-    std::string werr = write_atomic(full, buf);
-    if (!werr.empty())
-        return error_result("Error: " + werr);
-
-    spdlog::trace("edit_file: {} ({}{})", rel_path,
-                  replace_all ? "replace_all, " : "",
-                  std::to_string(buf.size()) + " bytes");
-
-    std::string msg = "Edited " + rel_path;
-    if (replace_all)
-        msg += " (all occurrences)";
-    return {true, msg, msg};
-}
-
-// -- MultiEditFileTool ------------------------------------------------------
-
-std::string MultiEditFileTool::preview(const ToolCall& call) const
-{
     std::string path = call.args.value("path", "");
     const auto& edits = call.args.value("edits", nlohmann::json::array());
     std::ostringstream ss;
-    ss << "Edit " << path << " (" << edits.size() << " replacement"
-       << (edits.size() == 1 ? "" : "s") << ")\n";
+    ss << "Edit " << path;
+    if (edits.size() != 1)
+        ss << " (" << edits.size() << " replacements)";
+    ss << "\n";
     int n = 0;
     for (const auto& e : edits) {
         ss << make_edit_preview(e.value("old_string", ""),
@@ -364,7 +288,7 @@ std::string MultiEditFileTool::preview(const ToolCall& call) const
     return ss.str();
 }
 
-ToolResult MultiEditFileTool::execute(const ToolCall& call, IWorkspaceServices& ws)
+ToolResult EditFileTool::execute(const ToolCall& call, IWorkspaceServices& ws)
 {
     std::string rel_path = call.args.value("path", "");
     if (rel_path.empty())
@@ -381,19 +305,20 @@ ToolResult MultiEditFileTool::execute(const ToolCall& call, IWorkspaceServices& 
     if (full.empty())
         return error_result("Error: path resolves outside workspace");
     if (!fs::exists(full))
-        return error_result("Error: file does not exist: " + rel_path);
+        return error_result("Error: file does not exist: " + rel_path +
+                            " (use write_file to create a new file)");
 
     if (!ReadTracker::instance().was_read(full))
         return error_result("Error: read the file first. Call read_file on '" +
                             rel_path +
-                            "' before multi_edit_file so the exact content is confirmed.");
+                            "' before edit_file so the exact content is confirmed.");
 
     std::string buf;
     if (!slurp(full, buf))
         return error_result("Error: cannot open file for read: " + rel_path);
 
     // Apply every edit to an in-memory buffer. Any failure → discard buffer,
-    // file on disk is unchanged (atomicity).
+    // file on disk is unchanged (atomicity). Later edits see earlier results.
     for (size_t i = 0; i < edits.size(); ++i) {
         const auto& e = edits[i];
         std::string old_s = e.value("old_string", "");
@@ -402,9 +327,12 @@ ToolResult MultiEditFileTool::execute(const ToolCall& call, IWorkspaceServices& 
 
         std::string err = apply_single_edit(buf, old_s, new_s, all, rel_path);
         if (!err.empty()) {
-            return error_result("Error: edit " + std::to_string(i + 1) + "/" +
-                                std::to_string(edits.size()) + " failed: " + err +
-                                " (no changes written — multi_edit is atomic)");
+            std::string where = edits.size() == 1
+                ? std::string{}
+                : " (edit " + std::to_string(i + 1) + "/" +
+                  std::to_string(edits.size()) + ")";
+            return error_result(err + where +
+                                " — no changes written (edits are atomic)");
         }
     }
 
@@ -412,12 +340,13 @@ ToolResult MultiEditFileTool::execute(const ToolCall& call, IWorkspaceServices& 
     if (!werr.empty())
         return error_result("Error: " + werr);
 
-    spdlog::trace("multi_edit_file: {} ({} edits, {} bytes)",
-                  rel_path, edits.size(), buf.size());
+    spdlog::trace("edit_file: {} ({} edit{}, {} bytes)",
+                  rel_path, edits.size(), edits.size() == 1 ? "" : "s",
+                  buf.size());
 
-    std::string msg = "Applied " + std::to_string(edits.size()) +
-                      " edit" + (edits.size() == 1 ? "" : "s") +
-                      " to " + rel_path;
+    std::string msg = edits.size() == 1
+        ? "Edited " + rel_path
+        : "Applied " + std::to_string(edits.size()) + " edits to " + rel_path;
     return {true, msg, msg};
 }
 

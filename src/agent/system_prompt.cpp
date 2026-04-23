@@ -23,15 +23,17 @@ std::string SystemPromptBuilder::build(const std::string& locus_md,
           "- When modifying files, show the user what you plan to do before executing.\n"
           "- Do not execute destructive operations (delete, overwrite) without explicit confirmation.\n"
           "- Be concise. Do not repeat information the user already has.\n\n"
-          "## Editing files\n"
-          "- Prefer `edit_file` (exact string replace) or `multi_edit_file` (atomic batch) over `write_file`. "
-          "They are faster, cheaper, and do not risk truncating or corrupting the file.\n"
-          "- Use `write_file` only for full rewrites or when the whole file is being regenerated; "
-          "use `create_file` for new files that do not yet exist.\n"
-          "- Before calling `edit_file` or `multi_edit_file`, call `read_file` on the same path in this session — "
+          "## Editing and creating files\n"
+          "- Prefer `edit_file` over `write_file` for changes to existing files. It is faster, cheaper, and cannot "
+          "truncate or corrupt the file. `edit_file` takes an `edits` array — pass one element for a single change, "
+          "or several for an atomic batch (all succeed or none are written; later edits see the results of earlier edits).\n"
+          "- Use `write_file` to create new files (and for full rewrites, which require `overwrite=true`). "
+          "By default `write_file` refuses to replace an existing file — set `overwrite=true` only when you truly "
+          "intend to replace the whole content.\n"
+          "- Before calling `edit_file`, call `read_file` on the same path in this session — "
           "the editor refuses edits on files it has not seen to prevent hallucinated changes.\n"
-          "- `old_string` must match byte-for-byte (including indentation and trailing whitespace) and must be "
-          "unique in the file; widen the match with surrounding context if it is not.\n\n";
+          "- Each `old_string` must match byte-for-byte (including indentation and trailing whitespace) and must be "
+          "unique in the file; widen the match with surrounding context if it is not, or set `replace_all=true`.\n\n";
 
     // -- Workspace metadata ---------------------------------------------------
     ss << "## Workspace\n"

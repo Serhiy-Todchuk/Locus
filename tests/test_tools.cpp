@@ -49,10 +49,10 @@ TEST_CASE("ToolRegistry: build_schema_json produces valid OpenAI schema", "[s0.6
     auto schema = registry.build_schema_json();
 
     REQUIRE(schema.is_array());
-    // S3.L: 4 search tools collapsed into a single unified `search` face,
-    // so the manifest held 9 entries. S4.A adds `edit_file` and
-    // `multi_edit_file`, bringing the total to 11.
-    REQUIRE(schema.size() == 11);
+    // S3.L: 4 search tools collapsed into a single unified `search` face (9 total).
+    // S4.A: +1 `edit_file` (exact-string edits, single or atomic batch),
+    //       -1 `create_file` (merged into `write_file` with optional `overwrite`).
+    REQUIRE(schema.size() == 9);
 
     // One `search` entry, no split search_* tools.
     bool has_search = false;
@@ -95,7 +95,7 @@ TEST_CASE("ToolRegistry: all returns all tools", "[s0.6]")
     locus::register_builtin_tools(registry);
 
     auto all = registry.all();
-    REQUIRE(all.size() == 11);
+    REQUIRE(all.size() == 9);
 }
 
 TEST_CASE("ToolRegistry: parse_tool_call handles valid and empty JSON", "[s0.6]")
@@ -183,47 +183,13 @@ TEST_CASE("ReadFileTool: rejects path traversal", "[s0.6]")
 
 // -- WriteFileTool tests ----------------------------------------------------
 
-TEST_CASE("WriteFileTool: overwrites existing file", "[s0.6]")
-{
-    auto tmp = make_temp_workspace();
-    write_test_file(tmp, "target.txt", "original content");
-
-    locus::test::FakeWorkspaceServices ws{tmp};
-    locus::WriteFileTool tool;
-    locus::ToolCall call{"c1", "write_file",
-        {{"path", "target.txt"}, {"content", "new content"}}};
-
-    auto result = tool.execute(call, ws);
-    REQUIRE(result.success);
-    REQUIRE(read_entire_file(tmp / "target.txt") == "new content");
-
-    fs::remove_all(tmp);
-}
-
-TEST_CASE("WriteFileTool: fails for nonexistent file", "[s0.6]")
+TEST_CASE("WriteFileTool: creates a new file with parent directories", "[s0.6][s4.a]")
 {
     auto tmp = make_temp_workspace();
 
     locus::test::FakeWorkspaceServices ws{tmp};
     locus::WriteFileTool tool;
     locus::ToolCall call{"c1", "write_file",
-        {{"path", "nope.txt"}, {"content", "data"}}};
-
-    auto result = tool.execute(call, ws);
-    REQUIRE_FALSE(result.success);
-
-    fs::remove_all(tmp);
-}
-
-// -- CreateFileTool tests ---------------------------------------------------
-
-TEST_CASE("CreateFileTool: creates new file with directories", "[s0.6]")
-{
-    auto tmp = make_temp_workspace();
-
-    locus::test::FakeWorkspaceServices ws{tmp};
-    locus::CreateFileTool tool;
-    locus::ToolCall call{"c1", "create_file",
         {{"path", "subdir/new.txt"}, {"content", "hello"}}};
 
     auto result = tool.execute(call, ws);
@@ -234,18 +200,54 @@ TEST_CASE("CreateFileTool: creates new file with directories", "[s0.6]")
     fs::remove_all(tmp);
 }
 
-TEST_CASE("CreateFileTool: fails if file exists", "[s0.6]")
+TEST_CASE("WriteFileTool: refuses to overwrite when overwrite flag absent", "[s0.6][s4.a]")
 {
     auto tmp = make_temp_workspace();
-    write_test_file(tmp, "exists.txt", "old");
+    write_test_file(tmp, "target.txt", "original");
 
     locus::test::FakeWorkspaceServices ws{tmp};
-    locus::CreateFileTool tool;
-    locus::ToolCall call{"c1", "create_file",
-        {{"path", "exists.txt"}, {"content", "new"}}};
+    locus::WriteFileTool tool;
+    locus::ToolCall call{"c1", "write_file",
+        {{"path", "target.txt"}, {"content", "new"}}};  // overwrite defaults to false
 
     auto result = tool.execute(call, ws);
     REQUIRE_FALSE(result.success);
+    REQUIRE(read_entire_file(tmp / "target.txt") == "original");
+
+    fs::remove_all(tmp);
+}
+
+TEST_CASE("WriteFileTool: overwrites when overwrite=true", "[s0.6][s4.a]")
+{
+    auto tmp = make_temp_workspace();
+    write_test_file(tmp, "target.txt", "original");
+
+    locus::test::FakeWorkspaceServices ws{tmp};
+    locus::WriteFileTool tool;
+    locus::ToolCall call{"c1", "write_file",
+        {{"path", "target.txt"}, {"content", "new"}, {"overwrite", true}}};
+
+    auto result = tool.execute(call, ws);
+    REQUIRE(result.success);
+    REQUIRE(read_entire_file(tmp / "target.txt") == "new");
+
+    fs::remove_all(tmp);
+}
+
+TEST_CASE("WriteFileTool: overwrite=false on a fresh path still creates", "[s4.a]")
+{
+    // overwrite=false means "do not replace an existing file" — it must not
+    // block creation of a brand-new path.
+    auto tmp = make_temp_workspace();
+
+    locus::test::FakeWorkspaceServices ws{tmp};
+    locus::WriteFileTool tool;
+    locus::ToolCall call{"c1", "write_file",
+        {{"path", "fresh.txt"}, {"content", "hi"}, {"overwrite", false}}};
+
+    auto result = tool.execute(call, ws);
+    REQUIRE(result.success);
+    REQUIRE(read_entire_file(tmp / "fresh.txt") == "hi");
 
     fs::remove_all(tmp);
 }
@@ -466,7 +468,7 @@ TEST_CASE("ITool defaults: available()=true, visible_in_mode only in agent", "[s
     auto agent = registry.build_schema_json(ws, locus::ToolMode::agent);
     auto plan  = registry.build_schema_json(ws, locus::ToolMode::plan);
 
-    REQUIRE(agent.size() == 11);
+    REQUIRE(agent.size() == 9);
     REQUIRE(plan.size()  == 0);  // defaults hide everything in plan mode
 }
 
@@ -486,8 +488,6 @@ TEST_CASE("Tool approval policies are correct", "[s0.6]")
     // ask tools (mutating)
     REQUIRE(registry.find("write_file")->approval_policy() == locus::ToolApprovalPolicy::ask);
     REQUIRE(registry.find("edit_file")->approval_policy() == locus::ToolApprovalPolicy::ask);
-    REQUIRE(registry.find("multi_edit_file")->approval_policy() == locus::ToolApprovalPolicy::ask);
-    REQUIRE(registry.find("create_file")->approval_policy() == locus::ToolApprovalPolicy::ask);
     REQUIRE(registry.find("delete_file")->approval_policy() == locus::ToolApprovalPolicy::ask);
     REQUIRE(registry.find("run_command")->approval_policy() == locus::ToolApprovalPolicy::ask);
 }
@@ -508,6 +508,16 @@ void prime_read(const fs::path& tmp, const std::string& rel)
     REQUIRE(r.success);
 }
 
+// Build an edit_file call with a single (old, new, replace_all?) edit.
+locus::ToolCall one_edit(const std::string& rel, const std::string& old_s,
+                         const std::string& new_s, bool replace_all = false)
+{
+    nlohmann::json edit = {{"old_string", old_s}, {"new_string", new_s}};
+    if (replace_all) edit["replace_all"] = true;
+    return {"c1", "edit_file",
+            {{"path", rel}, {"edits", nlohmann::json::array({edit})}}};
+}
+
 } // namespace
 
 TEST_CASE("EditFileTool: exact single-occurrence replacement", "[s4.a]")
@@ -519,10 +529,7 @@ TEST_CASE("EditFileTool: exact single-occurrence replacement", "[s4.a]")
 
     locus::test::FakeWorkspaceServices ws{tmp};
     locus::EditFileTool tool;
-    locus::ToolCall call{"c1", "edit_file",
-        {{"path", "f.txt"}, {"old_string", "beta"}, {"new_string", "BETA"}}};
-
-    auto result = tool.execute(call, ws);
+    auto result = tool.execute(one_edit("f.txt", "beta", "BETA"), ws);
     REQUIRE(result.success);
     REQUIRE(read_entire_file(tmp / "f.txt") == "alpha BETA gamma");
 
@@ -538,10 +545,7 @@ TEST_CASE("EditFileTool: ambiguous match fails uniqueness check", "[s4.a]")
 
     locus::test::FakeWorkspaceServices ws{tmp};
     locus::EditFileTool tool;
-    locus::ToolCall call{"c1", "edit_file",
-        {{"path", "f.txt"}, {"old_string", "foo"}, {"new_string", "bar"}}};
-
-    auto result = tool.execute(call, ws);
+    auto result = tool.execute(one_edit("f.txt", "foo", "bar"), ws);
     REQUIRE_FALSE(result.success);
     REQUIRE_THAT(result.content, ContainsSubstring("matches 3 locations"));
     // File must be untouched on failure.
@@ -559,11 +563,7 @@ TEST_CASE("EditFileTool: replace_all rewrites every occurrence", "[s4.a]")
 
     locus::test::FakeWorkspaceServices ws{tmp};
     locus::EditFileTool tool;
-    locus::ToolCall call{"c1", "edit_file",
-        {{"path", "f.txt"}, {"old_string", "foo"},
-         {"new_string", "bar"}, {"replace_all", true}}};
-
-    auto result = tool.execute(call, ws);
+    auto result = tool.execute(one_edit("f.txt", "foo", "bar", true), ws);
     REQUIRE(result.success);
     REQUIRE(read_entire_file(tmp / "f.txt") == "bar bar bar");
 
@@ -579,10 +579,7 @@ TEST_CASE("EditFileTool: no match fails cleanly", "[s4.a]")
 
     locus::test::FakeWorkspaceServices ws{tmp};
     locus::EditFileTool tool;
-    locus::ToolCall call{"c1", "edit_file",
-        {{"path", "f.txt"}, {"old_string", "xyz"}, {"new_string", "zzz"}}};
-
-    auto result = tool.execute(call, ws);
+    auto result = tool.execute(one_edit("f.txt", "xyz", "zzz"), ws);
     REQUIRE_FALSE(result.success);
     REQUIRE_THAT(result.content, ContainsSubstring("not found"));
     REQUIRE(read_entire_file(tmp / "f.txt") == "abc def");
@@ -601,12 +598,8 @@ TEST_CASE("EditFileTool: preserves indentation exactly", "[s4.a]")
 
     locus::test::FakeWorkspaceServices ws{tmp};
     locus::EditFileTool tool;
-    locus::ToolCall call{"c1", "edit_file",
-        {{"path", "m.rs"},
-         {"old_string", "\treturn 0;"},
-         {"new_string", "\treturn 42;"}}};
-
-    auto result = tool.execute(call, ws);
+    auto result = tool.execute(
+        one_edit("m.rs", "\treturn 0;", "\treturn 42;"), ws);
     REQUIRE(result.success);
     REQUIRE(read_entire_file(tmp / "m.rs") == "fn main() {\n\treturn 42;\n}\n");
 
@@ -621,10 +614,7 @@ TEST_CASE("EditFileTool: requires prior read_file in session", "[s4.a]")
 
     locus::test::FakeWorkspaceServices ws{tmp};
     locus::EditFileTool tool;
-    locus::ToolCall call{"c1", "edit_file",
-        {{"path", "unseen.txt"}, {"old_string", "hello"}, {"new_string", "world"}}};
-
-    auto result = tool.execute(call, ws);
+    auto result = tool.execute(one_edit("unseen.txt", "hello", "world"), ws);
     REQUIRE_FALSE(result.success);
     REQUIRE_THAT(result.content, ContainsSubstring("read the file first"));
     REQUIRE(read_entire_file(tmp / "unseen.txt") == "hello");
@@ -641,19 +631,16 @@ TEST_CASE("EditFileTool: rejects old_string == new_string", "[s4.a]")
 
     locus::test::FakeWorkspaceServices ws{tmp};
     locus::EditFileTool tool;
-    locus::ToolCall call{"c1", "edit_file",
-        {{"path", "f.txt"}, {"old_string", "hello"}, {"new_string", "hello"}}};
-
-    auto result = tool.execute(call, ws);
+    auto result = tool.execute(one_edit("f.txt", "hello", "hello"), ws);
     REQUIRE_FALSE(result.success);
     REQUIRE_THAT(result.content, ContainsSubstring("no-op"));
 
     fs::remove_all(tmp);
 }
 
-// -- MultiEditFileTool tests ------------------------------------------------
+// -- Batch (edits[] with multiple entries) -----------------------------------
 
-TEST_CASE("MultiEditFileTool: applies every edit in order", "[s4.a]")
+TEST_CASE("EditFileTool: applies every batched edit in order", "[s4.a]")
 {
     locus::tools::ReadTracker::instance().clear();
     auto tmp = make_temp_workspace();
@@ -661,8 +648,8 @@ TEST_CASE("MultiEditFileTool: applies every edit in order", "[s4.a]")
     prime_read(tmp, "f.txt");
 
     locus::test::FakeWorkspaceServices ws{tmp};
-    locus::MultiEditFileTool tool;
-    locus::ToolCall call{"c1", "multi_edit_file",
+    locus::EditFileTool tool;
+    locus::ToolCall call{"c1", "edit_file",
         {{"path", "f.txt"},
          {"edits", nlohmann::json::array({
              {{"old_string", "red"},   {"new_string", "R"}},
@@ -677,7 +664,7 @@ TEST_CASE("MultiEditFileTool: applies every edit in order", "[s4.a]")
     fs::remove_all(tmp);
 }
 
-TEST_CASE("MultiEditFileTool: atomic — one bad edit aborts all", "[s4.a]")
+TEST_CASE("EditFileTool: batch is atomic — one bad edit aborts all", "[s4.a]")
 {
     locus::tools::ReadTracker::instance().clear();
     auto tmp = make_temp_workspace();
@@ -685,8 +672,8 @@ TEST_CASE("MultiEditFileTool: atomic — one bad edit aborts all", "[s4.a]")
     prime_read(tmp, "f.txt");
 
     locus::test::FakeWorkspaceServices ws{tmp};
-    locus::MultiEditFileTool tool;
-    locus::ToolCall call{"c1", "multi_edit_file",
+    locus::EditFileTool tool;
+    locus::ToolCall call{"c1", "edit_file",
         {{"path", "f.txt"},
          {"edits", nlohmann::json::array({
              {{"old_string", "red"},     {"new_string", "R"}},
@@ -703,7 +690,7 @@ TEST_CASE("MultiEditFileTool: atomic — one bad edit aborts all", "[s4.a]")
     fs::remove_all(tmp);
 }
 
-TEST_CASE("MultiEditFileTool: later edits see earlier results", "[s4.a]")
+TEST_CASE("EditFileTool: later batched edits see earlier results", "[s4.a]")
 {
     locus::tools::ReadTracker::instance().clear();
     auto tmp = make_temp_workspace();
@@ -711,8 +698,8 @@ TEST_CASE("MultiEditFileTool: later edits see earlier results", "[s4.a]")
     prime_read(tmp, "f.txt");
 
     locus::test::FakeWorkspaceServices ws{tmp};
-    locus::MultiEditFileTool tool;
-    locus::ToolCall call{"c1", "multi_edit_file",
+    locus::EditFileTool tool;
+    locus::ToolCall call{"c1", "edit_file",
         {{"path", "f.txt"},
          {"edits", nlohmann::json::array({
              {{"old_string", "one"}, {"new_string", "two"}},
@@ -726,7 +713,7 @@ TEST_CASE("MultiEditFileTool: later edits see earlier results", "[s4.a]")
     fs::remove_all(tmp);
 }
 
-TEST_CASE("MultiEditFileTool: empty edits array rejected", "[s4.a]")
+TEST_CASE("EditFileTool: empty edits array rejected", "[s4.a]")
 {
     locus::tools::ReadTracker::instance().clear();
     auto tmp = make_temp_workspace();
@@ -734,8 +721,8 @@ TEST_CASE("MultiEditFileTool: empty edits array rejected", "[s4.a]")
     prime_read(tmp, "f.txt");
 
     locus::test::FakeWorkspaceServices ws{tmp};
-    locus::MultiEditFileTool tool;
-    locus::ToolCall call{"c1", "multi_edit_file",
+    locus::EditFileTool tool;
+    locus::ToolCall call{"c1", "edit_file",
         {{"path", "f.txt"}, {"edits", nlohmann::json::array()}}};
 
     auto result = tool.execute(call, ws);

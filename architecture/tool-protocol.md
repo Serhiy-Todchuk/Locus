@@ -97,12 +97,11 @@ public:
 | Tool name | Approval | Description |
 |---|---|---|
 | `read_file` | auto | Read file contents (paginated) |
-| `write_file` | always | Write/overwrite a file |
-| `create_file` | always | Create a new file at a path |
+| `write_file` | always | Create a new file; overwrites only when `overwrite=true` |
+| `edit_file` | always | Exact-string replace (single or atomic batch of edits) |
 | `delete_file` | always | Delete a file (extra confirmation in preview) |
 | `list_directory` | auto | List directory tree with index metadata |
-| `search_text` | auto | FTS5 full-text search, returns ranked snippets |
-| `search_symbols` | auto | Find code symbols by name/kind |
+| `search` | auto | Unified text / symbols / semantic / hybrid search (`mode` param) |
 | `get_file_outline` | auto | File structure (headings, symbols) without full content |
 | `run_command` | always | Execute a terminal command in workspace dir |
 | `web_search` | always | Search the web, return titles + URLs + snippets |
