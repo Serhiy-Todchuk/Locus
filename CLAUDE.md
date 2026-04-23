@@ -38,7 +38,7 @@ data into context, and keeps the user in full transparent control of every step.
 
 ## Current Stage
 
-**M3 — Refactoring in progress.** S3.C (`IWorkspaceServices`), S3.F (`WatcherPump` + `LocusFrame` split), S3.A (`AgentCore` split into `AgentLoop` / `ToolDispatcher` / `ActivityLog` / `ContextBudget`; agent sources moved to `src/agent/`), S3.J (`SlashCommandParser` + `SlashCommandDispatcher` extracted; GUI popup sources completions from the dispatcher) and S3.E (`tools.cpp` split into `src/tools/` by family — shared / file / search / index / process / interactive; `tools.h` is now an aggregator re-export) done. See [roadmap/M3/](roadmap/M3/) for the task list.
+**M3 — Refactoring in progress.** S3.C (`IWorkspaceServices`), S3.F (`WatcherPump` + `LocusFrame` split), S3.A (`AgentCore` split into `AgentLoop` / `ToolDispatcher` / `ActivityLog` / `ContextBudget`; agent sources moved to `src/agent/`), S3.J (`SlashCommandParser` + `SlashCommandDispatcher` extracted; GUI popup sources completions from the dispatcher), S3.E (`tools.cpp` split into `src/tools/` by family — shared / file / search / index / process / interactive; `tools.h` is now an aggregator re-export) and S3.K (`architecture/agent-loop.md` updated for post-S3.A split, `architecture/decisions/` ADR trail, `overview.md` see-also footer) done. See [roadmap/M3/](roadmap/M3/) for the task list.
 
 **M3 is now Refactoring** (not Agent Quality). Old M3 → M4 (Agent Quality), old M4 → M5 (Connected). Per-stage docs live under [roadmap/M3/](roadmap/M3/), [roadmap/M4/](roadmap/M4/), [roadmap/M5/](roadmap/M5/). [roadmap.md](roadmap.md) is the index.
 
@@ -200,7 +200,7 @@ Core is a static lib (`locus_core`). Both `locus` (exe) and `locus_tests` link i
 | [DIFFERENTIATORS.md](DIFFERENTIATORS.md) | Who this is for, what makes it different |
 | [requirements.md](requirements.md) | Full feature list — reference when scoping work |
 | [architecture/overview.md](architecture/overview.md) | System component map, data flow, context strategy |
-| [architecture/agent-loop.md](architecture/agent-loop.md) | AgentCore turn orchestration — threading, phases, sequence diagrams, M3/M4 hook points |
+| [architecture/agent-loop.md](architecture/agent-loop.md) | AgentCore turn orchestration — threading, phases, sequence diagrams, M4 hook points |
 | [architecture/tool-protocol.md](architecture/tool-protocol.md) | ITool interface, approval flow, adding tools |
 | [architecture/workspace-index.md](architecture/workspace-index.md) | Index subsystem: schema, update strategy, query API |
 | [architecture/tech-stack.md](architecture/tech-stack.md) | Tech stack — decided choices and future frontend options |

@@ -334,3 +334,14 @@ User picks a strategy:
 
 - Remote access: LAN only vs internet tunneling (Tailscale/ngrok)? LAN first.
 - Mobile: native app vs PWA (Progressive Web App)? Likely PWA first — reuses web frontend.
+
+---
+
+## See also
+
+- [agent-loop.md](agent-loop.md) — turn orchestration, threading, `AgentCore` collaborator split, M4 hook points
+- [tool-protocol.md](tool-protocol.md) — `ITool` contract, approval policies, adding a new tool
+- [workspace-index.md](workspace-index.md) — index schema, incremental updates, FTS5 + vector query API
+- [tech-stack.md](tech-stack.md) — library choices and rationale
+- [web-retrieval.md](web-retrieval.md) — web RAG pipeline (fetch → index → search)
+- [decisions/](decisions/) — ADR trail for load-bearing architectural decisions
