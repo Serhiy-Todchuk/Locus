@@ -200,9 +200,10 @@ Orchestrates the conversation loop:
 ### 4. Tool Set (ITool interface)
 See: [tool-protocol.md](tool-protocol.md)
 
-Initial tools: `read_file`, `write_file`, `create_file`, `delete_file`,
-`list_directory`, `search_hybrid`, `search_text`, `search_symbols`,
-`get_file_outline`, `run_command`, `web_search`, `web_fetch`, `web_read`
+Current tools: `read_file`, `write_file` (create or overwrite with `overwrite=true`),
+`edit_file` (exact-string replace, atomic batch), `delete_file`, `list_directory`,
+`search` (mode: text / symbols / semantic / hybrid), `get_file_outline`,
+`run_command`, `ask_user`. Planned: `web_search`, `web_fetch`, `web_read`.
 
 ### 5. LLM Client
 - Currently: LM Studio OpenAI-compatible REST API (localhost:1234)

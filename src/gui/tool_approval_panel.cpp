@@ -201,31 +201,22 @@ enum : int {
 
 bool ToolApprovalPanel::render_diff_view()
 {
-    const bool is_edit = (tool_name_ == "edit_file" ||
-                          tool_name_ == "multi_edit_file");
-    if (!is_edit) return false;
+    if (tool_name_ != "edit_file") return false;
 
-    // Gather edits into a flat list. edit_file has a single edit embedded in
-    // the top-level args; multi_edit_file carries them in `edits[]`.
+    // Gather edits from the unified `edits[]` array.
     struct EditPair { std::string old_s; std::string new_s; bool all; };
     std::vector<EditPair> edits;
 
     std::string path = original_args_.value("path", "");
-
-    if (tool_name_ == "edit_file") {
-        edits.push_back({original_args_.value("old_string", ""),
-                         original_args_.value("new_string", ""),
-                         original_args_.value("replace_all", false)});
-    } else {
-        if (original_args_.contains("edits") &&
-            original_args_["edits"].is_array()) {
-            for (const auto& e : original_args_["edits"]) {
-                edits.push_back({e.value("old_string", ""),
-                                 e.value("new_string", ""),
-                                 e.value("replace_all", false)});
-            }
+    if (original_args_.contains("edits") &&
+        original_args_["edits"].is_array()) {
+        for (const auto& e : original_args_["edits"]) {
+            edits.push_back({e.value("old_string", ""),
+                             e.value("new_string", ""),
+                             e.value("replace_all", false)});
         }
     }
+    if (edits.empty()) return false;  // malformed — fall back to raw JSON
 
     // Switch lexer off so only our hand-applied styling drives colour.
     args_stc_->SetReadOnly(false);

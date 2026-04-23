@@ -23,32 +23,27 @@ public:
     ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws) override;
 };
 
+// Create a new file, or overwrite an existing one when `overwrite=true` is
+// set explicitly. Parent directories are created as needed. Without
+// `overwrite`, the tool fails if the target already exists — protects
+// against hallucinated paths that happen to collide with existing files.
+// For modifying existing files, prefer `edit_file`.
 class WriteFileTool : public ITool {
 public:
     std::string name()        const override { return "write_file"; }
     std::string description() const override {
-        return "Write content to an existing file, replacing its contents entirely.";
+        return "Create a new file at the given path. Parent directories are created "
+               "automatically. Fails if the file already exists unless `overwrite=true` "
+               "is set — set that only when you intend to replace the whole file. "
+               "For modifying existing files, prefer `edit_file`.";
     }
     std::vector<ToolParam> params() const override {
         return {
-            {"path",    "string", "Relative path from workspace root", true},
-            {"content", "string", "The full content to write",         true},
-        };
-    }
-    std::string preview(const ToolCall& call) const override;
-    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws) override;
-};
-
-class CreateFileTool : public ITool {
-public:
-    std::string name()        const override { return "create_file"; }
-    std::string description() const override {
-        return "Create a new file at the given path. Fails if the file already exists.";
-    }
-    std::vector<ToolParam> params() const override {
-        return {
-            {"path",    "string", "Relative path from workspace root", true},
-            {"content", "string", "Initial file content",              true},
+            {"path",      "string",  "Relative path from workspace root", true},
+            {"content",   "string",  "The full content to write",         true},
+            {"overwrite", "boolean",
+             "Allow replacing an existing file (default false). Set only for full rewrites; "
+             "prefer `edit_file` for partial changes.", false},
         };
     }
     std::string preview(const ToolCall& call) const override;
@@ -56,49 +51,31 @@ public:
 };
 
 // Exact string-match edit (Claude-Code-style: find `old_string` in the file,
-// replace with `new_string`). Uniqueness check fails if `old_string` occurs
-// more than once and `replace_all` is false — the LLM is expected to widen
-// the match with extra surrounding context and retry. Requires a prior
-// `read_file` on the same path in this process (S4.A).
+// replace with `new_string`). Always takes an atomic list of edits — pass a
+// one-element array for the common single-edit case. Either every edit
+// applies, or the file is left untouched. Each edit is applied in order to
+// the running buffer; later edits see the results of earlier edits.
+// Uniqueness fails when `old_string` occurs more than once and `replace_all`
+// is false — the LLM is expected to widen the match with surrounding context
+// and retry. Requires a prior `read_file` on the same path in this process
+// (S4.A).
 class EditFileTool : public ITool {
 public:
     std::string name()        const override { return "edit_file"; }
     std::string description() const override {
         return "Edit a file by exact string replacement. Prefer this over write_file — "
-               "it is faster, cheaper, and immune to drift. `old_string` must match "
-               "exactly (including whitespace) and must be unique in the file unless "
-               "`replace_all` is true. You must have read the file earlier in this "
-               "session before editing it.";
-    }
-    std::vector<ToolParam> params() const override {
-        return {
-            {"path",        "string",  "Relative path from workspace root", true},
-            {"old_string",  "string",  "Exact text to find. Must be unique unless replace_all=true.", true},
-            {"new_string",  "string",  "Replacement text.",                  true},
-            {"replace_all", "boolean", "Replace every occurrence (default false).", false},
-        };
-    }
-    std::string preview(const ToolCall& call) const override;
-    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws) override;
-};
-
-// Atomic batch of edits on a single file. Either every edit applies, or the
-// file is left untouched. Each edit is applied in order to the running
-// buffer; later edits see the results of earlier edits. Uniqueness is
-// checked per edit just like `edit_file`.
-class MultiEditFileTool : public ITool {
-public:
-    std::string name()        const override { return "multi_edit_file"; }
-    std::string description() const override {
-        return "Apply an atomic list of (old_string, new_string) edits to a single file. "
-               "Edits apply in order; either all succeed or none are written. Use when "
-               "one logical change needs several related replacements.";
+               "it is faster, cheaper, and immune to drift. Pass an `edits` array "
+               "(use a single element for one change, multiple for an atomic batch). "
+               "Each `old_string` must match byte-for-byte (including whitespace) and "
+               "must be unique in the file unless `replace_all` is true. Edits apply in "
+               "order and either all succeed or none are written. You must have read "
+               "the file earlier in this session before editing it.";
     }
     std::vector<ToolParam> params() const override {
         return {
             {"path",  "string", "Relative path from workspace root", true},
             {"edits", "array",
-             "Array of edits. Each item: "
+             "Ordered list of replacements. Each item: "
              "{\"old_string\": str, \"new_string\": str, \"replace_all\"?: bool}.", true},
         };
     }
