@@ -102,6 +102,7 @@ Per-stage detail: [roadmap/M3/](roadmap/M3/) — see [README](roadmap/M3/README.
 | [S3.I](roadmap/M3/S3.I-threading-model.md) ✔ | Document threads + ownership rules + cross-thread invariants |
 | [S3.J](roadmap/M3/S3.J-slash-commands.md) | Extract slash-command tokenizer + dispatcher from `AgentCore` into its own module |
 | [S3.K](roadmap/M3/S3.K-docs.md) ✔ | Add `agent-loop.md`, `threading-model.md`; introduce ADR trail under `architecture/decisions/` |
+| [S3.L](roadmap/M3/S3.L-tool-catalog-hygiene.md) | Tool-catalog hygiene: consolidate search family into `search(mode=…)`; add `available()` / `visible_in_mode()` gating hooks; log per-turn manifest size with threshold warning |
 
 ---
 
@@ -111,29 +112,31 @@ Per-stage detail: [roadmap/M3/](roadmap/M3/) — see [README](roadmap/M3/README.
 
 Per-stage detail: [roadmap/M4/](roadmap/M4/) — see [README](roadmap/M4/README.md) for ordering and M3 prerequisites.
 
+Listed in execution order. Letters are identity, not sequence (retained for link stability).
+
 | Stage | Title |
 |---|---|
 | [S4.A](roadmap/M4/S4.A-diff-editing.md) | Diff-Based Editing |
 | [S4.B](roadmap/M4/S4.B-checkpoint-undo.md) | Checkpoint & Undo |
-| [S4.C](roadmap/M4/S4.C-auto-verify.md) | Auto-Verify Feedback Loop |
-| [S4.D](roadmap/M4/S4.D-plan-mode.md) | Plan Mode |
-| [S4.E](roadmap/M4/S4.E-lsp.md) | LSP Integration |
-| [S4.F](roadmap/M4/S4.F-kv-cache.md) | KV / Prompt Cache Preservation |
-| [S4.G](roadmap/M4/S4.G-mcp.md) | MCP (Model Context Protocol) Client |
-| [S4.H](roadmap/M4/S4.H-parallel-tools.md) | Parallel Tool Calls |
-| [S4.I](roadmap/M4/S4.I-background-commands.md) | Background / Long-Running Commands |
+| [S4.P](roadmap/M4/S4.P-grep.md) | Grep Tool (Regex over Raw Content) |
 | [S4.J](roadmap/M4/S4.J-embeddings-reranker.md) | Better Embeddings + Reranker |
 | [S4.K](roadmap/M4/S4.K-retrieval-eval.md) | Retrieval Evaluation Harness |
+| [S4.I](roadmap/M4/S4.I-background-commands.md) | Background / Long-Running Commands |
+| [S4.S](roadmap/M4/S4.S-telemetry.md) | Telemetry & Agent Performance Metrics |
 | [S4.L](roadmap/M4/S4.L-git-native.md) | Git-Native Features |
 | [S4.M](roadmap/M4/S4.M-ast-search.md) | Tree-Sitter Query Tool (Structural Grep) |
-| [S4.N](roadmap/M4/S4.N-tool-call-robustness.md) | Tool-Call Robustness Across Model Families |
-| [S4.O](roadmap/M4/S4.O-streaming-tool-results.md) | Streaming / Partial Tool Results |
-| [S4.P](roadmap/M4/S4.P-grep.md) | Grep Tool (Regex over Raw Content) |
-| [S4.Q](roadmap/M4/S4.Q-multi-model.md) | Multi-Model Split (Weak + Strong) |
-| [S4.R](roadmap/M4/S4.R-memory-bank.md) | Memory Bank / Session Scratchpad |
-| [S4.S](roadmap/M4/S4.S-telemetry.md) | Telemetry & Agent Performance Metrics |
 | [S4.T](roadmap/M4/S4.T-file-change-awareness.md) | File-Change Awareness Between Turns |
 | [S4.U](roadmap/M4/S4.U-subagents.md) | Subagent / Task Delegation |
+| [S4.Q](roadmap/M4/S4.Q-multi-model.md) | Multi-Model Split (Weak + Strong) |
+| [S4.F](roadmap/M4/S4.F-kv-cache.md) | KV / Prompt Cache Preservation |
+| [S4.N](roadmap/M4/S4.N-tool-call-robustness.md) | Tool-Call Robustness Across Model Families |
+| [S4.E](roadmap/M4/S4.E-lsp.md) | LSP Integration |
+| [S4.R](roadmap/M4/S4.R-memory-bank.md) | Memory Bank / Session Scratchpad |
+| [S4.G](roadmap/M4/S4.G-mcp.md) | MCP (Model Context Protocol) Client |
+| [S4.C](roadmap/M4/S4.C-auto-verify.md) | Auto-Verify Feedback Loop |
+| [S4.D](roadmap/M4/S4.D-plan-mode.md) | Plan Mode |
+| [S4.H](roadmap/M4/S4.H-parallel-tools.md) | Parallel Tool Calls |
+| [S4.O](roadmap/M4/S4.O-streaming-tool-results.md) | Streaming / Partial Tool Results |
 | [S4.V](roadmap/M4/S4.V-misc-gaps.md) | Miscellaneous Smaller Gaps |
 
 ---
