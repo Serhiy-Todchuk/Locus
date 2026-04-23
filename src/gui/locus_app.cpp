@@ -1,7 +1,7 @@
 #include "locus_app.h"
 #include "locus_frame.h"
 #include "recent_workspaces.h"
-#include "../tools.h"
+#include "../tools/tools.h"
 #include "../indexer.h"
 #include "../index_query.h"
 #include "../agent/system_prompt.h"

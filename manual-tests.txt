@@ -1,10 +1,14 @@
-Analyze the project, this is your codebase - do you have everything (all the docs understandable and consistent, code is transparent) to perform fixes or write features by yourself.
-
-let's test ask_user tool, ask me anything. use your imagination
-
-Use search_semantic to find code related to embedding inference
-
-Use search_hybrid to find files about file watching and debouncing
-
-Add temperature control for LLM to settings dialog in src/gui. Default it to "0.1". Start by reading
-CLAUDE.md to get project context, then propose what to change.
+1	Analyze the project, this is your codebase - do you have everything (all the docs understandable and consistent, code is transparent) to perform fixes or write features by yourself.
+2	
+3	let's test ask_user tool, ask me anything. use your imagination
+4	
+5	Use search_semantic to find code related to embedding inference
+6	
+7	Use search_hybrid to find files about file watching and debouncing
+8	
+9	Add temperature control for LLM to settings dialog in src/gui. Default it to "0.1". Start by reading
+10	CLAUDE.md to get project context, then propose what to change.
+11	Test list_directory with deep recursion (e.g., depth=2) on a known directory path, and then test listing a non-existent path.
+12	Use search_text with complex FTS5 syntax, such as searching for "error AND critical" OR "timeout near 'seconds'".
+13	Run list_directory on the root path ('.') with depth=1 to verify all top-level directories and confirm structural coverage.
+14	Test symbol search using a very broad prefix (e.g., `get`) followed by narrowing down the results, or searching for a specific kind/language combination that might not exist.

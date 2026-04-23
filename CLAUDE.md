@@ -38,7 +38,7 @@ data into context, and keeps the user in full transparent control of every step.
 
 ## Current Stage
 
-**M3 — Refactoring in progress.** S3.C (`IWorkspaceServices`), S3.F (`WatcherPump` + `LocusFrame` split), S3.A (`AgentCore` split into `AgentLoop` / `ToolDispatcher` / `ActivityLog` / `ContextBudget`; agent sources moved to `src/agent/`) and S3.J (`SlashCommandParser` + `SlashCommandDispatcher` extracted; GUI popup sources completions from the dispatcher) done. See [roadmap/M3/](roadmap/M3/) for the task list.
+**M3 — Refactoring in progress.** S3.C (`IWorkspaceServices`), S3.F (`WatcherPump` + `LocusFrame` split), S3.A (`AgentCore` split into `AgentLoop` / `ToolDispatcher` / `ActivityLog` / `ContextBudget`; agent sources moved to `src/agent/`), S3.J (`SlashCommandParser` + `SlashCommandDispatcher` extracted; GUI popup sources completions from the dispatcher) and S3.E (`tools.cpp` split into `src/tools/` by family — shared / file / search / index / process / interactive; `tools.h` is now an aggregator re-export) done. See [roadmap/M3/](roadmap/M3/) for the task list.
 
 **M3 is now Refactoring** (not Agent Quality). Old M3 → M4 (Agent Quality), old M4 → M5 (Connected). Per-stage docs live under [roadmap/M3/](roadmap/M3/), [roadmap/M4/](roadmap/M4/), [roadmap/M5/](roadmap/M5/). [roadmap.md](roadmap.md) is the index.
 
@@ -131,7 +131,13 @@ Core is a static lib (`locus_core`). Both `locus` (exe) and `locus_tests` link i
 | `src/core/watcher_pump.h/cpp` | Background thread that drains FileWatcher, batches by quiet-period (1.5s) + hard-cap (20s), calls `Indexer::process_events`. Owned by `Workspace` — replaces the pump that used to live duplicated in main.cpp / locus_app.cpp / locus_frame.cpp. Provides `flush_now()` for synchronous external flush. | `WatcherPump` |
 | `src/tool.h` | Tool system interfaces (no .cpp — pure abstract + structs). | `ITool`, `IToolRegistry`, `ToolParam`, `ToolResult`, `ToolCall` |
 | `src/tool_registry.h/cpp` | Concrete registry. Schema JSON builder. ToolCall parser. | `ToolRegistry` |
-| `src/tools.h/cpp` | All 12 built-in tools + `register_builtin_tools()` factory. | `ReadFileTool`, `WriteFileTool`, `CreateFileTool`, `DeleteFileTool`, `ListDirectoryTool`, `SearchTextTool`, `SearchSymbolsTool`, `GetFileOutlineTool`, `RunCommandTool`, `AskUserTool`, `SearchSemanticTool`, `SearchHybridTool` |
+| `src/tools/tools.h/cpp` | Aggregator header (re-exports every tool) + `register_builtin_tools()` factory. Individual tools live in the family headers below. | `register_builtin_tools` |
+| `src/tools/shared.h/cpp` | `resolve_path` / `make_relative` / `error_result` helpers shared by tool implementations. Namespace `locus::tools`. | — |
+| `src/tools/file_tools.h/cpp` | File CRUD tools. | `ReadFileTool`, `WriteFileTool`, `CreateFileTool`, `DeleteFileTool` |
+| `src/tools/search_tools.h/cpp` | Text, symbol, semantic and hybrid search tools. | `SearchTextTool`, `SearchSymbolsTool`, `SearchSemanticTool`, `SearchHybridTool` |
+| `src/tools/index_tools.h/cpp` | Index-sourced listing and outline tools. | `ListDirectoryTool`, `GetFileOutlineTool` |
+| `src/tools/process_tools.h/cpp` | Shell execution tool (Win32 CreateProcess pipeline with timeout). | `RunCommandTool` |
+| `src/tools/interactive_tools.h/cpp` | Tools that go through the approval gate to solicit user input. | `AskUserTool` |
 | `src/embedder.h/cpp` | llama.cpp session wrapper. Loads a GGUF model, tokenises via the embedded vocab, runs inference, returns an L2-normalised embedding vector. | `Embedder` |
 | `src/chunker.h/cpp` | Content chunking: code (Tree-sitter boundaries), document (heading boundaries), sliding window fallback. | `Chunk`, `SymbolSpan`, `chunk_code()`, `chunk_document()`, `chunk_sliding_window()` |
 | `src/embedding_worker.h/cpp` | Background thread: consumes chunk queue, calls Embedder, writes embeddings to vectors_db (its own connection — no lock contention with the indexer writing to main_db). | `EmbeddingWorker` |

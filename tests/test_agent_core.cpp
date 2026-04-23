@@ -3,7 +3,7 @@
 #include "agent/conversation.h"
 #include "agent/system_prompt.h"
 #include "tool_registry.h"
-#include "tools.h"
+#include "tools/tools.h"
 #include "agent/agent_core.h"
 #include "llm_client.h"
 
