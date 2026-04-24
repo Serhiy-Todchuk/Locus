@@ -116,13 +116,10 @@ bool LocusApp::OnInit()
 #endif
     std::setlocale(LC_ALL, ".UTF-8");
 
-    // Single-instance enforcement.
-    instance_checker_ = std::make_unique<wxSingleInstanceChecker>("Locus-SingleInstance");
-    if (instance_checker_->IsAnotherRunning()) {
-        wxMessageBox("Locus is already running.", "Locus",
-                     wxOK | wxICON_INFORMATION);
-        return false;
-    }
+    // Single-instance enforcement is now workspace-scoped — WorkspaceLock
+    // grabs an exclusive file lock inside .locus/ when the Workspace opens,
+    // so two Locus GUIs on *different* folders can coexist, but two on the
+    // same folder (or a nested one) fail loudly.
 
     // Parse command-line args.
     // Usage: locus_gui [workspace_path] [--endpoint URL] [--model NAME]

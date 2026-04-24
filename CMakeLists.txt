@@ -215,6 +215,7 @@ set_target_properties(sqlite_vec PROPERTIES
 add_library(locus_core STATIC
     src/workspace.cpp
     src/core/watcher_pump.cpp
+    src/core/workspace_lock.cpp
     src/database.cpp
     src/file_watcher.cpp
     src/indexer.cpp

@@ -6,7 +6,6 @@
 #include "../tool_registry.h"
 
 #include <wx/wx.h>
-#include <wx/snglinst.h>
 
 #include <memory>
 
@@ -14,8 +13,11 @@ namespace locus {
 
 class LocusFrame;
 
-// wxApp entry point. Owns the core subsystems (workspace, LLM, agent) and the
-// main frame. Enforces single-instance via wxSingleInstanceChecker.
+// wxApp entry point. Owns the core subsystems (workspace, LLM, agent) and
+// the main frame. Single-instance enforcement is per-workspace via the
+// Workspace's internal `WorkspaceLock` (file lock inside `.locus/`), not a
+// process-global wxSingleInstanceChecker — so two GUIs on different folders
+// coexist, but two on the same (or nested) folder fail cleanly.
 class LocusApp : public wxApp {
 public:
     bool OnInit() override;
@@ -27,8 +29,6 @@ public:
 
 private:
     void init_logging(const std::filesystem::path& locus_dir);
-
-    std::unique_ptr<wxSingleInstanceChecker> instance_checker_;
 
     // Core subsystems (owned, constructed in OnInit).
     std::unique_ptr<Workspace>    workspace_;
