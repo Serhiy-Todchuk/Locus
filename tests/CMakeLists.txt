@@ -28,3 +28,6 @@ add_custom_command(TARGET locus_tests POST_BUILD
 
 include(Catch)
 catch_discover_tests(locus_tests)
+
+# Manual-only LLM-driven integration tests (locus_integration_tests).
+add_subdirectory(integration)
