@@ -1,5 +1,6 @@
 #include "workspace.h"
 #include "core/watcher_pump.h"
+#include "core/workspace_lock.h"
 #include "database.h"
 #include "embedder.h"
 #include "embedding_worker.h"
@@ -42,6 +43,11 @@ Workspace::Workspace(const fs::path& root)
     if (ec) {
         throw std::runtime_error("Cannot create .locus/: " + ec.message());
     }
+
+    // Grab the workspace lock before touching any stateful subsystem — if
+    // another Locus instance owns this folder (or an ancestor of it), we
+    // must fail cleanly before opening databases or starting threads.
+    lock_ = std::make_unique<WorkspaceLock>(root_);
 
     load_config();
     load_locus_md();

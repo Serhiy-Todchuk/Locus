@@ -20,6 +20,7 @@ class FileWatcher;
 class IndexQuery;
 class Indexer;
 class WatcherPump;
+class WorkspaceLock;
 
 struct WorkspaceConfig {
     // Index settings
@@ -107,6 +108,9 @@ private:
     fs::path locus_dir_;
     WorkspaceConfig config_;
     std::string locus_md_;
+    // Held first, released last — stops another Locus process from opening
+    // this workspace (or a nested/ancestor one) while we own it.
+    std::unique_ptr<WorkspaceLock> lock_;
     std::unique_ptr<Database> main_db_;
     std::unique_ptr<Database> vectors_db_;  // null when semantic disabled
     std::unique_ptr<ExtractorRegistry> extractors_;

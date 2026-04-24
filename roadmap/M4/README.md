@@ -11,9 +11,9 @@
 | Stage | Title | Theme |
 |---|---|---|
 | [S4.A](S4.A-diff-editing.md) | Diff-Based Editing ✔ | Editing |
-| [S4.B](S4.B-checkpoint-undo.md) | Checkpoint & Undo | Safety |
 | [S4.P](S4.P-grep.md) | Grep Tool (Regex over Raw Content) | Tools |
 | [S4.J](S4.J-embeddings-reranker.md) | Better Embeddings + Reranker | Retrieval |
+| [S4.B](S4.B-checkpoint-undo.md) | Checkpoint & Undo | Safety |
 | [S4.K](S4.K-retrieval-eval.md) | Retrieval Evaluation Harness | Retrieval |
 | [S4.I](S4.I-background-commands.md) | Background / Long-Running Commands | Process model |
 | [S4.S](S4.S-telemetry.md) | Telemetry & Agent Performance Metrics | Observability |
