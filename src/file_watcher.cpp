@@ -84,7 +84,14 @@ void FileWatcher::push_raw(FileAction action, const fs::path& dir,
     fs::path rel_path = fs::relative(abs_path, root_);
 
     if (is_excluded(rel_path)) {
-        spdlog::trace("File watcher: excluded {}", rel_path.string());
+        // Log each excluded path at most once — otherwise SQLite WAL flushes
+        // on .locus/vectors.db-wal turn the trace log into a firehose.
+        std::string rel_str = rel_path.string();
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (excluded_logged_.insert(rel_str).second) {
+            spdlog::trace("File watcher: excluded {} (further events suppressed)",
+                          rel_str);
+        }
         return;
     }
 
