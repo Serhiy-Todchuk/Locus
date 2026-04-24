@@ -12,22 +12,30 @@ public:
     std::string name()        const override { return "search"; }
     std::string description() const override {
         return "Unified workspace search. `mode` selects the backend: "
-               "text (FTS5 keyword, default), symbols (code definitions), "
+               "text (FTS5 keyword, default), regex (raw-content ECMAScript regex, "
+               "preserves punctuation/case), symbols (code definitions), "
                "semantic (vector similarity), hybrid (BM25 + vector). "
                "Semantic and hybrid require semantic search to be enabled.";
     }
     std::vector<ToolParam> params() const override {
         return {
-            {"query",       "string",  "Search query. Keywords for text/hybrid, "
-                                       "symbol name/prefix for symbols, "
-                                       "natural language for semantic.", true},
-            {"mode",        "string",  "One of: text, symbols, semantic, hybrid. "
-                                       "Defaults to text.", false},
-            {"max_results", "integer", "Maximum results (default 20 for text/symbols, "
-                                       "10 for semantic/hybrid).", false},
-            {"kind",        "string",  "symbols mode only: filter by kind "
-                                       "(function, class, struct, method).", false},
-            {"language",    "string",  "symbols mode only: filter by language.", false},
+            {"query",          "string",  "Search query. Keywords for text/hybrid, "
+                                          "symbol name/prefix for symbols, "
+                                          "natural language for semantic. "
+                                          "Ignored in regex mode (use `pattern`).", false},
+            {"mode",           "string",  "One of: text, regex, symbols, semantic, hybrid. "
+                                          "Defaults to text.", false},
+            {"pattern",        "string",  "regex mode only: ECMAScript regex pattern to match. "
+                                          "Preserves punctuation and case — good for exact "
+                                          "identifiers like `->m_cache` or `TODO(XXX)`.", false},
+            {"path_glob",      "string",  "regex mode only: optional glob to limit which "
+                                          "indexed files are searched (e.g. `**/*.cpp`).", false},
+            {"case_sensitive", "boolean", "regex mode only: defaults to true.", false},
+            {"max_results",    "integer", "Maximum results (default 20 for text/symbols, "
+                                          "50 for regex, 10 for semantic/hybrid).", false},
+            {"kind",           "string",  "symbols mode only: filter by kind "
+                                          "(function, class, struct, method).", false},
+            {"language",       "string",  "symbols mode only: filter by language.", false},
         };
     }
     ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::auto_approve; }
@@ -84,6 +92,32 @@ public:
         return {
             {"query",       "string",  "Natural language query describing what to find", true},
             {"max_results", "integer", "Maximum results to return (default 10)", false},
+        };
+    }
+    ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::auto_approve; }
+    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws) override;
+};
+
+// Raw-content regex search. Runs in-process over indexed (non-binary) files via
+// `std::regex` (ECMAScript). Kept out of `register_builtin_tools()` — the LLM
+// reaches it through `SearchTool`'s `mode=regex`. Exposed as a standalone
+// `ITool` so unit tests and the slash-command surface can invoke it directly,
+// matching the pattern used by the other per-mode tools.
+class SearchRegexTool : public ITool {
+public:
+    std::string name()        const override { return "search_regex"; }
+    std::string description() const override {
+        return "Regex search over raw file content (ECMAScript syntax). "
+               "Unlike `search_text`, preserves punctuation and case — "
+               "use for exact identifiers, operators, and TODO tags.";
+    }
+    std::vector<ToolParam> params() const override {
+        return {
+            {"pattern",        "string",  "ECMAScript regex pattern.", true},
+            {"path_glob",      "string",  "Optional glob to limit which indexed files "
+                                          "are searched (matched against relative path).", false},
+            {"case_sensitive", "boolean", "Defaults to true.", false},
+            {"max_results",    "integer", "Maximum matches to return (default 50).", false},
         };
     }
     ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::auto_approve; }

@@ -104,3 +104,54 @@ TEST_CASE("hybrid search returns RRF-merged results", "[integration][llm][search
     REQUIRE(r.tool_called("search"));
     REQUIRE(search_result_mentions(r, "file_tools"));
 }
+
+// -- Regex mode (S4.P) ------------------------------------------------------
+
+TEST_CASE("regex search finds an exact punctuation-preserving identifier",
+          "[integration][llm][search][regex]")
+{
+    auto& h = harness();
+    PromptResult r = h.prompt(
+        "Use the search tool in regex mode with pattern `SQLITE_TRANSIENT` "
+        "to find every occurrence of that exact constant name. Tell me which "
+        "files contain it.");
+
+    REQUIRE_FALSE(r.timed_out);
+    REQUIRE(r.errors.empty());
+    REQUIRE(r.tool_called("search"));
+
+    // The LLM was told to use regex mode explicitly. Accept regex only —
+    // the whole point is that regex preserves casing / punctuation that FTS5
+    // would tokenize away.
+    REQUIRE(search_mode(r) == "regex");
+
+    // SQLITE_TRANSIENT lives in indexer.cpp, index_query.cpp, embedding_worker.cpp.
+    // Any one of those surfacing is enough — the LLM's report might cite just one.
+    bool mentioned =
+        search_result_mentions(r, "indexer.cpp") ||
+        search_result_mentions(r, "index_query.cpp") ||
+        search_result_mentions(r, "embedding_worker.cpp");
+    REQUIRE(mentioned);
+}
+
+TEST_CASE("regex search matches a pattern with regex metacharacters",
+          "[integration][llm][search][regex]")
+{
+    auto& h = harness();
+    PromptResult r = h.prompt(
+        "Use the search tool in regex mode to find calls to sqlite3_reset "
+        "on variables whose name starts with `stmt_`. Use the pattern "
+        "`sqlite3_reset\\(stmt_\\w+\\)`. Report a file that matches.");
+
+    REQUIRE_FALSE(r.timed_out);
+    REQUIRE(r.tool_called("search"));
+    REQUIRE(search_mode(r) == "regex");
+
+    // `sqlite3_reset(stmt_...)` appears in indexer.cpp / index_query.cpp /
+    // embedding_worker.cpp.
+    bool mentioned =
+        search_result_mentions(r, "indexer.cpp") ||
+        search_result_mentions(r, "index_query.cpp") ||
+        search_result_mentions(r, "embedding_worker.cpp");
+    REQUIRE(mentioned);
+}

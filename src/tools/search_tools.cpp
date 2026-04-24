@@ -3,15 +3,22 @@
 
 #include "core/workspace_services.h"
 #include "embedding_worker.h"
+#include "glob_match.h"
 #include "index_query.h"
 
 #include <spdlog/spdlog.h>
 
+#include <algorithm>
+#include <fstream>
 #include <iomanip>
+#include <regex>
 #include <sstream>
 #include <string>
+#include <vector>
 
 namespace locus {
+
+namespace fs = std::filesystem;
 
 using tools::error_result;
 
@@ -45,12 +52,16 @@ ToolResult SearchTool::execute(const ToolCall& call, IWorkspaceServices& ws)
         SearchHybridTool impl;
         return impl.execute(sub, ws);
     }
-    if (mode == "regex" || mode == "ast") {
+    if (mode == "regex") {
+        SearchRegexTool impl;
+        return impl.execute(sub, ws);
+    }
+    if (mode == "ast") {
         return error_result("Error: mode '" + mode + "' is not yet implemented "
                             "(planned for M4).");
     }
     return error_result("Error: unknown search mode '" + mode +
-                        "'. Supported: text, symbols, semantic, hybrid.");
+                        "'. Supported: text, regex, symbols, semantic, hybrid.");
 }
 
 // -- SearchTextTool ---------------------------------------------------------
@@ -159,6 +170,163 @@ ToolResult SearchSemanticTool::execute(const ToolCall& call, IWorkspaceServices&
     }
 
     std::string result = out.str();
+    return {true, result, result};
+}
+
+// -- SearchRegexTool --------------------------------------------------------
+
+namespace {
+
+// 1 MB per-file cap keeps `std::regex` latency bounded on pathological
+// generated files that still slip past the indexer's size filter.
+constexpr size_t k_regex_file_read_cap = 1 * 1024 * 1024;
+
+// Build 1-based line-start offsets for fast position -> line mapping.
+std::vector<size_t> compute_line_starts(const std::string& content)
+{
+    std::vector<size_t> starts;
+    starts.reserve(content.size() / 40 + 1);
+    starts.push_back(0);
+    for (size_t i = 0; i < content.size(); ++i) {
+        if (content[i] == '\n') starts.push_back(i + 1);
+    }
+    return starts;
+}
+
+// Extract a snippet around `line` (1-based) with `context_lines` on each side,
+// trimmed and length-capped. Mirrors index_query.cpp's helper.
+std::string extract_regex_snippet(const std::string& content,
+                                  const std::vector<size_t>& line_starts,
+                                  int line, int context_lines)
+{
+    if (line <= 0 || line_starts.empty()) return {};
+    int start_line = std::max(1, line - context_lines);
+    int end_line   = std::min(static_cast<int>(line_starts.size()),
+                              line + context_lines);
+    size_t s = line_starts[start_line - 1];
+    size_t e = (end_line < static_cast<int>(line_starts.size()))
+                   ? line_starts[end_line]
+                   : content.size();
+    std::string snippet = content.substr(s, e - s);
+    while (!snippet.empty() &&
+           (snippet.back() == '\n' || snippet.back() == '\r'))
+        snippet.pop_back();
+    if (snippet.size() > 500) {
+        snippet.resize(500);
+        snippet += "...";
+    }
+    return snippet;
+}
+
+} // namespace
+
+ToolResult SearchRegexTool::execute(const ToolCall& call, IWorkspaceServices& ws)
+{
+    std::string pattern = call.args.value("pattern", "");
+    if (pattern.empty())
+        return error_result("Error: 'pattern' parameter is required");
+
+    std::string path_glob    = call.args.value("path_glob", "");
+    bool        case_sens    = call.args.value("case_sensitive", true);
+    int         max_results  = call.args.value("max_results", 50);
+    if (max_results <= 0) max_results = 50;
+
+    auto* idx = ws.index();
+    if (!idx) return error_result("Error: workspace index not available");
+
+    std::regex re;
+    try {
+        auto flags = std::regex::ECMAScript;
+        if (!case_sens) flags |= std::regex::icase;
+        re.assign(pattern, flags);
+    } catch (const std::regex_error& e) {
+        return error_result(std::string("Error: invalid regex: ") + e.what());
+    }
+
+    // Enumerate every indexed file. `list_directory("", huge_depth)` emits
+    // files (never folded into parent directories) because nothing exceeds
+    // the depth cap. The indexer's exclude patterns are already baked into
+    // the files table, so no re-filtering here.
+    auto files = idx->list_directory("", 1'000'000);
+
+    struct Match {
+        std::string path;
+        int         line = 0;
+        std::string snippet;
+    };
+    std::vector<Match> matches;
+    matches.reserve(max_results);
+
+    int files_searched = 0;
+    int files_with_matches = 0;
+    bool truncated = false;
+
+    for (auto& fe : files) {
+        if (fe.is_directory) continue;
+        if (fe.is_binary)    continue;
+
+        if (!path_glob.empty() && !glob_match(path_glob, fe.path)) continue;
+
+        fs::path abs = ws.root() / fe.path;
+        std::ifstream f(abs, std::ios::binary);
+        if (!f.is_open()) continue;
+
+        std::string content{ std::istreambuf_iterator<char>(f),
+                             std::istreambuf_iterator<char>() };
+        if (content.empty()) continue;
+        if (content.size() > k_regex_file_read_cap)
+            content.resize(k_regex_file_read_cap);
+
+        ++files_searched;
+
+        auto line_starts = compute_line_starts(content);
+
+        bool file_had_match = false;
+
+        auto it  = std::sregex_iterator(content.begin(), content.end(), re);
+        auto end = std::sregex_iterator();
+        for (; it != end; ++it) {
+            if (static_cast<int>(matches.size()) >= max_results) {
+                truncated = true;
+                break;
+            }
+            size_t pos = static_cast<size_t>(it->position());
+            auto   lit = std::upper_bound(line_starts.begin(),
+                                          line_starts.end(), pos);
+            int    line = static_cast<int>(lit - line_starts.begin());
+
+            Match m;
+            m.path    = fe.path;
+            m.line    = line;
+            m.snippet = extract_regex_snippet(content, line_starts, line, 1);
+            matches.push_back(std::move(m));
+            file_had_match = true;
+        }
+        if (file_had_match) ++files_with_matches;
+        if (truncated) break;
+    }
+
+    std::ostringstream out;
+    out << matches.size() << " match" << (matches.size() == 1 ? "" : "es")
+        << " for /" << pattern << "/" << (case_sens ? "" : "i")
+        << " in " << files_with_matches << " file"
+        << (files_with_matches == 1 ? "" : "s")
+        << " (searched " << files_searched << ")";
+    if (truncated) out << " [truncated at max_results]";
+    out << "\n";
+
+    for (auto& m : matches) {
+        out << "  " << m.path << ":" << m.line << "\n";
+        std::istringstream is(m.snippet);
+        std::string        ln;
+        while (std::getline(is, ln)) {
+            out << "    " << ln << "\n";
+        }
+    }
+
+    std::string result = out.str();
+    spdlog::trace("search_regex: /{}/ -> {} matches across {} files",
+                  pattern, matches.size(), files_with_matches);
     return {true, result, result};
 }
 
