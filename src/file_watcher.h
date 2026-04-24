@@ -7,6 +7,7 @@
 #include <mutex>
 #include <chrono>
 #include <unordered_map>
+#include <unordered_set>
 #include <memory>
 
 namespace efsw { class FileWatcher; class FileWatchListener; }
@@ -70,6 +71,11 @@ private:
     std::mutex mutex_;
     std::unordered_map<std::string, PendingEvent> pending_;
     std::vector<FileEvent> ready_;
+    // Dedupe set for excluded-path trace logging. efsw fires per-event for
+    // every excluded file (SQLite WAL flushes on `.locus/vectors.db-wal` can
+    // emit several events per second) — we only want to see each excluded
+    // path once. Bounded by the number of unique excluded paths encountered.
+    std::unordered_set<std::string> excluded_logged_;
 };
 
 } // namespace locus
