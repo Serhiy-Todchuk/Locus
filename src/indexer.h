@@ -101,6 +101,7 @@ private:
     sqlite3_stmt* stmt_upsert_file_  = nullptr;
     sqlite3_stmt* stmt_delete_file_  = nullptr;
     sqlite3_stmt* stmt_file_id_      = nullptr;
+    sqlite3_stmt* stmt_file_stat_    = nullptr;  // (id, size_bytes, modified_at, is_binary) by path
     sqlite3_stmt* stmt_insert_fts_   = nullptr;
     sqlite3_stmt* stmt_delete_fts_   = nullptr;
     sqlite3_stmt* stmt_insert_sym_   = nullptr;
@@ -110,6 +111,7 @@ private:
     sqlite3_stmt* stmt_insert_chunk_   = nullptr;
     sqlite3_stmt* stmt_delete_chunks_  = nullptr;
     sqlite3_stmt* stmt_delete_chunk_vecs_ = nullptr;
+    sqlite3_stmt* stmt_file_has_chunks_   = nullptr;  // EXISTS chunks(file_id=?) — vectors.db
 
     // Tree-sitter
     TSParser* ts_parser_ = nullptr;
