@@ -54,7 +54,11 @@ reranker (for top-K precision). Both are GGUF files that live in `models/` next 
 | Script | Profile | Files | Total |
 |---|---|---|---|
 | [models/download.ps1](models/download.ps1) | Recommended (multilingual) | `bge-m3` Q8 + `bge-reranker-v2-m3` Q8 | ~1.27 GB |
-| [models/download-small.ps1](models/download-small.ps1) | Small / English-only | `bge-small-en-v1.5` Q8 + `bge-reranker-v2-m3` Q4_K_M | ~475 MB |
+| [models/download-small.ps1](models/download-small.ps1) | Small / English-only | `bge-small-en-v1.5` Q8 + `ms-marco-MiniLM-L6-v2` Q4_K_M | ~58 MB |
+
+The small reranker is ~13× faster than the recommended one in practice
+(22M vs 568M params; ~8 ms vs ~100 ms per rerank in Release on CPU) but
+English-only and weaker on long passages — pick by your corpus.
 
 ```powershell
 # From the repo root. Use -ExecutionPolicy Bypass to avoid permanently
