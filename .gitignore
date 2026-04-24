@@ -8,3 +8,4 @@ out/
 *.user
 CMakeUserPresets.json
 third_party/pdfium_download/
+tests/integration_tmp/
