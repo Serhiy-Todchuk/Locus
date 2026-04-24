@@ -19,7 +19,7 @@ class Embedder;
 // work — does not block the indexer or the UI.
 class EmbeddingWorker {
 public:
-    EmbeddingWorker(Database& db, Embedder& embedder, int dimensions = 384);
+    EmbeddingWorker(Database& db, Embedder& embedder);
     ~EmbeddingWorker();
 
     EmbeddingWorker(const EmbeddingWorker&) = delete;
@@ -49,7 +49,6 @@ private:
 
     Database& db_;
     Embedder& embedder_;
-    int dimensions_;
 
     std::thread thread_;
     std::atomic<bool> running_{false};

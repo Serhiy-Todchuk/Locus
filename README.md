@@ -42,7 +42,41 @@ into every step the agent takes. Nothing leaves your network.
 ### Prerequisites
 
 - **LLM server**: [LM Studio](https://lmstudio.ai/) or any OpenAI-compatible endpoint
+- **Embedding + reranker models** for semantic search — see [Models](#models) below
 - **Build tools** (if building from source): CMake 4+, Visual Studio 2026, vcpkg
+
+### Models
+
+Locus uses a local embedding model (for semantic search) and a local cross-encoder
+reranker (for top-K precision). Both are GGUF files that live in `models/` next to
+`locus.exe`. Two download scripts are provided:
+
+| Script | Profile | Files | Total |
+|---|---|---|---|
+| [models/download.ps1](models/download.ps1) | Recommended (multilingual) | `bge-m3` Q8 + `bge-reranker-v2-m3` Q8 | ~1.27 GB |
+| [models/download-small.ps1](models/download-small.ps1) | Small / English-only | `bge-small-en-v1.5` Q8 + `bge-reranker-v2-m3` Q4_K_M | ~475 MB |
+
+```powershell
+# From the repo root. Use -ExecutionPolicy Bypass to avoid permanently
+# changing your machine's policy for one-off scripts.
+powershell -NoProfile -ExecutionPolicy Bypass -File .\models\download.ps1
+
+# Embedder only / reranker only
+powershell -NoProfile -ExecutionPolicy Bypass -File .\models\download.ps1 -Embedder
+powershell -NoProfile -ExecutionPolicy Bypass -File .\models\download.ps1 -Reranker
+
+# Smaller English-only profile
+powershell -NoProfile -ExecutionPolicy Bypass -File .\models\download-small.ps1
+```
+
+Files are skipped if already present at the expected size; pass `-Force` to
+re-download. The scripts pull from the official `ggml-org` and `gpustack`
+Hugging Face mirrors — no auth required.
+
+The model filenames in `models/` are referenced from `.locus/config.json`
+(`index.semantic_search.model` and `index.semantic_search.reranker_model`).
+Switching to a different embedding model triggers a one-time re-embed of the
+workspace (the existing vectors are dropped because dimensions don't match).
 
 ### Quick Start
 

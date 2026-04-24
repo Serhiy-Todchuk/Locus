@@ -49,6 +49,9 @@ private:
     // Semantic search controls
     wxCheckBox*        semantic_enabled_ctrl_ = nullptr;
     wxTextCtrl*        semantic_model_ctrl_   = nullptr;
+    wxCheckBox*        reranker_enabled_ctrl_ = nullptr;
+    wxTextCtrl*        reranker_model_ctrl_   = nullptr;
+    wxSpinCtrl*        reranker_top_k_ctrl_   = nullptr;
 
     // Tool approval controls — one choice per tool, same order as tool_names_.
     std::vector<std::string> tool_names_;

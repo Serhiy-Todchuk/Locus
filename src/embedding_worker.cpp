@@ -7,10 +7,9 @@
 
 namespace locus {
 
-EmbeddingWorker::EmbeddingWorker(Database& db, Embedder& embedder, int dimensions)
+EmbeddingWorker::EmbeddingWorker(Database& db, Embedder& embedder)
     : db_(db)
     , embedder_(embedder)
-    , dimensions_(dimensions)
 {
 }
 

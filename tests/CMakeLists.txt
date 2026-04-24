@@ -13,6 +13,7 @@ add_executable(locus_tests
     test_slash_commands.cpp
     test_workspace_lock.cpp
     test_search_regex.cpp
+    test_reranker.cpp
 )
 
 target_include_directories(locus_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

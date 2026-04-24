@@ -19,6 +19,7 @@ class ExtractorRegistry;
 class FileWatcher;
 class IndexQuery;
 class Indexer;
+class Reranker;
 class WatcherPump;
 class WorkspaceLock;
 
@@ -31,12 +32,25 @@ struct WorkspaceConfig {
     int max_file_size_kb = 1024;
     bool code_parsing_enabled = true;
 
-    // Semantic search (on by default — gracefully disabled if model missing)
+    // Semantic search (on by default - gracefully disabled if model missing).
+    // Embedding dimension is derived from the loaded GGUF, never from config:
+    // swapping models triggers an automatic re-embed on next workspace open.
     bool semantic_search_enabled = true;
-    std::string embedding_model = "all-MiniLM-L6-v2.Q8_0.gguf";
-    int embedding_dimensions = 384;
+    std::string embedding_model = "bge-m3-Q8_0.gguf";
     int chunk_size_lines = 80;
     int chunk_overlap_lines = 10;
+
+    // Reranker (cross-encoder, S4.J). Off by default until the model is
+    // present so first-run users without the GGUF aren't blocked. When on,
+    // search_semantic / search_hybrid fetch reranker_top_k bi-encoder
+    // candidates and rerank to the requested max_results.
+    bool reranker_enabled = false;
+    std::string reranker_model = "bge-reranker-v2-m3-Q8_0.gguf";
+    // 20 candidates × ~100ms/rerank in Release on CPU = ~2s wall-clock per
+    // search call, which is the practical ceiling before a synchronous
+    // tool invocation feels broken. Bump only if you're on a workstation
+    // CPU or move to GPU.
+    int reranker_top_k = 20;
 
     // LLM settings (persisted per-workspace)
     std::string llm_endpoint = "http://127.0.0.1:1234";
@@ -72,6 +86,7 @@ public:
     const fs::path&  root() const override { return root_; }
     IndexQuery*      index() override      { return query_.get(); }
     EmbeddingWorker* embedder() override   { return embedding_worker_.get(); }
+    Reranker*        reranker() override   { return reranker_.get(); }
     Workspace*       workspace() override  { return this; }
 
     // -- Workspace-specific ---------------------------------------------------
@@ -119,6 +134,7 @@ private:
     std::unique_ptr<IndexQuery> query_;
     std::unique_ptr<Embedder> embedder_;
     std::unique_ptr<EmbeddingWorker> embedding_worker_;
+    std::unique_ptr<Reranker> reranker_;
     // Owned after `indexer_` so it stops + joins before the indexer is torn
     // down (the pump's background thread feeds events into the indexer).
     std::unique_ptr<WatcherPump> watcher_pump_;

@@ -24,6 +24,10 @@ enum class DbKind {
 // appropriate schema on open. WAL mode is always enabled.
 class Database {
 public:
+    // For Main: just opens + creates skeleton schema.
+    // For Vectors: opens connection, loads sqlite-vec, creates `chunks` and a
+    //   `meta` table; the `chunk_vectors` virtual table requires a known
+    //   embedding dimension and is created lazily by ensure_vectors_schema().
     Database(const fs::path& db_path, DbKind kind);
     ~Database();
 
@@ -43,9 +47,21 @@ public:
     // legacy Main DB from before the split.  Only meaningful on Main.
     void drop_legacy_semantic_tables();
 
+    // Vectors-only: read the persisted embedding dimension from the meta
+    // table.  Returns 0 if no embeddings have ever been written, or the DB
+    // was created by a pre-S4.J build without the meta table.
+    int stored_embedding_dim();
+
+    // Vectors-only: ensure `chunk_vectors` exists with the requested dimension.
+    // If the table exists with a different dim (model swap), or if `force_wipe`
+    // is true, drops + recreates it AND drops `chunks` so the indexer
+    // re-chunks every file.  Persists `dim` to the meta table.
+    // Returns true if a wipe happened.
+    bool ensure_vectors_schema(int dim, bool force_wipe = false);
+
 private:
     void create_main_schema();
-    void create_vectors_schema();
+    void create_vectors_skeleton();  // chunks + meta only
     void load_sqlite_vec();
 
     sqlite3* db_ = nullptr;

@@ -13,6 +13,7 @@
 #include "file_watcher.h"
 #include "index_query.h"
 #include "indexer.h"
+#include "reranker.h"
 
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
@@ -161,15 +162,24 @@ bool Workspace::enable_semantic_search()
     }
 
     try {
+        // Embedder first - we need its native dimension before opening
+        // (or migrating) the vectors schema.
+        embedder_ = std::make_unique<Embedder>(model_path);
+        const int dim = embedder_->dimensions();
+
         if (!vectors_db_) {
             auto vpath = locus_dir_ / "vectors.db";
             spdlog::info("Opening vectors database at {}", vpath.string());
             vectors_db_ = std::make_unique<Database>(vpath, DbKind::Vectors);
         }
 
-        embedder_ = std::make_unique<Embedder>(model_path, config_.embedding_dimensions);
+        // If a previous run wrote vectors with a different dim (model swap),
+        // ensure_vectors_schema drops chunk_vectors + chunks; the indexer
+        // pass that follows will re-chunk + re-enqueue every file.
+        vectors_db_->ensure_vectors_schema(dim);
+
         embedding_worker_ = std::make_unique<EmbeddingWorker>(
-            *vectors_db_, *embedder_, config_.embedding_dimensions);
+            *vectors_db_, *embedder_);
 
         // Wire indexer callback
         if (indexer_) {
@@ -179,12 +189,40 @@ bool Workspace::enable_semantic_search()
         }
 
         embedding_worker_->start();
-        spdlog::info("Semantic search enabled (model: {})", model_path.string());
+        spdlog::info("Semantic search enabled (model: {}, dim: {})",
+                     model_path.string(), dim);
+
+        // Reranker is optional - only load if enabled and the GGUF is present.
+        if (config_.reranker_enabled) {
+            fs::path rr_path;
+            fs::path b = exe_dir;
+            for (int i = 0; i < 6; ++i) {
+                fs::path c = b / "models" / config_.reranker_model;
+                if (fs::exists(c)) { rr_path = c; break; }
+                if (!b.has_parent_path() || b.parent_path() == b) break;
+                b = b.parent_path();
+            }
+            if (rr_path.empty()) {
+                spdlog::warn("Reranker enabled but model '{}' not found - "
+                             "search will use bi-encoder scores only",
+                             config_.reranker_model);
+            } else {
+                try {
+                    reranker_ = std::make_unique<Reranker>(rr_path);
+                    spdlog::info("Reranker enabled (model: {})", rr_path.string());
+                } catch (const std::exception& e) {
+                    spdlog::error("Failed to initialise reranker: {} - "
+                                  "search will use bi-encoder scores only", e.what());
+                    reranker_.reset();
+                }
+            }
+        }
         return true;
     } catch (const std::exception& e) {
         spdlog::error("Failed to initialise embedder: {}", e.what());
         embedder_.reset();
         embedding_worker_.reset();
+        reranker_.reset();
         vectors_db_.reset();
         return false;
     }
@@ -197,6 +235,7 @@ void Workspace::disable_semantic_search()
         embedding_worker_.reset();
     }
     embedder_.reset();
+    reranker_.reset();
     // Keep vectors_db_ open so existing embeddings remain queryable even while
     // no new ones are being produced.  Callers that want to reclaim disk can
     // close + delete the file separately.
@@ -228,12 +267,18 @@ static WorkspaceConfig config_from_json(const json& j)
                 cfg.semantic_search_enabled = ss["enabled"].get<bool>();
             if (ss.contains("model"))
                 cfg.embedding_model = ss["model"].get<std::string>();
-            if (ss.contains("dimensions"))
-                cfg.embedding_dimensions = ss["dimensions"].get<int>();
+            // 'dimensions' is no longer a config setting - silently ignore
+            // legacy entries so old config.json files don't error out.
             if (ss.contains("chunk_size_lines"))
                 cfg.chunk_size_lines = ss["chunk_size_lines"].get<int>();
             if (ss.contains("chunk_overlap_lines"))
                 cfg.chunk_overlap_lines = ss["chunk_overlap_lines"].get<int>();
+            if (ss.contains("reranker_enabled"))
+                cfg.reranker_enabled = ss["reranker_enabled"].get<bool>();
+            if (ss.contains("reranker_model"))
+                cfg.reranker_model = ss["reranker_model"].get<std::string>();
+            if (ss.contains("reranker_top_k"))
+                cfg.reranker_top_k = ss["reranker_top_k"].get<int>();
         }
     }
 
@@ -282,9 +327,11 @@ static json config_to_json(const WorkspaceConfig& cfg)
             {"semantic_search", {
                 {"enabled", cfg.semantic_search_enabled},
                 {"model", cfg.embedding_model},
-                {"dimensions", cfg.embedding_dimensions},
                 {"chunk_size_lines", cfg.chunk_size_lines},
-                {"chunk_overlap_lines", cfg.chunk_overlap_lines}
+                {"chunk_overlap_lines", cfg.chunk_overlap_lines},
+                {"reranker_enabled", cfg.reranker_enabled},
+                {"reranker_model", cfg.reranker_model},
+                {"reranker_top_k", cfg.reranker_top_k}
             }}
         }},
         {"llm", {
