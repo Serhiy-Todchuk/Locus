@@ -182,6 +182,8 @@ Core is a static lib (`locus_core`). Both `locus` (exe) and `locus_tests` link i
 
 **Test files** follow `tests/test_<topic>.cpp` — one per subsystem, tagged by stage.
 
+**Integration tests** live in `tests/integration/` — a separate `locus_integration_tests` executable that drives `AgentCore` against a live LM Studio LLM end-to-end. Manual-only (not in `ctest`). See [tests/integration/README.md](tests/integration/README.md) for what each tag area covers.
+
 **Data flow**: `main` → `Workspace` (owns `Database`, `ExtractorRegistry`, `FileWatcher`, `Indexer`, `IndexQuery`; implements `IWorkspaceServices`) → `AgentCore` (owns `ConversationHistory`, `SessionManager`, bridges `ILLMClient` + `IToolRegistry` + `IWorkspaceServices&`) → frontends receive events via `IFrontend` through `FrontendRegistry`.
 
 **Adding a new file format extractor**: Create `src/extractors/<format>_extractor.h/cpp` implementing `ITextExtractor`. Register it in `Workspace::Workspace()` (`workspace.cpp`) with `extractors_->register_extractor(".ext", ...)`. Add the `.cpp` to `locus_core` in `CMakeLists.txt`. No changes to `indexer.cpp` needed.
@@ -193,6 +195,7 @@ Core is a static lib (`locus_core`). Both `locus` (exe) and `locus_tests` link i
 | File | When to read |
 |---|---|
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Code style, build/run/test instructions for humans |
+| [tests/integration/README.md](tests/integration/README.md) | Manual LLM-driven integration test suite — tags, harness design, update rules |
 | [roadmap.md](roadmap.md) | Roadmap index — milestones M0–M5 with one-table summaries. Real detail lives in `roadmap/`. |
 | [roadmap/M0.md](roadmap/M0.md), [M1.md](roadmap/M1.md), [M2.md](roadmap/M2.md) | Completed/in-progress milestones — full task lists, one file per milestone |
 | [roadmap/M3/](roadmap/M3/) | M3 Refactoring — one file per stage (S3.A–S3.K) |
@@ -246,6 +249,14 @@ itself during development. What Locus indexes is exactly what is visible here.
 
 This protocol means every stage is validated before the next begins.
 No accumulated debt, no "we'll debug it later."
+
+**Integration tests (`tests/integration/`, manual, LLM-driven):**
+- **Update them whenever tools, extractors, the agent loop, the approval gate, or the slash-command dispatcher change** — schema changes, new tool, retired tool, changed arg shape, new extractor, new approval path all need matching test coverage in the relevant `test_int_*.cpp`. Add a new `TEST_CASE` tagged `[integration][llm][<topic>]`; don't silently skip.
+- **Do NOT run them by default.** They need a live LLM, take minutes, and are not part of the per-stage verification protocol above. Only run when explicitly asked ("run the integration tests", "run [search] integration").
+- **When running on request, always pass `-console`.** The flag pops a dedicated console window and streams trace-level logs there live. The user wants to SEE the run (tool calls, LLM stream, SQL, FTS), not a silent 5-minute wait ending in a pass/fail summary. Omit `-console` only if the user explicitly asks for silent mode.
+- **Consequence of `-console` when you launch via Bash/subprocess:** the exe redirects its stdout/stderr into the new window, so your captured output will look empty. The subprocess call still completes cleanly when tests finish (no pause). For pass/fail, rely on the exit code; for post-mortem detail point the user at `<workspace>/.locus/integration_test.log`.
+- **Minimum verified model: Gemma 4 E4B @ 8k context.** Larger / more capable models are fine. Any model without tool-calling support will fail most cases.
+- See [tests/integration/README.md](tests/integration/README.md) for the full run matrix, env vars, and harness design notes.
 
 **After every completed stage/task — mandatory bookkeeping:**
 1. Update `roadmap.md`: mark completed tasks `[x]`, add ✔ to the stage header

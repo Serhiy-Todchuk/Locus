@@ -15,6 +15,12 @@
 
 namespace locus::integration {
 
+// Mirror stderr log output at trace level so test runs are observable live in
+// the console. Must be called before the harness is first accessed (logger is
+// init'd once, on first `IntegrationHarness::shared()`).
+void set_console_logging(bool enabled);
+bool is_console_logging();
+
 struct PromptResult {
     std::string                     tokens;
     std::vector<ObservedToolCall>   tool_calls;

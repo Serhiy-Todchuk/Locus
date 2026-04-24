@@ -24,6 +24,7 @@
 | [architecture/tool-protocol.md](architecture/tool-protocol.md) | ITool interface and approval flow |
 | [architecture/workspace-index.md](architecture/workspace-index.md) | The workspace indexing subsystem design |
 | [architecture/tech-stack.md](architecture/tech-stack.md) | Technology stack — decided choices and future frontend options |
+| [tests/integration/README.md](tests/integration/README.md) | Manual end-to-end tests that drive `AgentCore` against a live local LLM |
 
 ## How It Works
 
