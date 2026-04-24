@@ -197,6 +197,8 @@ Indexer::Indexer(Database& main_db, Database* vectors_db,
 
     stmt_delete_file_ = main_db_.prepare("DELETE FROM files WHERE path = ?1");
     stmt_file_id_     = main_db_.prepare("SELECT id FROM files WHERE path = ?1");
+    stmt_file_stat_   = main_db_.prepare(
+        "SELECT id, size_bytes, modified_at, is_binary FROM files WHERE path = ?1");
 
     stmt_insert_fts_  = main_db_.prepare("INSERT INTO files_fts (path, content) VALUES (?1, ?2)");
     stmt_delete_fts_  = main_db_.prepare("DELETE FROM files_fts WHERE path = ?1");
@@ -222,6 +224,8 @@ Indexer::Indexer(Database& main_db, Database* vectors_db,
         stmt_delete_chunks_ = vectors_db_->prepare("DELETE FROM chunks WHERE file_id = ?1");
         stmt_delete_chunk_vecs_ = vectors_db_->prepare(
             "DELETE FROM chunk_vectors WHERE chunk_id IN (SELECT id FROM chunks WHERE file_id = ?1)");
+        stmt_file_has_chunks_ = vectors_db_->prepare(
+            "SELECT EXISTS(SELECT 1 FROM chunks WHERE file_id = ?1)");
     }
 
     init_tree_sitter();
@@ -237,6 +241,7 @@ Indexer::~Indexer()
     finalize(stmt_upsert_file_);
     finalize(stmt_delete_file_);
     finalize(stmt_file_id_);
+    finalize(stmt_file_stat_);
     finalize(stmt_insert_fts_);
     finalize(stmt_delete_fts_);
     finalize(stmt_insert_sym_);
@@ -246,6 +251,7 @@ Indexer::~Indexer()
     finalize(stmt_insert_chunk_);
     finalize(stmt_delete_chunks_);
     finalize(stmt_delete_chunk_vecs_);
+    finalize(stmt_file_has_chunks_);
 
     if (ts_parser_) {
         ts_parser_delete(ts_parser_);
@@ -493,6 +499,40 @@ void Indexer::index_file(const fs::path& rel_path)
     int64_t mtime = std::chrono::duration_cast<std::chrono::seconds>(
         sctp.time_since_epoch()).count();
 
+    // Fast path — skip any file whose size+mtime match what's already in the
+    // index. Saves re-chunking + re-embedding every chunk on every startup.
+    // When semantic search is enabled, also require that chunks already exist
+    // for this file (guards against a wiped or freshly-enabled vectors.db).
+    // Stats are still bumped so the final "Index: N files" summary reflects
+    // the full on-disk state, not just files touched this session.
+    sqlite3_reset(stmt_file_stat_);
+    sqlite3_bind_text(stmt_file_stat_, 1, rel_str.c_str(), -1, SQLITE_TRANSIENT);
+    if (sqlite3_step(stmt_file_stat_) == SQLITE_ROW) {
+        int64_t db_file_id  = sqlite3_column_int64(stmt_file_stat_, 0);
+        int64_t db_size     = sqlite3_column_int64(stmt_file_stat_, 1);
+        int64_t db_mtime    = sqlite3_column_int64(stmt_file_stat_, 2);
+        bool    db_binary   = sqlite3_column_int (stmt_file_stat_, 3) != 0;
+        bool    stat_match  = (db_size == static_cast<int64_t>(fsize) &&
+                               db_mtime == mtime);
+
+        bool chunks_ok = true;
+        if (stat_match && !db_binary && vectors_db_ &&
+            config_.semantic_search_enabled && stmt_file_has_chunks_) {
+            sqlite3_reset(stmt_file_has_chunks_);
+            sqlite3_bind_int64(stmt_file_has_chunks_, 1, db_file_id);
+            if (sqlite3_step(stmt_file_has_chunks_) == SQLITE_ROW) {
+                chunks_ok = sqlite3_column_int(stmt_file_has_chunks_, 0) != 0;
+            }
+        }
+
+        if (stat_match && chunks_ok) {
+            ++stats_.files_total;
+            if (db_binary) ++stats_.files_binary;
+            else           ++stats_.files_indexed;
+            return;
+        }
+    }
+
     std::string ext = rel_path.extension().string();
     std::string language = detect_language(ext);
 
@@ -688,6 +728,29 @@ void Indexer::build_initial()
 
     main_db_.exec("COMMIT");
     if (vectors_db_) vectors_db_->exec("COMMIT");
+
+    // Overwrite the per-session counters with authoritative DB totals — after
+    // the fast-path skip landed, symbols/headings/chunks_total only reflect
+    // files re-indexed this session, which reads as "0 symbols" on a warm
+    // start. Callers (main.cpp, integration harness) feed these into the
+    // agent's WorkspaceMetadata, so they need the full on-disk totals.
+    if (auto* s = main_db_.prepare("SELECT COUNT(*) FROM symbols"); s) {
+        if (sqlite3_step(s) == SQLITE_ROW)
+            stats_.symbols_total = sqlite3_column_int(s, 0);
+        sqlite3_finalize(s);
+    }
+    if (auto* s = main_db_.prepare("SELECT COUNT(*) FROM headings"); s) {
+        if (sqlite3_step(s) == SQLITE_ROW)
+            stats_.headings_total = sqlite3_column_int(s, 0);
+        sqlite3_finalize(s);
+    }
+    if (vectors_db_) {
+        if (auto* s = vectors_db_->prepare("SELECT COUNT(*) FROM chunks"); s) {
+            if (sqlite3_step(s) == SQLITE_ROW)
+                stats_.chunks_total = sqlite3_column_int(s, 0);
+            sqlite3_finalize(s);
+        }
+    }
 
     auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - t0);
