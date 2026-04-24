@@ -81,6 +81,8 @@ fs::path resolve_workspace_root()
 #endif
 }
 
+std::atomic<bool> g_console_logging{false};
+
 void init_integration_logging(const fs::path& locus_dir)
 {
     static std::once_flag flag;
@@ -91,7 +93,9 @@ void init_integration_logging(const fs::path& locus_dir)
                 (locus_dir / "integration_test.log").string(),
                 5 * 1024 * 1024, 2);
 
-            stderr_sink->set_level(spdlog::level::warn);
+            stderr_sink->set_level(g_console_logging.load()
+                                       ? spdlog::level::trace
+                                       : spdlog::level::warn);
             file_sink->set_level(spdlog::level::trace);
 
             auto logger = std::make_shared<spdlog::logger>(
@@ -114,6 +118,11 @@ std::unique_ptr<IntegrationHarness>& instance_slot()
 }
 
 } // namespace
+
+// -- Console logging toggle ---------------------------------------------------
+
+void set_console_logging(bool enabled) { g_console_logging.store(enabled); }
+bool is_console_logging()              { return g_console_logging.load(); }
 
 // -- IntegrationHarness -------------------------------------------------------
 

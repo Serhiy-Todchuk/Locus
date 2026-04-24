@@ -5,9 +5,9 @@
 # via LOCUS_INT_TEST_ENDPOINT) with a tool-calling capable model loaded.
 
 add_executable(locus_integration_tests
+    integration_main.cpp
     harness_frontend.cpp
     harness_fixture.cpp
-    session_listener.cpp
     test_int_smoke.cpp
     test_int_search.cpp
     test_int_outline.cpp
@@ -21,8 +21,10 @@ target_include_directories(locus_integration_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
+# Plain Catch2::Catch2 (not Catch2WithMain) because we own main() in
+# integration_main.cpp to parse the -console flag before Catch2 takes over.
 target_link_libraries(locus_integration_tests PRIVATE
-    Catch2::Catch2WithMain
+    Catch2::Catch2
     locus_core
 )
 
