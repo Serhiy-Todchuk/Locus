@@ -206,7 +206,8 @@
       "Bash(git -C d:/Projects/AICodeAss show --stat 2956663)",
       "Bash(git -C d:/Projects/AICodeAss show 2956663 -- architecture/tech-stack.md)",
       "Bash(git mv *)",
-      "Bash(cmake --build build/debug --target locus_core)"
+      "Bash(cmake --build build/debug --target locus_core)",
+      "WebSearch"
     ]
   }
 }

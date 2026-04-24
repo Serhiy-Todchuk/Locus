@@ -1,12 +1,18 @@
 # Locus - download SMALL English-only embedding + reranker models.
 #
 #   bge-small-en-v1.5         Q8_0     ~37 MB    384-dim, 512 ctx, English
-#   bge-reranker-v2-m3        Q4_K_M   ~438 MB   cross-encoder reranker (still
-#                                                multilingual - there is no
-#                                                widely-distributed smaller
-#                                                GGUF reranker as of 2026)
+#   ms-marco-MiniLM-L6-v2     Q4_K_M   ~21 MB    22M-param cross-encoder.
+#                                                The canonical English
+#                                                passage-ranking reranker -
+#                                                ~13x faster than
+#                                                bge-reranker-v2-m3 in
+#                                                practice (~8ms/rerank in
+#                                                Release on CPU vs ~100ms),
+#                                                at the cost of English-only
+#                                                and weaker handling of long
+#                                                passages.
 #
-# Total: ~475 MB. Use this profile when disk/RAM is tight or your workspace
+# Total: ~58 MB. Use this profile when disk/RAM is tight or your workspace
 # is English-only. Recall on non-English text and long chunks will be lower
 # than the recommended bge-m3 set (see download.ps1).
 #
@@ -38,9 +44,9 @@ $Files = @(
         Want     = $Embedder
     },
     @{
-        Name     = 'bge-reranker-v2-m3-Q4_K_M.gguf'
-        Url      = 'https://huggingface.co/gpustack/bge-reranker-v2-m3-GGUF/resolve/main/bge-reranker-v2-m3-Q4_K_M.gguf?download=true'
-        MinBytes = 400MB
+        Name     = 'ms-marco-MiniLM-L6-v2-Q4_K_M.gguf'
+        Url      = 'https://huggingface.co/sinjab/ms-marco-MiniLM-L6-v2-Q4_K_M-GGUF/resolve/main/ms-marco-MiniLM-L6-v2-Q4_K_M.gguf?download=true'
+        MinBytes = 15MB
         Want     = $Reranker
     }
 )
