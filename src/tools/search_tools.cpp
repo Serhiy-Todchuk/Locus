@@ -5,6 +5,8 @@
 #include "embedding_worker.h"
 #include "glob_match.h"
 #include "index_query.h"
+#include "reranker.h"
+#include "workspace.h"
 
 #include <spdlog/spdlog.h>
 
@@ -135,6 +137,65 @@ ToolResult SearchSymbolsTool::execute(const ToolCall& call, IWorkspaceServices& 
 
 // -- SearchSemanticTool -----------------------------------------------------
 
+namespace {
+
+// If a reranker is wired up on the workspace, fetch top_k bi-encoder
+// candidates and rerank them down to max_results. Otherwise just trim
+// `results` to max_results in place (the bi-encoder ordering is preserved).
+//
+// Mutates `results` to reflect the reranked order; rewrites .score to the
+// reranker logit when reranking happens.
+void apply_reranker(std::vector<SearchResult>& results,
+                    IWorkspaceServices& ws,
+                    const std::string& query,
+                    int max_results)
+{
+    auto* rr = ws.reranker();
+    if (!rr || results.size() <= 1) {
+        if (static_cast<int>(results.size()) > max_results)
+            results.resize(static_cast<size_t>(max_results));
+        return;
+    }
+
+    std::vector<std::string> passages;
+    passages.reserve(results.size());
+    for (const auto& r : results) passages.push_back(r.snippet);
+
+    std::vector<float> scores;
+    try {
+        scores = rr->score_batch(query, passages);
+    } catch (const std::exception& e) {
+        spdlog::warn("Reranker failed, falling back to bi-encoder order: {}", e.what());
+        if (static_cast<int>(results.size()) > max_results)
+            results.resize(static_cast<size_t>(max_results));
+        return;
+    }
+
+    std::vector<size_t> idx(results.size());
+    for (size_t i = 0; i < idx.size(); ++i) idx[i] = i;
+    std::sort(idx.begin(), idx.end(),
+              [&](size_t a, size_t b) { return scores[a] > scores[b]; });
+
+    std::vector<SearchResult> reranked;
+    reranked.reserve(std::min<size_t>(idx.size(), static_cast<size_t>(max_results)));
+    for (size_t i = 0; i < idx.size() && static_cast<int>(reranked.size()) < max_results; ++i) {
+        SearchResult r = results[idx[i]];
+        r.score = static_cast<double>(scores[idx[i]]);
+        reranked.push_back(std::move(r));
+    }
+    results = std::move(reranked);
+}
+
+// Returns the workspace's configured reranker_top_k, or `fallback` if the
+// services interface doesn't expose a Workspace (e.g. in tests).
+int reranker_top_k_for(IWorkspaceServices& ws, int fallback)
+{
+    if (auto* w = ws.workspace()) return w->config().reranker_top_k;
+    return fallback;
+}
+
+} // namespace
+
 ToolResult SearchSemanticTool::execute(const ToolCall& call, IWorkspaceServices& ws)
 {
     auto* emb = ws.embedder();
@@ -154,18 +215,27 @@ ToolResult SearchSemanticTool::execute(const ToolCall& call, IWorkspaceServices&
     auto embedding = emb->embed_query(query);
 
     SearchOptions opts;
-    opts.max_results = max_results;
+    // Pull a wider candidate set when a reranker is active; the rerank step
+    // will trim back down to max_results.
+    bool use_rr = ws.reranker() != nullptr;
+    opts.max_results = use_rr
+        ? std::max(max_results, reranker_top_k_for(ws, 50))
+        : max_results;
     auto results = idx->search_semantic(embedding, opts);
+
+    apply_reranker(results, ws, query, max_results);
 
     if (results.empty())
         return {true, "No semantic matches found.", "No semantic matches found."};
 
     std::ostringstream out;
-    out << results.size() << " semantic matches:\n";
+    out << results.size() << " semantic matches"
+        << (use_rr ? " (reranked):\n" : ":\n");
     for (size_t i = 0; i < results.size(); ++i) {
         auto& r = results[i];
         out << "\n[" << (i + 1) << "] " << r.path << ":" << r.line
-            << " (similarity: " << std::fixed << std::setprecision(3) << r.score << ")\n";
+            << (use_rr ? " (rerank: " : " (similarity: ")
+            << std::fixed << std::setprecision(3) << r.score << ")\n";
         out << r.snippet << "\n";
     }
 
@@ -351,14 +421,20 @@ ToolResult SearchHybridTool::execute(const ToolCall& call, IWorkspaceServices& w
     auto embedding = emb->embed_query(query);
 
     SearchOptions opts;
-    opts.max_results = max_results;
+    bool use_rr = ws.reranker() != nullptr;
+    opts.max_results = use_rr
+        ? std::max(max_results, reranker_top_k_for(ws, 50))
+        : max_results;
     auto results = idx->search_hybrid(query, embedding, opts);
+
+    apply_reranker(results, ws, query, max_results);
 
     if (results.empty())
         return {true, "No matches found.", "No matches found."};
 
     std::ostringstream out;
-    out << results.size() << " hybrid matches (BM25 + semantic):\n";
+    out << results.size() << " hybrid matches (BM25 + semantic"
+        << (use_rr ? " + rerank):\n" : "):\n");
     for (size_t i = 0; i < results.size(); ++i) {
         auto& r = results[i];
         out << "\n[" << (i + 1) << "] " << r.path << ":" << r.line

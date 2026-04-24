@@ -94,7 +94,26 @@ SettingsDialog::SettingsDialog(wxWindow* parent, WorkspaceConfig& config,
     semantic_model_ctrl_ = new wxTextCtrl(this, wxID_ANY,
         wxString::FromUTF8(config.embedding_model));
     sem_grid->Add(semantic_model_ctrl_, 1, wxEXPAND);
+
+    sem_grid->Add(new wxStaticText(this, wxID_ANY, "Reranker model:"),
+                  0, wxALIGN_CENTER_VERTICAL);
+    reranker_model_ctrl_ = new wxTextCtrl(this, wxID_ANY,
+        wxString::FromUTF8(config.reranker_model));
+    sem_grid->Add(reranker_model_ctrl_, 1, wxEXPAND);
+
+    sem_grid->Add(new wxStaticText(this, wxID_ANY, "Reranker candidate pool (top-K):"),
+                  0, wxALIGN_CENTER_VERTICAL);
+    reranker_top_k_ctrl_ = new wxSpinCtrl(this, wxID_ANY);
+    reranker_top_k_ctrl_->SetRange(1, 200);
+    reranker_top_k_ctrl_->SetValue(config.reranker_top_k);
+    sem_grid->Add(reranker_top_k_ctrl_, 0);
+
     idx_box->Add(sem_grid, 0, wxEXPAND | wxALL, 4);
+
+    reranker_enabled_ctrl_ = new wxCheckBox(this, wxID_ANY,
+        "Enable cross-encoder reranker (slower, more accurate top-N)");
+    reranker_enabled_ctrl_->SetValue(config.reranker_enabled);
+    idx_box->Add(reranker_enabled_ctrl_, 0, wxALL, 4);
 
     main_sizer->Add(idx_box, 1, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
 
@@ -195,11 +214,17 @@ void SettingsDialog::on_ok(wxCommandEvent& evt)
 
     bool new_semantic = semantic_enabled_ctrl_->GetValue();
     std::string new_sem_model = semantic_model_ctrl_->GetValue().ToStdString();
+    bool new_reranker_enabled = reranker_enabled_ctrl_->GetValue();
+    std::string new_reranker_model = reranker_model_ctrl_->GetValue().ToStdString();
+    int new_reranker_top_k = reranker_top_k_ctrl_->GetValue();
 
     if (new_patterns != config_.exclude_patterns)
         index_changed_ = true;
     if (new_semantic != config_.semantic_search_enabled ||
-        new_sem_model != config_.embedding_model)
+        new_sem_model != config_.embedding_model ||
+        new_reranker_enabled != config_.reranker_enabled ||
+        new_reranker_model != config_.reranker_model ||
+        new_reranker_top_k != config_.reranker_top_k)
         semantic_changed_ = true;
 
     // Collect new tool approval overrides. Only persist entries that
@@ -230,6 +255,9 @@ void SettingsDialog::on_ok(wxCommandEvent& evt)
         config_.exclude_patterns  = new_patterns;
         config_.semantic_search_enabled = new_semantic;
         config_.embedding_model   = new_sem_model;
+        config_.reranker_enabled  = new_reranker_enabled;
+        config_.reranker_model    = new_reranker_model;
+        config_.reranker_top_k    = new_reranker_top_k;
         config_.tool_approval_policies = std::move(new_approvals);
 
         spdlog::info("Settings changed (llm={}, index={}, semantic={}, approvals={})",

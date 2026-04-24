@@ -12,18 +12,13 @@
 namespace locus {
 
 // ---------------------------------------------------------------------------
-// Embedder::Impl  —  wraps llama.cpp session for embedding extraction
+// Embedder::Impl  -  wraps llama.cpp session for embedding extraction
 // ---------------------------------------------------------------------------
 //
-// llama.cpp replaces ONNX Runtime for embedding inference:
-//   - Vocabulary is embedded inside the GGUF file; llama_tokenize produces
-//     real WordPiece / SentencePiece IDs instead of hashed fake tokens.
-//   - No static-constructor schema-registration issue that plagued
-//     onnxruntime + vcpkg x64-windows-static.
-//   - Mean-pooling is performed inside the context via
-//     LLAMA_POOLING_TYPE_MEAN, so llama_get_embeddings_seq() already returns
-//     the pooled sentence vector.  We L2-normalise afterwards to preserve
-//     cosine-as-dot-product behaviour in IndexQuery.
+// Pooling = MEAN. The dimension is taken from the loaded GGUF
+// (llama_model_n_embd) so swapping models (MiniLM 384 -> bge-m3 1024)
+// requires no config change. Output is L2-normalised so cosine similarity
+// reduces to a dot product downstream in IndexQuery.
 
 static void init_llama_backend_once()
 {
@@ -51,9 +46,8 @@ struct Embedder::Impl {
 // Public API
 // ---------------------------------------------------------------------------
 
-Embedder::Embedder(const fs::path& model_path, int dimensions)
+Embedder::Embedder(const fs::path& model_path, int n_ctx)
     : model_path_(model_path)
-    , dimensions_(dimensions)
 {
     if (!fs::exists(model_path)) {
         throw std::runtime_error("Embedding model not found: " + model_path.string());
@@ -72,12 +66,18 @@ Embedder::Embedder(const fs::path& model_path, int dimensions)
         throw std::runtime_error("llama_model_load_from_file failed: " + model_path.string());
     }
 
+    // Cap n_ctx at what the model was trained for; some embedders (MiniLM)
+    // train at 512 and asking for more is wasteful (or invalid).
+    int trained_ctx = static_cast<int>(llama_model_n_ctx_train(impl_->model));
+    if (trained_ctx > 0 && n_ctx > trained_ctx) n_ctx = trained_ctx;
+    if (n_ctx <= 0) n_ctx = 512;
+
     llama_context_params cparams = llama_context_default_params();
     cparams.embeddings   = true;
     cparams.pooling_type = LLAMA_POOLING_TYPE_MEAN;
-    cparams.n_ctx        = 512;
-    cparams.n_batch      = 512;
-    cparams.n_ubatch     = 512;
+    cparams.n_ctx        = static_cast<uint32_t>(n_ctx);
+    cparams.n_batch      = static_cast<uint32_t>(n_ctx);
+    cparams.n_ubatch     = static_cast<uint32_t>(n_ctx);
 
     impl_->ctx = llama_init_from_model(impl_->model, cparams);
     if (!impl_->ctx) {
@@ -87,13 +87,10 @@ Embedder::Embedder(const fs::path& model_path, int dimensions)
     }
 
     impl_->n_embd = llama_model_n_embd(impl_->model);
-    if (impl_->n_embd != dimensions_) {
-        spdlog::warn("Model n_embd={} does not match requested dimensions={}; "
-                     "output will be padded/truncated",
-                     impl_->n_embd, dimensions_);
-    }
+    dimensions_   = impl_->n_embd;
 
-    spdlog::info("Embedder loaded: {} (n_embd={})", model_path.string(), impl_->n_embd);
+    spdlog::info("Embedder loaded: {} (n_embd={}, n_ctx={})",
+                 model_path.string(), impl_->n_embd, n_ctx);
 }
 
 Embedder::~Embedder() = default;
@@ -125,8 +122,6 @@ std::vector<float> Embedder::embed(const std::string& text) const
     }
     tokens.resize(static_cast<size_t>(n));
 
-    // Empty input: llama_decode rejects zero-token batches.  Return a zero
-    // vector (consistent with the previous behaviour for empty text).
     if (tokens.empty()) {
         return std::vector<float>(dimensions_, 0.0f);
     }
@@ -148,11 +143,8 @@ std::vector<float> Embedder::embed(const std::string& text) const
     }
     batch.n_tokens = static_cast<int32_t>(tokens.size());
 
-    // Clear KV cache before each independent call so sequence 0 is reusable.
     llama_memory_clear(llama_get_memory(impl_->ctx), /*data*/ true);
 
-    // Encoder-only embedding models (BERT-style) use llama_encode; calling
-    // llama_decode triggers a fallback warning on every call.
     if (llama_encode(impl_->ctx, batch) != 0) {
         llama_batch_free(batch);
         throw std::runtime_error("llama_encode failed");
@@ -167,17 +159,12 @@ std::vector<float> Embedder::embed(const std::string& text) const
 
     std::vector<float> out(pooled, pooled + impl_->n_embd);
 
-    // L2 normalise — pooling_type=MEAN does not normalise; downstream
-    // IndexQuery::search_semantic treats cosine distance as 1 - dot product,
-    // which requires unit-length vectors.
     float norm = 0.0f;
     for (float v : out) norm += v * v;
     norm = std::sqrt(norm);
     if (norm > 0.0f) {
         for (auto& v : out) v /= norm;
     }
-
-    out.resize(dimensions_, 0.0f);
     return out;
 }
 

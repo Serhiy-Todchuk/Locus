@@ -38,7 +38,7 @@ Database::Database(const fs::path& db_path, DbKind kind)
         create_main_schema();
     } else {
         load_sqlite_vec();
-        create_vectors_schema();
+        create_vectors_skeleton();
     }
 }
 
@@ -144,9 +144,9 @@ void Database::create_main_schema()
     spdlog::trace("Main DB schema initialised");
 }
 
-void Database::create_vectors_schema()
+void Database::create_vectors_skeleton()
 {
-    // Semantic chunks.  `file_id` is a plain integer — the referenced `files`
+    // Semantic chunks.  `file_id` is a plain integer - the referenced `files`
     // row lives in a different database file so no FK constraint.
     exec(R"(
         CREATE TABLE IF NOT EXISTS chunks (
@@ -160,15 +160,98 @@ void Database::create_vectors_schema()
     )");
     exec("CREATE INDEX IF NOT EXISTS chunks_file ON chunks(file_id)");
 
-    // Vector index for semantic similarity (sqlite-vec)
+    // Records what embedder produced the vectors currently in chunk_vectors.
+    // Used to detect model swaps (different dim => wipe + re-embed).
     exec(R"(
-        CREATE VIRTUAL TABLE IF NOT EXISTS chunk_vectors USING vec0(
-            chunk_id INTEGER PRIMARY KEY,
-            embedding float[384]
+        CREATE TABLE IF NOT EXISTS meta (
+            key   TEXT PRIMARY KEY,
+            value TEXT NOT NULL
         )
     )");
 
-    spdlog::trace("Vectors DB schema initialised");
+    spdlog::trace("Vectors DB skeleton initialised (chunk_vectors created lazily)");
+}
+
+int Database::stored_embedding_dim()
+{
+    // Prefer the explicit meta record, but fall back to introspecting an
+    // existing chunk_vectors definition so workspaces created before the
+    // meta table existed still get a clean migration.
+    sqlite3_stmt* stmt = nullptr;
+    if (sqlite3_prepare_v2(db_,
+            "SELECT value FROM meta WHERE key = 'embedding_dim'",
+            -1, &stmt, nullptr) == SQLITE_OK) {
+        int dim = 0;
+        if (sqlite3_step(stmt) == SQLITE_ROW) {
+            const auto* t = sqlite3_column_text(stmt, 0);
+            if (t) dim = std::atoi(reinterpret_cast<const char*>(t));
+        }
+        sqlite3_finalize(stmt);
+        if (dim > 0) return dim;
+    }
+
+    if (sqlite3_prepare_v2(db_,
+            "SELECT sql FROM sqlite_master "
+            "WHERE type='table' AND name='chunk_vectors'",
+            -1, &stmt, nullptr) == SQLITE_OK) {
+        int dim = 0;
+        if (sqlite3_step(stmt) == SQLITE_ROW) {
+            const auto* t = sqlite3_column_text(stmt, 0);
+            if (t) {
+                std::string sql(reinterpret_cast<const char*>(t));
+                auto lb = sql.find('[');
+                auto rb = sql.find(']', lb == std::string::npos ? 0 : lb);
+                if (lb != std::string::npos && rb != std::string::npos && rb > lb)
+                    dim = std::atoi(sql.substr(lb + 1, rb - lb - 1).c_str());
+            }
+        }
+        sqlite3_finalize(stmt);
+        return dim;
+    }
+    return 0;
+}
+
+bool Database::ensure_vectors_schema(int dim, bool force_wipe)
+{
+    if (dim <= 0) {
+        throw std::runtime_error("ensure_vectors_schema: dim must be > 0");
+    }
+
+    int existing = stored_embedding_dim();
+    bool wipe = force_wipe || (existing > 0 && existing != dim);
+
+    if (wipe) {
+        spdlog::info("Wiping vectors.db (stored dim={}, want dim={}{})",
+                     existing, dim, force_wipe ? ", forced" : "");
+        char* err = nullptr;
+        sqlite3_exec(db_, "DROP TABLE IF EXISTS chunk_vectors", nullptr, nullptr, &err);
+        if (err) { sqlite3_free(err); err = nullptr; }
+        sqlite3_exec(db_, "DELETE FROM chunks", nullptr, nullptr, &err);
+        if (err) { sqlite3_free(err); err = nullptr; }
+    }
+
+    // Create chunk_vectors with the requested dim if missing.  vec0 syntax
+    // requires the dim to be embedded in the column type.
+    std::string create_sql =
+        "CREATE VIRTUAL TABLE IF NOT EXISTS chunk_vectors USING vec0("
+        "chunk_id INTEGER PRIMARY KEY, embedding float[" + std::to_string(dim) + "])";
+    exec(create_sql.c_str());
+
+    // Persist (upsert) the dim in meta.
+    sqlite3_stmt* up = nullptr;
+    if (sqlite3_prepare_v2(db_,
+            "INSERT INTO meta(key, value) VALUES('embedding_dim', ?1) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            -1, &up, nullptr) == SQLITE_OK) {
+        std::string s = std::to_string(dim);
+        sqlite3_bind_text(up, 1, s.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_step(up);
+        sqlite3_finalize(up);
+    }
+
+    spdlog::info("Vectors schema ready: dim={}{}",
+                 dim, wipe ? " (wiped)" : "");
+    return wipe;
 }
 
 void Database::drop_legacy_semantic_tables()

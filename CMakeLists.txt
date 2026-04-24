@@ -250,6 +250,7 @@ add_library(locus_core STATIC
     src/embedder.cpp
     src/chunker.cpp
     src/embedding_worker.cpp
+    src/reranker.cpp
 )
 
 target_include_directories(locus_core PUBLIC src third_party/sqlite-vec)

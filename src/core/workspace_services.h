@@ -6,6 +6,7 @@ namespace locus {
 
 class EmbeddingWorker;
 class IndexQuery;
+class Reranker;
 class Workspace;
 
 // Services surface that tools and the agent loop see.
@@ -23,6 +24,7 @@ public:
 
     // Optional subsystems.
     virtual EmbeddingWorker* embedder()  { return nullptr; }
+    virtual Reranker*        reranker()  { return nullptr; }
     virtual Workspace*       workspace() { return nullptr; }
 };
 

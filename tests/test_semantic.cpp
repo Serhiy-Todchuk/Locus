@@ -16,8 +16,9 @@
 using namespace locus;
 namespace fs = std::filesystem;
 
-// Locate the GGUF model file.  Prefers Q8_0 (smallest), then F16, then any
-// all-MiniLM-L6-v2.*.gguf.  Returns empty path if not found.
+// Locate any supported embedding GGUF.  Tries the bge family first (current
+// default), then falls back to the legacy MiniLM file. Returns empty path if
+// none are present.
 //
 // The working directory depends on how the test is launched:
 //   direct exe:    build/debug/tests/Debug/   (4 up to project root)
@@ -27,6 +28,8 @@ namespace fs = std::filesystem;
 static fs::path find_model()
 {
     const char* names[] = {
+        "bge-m3-Q8_0.gguf",
+        "bge-small-en-v1.5-Q8_0.gguf",
         "all-MiniLM-L6-v2.Q8_0.gguf",
         "all-MiniLM-L6-v2.f16.gguf",
         "all-MiniLM-L6-v2.gguf",
@@ -279,16 +282,17 @@ static std::unique_ptr<Embedder> load_embedder()
 {
     auto model_path = find_model();
     REQUIRE_FALSE(model_path.empty());
-    return std::make_unique<Embedder>(model_path, 384);
+    return std::make_unique<Embedder>(model_path);
 }
 
-TEST_CASE("Embedder produces 384-dim normalised vector", "[s2.1]")
+TEST_CASE("Embedder produces normalised vector matching model dim", "[s2.1]")
 {
     auto embedder = load_embedder();
 
     auto vec = embedder->embed("hello world");
 
-    REQUIRE(vec.size() == 384);
+    REQUIRE(vec.size() == static_cast<size_t>(embedder->dimensions()));
+    CHECK(embedder->dimensions() > 0);
 
     // Check L2 norm is ~1.0 (normalised)
     float norm = 0.0f;
@@ -322,12 +326,13 @@ TEST_CASE("Embedder similar texts have high cosine similarity", "[s2.1]")
 TEST_CASE("Embedder empty and short inputs do not crash", "[s2.1]")
 {
     auto embedder = load_embedder();
+    const size_t dim = static_cast<size_t>(embedder->dimensions());
 
     auto v_empty = embedder->embed("");
-    REQUIRE(v_empty.size() == 384);
+    REQUIRE(v_empty.size() == dim);
 
     auto v_short = embedder->embed("x");
-    REQUIRE(v_short.size() == 384);
+    REQUIRE(v_short.size() == dim);
 
     // Short input should still be normalised
     float norm = 0.0f;
@@ -338,6 +343,10 @@ TEST_CASE("Embedder empty and short inputs do not crash", "[s2.1]")
 // Anchor test: proves the real tokenizer (from GGUF vocab) is active.
 // The previous FNV-hash tokenizer would NOT pass these thresholds because
 // hashed IDs break the model's embedding-layer lookup.
+//
+// Absolute thresholds are model-specific (bge-m3 packs unrelated text
+// noticeably closer in cosine space than MiniLM did). What matters is that
+// the synonym/paraphrase pairs sit *meaningfully* above the unrelated pair.
 TEST_CASE("Embedder anchors real-tokenizer semantic quality", "[s2.1]")
 {
     auto embedder = load_embedder();
@@ -348,12 +357,16 @@ TEST_CASE("Embedder anchors real-tokenizer semantic quality", "[s2.1]")
         return s;
     };
 
-    // Synonymy — common lexical equivalence.
-    CHECK(cos(embedder->embed("car"), embedder->embed("automobile")) > 0.6f);
-    // Paraphrase — same intent, different word order.
-    CHECK(cos(embedder->embed("how to bake bread"),
-              embedder->embed("bread baking instructions")) > 0.6f);
-    // Unrelated — different domain.
-    CHECK(cos(embedder->embed("car"),
-              embedder->embed("photosynthesis chlorophyll")) < 0.4f);
+    float syn      = cos(embedder->embed("car"), embedder->embed("automobile"));
+    float paraphr  = cos(embedder->embed("how to bake bread"),
+                         embedder->embed("bread baking instructions"));
+    float unrelated = cos(embedder->embed("car"),
+                          embedder->embed("photosynthesis chlorophyll"));
+
+    CHECK(syn      > 0.6f);
+    CHECK(paraphr  > 0.6f);
+    // Synonym/paraphrase should sit comfortably above unrelated (>= 0.15
+    // cosine gap is a generous floor; both bge-m3 and MiniLM clear it).
+    CHECK((syn     - unrelated) > 0.15f);
+    CHECK((paraphr - unrelated) > 0.15f);
 }
