@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../core/locus_session.h"
-#include "../llm_client.h"
+#include "../llm/llm_client.h"
 
 #include <wx/wx.h>
 

@@ -1,5 +1,7 @@
 #include "compaction_dialog.h"
 
+#include "../llm/token_counter.h"
+
 #include <algorithm>
 
 namespace locus {
@@ -203,7 +205,7 @@ int CompactionDialog::estimate_freed_tokens() const
         int freed = 0;
         for (auto& m : msgs) {
             if (m.role == MessageRole::tool && !m.content.empty())
-                freed += ILLMClient::estimate_tokens(m.content);
+                freed += TokenCounter::estimate(m.content);
         }
         return freed;
     }
@@ -214,7 +216,7 @@ int CompactionDialog::estimate_freed_tokens() const
     int dropped = 0;
     for (size_t i = 1; i < msgs.size() && dropped < n * 2; ++i) {
         if (msgs[i].role == MessageRole::system) continue;
-        freed += ILLMClient::estimate_tokens(msgs[i].content);
+        freed += TokenCounter::estimate(msgs[i].content);
         ++dropped;
     }
     return freed;

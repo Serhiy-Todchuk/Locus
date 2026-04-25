@@ -5,7 +5,7 @@
 #include "tool_registry.h"
 #include "tools/tools.h"
 #include "agent/agent_core.h"
-#include "llm_client.h"
+#include "llm/llm_client.h"
 
 using namespace locus;
 

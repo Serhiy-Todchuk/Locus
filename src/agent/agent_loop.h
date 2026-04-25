@@ -3,7 +3,7 @@
 #include "conversation.h"
 #include "core/workspace_services.h"
 #include "frontend_registry.h"
-#include "llm_client.h"
+#include "llm/llm_client.h"
 #include "tool.h"
 
 #include <string>

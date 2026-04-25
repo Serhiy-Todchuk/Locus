@@ -135,12 +135,6 @@ public:
     // Query the server for loaded model info (id, context_length).
     // Returns the first loaded model, or empty ModelInfo on failure.
     virtual ModelInfo query_model_info() = 0;
-
-    // Heuristic token count for a string (~4 chars = 1 token).
-    static int estimate_tokens(const std::string& text);
-
-    // Estimate tokens for an entire conversation.
-    static int estimate_tokens(const std::vector<ChatMessage>& messages);
 };
 
 // Factory: creates a LMStudioClient (OpenAI-compatible) with the given config.

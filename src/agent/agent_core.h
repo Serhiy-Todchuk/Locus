@@ -10,7 +10,7 @@
 #include "core/workspace_services.h"
 #include "frontend.h"
 #include "frontend_registry.h"
-#include "llm_client.h"
+#include "llm/llm_client.h"
 #include "session_manager.h"
 #include "slash_commands.h"
 #include "system_prompt.h"

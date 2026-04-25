@@ -1,7 +1,7 @@
 #include "workspace.h"
 #include "core/locus_session.h"
 #include "core/watcher_pump.h"
-#include "llm_client.h"
+#include "llm/llm_client.h"
 #include "agent/agent_core.h"
 #include "frontends/cli_frontend.h"
 

@@ -1,4 +1,4 @@
-#include "sse_parser.h"
+#include "llm/sse_parser.h"
 
 namespace locus {
 

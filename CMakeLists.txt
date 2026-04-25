@@ -232,8 +232,14 @@ add_library(locus_core STATIC
     src/index/symbol_extractors/java_extractor.cpp
     src/index/symbol_extractors/csharp_extractor.cpp
     src/index/prepared_statements.cpp
-    src/sse_parser.cpp
-    src/llm_client.cpp
+    src/llm/sse_parser.cpp
+    src/llm/llm_client.cpp
+    src/llm/openai_transport.cpp
+    src/llm/stream_decoders/openai_decoder.cpp
+    src/llm/stream_decoders/qwen_xml_decoder.cpp
+    src/llm/stream_decoders/claude_xml_decoder.cpp
+    src/llm/llm_router.cpp
+    src/llm/token_counter.cpp
     src/tool_registry.cpp
     src/tools/shared.cpp
     src/tools/file_tools.cpp

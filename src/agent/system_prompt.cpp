@@ -1,5 +1,5 @@
 #include "system_prompt.h"
-#include "llm_client.h"
+#include "llm/token_counter.h"
 
 #include <spdlog/spdlog.h>
 
@@ -71,7 +71,7 @@ std::string SystemPromptBuilder::build(const std::string& locus_md,
 
 int SystemPromptBuilder::check_locus_md_budget(const std::string& locus_md)
 {
-    int tokens = ILLMClient::estimate_tokens(locus_md);
+    int tokens = TokenCounter::estimate(locus_md);
     if (tokens > 500) {
         spdlog::warn("LOCUS.md is ~{} tokens (budget: 500). Consider trimming it "
                      "to leave more context for conversation.", tokens);

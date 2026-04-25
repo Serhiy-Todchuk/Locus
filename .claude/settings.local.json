@@ -213,7 +213,8 @@
       "Bash(echo \"EXIT=$?\")",
       "Bash(cmake --build build/release --target locus_retrieval_eval --config Release)",
       "Bash(./build/release/tests/retrieval_eval/Release/locus_retrieval_eval.exe --help)",
-      "Bash(./build/release/tests/retrieval_eval/Release/locus_retrieval_eval.exe --curate-from .locus/sessions)"
+      "Bash(./build/release/tests/retrieval_eval/Release/locus_retrieval_eval.exe --curate-from .locus/sessions)",
+      "Bash(d:/Projects/AICodeAss/build/debug/Debug/locus.exe d:/Projects/AICodeAss -verbose)"
     ]
   }
 }

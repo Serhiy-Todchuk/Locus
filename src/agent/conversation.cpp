@@ -1,5 +1,7 @@
 #include "conversation.h"
 
+#include "llm/token_counter.h"
+
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
@@ -61,7 +63,7 @@ void ConversationHistory::replace_system_prompt(std::string content)
 
 int ConversationHistory::estimate_tokens() const
 {
-    return ILLMClient::estimate_tokens(messages_);
+    return TokenCounter::estimate(messages_);
 }
 
 // -- Compaction ---------------------------------------------------------------
