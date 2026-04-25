@@ -1,5 +1,6 @@
 #pragma once
 
+#include "llm/llm_client.h"   // ToolFormat
 #include "tool.h"
 
 #include <filesystem>
@@ -26,10 +27,14 @@ struct WorkspaceMetadata {
 
 class SystemPromptBuilder {
 public:
-    // Build the full system prompt string.
+    // Build the full system prompt string. `tool_format` selects an
+    // optional appendix that tells the model exactly how to emit tool
+    // calls when the wire format isn't pure OpenAI JSON -- a hedge for
+    // models whose chat template is broken or absent in LM Studio.
     static std::string build(const std::string& locus_md,
                              const WorkspaceMetadata& meta,
-                             const IToolRegistry& tools);
+                             const IToolRegistry& tools,
+                             ToolFormat tool_format = ToolFormat::Auto);
 
     // Estimate tokens for a LOCUS.md string. Logs a warning if > 500 tokens.
     static int check_locus_md_budget(const std::string& locus_md);

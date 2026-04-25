@@ -60,6 +60,13 @@ struct WorkspaceConfig {
     double      llm_temperature = 0.7;
     int         llm_context_limit = 0; // 0 = auto-detect from server
 
+    // S4.N -- tool-call wire format. Stored as a string so a config.json
+    // edited by the user reads naturally; parsed via tool_format_from_string.
+    // "auto" runs OpenAI JSON tool_calls + Qwen/Claude XML extraction in
+    // parallel, which is the right default for unknown models. Override to
+    // "openai" / "qwen" / "claude" / "none" for a known model family.
+    std::string llm_tool_format = "auto";
+
     // Per-workspace tool approval overrides: tool_name -> policy.
     // Absent entries fall back to the tool's default (ITool::approval_policy()).
     std::unordered_map<std::string, ToolApprovalPolicy> tool_approval_policies;

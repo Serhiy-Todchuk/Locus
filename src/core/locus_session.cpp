@@ -30,6 +30,12 @@ void merge_workspace_defaults(LLMConfig& cfg, const WorkspaceConfig& wc)
     // from "default". Treat any non-default workspace value as an override.
     if (wc.llm_temperature > 0.0 && wc.llm_temperature != cfg.temperature)
         cfg.temperature = wc.llm_temperature;
+    // tool_format: caller seeds keep precedence (today the CLI/GUI never
+    // sets it, so the workspace value always wins). Default Auto in
+    // LLMConfig is the same as default "auto" in WorkspaceConfig, so we
+    // can unconditionally read from the workspace.
+    if (cfg.tool_format == ToolFormat::Auto && !wc.llm_tool_format.empty())
+        cfg.tool_format = tool_format_from_string(wc.llm_tool_format);
 }
 
 } // namespace

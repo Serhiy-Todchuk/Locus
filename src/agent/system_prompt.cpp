@@ -7,9 +7,51 @@
 
 namespace locus {
 
+namespace {
+
+// Format-specific addendum injected when the configured wire format is
+// not pure OpenAI JSON. Most LM Studio templates handle this for the
+// model, but explicit instructions are a cheap belt-and-braces hedge
+// against a broken or missing chat template.
+const char* tool_format_instructions(ToolFormat f)
+{
+    switch (f) {
+    case ToolFormat::Qwen:
+        return "\n## Tool-call format\n"
+               "When you call a tool, emit it on its own line as:\n"
+               "<tool_call>\n"
+               "{\"name\": \"<tool_name>\", \"arguments\": {<args object>}}\n"
+               "</tool_call>\n"
+               "Do not include any other text on the lines containing the markers. "
+               "Use exactly one tool call per <tool_call> block.\n";
+    case ToolFormat::Claude:
+        return "\n## Tool-call format\n"
+               "When you call a tool, emit it inside a <function_calls> block:\n"
+               "<function_calls>\n"
+               "<invoke name=\"<tool_name>\">\n"
+               "<parameter name=\"<arg_name>\"><arg_value></parameter>\n"
+               "</invoke>\n"
+               "</function_calls>\n"
+               "One <invoke> per tool. Multiple <parameter> blocks per invoke "
+               "for multiple arguments. Values may be raw text, JSON arrays, "
+               "or JSON objects.\n";
+    case ToolFormat::None:
+        return "\n## Tools\n"
+               "No tools are available. Answer from your own knowledge "
+               "of the workspace context provided above.\n";
+    case ToolFormat::OpenAi:
+    case ToolFormat::Auto:
+    default:
+        return "";
+    }
+}
+
+} // namespace
+
 std::string SystemPromptBuilder::build(const std::string& locus_md,
                                        const WorkspaceMetadata& meta,
-                                       const IToolRegistry& tools)
+                                       const IToolRegistry& tools,
+                                       ToolFormat tool_format)
 {
     std::ostringstream ss;
 
@@ -65,6 +107,9 @@ std::string SystemPromptBuilder::build(const std::string& locus_md,
             ss << "): " << p.description << "\n";
         }
     }
+
+    // -- Tool-call wire format addendum (S4.N) --------------------------------
+    ss << tool_format_instructions(tool_format);
 
     return ss.str();
 }

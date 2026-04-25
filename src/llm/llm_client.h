@@ -55,6 +55,35 @@ struct ChatMessage {
     static ChatMessage from_json(const nlohmann::json& j);
 };
 
+// ---- Tool-call format (S4.N) ------------------------------------------------
+
+// Wire format the model uses to emit tool calls. LM Studio normally wraps
+// every model behind the OpenAI tool API and translates Qwen/Claude-style
+// text-channel tool calls back into JSON `tool_calls` deltas, but that
+// translation is not always reliable -- some models leak the raw XML
+// markers into the content channel. The decoder layer extracts them so
+// we don't lose tool intent regardless of who let it through.
+//
+//   Auto   -- always extract Qwen + Claude markers from text in addition to
+//             the JSON tool_calls path. Default.
+//   OpenAi -- trust LM Studio's JSON tool_calls deltas only; skip XML
+//             extraction. Slightly cheaper, useful when the user knows
+//             the model behaves.
+//   Qwen   -- run JSON path + Qwen-only XML extraction (`<tool_call>...`).
+//   Claude -- run JSON path + Claude-only XML extraction (`<function_calls>...`).
+//   None   -- omit the `tools` array from the request entirely; the model
+//             is expected not to call tools (e.g. base Llama3 untrained).
+enum class ToolFormat {
+    Auto,
+    OpenAi,
+    Qwen,
+    Claude,
+    None
+};
+
+const char* to_string(ToolFormat f);
+ToolFormat  tool_format_from_string(const std::string& s);
+
 // ---- Config -----------------------------------------------------------------
 
 struct LLMConfig {
@@ -64,6 +93,7 @@ struct LLMConfig {
     int         max_tokens    = 2048;
     int         context_limit = 8192;        // total context window size
     int         timeout_ms    = 60000;       // stream stall timeout: abort if no bytes flow for this long. Not a total-request cap — long reasoning streams are fine.
+    ToolFormat  tool_format   = ToolFormat::Auto;
 };
 
 // ---- Model info (from /v1/models) -------------------------------------------

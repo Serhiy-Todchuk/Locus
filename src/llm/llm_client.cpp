@@ -1,14 +1,72 @@
 #include "llm/llm_client.h"
 #include "llm/openai_transport.h"
+#include "llm/stream_decoder.h"
 #include "llm/stream_decoders/openai_decoder.h"
+#include "llm/stream_decoders/qwen_xml_decoder.h"
+#include "llm/stream_decoders/claude_xml_decoder.h"
+#include "llm/stream_decoders/auto_decoder.h"
 
 #include <cpr/cpr.h>
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 
+#include <algorithm>
+#include <cctype>
+
 using json = nlohmann::json;
 
 namespace locus {
+
+// ---- ToolFormat string conversion -------------------------------------------
+
+const char* to_string(ToolFormat f)
+{
+    switch (f) {
+    case ToolFormat::Auto:   return "auto";
+    case ToolFormat::OpenAi: return "openai";
+    case ToolFormat::Qwen:   return "qwen";
+    case ToolFormat::Claude: return "claude";
+    case ToolFormat::None:   return "none";
+    }
+    return "auto";
+}
+
+ToolFormat tool_format_from_string(const std::string& s)
+{
+    std::string l;
+    l.reserve(s.size());
+    for (char c : s) l.push_back(static_cast<char>(std::tolower(
+        static_cast<unsigned char>(c))));
+    if (l == "openai" || l == "open_ai" || l == "open-ai") return ToolFormat::OpenAi;
+    if (l == "qwen")                                       return ToolFormat::Qwen;
+    if (l == "claude" || l == "anthropic" || l == "xml")   return ToolFormat::Claude;
+    if (l == "none" || l == "off" || l == "disabled")      return ToolFormat::None;
+    // Unknown values fall back to Auto so a typo never breaks tool calls.
+    return ToolFormat::Auto;
+}
+
+namespace {
+
+// Build the right decoder for the configured tool_format. Defined in this
+// TU so that the LMStudioClient (also in this TU) can hold a generic
+// std::unique_ptr<IStreamDecoder> instead of a templated member.
+std::unique_ptr<IStreamDecoder> make_decoder_for(ToolFormat tf)
+{
+    switch (tf) {
+    case ToolFormat::OpenAi:
+    case ToolFormat::None:
+        return std::make_unique<OpenAiDecoder>();
+    case ToolFormat::Qwen:
+        return std::make_unique<QwenXmlDecoder>();
+    case ToolFormat::Claude:
+        return std::make_unique<ClaudeXmlDecoder>();
+    case ToolFormat::Auto:
+    default:
+        return std::make_unique<AutoToolFormatDecoder>();
+    }
+}
+
+} // namespace
 
 // ---- ChatMessage JSON -------------------------------------------------------
 
@@ -80,24 +138,26 @@ private:
         const std::vector<ChatMessage>& messages,
         const std::vector<ToolSchema>&  tools) const;
 
-    LLMConfig         config_;
-    OpenAiTransport   transport_;
-    OpenAiDecoder     decoder_;
+    LLMConfig                       config_;
+    OpenAiTransport                 transport_;
+    std::unique_ptr<IStreamDecoder> decoder_;
 };
 
 LMStudioClient::LMStudioClient(LLMConfig config)
     : config_(std::move(config))
     , transport_(config_)
+    , decoder_(make_decoder_for(config_.tool_format))
 {
     // Strip trailing slash from base URL.
     while (!config_.base_url.empty() && config_.base_url.back() == '/')
         config_.base_url.pop_back();
 
-    spdlog::info("LLM client: endpoint={} model={} temp={} max_tokens={}",
+    spdlog::info("LLM client: endpoint={} model={} temp={} max_tokens={} tool_format={}",
                  config_.base_url,
                  config_.model.empty() ? "(server default)" : config_.model,
                  config_.temperature,
-                 config_.max_tokens);
+                 config_.max_tokens,
+                 to_string(config_.tool_format));
 }
 
 // Helper: extract context length from a model JSON object using known field names.
@@ -241,8 +301,9 @@ json LMStudioClient::build_request_body(
     if (!config_.model.empty())
         body["model"] = config_.model;
 
-    // Tool definitions
-    if (!tools.empty()) {
+    // Tool definitions. Skipped entirely when tool_format=None -- the model
+    // is expected not to call tools (e.g. base Llama3 with no tool training).
+    if (!tools.empty() && config_.tool_format != ToolFormat::None) {
         json tool_arr = json::array();
         for (auto& t : tools) {
             tool_arr.push_back({
@@ -282,7 +343,7 @@ void LMStudioClient::stream_completion(
     bool errored        = false;
     CompletionUsage usage;
 
-    decoder_.reset();
+    decoder_->reset();
 
     StreamDecoderSink sink;
     sink.on_text = [&](const std::string& token) {
@@ -313,7 +374,7 @@ void LMStudioClient::stream_completion(
     OpenAiTransport::Callbacks tcbs;
     tcbs.on_data = [&](const std::string& data) -> bool {
         got_data = true;
-        return decoder_.decode(data, sink);
+        return decoder_->decode(data, sink);
     };
     tcbs.on_error = [&](const std::string& err) {
         errored = true;
@@ -325,6 +386,10 @@ void LMStudioClient::stream_completion(
 
     if (errored)
         return;
+
+    // Flush any state the decoder is still holding back (XML decoders
+    // may have buffered a few bytes waiting on a partial-tag suffix).
+    decoder_->finish_stream(sink);
 
     // No data received at all (transport ok but server sent empty body).
     if (!got_data) {

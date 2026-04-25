@@ -1,22 +1,22 @@
-#include "llm/stream_decoders/claude_xml_decoder.h"
+#include "llm/stream_decoders/auto_decoder.h"
 
 #include "llm/stream_decoders/openai_decoder.h"
 #include "llm/xml_tool_call_extractor.h"
 
 namespace locus {
 
-struct ClaudeXmlDecoder::Impl {
+struct AutoToolFormatDecoder::Impl {
     OpenAiDecoder        inner;
     XmlToolCallExtractor extractor;
 
-    Impl() : extractor({XmlMarker::Claude}) {}
+    Impl() : extractor({XmlMarker::Qwen, XmlMarker::Claude}) {}
 };
 
-ClaudeXmlDecoder::ClaudeXmlDecoder() : impl_(std::make_unique<Impl>()) {}
-ClaudeXmlDecoder::~ClaudeXmlDecoder() = default;
+AutoToolFormatDecoder::AutoToolFormatDecoder() : impl_(std::make_unique<Impl>()) {}
+AutoToolFormatDecoder::~AutoToolFormatDecoder() = default;
 
-bool ClaudeXmlDecoder::decode(const std::string& payload,
-                              const StreamDecoderSink& sink)
+bool AutoToolFormatDecoder::decode(const std::string& payload,
+                                   const StreamDecoderSink& sink)
 {
     StreamDecoderSink inner_sink;
     inner_sink.on_reasoning       = sink.on_reasoning;
@@ -37,14 +37,14 @@ bool ClaudeXmlDecoder::decode(const std::string& payload,
     return impl_->inner.decode(payload, inner_sink);
 }
 
-void ClaudeXmlDecoder::finish_stream(const StreamDecoderSink& sink)
+void AutoToolFormatDecoder::finish_stream(const StreamDecoderSink& sink)
 {
     impl_->extractor.finish([&](const std::string& tail) {
         if (sink.on_text && !tail.empty()) sink.on_text(tail);
     });
 }
 
-void ClaudeXmlDecoder::reset()
+void AutoToolFormatDecoder::reset()
 {
     impl_->inner.reset();
     impl_->extractor.reset();
