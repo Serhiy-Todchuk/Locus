@@ -15,6 +15,8 @@ add_executable(locus_tests
     test_search_regex.cpp
     test_reranker.cpp
     test_checkpoint_store.cpp
+    test_retrieval_eval.cpp
+    retrieval_eval/metrics.cpp
     support/shared_embedder.cpp
 )
 
@@ -35,3 +37,6 @@ catch_discover_tests(locus_tests)
 
 # Manual-only LLM-driven integration tests (locus_integration_tests).
 add_subdirectory(integration)
+
+# Manual-only retrieval evaluation harness (locus_retrieval_eval).
+add_subdirectory(retrieval_eval)
