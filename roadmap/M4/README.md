@@ -12,7 +12,7 @@
 |---|---|---|
 | [S4.A](S4.A-diff-editing.md) | Diff-Based Editing ✔ | Editing |
 | [S4.P](S4.P-grep.md) | Grep Tool (Regex over Raw Content) ✔ | Tools |
-| [S4.J](S4.J-embeddings-reranker.md) | Better Embeddings + Reranker | Retrieval |
+| [S4.J](S4.J-embeddings-reranker.md) | Better Embeddings + Reranker ✔ | Retrieval |
 | [S4.B](S4.B-checkpoint-undo.md) | Checkpoint & Undo ✔ | Safety |
 | [S4.K](S4.K-retrieval-eval.md) | Retrieval Evaluation Harness | Retrieval |
 | [S4.I](S4.I-background-commands.md) | Background / Long-Running Commands | Process model |
@@ -36,8 +36,14 @@
 
 ## Prerequisites from M3
 
-- [S3.L — tool-catalog-hygiene](../M3/S3.L-tool-catalog-hygiene.md) before S4.A — every subsequent M4 stage that adds tools should be authored against the new `available()` / `visible_in_mode()` hooks instead of retrofitted.
-- [S3.B — llm-client-split](../M3/S3.B-llm-client-split.md) before S4.N, S4.Q.
-- [S3.G — locus-session](../M3/S3.G-locus-session.md) before S4.B — the first new lifecycle subsystem (the checkpoint store) is the natural moment to bundle wiring into `LocusSession`.
+Already landed (no action required):
 
-S3.A (agent-core-split) and S3.I (threading-model), also prerequisites for several M4 stages, already done.
+- [S3.A — agent-core-split](../M3/S3.A-agent-core-split.md) — required for the M4 stages that hook into the agent loop.
+- [S3.I — threading-model](../M3/S3.I-threading-model.md) — required for any stage that adds a thread.
+- [S3.L — tool-catalog-hygiene](../M3/S3.L-tool-catalog-hygiene.md) — every M4 stage that adds tools is authored against the `available()` / `visible_in_mode()` hooks instead of retrofitted.
+- [S3.G — locus-session](../M3/S3.G-locus-session.md) — bundles the per-workspace lifecycle so future M4 subsystems (LSP, MCP, process registry) slot in as one more `unique_ptr` member.
+
+Still outstanding:
+
+- [S3.B — llm-client-split](../M3/S3.B-llm-client-split.md) before [S4.N](S4.N-tool-call-robustness.md) (tool-call robustness across model families) and [S4.Q](S4.Q-multi-model.md) (weak/strong split).
+- [S3.D — indexer-split](../M3/S3.D-indexer-split.md) and [S3.H — src-layering](../M3/S3.H-src-layering.md) are nice-to-have refactors with no hard M4 dependency; pick them up opportunistically when the touched files come up for other reasons.
