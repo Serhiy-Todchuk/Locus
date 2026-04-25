@@ -172,6 +172,22 @@ void Database::create_vectors_skeleton()
     spdlog::trace("Vectors DB skeleton initialised (chunk_vectors created lazily)");
 }
 
+std::string Database::stored_embedding_model()
+{
+    sqlite3_stmt* stmt = nullptr;
+    std::string out;
+    if (sqlite3_prepare_v2(db_,
+            "SELECT value FROM meta WHERE key = 'embedding_model'",
+            -1, &stmt, nullptr) == SQLITE_OK) {
+        if (sqlite3_step(stmt) == SQLITE_ROW) {
+            const auto* t = sqlite3_column_text(stmt, 0);
+            if (t) out.assign(reinterpret_cast<const char*>(t));
+        }
+        sqlite3_finalize(stmt);
+    }
+    return out;
+}
+
 int Database::stored_embedding_dim()
 {
     // Prefer the explicit meta record, but fall back to introspecting an
@@ -211,18 +227,29 @@ int Database::stored_embedding_dim()
     return 0;
 }
 
-bool Database::ensure_vectors_schema(int dim, bool force_wipe)
+bool Database::ensure_vectors_schema(int dim, const std::string& model_id,
+                                     bool force_wipe)
 {
     if (dim <= 0) {
         throw std::runtime_error("ensure_vectors_schema: dim must be > 0");
     }
 
-    int existing = stored_embedding_dim();
-    bool wipe = force_wipe || (existing > 0 && existing != dim);
+    int         existing_dim   = stored_embedding_dim();
+    std::string existing_model = stored_embedding_model();
+
+    // Wipe only when we'd otherwise be asking sqlite-vec to compare vectors
+    // from two incompatible sources. Same dim + empty stored model = the DB
+    // was last touched by a pre-model-tracking build; treat that as a match
+    // to avoid spurious wipes on first upgrade.
+    bool dim_mismatch   = (existing_dim   > 0)        && existing_dim   != dim;
+    bool model_mismatch = !existing_model.empty()     && existing_model != model_id;
+    bool wipe = force_wipe || dim_mismatch || model_mismatch;
 
     if (wipe) {
-        spdlog::info("Wiping vectors.db (stored dim={}, want dim={}{})",
-                     existing, dim, force_wipe ? ", forced" : "");
+        spdlog::info("Wiping vectors.db (stored dim={}, model='{}'; "
+                     "want dim={}, model='{}'{})",
+                     existing_dim, existing_model, dim, model_id,
+                     force_wipe ? ", forced" : "");
         char* err = nullptr;
         sqlite3_exec(db_, "DROP TABLE IF EXISTS chunk_vectors", nullptr, nullptr, &err);
         if (err) { sqlite3_free(err); err = nullptr; }
@@ -237,20 +264,24 @@ bool Database::ensure_vectors_schema(int dim, bool force_wipe)
         "chunk_id INTEGER PRIMARY KEY, embedding float[" + std::to_string(dim) + "])";
     exec(create_sql.c_str());
 
-    // Persist (upsert) the dim in meta.
-    sqlite3_stmt* up = nullptr;
-    if (sqlite3_prepare_v2(db_,
-            "INSERT INTO meta(key, value) VALUES('embedding_dim', ?1) "
-            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-            -1, &up, nullptr) == SQLITE_OK) {
-        std::string s = std::to_string(dim);
-        sqlite3_bind_text(up, 1, s.c_str(), -1, SQLITE_TRANSIENT);
-        sqlite3_step(up);
-        sqlite3_finalize(up);
-    }
+    // Persist (upsert) dim + model_id in meta.
+    auto upsert = [&](const char* key, const std::string& value) {
+        sqlite3_stmt* up = nullptr;
+        if (sqlite3_prepare_v2(db_,
+                "INSERT INTO meta(key, value) VALUES(?1, ?2) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                -1, &up, nullptr) == SQLITE_OK) {
+            sqlite3_bind_text(up, 1, key,           -1, SQLITE_TRANSIENT);
+            sqlite3_bind_text(up, 2, value.c_str(), -1, SQLITE_TRANSIENT);
+            sqlite3_step(up);
+            sqlite3_finalize(up);
+        }
+    };
+    upsert("embedding_dim",   std::to_string(dim));
+    upsert("embedding_model", model_id);
 
-    spdlog::info("Vectors schema ready: dim={}{}",
-                 dim, wipe ? " (wiped)" : "");
+    spdlog::info("Vectors schema ready: dim={}, model='{}'{}",
+                 dim, model_id, wipe ? " (wiped)" : "");
     return wipe;
 }
 

@@ -228,8 +228,13 @@ IntegrationHarness::IntegrationHarness()
     agent_->start();
 
     // Wait for any initial embedding backlog to drain so semantic queries are
-    // meaningful on turn one.
-    wait_for_embedding_idle();
+    // meaningful on turn one. The harness ctor can't REQUIRE (no Catch test
+    // context yet), so we just log; per-test wait_for_embedding_idle calls
+    // are the enforcement point.
+    if (!wait_for_embedding_idle()) {
+        spdlog::error("Initial embedding did not finish within timeout - "
+                      "semantic test cases will likely fail");
+    }
 }
 
 IntegrationHarness::~IntegrationHarness()
@@ -278,26 +283,38 @@ void IntegrationHarness::wait_for_index_idle(std::chrono::milliseconds timeout)
     }
 }
 
-void IntegrationHarness::wait_for_embedding_idle(std::chrono::milliseconds timeout)
+bool IntegrationHarness::wait_for_embedding_idle(std::chrono::milliseconds timeout)
 {
     EmbeddingWorker* ew = workspace_->embedding_worker();
-    if (!ew) return;
+    if (!ew) return true;
 
     const auto deadline = std::chrono::steady_clock::now() + timeout;
     int stable_ticks = 0;
     int last_done = -1, last_total = -1;
+    auto last_log = std::chrono::steady_clock::now();
     while (std::chrono::steady_clock::now() < deadline) {
         auto s = ew->stats();
         if (s.done == s.total && s.done == last_done && s.total == last_total) {
-            if (++stable_ticks >= 3) return;  // idle for ~300ms
+            if (++stable_ticks >= 3) return true;  // idle for ~300ms
         } else {
             stable_ticks = 0;
+        }
+        // Heartbeat every 30s so a long cold-embed run shows progress in
+        // the console rather than looking hung.
+        auto now = std::chrono::steady_clock::now();
+        if (now - last_log > std::chrono::seconds(30)) {
+            spdlog::info("wait_for_embedding_idle: {}/{} chunks embedded",
+                         s.done, s.total);
+            last_log = now;
         }
         last_done = s.done;
         last_total = s.total;
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
-    spdlog::warn("wait_for_embedding_idle: timed out");
+    auto s = ew->stats();
+    spdlog::warn("wait_for_embedding_idle: timed out at {}/{} after {} ms",
+                 s.done, s.total, timeout.count());
+    return false;
 }
 
 } // namespace locus::integration

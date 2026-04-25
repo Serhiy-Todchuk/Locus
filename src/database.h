@@ -52,12 +52,22 @@ public:
     // was created by a pre-S4.J build without the meta table.
     int stored_embedding_dim();
 
-    // Vectors-only: ensure `chunk_vectors` exists with the requested dimension.
-    // If the table exists with a different dim (model swap), or if `force_wipe`
-    // is true, drops + recreates it AND drops `chunks` so the indexer
-    // re-chunks every file.  Persists `dim` to the meta table.
+    // Vectors-only: read the persisted embedder model identifier (typically
+    // the GGUF filename).  Returns empty string if not set.
+    std::string stored_embedding_model();
+
+    // Vectors-only: ensure `chunk_vectors` exists with the requested
+    // dimension. Wipes (drops `chunk_vectors` + clears `chunks`) when:
+    //   - the existing dim differs from `dim` (vec0 schema is dim-baked), or
+    //   - `model_id` differs from the stored value (same dim, different
+    //     vector space - e.g. MiniLM -> bge-small-en-v1.5, both 384-dim
+    //     but trained on different objectives), or
+    //   - `force_wipe` is true.
+    // After wipe, the indexer's next scan re-chunks every file and the
+    // embedding worker re-embeds them. Persists dim + model_id to meta.
     // Returns true if a wipe happened.
-    bool ensure_vectors_schema(int dim, bool force_wipe = false);
+    bool ensure_vectors_schema(int dim, const std::string& model_id,
+                               bool force_wipe = false);
 
 private:
     void create_main_schema();

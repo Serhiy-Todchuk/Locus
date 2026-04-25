@@ -173,10 +173,11 @@ bool Workspace::enable_semantic_search()
             vectors_db_ = std::make_unique<Database>(vpath, DbKind::Vectors);
         }
 
-        // If a previous run wrote vectors with a different dim (model swap),
+        // If a previous run wrote vectors with a different dim OR a
+        // different embedder model (same dim, different vector space),
         // ensure_vectors_schema drops chunk_vectors + chunks; the indexer
         // pass that follows will re-chunk + re-enqueue every file.
-        vectors_db_->ensure_vectors_schema(dim);
+        vectors_db_->ensure_vectors_schema(dim, config_.embedding_model);
 
         embedding_worker_ = std::make_unique<EmbeddingWorker>(
             *vectors_db_, *embedder_);

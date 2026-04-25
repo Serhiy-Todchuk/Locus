@@ -194,6 +194,29 @@ int reranker_top_k_for(IWorkspaceServices& ws, int fallback)
     return fallback;
 }
 
+// If the embedding worker still has chunks in flight, returns a one-line
+// note to prepend to the tool result so both the user and the LLM know the
+// vector index is incomplete. Empty string when the worker is idle - in
+// which case the search results are over the full corpus.
+//
+// Without this, a query fired during cold-start indexing would silently
+// return a top-K from the partial subset, indistinguishable from a real
+// zero-match query against a fully-indexed workspace.
+std::string indexing_progress_note(IWorkspaceServices& ws)
+{
+    auto* emb = ws.embedder();
+    if (!emb) return {};
+    auto s = emb->stats();
+    if (s.total <= 0 || s.done >= s.total) return {};
+    int pct = static_cast<int>((100LL * s.done) / s.total);
+    std::ostringstream o;
+    o << "Note: indexing in progress (" << s.done << "/" << s.total
+      << " chunks embedded, " << pct
+      << "%). Semantic results below are partial - retry once indexing "
+         "completes for full coverage.\n\n";
+    return o.str();
+}
+
 } // namespace
 
 ToolResult SearchSemanticTool::execute(const ToolCall& call, IWorkspaceServices& ws)
@@ -225,11 +248,16 @@ ToolResult SearchSemanticTool::execute(const ToolCall& call, IWorkspaceServices&
 
     apply_reranker(results, ws, query, max_results);
 
-    if (results.empty())
-        return {true, "No semantic matches found.", "No semantic matches found."};
+    std::string progress = indexing_progress_note(ws);
+
+    if (results.empty()) {
+        std::string body = progress + "No semantic matches found.";
+        return {true, body, body};
+    }
 
     std::ostringstream out;
-    out << results.size() << " semantic matches"
+    out << progress
+        << results.size() << " semantic matches"
         << (use_rr ? " (reranked):\n" : ":\n");
     for (size_t i = 0; i < results.size(); ++i) {
         auto& r = results[i];
@@ -429,11 +457,16 @@ ToolResult SearchHybridTool::execute(const ToolCall& call, IWorkspaceServices& w
 
     apply_reranker(results, ws, query, max_results);
 
-    if (results.empty())
-        return {true, "No matches found.", "No matches found."};
+    std::string progress = indexing_progress_note(ws);
+
+    if (results.empty()) {
+        std::string body = progress + "No matches found.";
+        return {true, body, body};
+    }
 
     std::ostringstream out;
-    out << results.size() << " hybrid matches (BM25 + semantic"
+    out << progress
+        << results.size() << " hybrid matches (BM25 + semantic"
         << (use_rr ? " + rerank):\n" : "):\n");
     for (size_t i = 0; i < results.size(); ++i) {
         auto& r = results[i];
