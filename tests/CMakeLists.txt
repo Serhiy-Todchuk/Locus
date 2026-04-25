@@ -19,6 +19,7 @@ add_executable(locus_tests
     test_process_registry.cpp
     test_retrieval_eval.cpp
     test_metrics.cpp
+    test_file_change_tracker.cpp
     retrieval_eval/metrics.cpp
     support/shared_embedder.cpp
 )

@@ -125,7 +125,7 @@ Listed in execution order. Letters are identity, not sequence (retained for link
 | [S4.S](roadmap/M4/S4.S-telemetry.md) | Telemetry & Agent Performance Metrics ✔ |
 | [S4.L](roadmap/M4/S4.L-git-native.md) | Git-Native Features |
 | [S4.M](roadmap/M4/S4.M-ast-search.md) | Tree-Sitter Query Tool (Structural Grep) ✔ |
-| [S4.T](roadmap/M4/S4.T-file-change-awareness.md) | File-Change Awareness Between Turns |
+| [S4.T](roadmap/M4/S4.T-file-change-awareness.md) | File-Change Awareness Between Turns ✔ |
 | [S4.U](roadmap/M4/S4.U-subagents.md) | Subagent / Task Delegation |
 | [S4.Q](roadmap/M4/S4.Q-multi-model.md) | Multi-Model Split (Weak + Strong) |
 | [S4.F](roadmap/M4/S4.F-kv-cache.md) | KV / Prompt Cache Preservation |

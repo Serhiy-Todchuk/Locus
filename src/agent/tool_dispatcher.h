@@ -18,6 +18,7 @@ namespace locus {
 
 class ActivityLog;
 class CheckpointStore;
+class FileChangeTracker;
 class MetricsAggregator;
 
 // Runs a single tool call through the approval gate, executes it, and
@@ -58,6 +59,12 @@ public:
                           std::string session_id,
                           int turn_id);
 
+    // S4.T -- attach a file-change tracker so the dispatcher can mark paths
+    // the agent itself mutated (and thus suppress them from next turn's
+    // "files changed since last turn" notification). Lifetime is owned by
+    // AgentCore; pass nullptr to disable.
+    void set_change_tracker(FileChangeTracker* tracker);
+
 private:
     // Inspect the tool name + args and snapshot the target path if relevant.
     void maybe_snapshot(const ToolCall& call);
@@ -79,6 +86,11 @@ private:
     CheckpointStore* checkpoints_     = nullptr;
     std::string      checkpoint_sid_;
     int              checkpoint_turn_ = 0;
+
+    // S4.T -- file-change tracker (lives on AgentCore). When non-null, every
+    // mutating tool call records the touched path so it gets suppressed from
+    // next turn's external-changes notification.
+    FileChangeTracker* change_tracker_ = nullptr;
 };
 
 } // namespace locus

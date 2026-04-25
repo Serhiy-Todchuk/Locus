@@ -254,6 +254,7 @@ add_library(locus_core STATIC
     src/agent/agent_core.cpp
     src/agent/session_manager.cpp
     src/agent/checkpoint_store.cpp
+    src/agent/file_change_tracker.cpp
     src/frontends/cli_frontend.cpp
     src/extractors/extractor_registry.cpp
     src/extractors/markdown_extractor.cpp

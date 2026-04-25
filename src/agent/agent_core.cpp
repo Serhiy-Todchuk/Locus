@@ -61,6 +61,19 @@ AgentCore::AgentCore(ILLMClient& llm,
                                                    metrics_.get());
     slash_      = std::make_unique<SlashCommandDispatcher>(tools_, services_);
 
+    // S4.T -- file-change tracker. Always allocated; the per-turn injection is
+    // gated by WorkspaceConfig::notify_external_changes. Take an initial
+    // snapshot so the first user turn diffs against "the world as it was when
+    // we started", not against an empty set (which would flood the prompt).
+    change_tracker_ = std::make_unique<FileChangeTracker>();
+    if (auto* idx = services_.index()) {
+        try { change_tracker_->snapshot(*idx); }
+        catch (const std::exception& e) {
+            spdlog::warn("FileChangeTracker: initial snapshot failed: {}", e.what());
+        }
+    }
+    dispatcher_->set_change_tracker(change_tracker_.get());
+
     session_id_ = make_session_id();
     turn_id_    = 0;
     if (!checkpoints_dir.empty()) {
@@ -331,7 +344,47 @@ void AgentCore::process_message(const std::string& content)
     }
     metrics_->begin_turn(turn_id_);
 
-    history_.add({MessageRole::user, content});
+    // S4.T -- compute "files changed since last assistant turn" and prepend a
+    // one-liner to the user message before it lands in history. The tracker's
+    // suppression set carries paths the agent itself touched last turn; reset
+    // it now so this turn's edits get recorded fresh.
+    std::string effective_content = content;
+    bool notify = true;
+    if (auto* ws = services_.workspace())
+        notify = ws->config().notify_external_changes;
+    if (notify && change_tracker_) {
+        if (auto* idx = services_.index()) {
+            try {
+                auto diff = change_tracker_->diff_since_snapshot(*idx);
+                if (!diff.changed.empty() || !diff.deleted.empty()) {
+                    std::ostringstream note;
+                    note << "[Files changed since last turn:";
+                    bool first = true;
+                    for (const auto& p : diff.changed) {
+                        note << (first ? " " : ", ") << p;
+                        first = false;
+                    }
+                    for (const auto& p : diff.deleted) {
+                        note << (first ? " " : ", ") << p << " (deleted)";
+                        first = false;
+                    }
+                    note << "]\n\n";
+                    effective_content = note.str() + effective_content;
+                    spdlog::info("AgentCore: external changes since last turn: "
+                                 "{} modified, {} deleted",
+                                 diff.changed.size(), diff.deleted.size());
+                    activity_->emit(ActivityKind::index_event,
+                                    "External file changes detected",
+                                    note.str());
+                }
+            } catch (const std::exception& e) {
+                spdlog::warn("FileChangeTracker: diff failed: {}", e.what());
+            }
+        }
+        change_tracker_->clear_agent_touched();
+    }
+
+    history_.add({MessageRole::user, effective_content});
 
     activity_->emit(ActivityKind::user_message,
                     "User message (" + std::to_string(content.size()) + " chars)",
@@ -408,6 +461,19 @@ void AgentCore::process_message(const std::string& content)
         dispatcher_->set_turn_context(nullptr, {}, 0);
     }
 
+    // S4.T -- refresh the mtime baseline for next turn's diff. Done after the
+    // assistant has finished so any writes the agent just made are part of
+    // the new baseline (the suppression set is cleared next turn anyway).
+    if (change_tracker_) {
+        if (auto* idx = services_.index()) {
+            try { change_tracker_->snapshot(*idx); }
+            catch (const std::exception& e) {
+                spdlog::warn("FileChangeTracker: end-of-turn snapshot failed: {}",
+                             e.what());
+            }
+        }
+    }
+
     frontends_.broadcast([](IFrontend& fe) { fe.on_turn_complete(); });
     busy_.store(false);
 }
@@ -481,6 +547,20 @@ void AgentCore::reset_conversation()
         checkpoints_->drop_session(session_id_);
         session_id_ = make_session_id();
         turn_id_ = 0;
+    }
+
+    // S4.T -- baseline a fresh snapshot so we don't replay diffs that
+    // happened across the now-cleared session. clear_agent_touched is implied
+    // by the snapshot taking but be explicit.
+    if (change_tracker_) {
+        change_tracker_->clear_agent_touched();
+        if (auto* idx = services_.index()) {
+            try { change_tracker_->snapshot(*idx); }
+            catch (const std::exception& e) {
+                spdlog::warn("FileChangeTracker: reset snapshot failed: {}",
+                             e.what());
+            }
+        }
     }
 
     spdlog::info("AgentCore: conversation reset");

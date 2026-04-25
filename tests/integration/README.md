@@ -27,6 +27,7 @@ Tag filters match [Catch2 test tags](https://github.com/catchorg/Catch2/blob/dev
 | `[bg]`       | [test_int_bg.cpp](test_int_bg.cpp)              | S4.I background-process tools — `run_command_bg` + `read_process_output` + `list_processes` + `stop_process` chained in single turns. |
 | `[ask_user]` | [test_int_interactive.cpp](test_int_interactive.cpp) | `ask_user` routes through the approval gate, harness supplies a scripted response via `ToolDecision::modify`. |
 | `[slash]`    | [test_int_slash.cpp](test_int_slash.cpp)        | `/help` and `/read_file` routed through `SlashCommandDispatcher`. |
+| `[file_change_awareness]` | [test_int_file_change_awareness.cpp](test_int_file_change_awareness.cpp) | S4.T -- external user edits between turns surface as `[Files changed since last turn: ...]` prefix on the next user message; agent's own writes don't echo back. |
 
 Every test is also tagged `[integration][llm]` for bulk filtering.
 

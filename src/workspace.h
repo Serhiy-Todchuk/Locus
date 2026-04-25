@@ -76,6 +76,14 @@ struct WorkspaceConfig {
     // covers a verbose dev-server log between turns without paging the agent
     // thread, and is still cheap (a few processes × 256 KB is negligible).
     int process_output_buffer_kb = 256;
+
+    // S4.T — between-turn external file-change awareness. When true, AgentCore
+    // snapshots indexed file mtimes at end of each assistant turn; on the next
+    // user turn it computes the diff (excluding files the agent itself touched
+    // that turn) and prepends a one-line note to the user message so the LLM
+    // knows which files changed under it. Default on -- the cost is one cheap
+    // SQLite scan per turn and a single line in the prompt.
+    bool notify_external_changes = true;
 };
 
 // Owns all workspace-level resources: config, database, file watcher, LOCUS.md.
