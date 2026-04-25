@@ -5,6 +5,7 @@
 #include "checkpoint_store.h"
 #include "context_budget.h"
 #include "conversation.h"
+#include "file_change_tracker.h"
 #include "metrics.h"
 #include "core/workspace_services.h"
 #include "frontend.h"
@@ -164,6 +165,10 @@ private:
     std::unique_ptr<ToolDispatcher>        dispatcher_;
     std::unique_ptr<SlashCommandDispatcher> slash_;
     std::unique_ptr<CheckpointStore>       checkpoints_;
+    // S4.T -- snapshots indexed file mtimes between turns. Always allocated;
+    // notification is gated by WorkspaceConfig::notify_external_changes at
+    // injection time.
+    std::unique_ptr<FileChangeTracker>     change_tracker_;
 
     // Session identity for the checkpoint store. Generated at construction;
     // overwritten by save_session()/load_session() so saved-and-resumed

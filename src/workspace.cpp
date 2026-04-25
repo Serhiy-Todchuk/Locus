@@ -366,6 +366,8 @@ static WorkspaceConfig config_from_json(const json& j)
             cfg.tool_manifest_warn_tokens = ag["tool_manifest_warn_tokens"].get<int>();
         if (ag.contains("process_output_buffer_kb"))
             cfg.process_output_buffer_kb = ag["process_output_buffer_kb"].get<int>();
+        if (ag.contains("notify_external_changes"))
+            cfg.notify_external_changes = ag["notify_external_changes"].get<bool>();
     }
 
     if (j.contains("tool_approvals") && j["tool_approvals"].is_object()) {
@@ -410,7 +412,8 @@ static json config_to_json(const WorkspaceConfig& cfg)
         }},
         {"agent", {
             {"tool_manifest_warn_tokens", cfg.tool_manifest_warn_tokens},
-            {"process_output_buffer_kb",  cfg.process_output_buffer_kb}
+            {"process_output_buffer_kb",  cfg.process_output_buffer_kb},
+            {"notify_external_changes",   cfg.notify_external_changes}
         }},
         {"tool_approvals", approvals}
     };

@@ -2,6 +2,7 @@
 
 #include "activity_log.h"
 #include "checkpoint_store.h"
+#include "file_change_tracker.h"
 #include "metrics.h"
 #include "tools/shared.h"
 #include "workspace.h"
@@ -50,11 +51,15 @@ void ToolDispatcher::set_turn_context(CheckpointStore* store,
     checkpoint_turn_ = turn_id;
 }
 
+void ToolDispatcher::set_change_tracker(FileChangeTracker* tracker)
+{
+    change_tracker_ = tracker;
+}
+
 void ToolDispatcher::maybe_snapshot(const ToolCall& call)
 {
-    if (!checkpoints_ || checkpoint_sid_.empty()) return;
-
-    // Map tool name -> action label. Only mutating tools snapshot.
+    // Detect mutating tools once -- both the checkpoint snapshot (S4.B) and
+    // the file-change tracker (S4.T) key off the same set.
     std::string action;
     if      (call.tool_name == "edit_file")   action = "edit";
     else if (call.tool_name == "write_file")  action = "write";
@@ -67,8 +72,19 @@ void ToolDispatcher::maybe_snapshot(const ToolCall& call)
     auto full = tools::resolve_path(services_, rel);
     if (full.empty()) return;  // outside workspace; tool will reject too
 
-    checkpoints_->snapshot_before(checkpoint_sid_, checkpoint_turn_,
-                                  services_.root(), full, action);
+    if (checkpoints_ && !checkpoint_sid_.empty()) {
+        checkpoints_->snapshot_before(checkpoint_sid_, checkpoint_turn_,
+                                      services_.root(), full, action);
+    }
+
+    // S4.T -- record so this turn's writes don't echo back as "external" next
+    // turn. Use the same workspace-relative form IndexQuery emits.
+    if (change_tracker_) {
+        std::error_code ec;
+        auto rel_norm = std::filesystem::relative(full, services_.root(), ec);
+        std::string key = ec ? rel : rel_norm.generic_string();
+        change_tracker_->mark_agent_touched(key);
+    }
 }
 
 void ToolDispatcher::dispatch(const ToolCall& call, const AppendFn& append_result)
