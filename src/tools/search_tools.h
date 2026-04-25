@@ -5,7 +5,7 @@
 namespace locus {
 
 // S3.L: unified search face. Replaces the four individual search tools in the
-// exposed manifest — dispatches to the same underlying index calls via an
+// exposed manifest -- dispatches to the same underlying index calls via an
 // internal `mode` parameter. Registered by `register_builtin_tools()`.
 class SearchTool : public ITool {
 public:
@@ -14,6 +14,7 @@ public:
         return "Unified workspace search. `mode` selects the backend: "
                "text (FTS5 keyword, default), regex (raw-content ECMAScript regex, "
                "preserves punctuation/case), symbols (code definitions), "
+               "ast (Tree-sitter structural query, e.g. all `malloc` call sites), "
                "semantic (vector similarity), hybrid (BM25 + vector). "
                "Semantic and hybrid require semantic search to be enabled.";
     }
@@ -21,21 +22,28 @@ public:
         return {
             {"query",          "string",  "Search query. Keywords for text/hybrid, "
                                           "symbol name/prefix for symbols, "
-                                          "natural language for semantic. "
+                                          "natural language for semantic, "
+                                          "Tree-sitter S-expression for ast "
+                                          "(e.g. `(call_expression function: "
+                                          "(identifier) @fn (#eq? @fn \"malloc\"))`). "
                                           "Ignored in regex mode (use `pattern`).", false},
-            {"mode",           "string",  "One of: text, regex, symbols, semantic, hybrid. "
+            {"mode",           "string",  "One of: text, regex, symbols, ast, semantic, hybrid. "
                                           "Defaults to text.", false},
             {"pattern",        "string",  "regex mode only: ECMAScript regex pattern to match. "
-                                          "Preserves punctuation and case — good for exact "
+                                          "Preserves punctuation and case -- good for exact "
                                           "identifiers like `->m_cache` or `TODO(XXX)`.", false},
-            {"path_glob",      "string",  "regex mode only: optional glob to limit which "
+            {"path_glob",      "string",  "regex/ast modes: optional glob to limit which "
                                           "indexed files are searched (e.g. `**/*.cpp`).", false},
             {"case_sensitive", "boolean", "regex mode only: defaults to true.", false},
             {"max_results",    "integer", "Maximum results (default 20 for text/symbols, "
-                                          "50 for regex, 10 for semantic/hybrid).", false},
+                                          "50 for regex/ast, 10 for semantic/hybrid).", false},
             {"kind",           "string",  "symbols mode only: filter by kind "
                                           "(function, class, struct, method).", false},
-            {"language",       "string",  "symbols mode only: filter by language.", false},
+            {"language",       "string",  "symbols mode: filter by language. "
+                                          "ast mode: required -- one of c, cpp, python, "
+                                          "javascript, typescript, go, rust, java, csharp.", false},
+            {"capture",        "string",  "ast mode only: report only this @capture name "
+                                          "from the query (default: report every capture).", false},
         };
     }
     ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::auto_approve; }
@@ -118,6 +126,38 @@ public:
                                           "are searched (matched against relative path).", false},
             {"case_sensitive", "boolean", "Defaults to true.", false},
             {"max_results",    "integer", "Maximum matches to return (default 50).", false},
+        };
+    }
+    ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::auto_approve; }
+    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws) override;
+};
+
+// Tree-sitter structural search (S4.M). Compiles a `.scm` query against the
+// chosen language's grammar and reports every match across the indexed files.
+// Like the regex tool, kept out of `register_builtin_tools()` -- the LLM
+// reaches it through `SearchTool`'s `mode=ast`. Exposed standalone so unit
+// tests can drive it directly.
+class SearchAstTool : public ITool {
+public:
+    std::string name()        const override { return "search_ast"; }
+    std::string description() const override {
+        return "Structural search using Tree-sitter S-expression queries. "
+               "Finds shapes (e.g. all `malloc` calls, classes inheriting "
+               "ITool, empty if-bodies), not just names. Requires `language` "
+               "and a `query` written against that grammar.";
+    }
+    std::vector<ToolParam> params() const override {
+        return {
+            {"language",    "string",  "One of c, cpp, python, javascript, "
+                                       "typescript, go, rust, java, csharp.", true},
+            {"query",       "string",  "Tree-sitter S-expression query. Example: "
+                                       "`(call_expression function: (identifier) @fn "
+                                       "(#eq? @fn \"malloc\"))`.", true},
+            {"path_glob",   "string",  "Optional glob to limit indexed files "
+                                       "(matched against relative path).", false},
+            {"capture",     "string",  "Report only this @capture name "
+                                       "(default: every capture).", false},
+            {"max_results", "integer", "Maximum matches to return (default 50).", false},
         };
     }
     ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::auto_approve; }

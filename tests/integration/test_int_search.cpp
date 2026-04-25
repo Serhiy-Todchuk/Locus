@@ -156,3 +156,62 @@ TEST_CASE("regex search matches a pattern with regex metacharacters",
         search_result_mentions(r, "embedding_worker.cpp");
     REQUIRE(mentioned);
 }
+
+// -- AST mode (S4.M) --------------------------------------------------------
+
+TEST_CASE("ast search finds calls to a specific C++ function by name",
+          "[integration][llm][search][ast]")
+{
+    auto& h = harness();
+    // The call site WS1 has the most copies of is `ts_node_child_by_field_name`
+    // -- it shows up across every per-language symbol extractor in
+    // src/index/symbol_extractors/. Asking for that lets us assert on a stable
+    // set of files regardless of which one the LLM cites.
+    PromptResult r = h.prompt(
+        "Use the search tool in ast mode (mode=\"ast\") with language=\"cpp\" "
+        "and the Tree-sitter query "
+        "`(call_expression function: (identifier) @fn (#eq? @fn "
+        "\"ts_node_child_by_field_name\"))`. Set capture=\"fn\". Report which "
+        "file has the most matches.");
+
+    REQUIRE_FALSE(r.timed_out);
+    REQUIRE(r.errors.empty());
+    REQUIRE(r.tool_called("search"));
+    REQUIRE(search_mode(r) == "ast");
+
+    bool mentioned =
+        search_result_mentions(r, "symbol_extractor")  ||
+        search_result_mentions(r, "cpp_extractor")     ||
+        search_result_mentions(r, "python_extractor")  ||
+        search_result_mentions(r, "go_extractor")      ||
+        search_result_mentions(r, "rust_extractor")    ||
+        search_result_mentions(r, "java_extractor")    ||
+        search_result_mentions(r, "csharp_extractor")  ||
+        search_result_mentions(r, "js_ts_extractor");
+    REQUIRE(mentioned);
+}
+
+TEST_CASE("ast search finds C++ classes inheriting from a base type",
+          "[integration][llm][search][ast]")
+{
+    auto& h = harness();
+    PromptResult r = h.prompt(
+        "Use the search tool in ast mode (mode=\"ast\") with language=\"cpp\" "
+        "to find every C++ class that inherits from `ITool`. Use the query "
+        "`(class_specifier name: (type_identifier) @name (base_class_clause "
+        "(type_identifier) @base (#eq? @base \"ITool\")))` with capture=\"name\". "
+        "Report a file that contains a match.");
+
+    REQUIRE_FALSE(r.timed_out);
+    REQUIRE(r.tool_called("search"));
+    REQUIRE(search_mode(r) == "ast");
+
+    // ITool subclasses live in src/tools/*_tools.h.
+    bool mentioned =
+        search_result_mentions(r, "file_tools.h")         ||
+        search_result_mentions(r, "search_tools.h")       ||
+        search_result_mentions(r, "index_tools.h")        ||
+        search_result_mentions(r, "process_tools.h")      ||
+        search_result_mentions(r, "interactive_tools.h");
+    REQUIRE(mentioned);
+}

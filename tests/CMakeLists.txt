@@ -13,6 +13,7 @@ add_executable(locus_tests
     test_slash_commands.cpp
     test_workspace_lock.cpp
     test_search_regex.cpp
+    test_search_ast.cpp
     test_reranker.cpp
     test_checkpoint_store.cpp
     test_process_registry.cpp
