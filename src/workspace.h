@@ -4,6 +4,7 @@
 #include "tool.h"  // for ToolApprovalPolicy
 
 #include <filesystem>
+#include <functional>
 #include <string>
 #include <memory>
 #include <unordered_map>
@@ -115,6 +116,15 @@ public:
     bool enable_semantic_search();
     void disable_semantic_search();
 
+    // Process-wide override hook. When set, enable_semantic_search() takes the
+    // returned embedder instead of loading a GGUF from disk. The model id
+    // recorded in vectors.db comes from the returned embedder's filename, so
+    // schema migration sees a stable identity. Designed for tests that share
+    // a single small embedder across many Workspace instances. Pass nullptr
+    // to revert to the default disk-load path.
+    using EmbedderProvider = std::function<std::shared_ptr<Embedder>()>;
+    static void set_embedder_provider(EmbedderProvider p);
+
 private:
     void load_config();
     void load_locus_md();
@@ -132,7 +142,10 @@ private:
     std::unique_ptr<FileWatcher> watcher_;
     std::unique_ptr<Indexer> indexer_;
     std::unique_ptr<IndexQuery> query_;
-    std::unique_ptr<Embedder> embedder_;
+    // shared_ptr so a process-wide hook (`set_embedder_provider`) can hand the
+    // same Embedder to multiple Workspace instances — primarily a test-suite
+    // optimisation; production unique-Workspace use is unaffected.
+    std::shared_ptr<Embedder> embedder_;
     std::unique_ptr<EmbeddingWorker> embedding_worker_;
     std::unique_ptr<Reranker> reranker_;
     // Owned after `indexer_` so it stops + joins before the indexer is torn

@@ -15,6 +15,7 @@ add_executable(locus_tests
     test_search_regex.cpp
     test_reranker.cpp
     test_checkpoint_store.cpp
+    support/shared_embedder.cpp
 )
 
 target_include_directories(locus_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
