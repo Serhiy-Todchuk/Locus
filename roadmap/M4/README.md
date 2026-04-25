@@ -16,7 +16,7 @@
 | [S4.B](S4.B-checkpoint-undo.md) | Checkpoint & Undo ✔ | Safety |
 | [S4.K](S4.K-retrieval-eval.md) | Retrieval Evaluation Harness ✔ | Retrieval |
 | [S4.I](S4.I-background-commands.md) | Background / Long-Running Commands ✔ | Process model |
-| [S4.S](S4.S-telemetry.md) | Telemetry & Agent Performance Metrics | Observability |
+| [S4.S](S4.S-telemetry.md) | Telemetry & Agent Performance Metrics ✔ | Observability |
 | [S4.M](S4.M-ast-search.md) | Tree-Sitter Query Tool (Structural Grep) | Tools |
 | [S4.T](S4.T-file-change-awareness.md) | File-Change Awareness Between Turns | Context |
 | [S4.U](S4.U-subagents.md) | Subagent / Task Delegation | Workflow |

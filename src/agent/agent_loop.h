@@ -13,6 +13,7 @@ namespace locus {
 
 class ActivityLog;
 class ContextBudget;
+class MetricsAggregator;
 
 // Result of one LLM round trip. The orchestrator is responsible for
 // appending `assistant_msg` to history and dispatching `tool_calls`.
@@ -33,7 +34,8 @@ public:
               IWorkspaceServices& services,
               ActivityLog& activity,
               ContextBudget& budget,
-              FrontendRegistry& frontends);
+              FrontendRegistry& frontends,
+              MetricsAggregator* metrics = nullptr);
 
     AgentStepResult run_step(const ConversationHistory& history);
 
@@ -51,6 +53,7 @@ private:
     ActivityLog&        activity_;
     ContextBudget&      budget_;
     FrontendRegistry&   frontends_;
+    MetricsAggregator*  metrics_ = nullptr;  // optional: nullptr disables recording
 };
 
 } // namespace locus

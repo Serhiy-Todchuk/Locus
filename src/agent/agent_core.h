@@ -5,6 +5,7 @@
 #include "checkpoint_store.h"
 #include "context_budget.h"
 #include "conversation.h"
+#include "metrics.h"
 #include "core/workspace_services.h"
 #include "frontend.h"
 #include "frontend_registry.h"
@@ -91,8 +92,14 @@ public:
 
     std::string undo_turn(int turn_id = 0) override;
 
-    SessionManager& sessions() { return sessions_; }
-    IToolRegistry&  tools()    { return tools_; }
+    // Export the current metrics snapshot to a file in `.locus/metrics/`.
+    // `format` is "json" or "csv". Returns the absolute path on success or
+    // an error string. Used by the GUI menu and the /export_metrics slash.
+    std::string export_metrics(const std::string& format) const;
+
+    SessionManager&    sessions() { return sessions_; }
+    IToolRegistry&     tools()    { return tools_; }
+    MetricsAggregator& metrics()  { return *metrics_; }
 
     const ConversationHistory& history() const { return history_; }
     int context_limit() const { return llm_config_.context_limit; }
@@ -152,6 +159,7 @@ private:
 
     std::unique_ptr<ActivityLog>           activity_;
     std::unique_ptr<ContextBudget>         budget_;
+    std::unique_ptr<MetricsAggregator>     metrics_;
     std::unique_ptr<AgentLoop>             loop_;
     std::unique_ptr<ToolDispatcher>        dispatcher_;
     std::unique_ptr<SlashCommandDispatcher> slash_;

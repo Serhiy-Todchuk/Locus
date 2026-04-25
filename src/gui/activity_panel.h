@@ -5,6 +5,7 @@
 
 #include <wx/wx.h>
 #include <wx/listctrl.h>
+#include <wx/notebook.h>
 #include <wx/splitter.h>
 #include <wx/stc/stc.h>
 
@@ -14,6 +15,7 @@
 namespace locus {
 
 class ILocusCore;
+class MetricsView;
 
 // Right-side panel showing the full activity log: system prompts, user
 // messages, LLM responses (with real token usage), tool calls/results,
@@ -42,9 +44,11 @@ private:
     void on_item_selected(wxListEvent& event);
 
     ILocusCore&                core_;
+    wxNotebook*                notebook_ = nullptr;
     wxSplitterWindow*          splitter_ = nullptr;
     wxListCtrl*                list_     = nullptr;
     wxStyledTextCtrl*          detail_   = nullptr;
+    MetricsView*               metrics_view_ = nullptr;
     std::vector<ActivityEvent> events_;
 
     // Per-kind row attributes for color coding (owned).

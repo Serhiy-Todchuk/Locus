@@ -17,6 +17,7 @@ add_executable(locus_tests
     test_checkpoint_store.cpp
     test_process_registry.cpp
     test_retrieval_eval.cpp
+    test_metrics.cpp
     retrieval_eval/metrics.cpp
     support/shared_embedder.cpp
 )

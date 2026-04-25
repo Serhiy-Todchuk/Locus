@@ -43,14 +43,17 @@ std::string SessionManager::generate_id()
 
 // -- Save ---------------------------------------------------------------------
 
-std::string SessionManager::save(const ConversationHistory& history)
+std::string SessionManager::save(const ConversationHistory& history,
+                                 const nlohmann::json& extras)
 {
     std::string id = generate_id();
-    save(id, history);
+    save(id, history, extras);
     return id;
 }
 
-void SessionManager::save(const std::string& id, const ConversationHistory& history)
+void SessionManager::save(const std::string& id,
+                          const ConversationHistory& history,
+                          const nlohmann::json& extras)
 {
     auto path = sessions_dir_ / (id + ".json");
 
@@ -59,6 +62,13 @@ void SessionManager::save(const std::string& id, const ConversationHistory& hist
     j["message_count"] = static_cast<int>(history.size());
     j["estimated_tokens"] = history.estimate_tokens();
     j["messages"] = history.to_json();
+
+    // Merge top-level extras (e.g. "metrics") in last so saved metadata can
+    // co-exist with future session-level fields without schema bumps.
+    if (extras.is_object()) {
+        for (auto it = extras.begin(); it != extras.end(); ++it)
+            j[it.key()] = it.value();
+    }
 
     // Extract first user message for preview.
     for (auto& msg : history.messages()) {
