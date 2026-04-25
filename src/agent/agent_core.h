@@ -2,6 +2,7 @@
 
 #include "activity_log.h"
 #include "agent_loop.h"
+#include "checkpoint_store.h"
 #include "context_budget.h"
 #include "conversation.h"
 #include "core/workspace_services.h"
@@ -50,7 +51,8 @@ public:
               const std::string& locus_md,
               const WorkspaceMetadata& ws_meta,
               const LLMConfig& llm_config,
-              const std::filesystem::path& sessions_dir);
+              const std::filesystem::path& sessions_dir,
+              const std::filesystem::path& checkpoints_dir = {});
 
     ~AgentCore() override;
 
@@ -77,8 +79,17 @@ public:
     std::string save_session() override;
     void load_session(const std::string& session_id) override;
 
+    // -- Checkpoint / undo (S4.B) --------------------------------------------
+    // Inspect the per-session checkpoint history (for UI listings).
+    std::vector<TurnInfo> list_checkpoints() const;
+
+    const std::string& current_session_id() const { return session_id_; }
+    int current_turn_id() const { return turn_id_; }
+
     bool is_busy() const override;
     void cancel_turn() override;
+
+    std::string undo_turn(int turn_id = 0) override;
 
     SessionManager& sessions() { return sessions_; }
     IToolRegistry&  tools()    { return tools_; }
@@ -144,6 +155,15 @@ private:
     std::unique_ptr<AgentLoop>             loop_;
     std::unique_ptr<ToolDispatcher>        dispatcher_;
     std::unique_ptr<SlashCommandDispatcher> slash_;
+    std::unique_ptr<CheckpointStore>       checkpoints_;
+
+    // Session identity for the checkpoint store. Generated at construction;
+    // overwritten by save_session()/load_session() so saved-and-resumed
+    // sessions keep their checkpoint dir.
+    std::string session_id_;
+    // Monotonic turn counter — bumped before each user message goes to the
+    // LLM. Used as the on-disk turn folder name.
+    int         turn_id_ = 0;
 
     // Agent thread + message queue.
     std::thread              agent_thread_;

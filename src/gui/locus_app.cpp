@@ -230,10 +230,12 @@ bool LocusApp::OnInit()
         ws_meta.symbol_count  = static_cast<int>(st.symbols_total);
         ws_meta.heading_count = static_cast<int>(st.headings_total);
 
-        fs::path sessions_dir = locus_dir / "sessions";
+        fs::path sessions_dir    = locus_dir / "sessions";
+        fs::path checkpoints_dir = locus_dir / "checkpoints";
         agent_ = std::make_unique<AgentCore>(
             *llm_, *tools_, *workspace_,
-            workspace_->locus_md(), ws_meta, llm_cfg, sessions_dir);
+            workspace_->locus_md(), ws_meta, llm_cfg,
+            sessions_dir, checkpoints_dir);
 
         workspace_->indexer().on_activity =
             [agent = agent_.get()](const std::string& s, const std::string& d) {
@@ -353,10 +355,12 @@ void LocusApp::open_workspace(const std::string& path)
         ws_meta.symbol_count  = static_cast<int>(st.symbols_total);
         ws_meta.heading_count = static_cast<int>(st.headings_total);
 
-        fs::path sessions_dir = locus_dir / "sessions";
+        fs::path sessions_dir    = locus_dir / "sessions";
+        fs::path checkpoints_dir = locus_dir / "checkpoints";
         agent_ = std::make_unique<AgentCore>(
             *llm_, *tools_, *workspace_,
-            workspace_->locus_md(), ws_meta, llm_cfg, sessions_dir);
+            workspace_->locus_md(), ws_meta, llm_cfg,
+            sessions_dir, checkpoints_dir);
 
         workspace_->indexer().on_activity =
             [agent = agent_.get()](const std::string& s, const std::string& d) {

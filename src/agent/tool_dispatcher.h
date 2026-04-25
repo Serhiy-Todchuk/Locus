@@ -17,6 +17,7 @@
 namespace locus {
 
 class ActivityLog;
+class CheckpointStore;
 
 // Runs a single tool call through the approval gate, executes it, and
 // injects the tool-result message back into conversation via the supplied
@@ -47,7 +48,18 @@ public:
     // Wake a dispatch that is blocked on approval (used by cancel).
     void wake();
 
+    // Set the checkpoint context for the current turn. Called by AgentCore at
+    // the top of each turn; cleared (store=nullptr) between turns. While set,
+    // mutating tools (write_file / edit_file / delete_file) get a pre-mutation
+    // snapshot before execute() runs.
+    void set_turn_context(CheckpointStore* store,
+                          std::string session_id,
+                          int turn_id);
+
 private:
+    // Inspect the tool name + args and snapshot the target path if relevant.
+    void maybe_snapshot(const ToolCall& call);
+
     IToolRegistry&      tools_;
     IWorkspaceServices& services_;
     ActivityLog&        activity_;
@@ -58,6 +70,12 @@ private:
     std::condition_variable     decision_cv_;
     std::optional<ToolDecision> pending_decision_;
     nlohmann::json              pending_modified_args_;
+
+    // Per-turn checkpoint context (S4.B). Plain pointer because the store
+    // lives at workspace scope; a null pointer disables checkpointing.
+    CheckpointStore* checkpoints_     = nullptr;
+    std::string      checkpoint_sid_;
+    int              checkpoint_turn_ = 0;
 };
 
 } // namespace locus

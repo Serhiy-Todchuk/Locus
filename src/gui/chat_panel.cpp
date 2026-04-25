@@ -330,11 +330,13 @@ function finalizeReasoning(id, label) {
 ChatPanel::ChatPanel(wxWindow* parent,
                      std::function<void(const std::string&)> on_send,
                      std::function<void()> on_compact,
-                     std::function<void()> on_stop)
+                     std::function<void()> on_stop,
+                     std::function<void()> on_undo)
     : wxPanel(parent, wxID_ANY)
     , on_send_(std::move(on_send))
     , on_compact_(std::move(on_compact))
     , on_stop_(std::move(on_stop))
+    , on_undo_(std::move(on_undo))
     , flush_timer_(this)
 {
     create_webview();
@@ -369,6 +371,7 @@ ChatPanel::ChatPanel(wxWindow* parent,
     footer->Add(ctx_gauge_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
     footer->Add(ctx_label_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
     footer->Add(compact_btn_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
+    footer->Add(undo_btn_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
     footer->Add(stop_btn_, 0, wxALIGN_CENTER_VERTICAL);
     footer->AddStretchSpacer();
     footer->Add(locus_chip_, 0, wxALIGN_CENTER_VERTICAL);
@@ -445,6 +448,12 @@ void ChatPanel::create_footer()
     stop_btn_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
         if (on_stop_) on_stop_();
     });
+    undo_btn_ = new wxButton(this, wxID_ANY, "Undo",
+                             wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+    undo_btn_->SetToolTip("Revert files mutated by the most recent turn");
+    undo_btn_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
+        if (on_undo_) on_undo_();
+    });
     locus_chip_ = new wxStaticText(this, wxID_ANY, "");
 }
 
@@ -462,6 +471,7 @@ void ChatPanel::on_turn_start()
     reasoning_id_ = 0;
 
     stop_btn_->Enable();
+    if (undo_btn_) undo_btn_->Disable();
 
     // Create an empty assistant message div.
     ++message_id_;
@@ -530,6 +540,7 @@ void ChatPanel::on_turn_complete()
 
     streaming_ = false;
     stop_btn_->Disable();
+    if (undo_btn_) undo_btn_->Enable();
     // Use SetEditable (not Enable) to preserve the custom dark background —
     // Disable() forces Windows' light "disabled control" colour.
     input_->SetEditable(true);

@@ -117,7 +117,7 @@ Listed in execution order. Letters are identity, not sequence (retained for link
 | Stage | Title |
 |---|---|
 | [S4.A](roadmap/M4/S4.A-diff-editing.md) | Diff-Based Editing ✔ |
-| [S4.B](roadmap/M4/S4.B-checkpoint-undo.md) | Checkpoint & Undo |
+| [S4.B](roadmap/M4/S4.B-checkpoint-undo.md) | Checkpoint & Undo ✔ |
 | [S4.P](roadmap/M4/S4.P-grep.md) | Grep Tool (Regex over Raw Content) ✔ |
 | [S4.J](roadmap/M4/S4.J-embeddings-reranker.md) | Better Embeddings + Reranker ✔ |
 | [S4.K](roadmap/M4/S4.K-retrieval-eval.md) | Retrieval Evaluation Harness |
