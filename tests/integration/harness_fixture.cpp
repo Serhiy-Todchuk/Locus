@@ -136,6 +136,11 @@ IntegrationHarness& IntegrationHarness::shared()
     return *slot;
 }
 
+IntegrationHarness* IntegrationHarness::shared_if_alive()
+{
+    return instance_slot().get();
+}
+
 void IntegrationHarness::shutdown_shared()
 {
     instance_slot().reset();
