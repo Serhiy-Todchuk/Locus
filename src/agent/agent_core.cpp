@@ -7,7 +7,10 @@
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
+#include <fstream>
+#include <iomanip>
 #include <sstream>
 #include <utility>
 
@@ -49,10 +52,13 @@ AgentCore::AgentCore(ILLMClient& llm,
 
     activity_   = std::make_unique<ActivityLog>(frontends_);
     budget_     = std::make_unique<ContextBudget>(llm_config_.context_limit, frontends_);
+    metrics_    = std::make_unique<MetricsAggregator>();
     loop_       = std::make_unique<AgentLoop>(llm_, tools_, services_,
-                                               *activity_, *budget_, frontends_);
+                                               *activity_, *budget_, frontends_,
+                                               metrics_.get());
     dispatcher_ = std::make_unique<ToolDispatcher>(tools_, services_, *activity_,
-                                                   frontends_, cancel_requested_);
+                                                   frontends_, cancel_requested_,
+                                                   metrics_.get());
     slash_      = std::make_unique<SlashCommandDispatcher>(tools_, services_);
 
     session_id_ = make_session_id();
@@ -323,6 +329,7 @@ void AgentCore::process_message(const std::string& content)
         dispatcher_->set_turn_context(checkpoints_.get(), session_id_, turn_id_);
         checkpoints_->gc_session(session_id_);
     }
+    metrics_->begin_turn(turn_id_);
 
     history_.add({MessageRole::user, content});
 
@@ -335,6 +342,7 @@ void AgentCore::process_message(const std::string& content)
     });
 
     int round = 0;
+    bool turn_had_error = false;
     static constexpr int k_max_rounds = 20;
 
     while (round < k_max_rounds) {
@@ -358,8 +366,10 @@ void AgentCore::process_message(const std::string& content)
             fe.on_context_meter(current_token_count(), llm_config_.context_limit);
         });
 
-        if (step.had_error)
+        if (step.had_error) {
+            turn_had_error = true;
             break;
+        }
 
         history_.add(std::move(step.assistant_msg));
 
@@ -378,11 +388,14 @@ void AgentCore::process_message(const std::string& content)
     }
 
     if (round >= k_max_rounds) {
+        turn_had_error = true;
         spdlog::warn("AgentCore: hit max round limit ({})", k_max_rounds);
         frontends_.broadcast([](IFrontend& fe) {
             fe.on_error("Agent reached the maximum number of tool call rounds.");
         });
     }
+
+    metrics_->end_turn(turn_had_error);
 
     // Drop the turn context so any background activity past this point won't
     // accidentally tag a snapshot to the just-finished turn. (Inter-turn
@@ -460,6 +473,7 @@ void AgentCore::reset_conversation()
     system_prompt_ = compose_system_prompt();
     history_.add({MessageRole::system, system_prompt_});
     budget_->reset();
+    metrics_->reset();
 
     // Drop checkpoint history with the conversation; start a fresh session
     // so the on-disk layout doesn't keep accumulating across resets.
@@ -527,11 +541,54 @@ std::vector<TurnInfo> AgentCore::list_checkpoints() const
     return checkpoints_->list_turns(session_id_);
 }
 
+// -- Metrics export (S4.S) ---------------------------------------------------
+
+std::string AgentCore::export_metrics(const std::string& format) const
+{
+    std::string fmt = format;
+    std::transform(fmt.begin(), fmt.end(), fmt.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
+    if (fmt != "json" && fmt != "csv")
+        return "Error: format must be 'json' or 'csv'";
+
+    auto dir = services_.root() / ".locus" / "metrics";
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    if (ec)
+        return "Error: cannot create metrics directory: " + ec.message();
+
+    auto now = std::chrono::system_clock::now();
+    auto t = std::chrono::system_clock::to_time_t(now);
+    std::tm tm{};
+#ifdef _WIN32
+    localtime_s(&tm, &t);
+#else
+    localtime_r(&t, &tm);
+#endif
+    std::ostringstream stamp;
+    stamp << std::put_time(&tm, "%Y-%m-%d_%H%M%S");
+
+    auto path = dir / ("metrics_" + stamp.str() + "." + fmt);
+    std::ofstream f(path);
+    if (!f.is_open())
+        return "Error: cannot write " + path.string();
+
+    if (fmt == "json")
+        f << metrics_->to_json().dump(2) << '\n';
+    else
+        f << metrics_->to_csv();
+
+    spdlog::info("AgentCore: metrics exported to {}", path.string());
+    return path.string();
+}
+
 // -- save_session / load_session ---------------------------------------------
 
 std::string AgentCore::save_session()
 {
-    auto id = sessions_.save(history_);
+    nlohmann::json extras;
+    extras["metrics"] = metrics_->to_json();
+    auto id = sessions_.save(history_, extras);
     spdlog::info("AgentCore: session saved as '{}'", id);
     return id;
 }
@@ -540,6 +597,7 @@ void AgentCore::load_session(const std::string& session_id)
 {
     history_ = sessions_.load(session_id);
     budget_->reset();
+    metrics_->reset();
     spdlog::info("AgentCore: loaded session '{}' ({} messages)",
                  session_id, history_.size());
 
@@ -587,6 +645,40 @@ bool AgentCore::try_slash_command(const std::string& content)
                 }
             }
             std::string msg = undo_turn(target);
+            frontends_.broadcast([&](IFrontend& fe) { fe.on_token(msg); });
+            return true;
+        }
+        if (cmd == "metrics") {
+            auto agg = metrics_->aggregates();
+            std::ostringstream o;
+            o << "Metrics — " << agg.turn_count << " turn"
+              << (agg.turn_count == 1 ? "" : "s") << "\n";
+            o << "  tokens: in="   << agg.tokens_in_total
+              << "  out="          << agg.tokens_out_total
+              << "  reasoning="    << agg.reasoning_total << "\n";
+            o << "  throughput: "  << std::fixed << std::setprecision(1)
+              << agg.tokens_per_second << " tok/s ("
+              << agg.stream_ms_total / 1000.0 << "s of stream)\n";
+            o << "  turn time: avg=" << agg.avg_turn_ms << "ms"
+              << " p95=" << agg.p95_turn_ms << "ms"
+              << " max=" << agg.max_turn_ms << "ms\n";
+            if (agg.retrieval_queries > 0)
+                o << "  retrieval: " << agg.retrieval_queries
+                  << " queries, hit_rate="
+                  << std::fixed << std::setprecision(2)
+                  << (agg.retrieval_hit_rate * 100.0) << "%\n";
+            if (!agg.tool_calls_by_name.empty()) {
+                o << "  tools:\n";
+                for (auto& [n, c] : agg.tool_calls_by_name)
+                    o << "    " << n << ": " << c << "\n";
+            }
+            std::string msg = o.str();
+            frontends_.broadcast([&](IFrontend& fe) { fe.on_token(msg); });
+            return true;
+        }
+        if (cmd == "export_metrics") {
+            std::string fmt = rest.empty() ? "json" : rest;
+            std::string msg = export_metrics(fmt);
             frontends_.broadcast([&](IFrontend& fe) { fe.on_token(msg); });
             return true;
         }

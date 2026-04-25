@@ -1,6 +1,10 @@
 #include "activity_panel.h"
 
+#include "metrics_view.h"
+#include "../agent/agent_core.h"
+
 #include <wx/listctrl.h>
+#include <wx/notebook.h>
 #include <wx/splitter.h>
 #include <wx/sizer.h>
 #include <wx/stc/stc.h>
@@ -47,7 +51,12 @@ ActivityPanel::ActivityPanel(wxWindow* parent, ILocusCore& core)
     : wxPanel(parent, wxID_ANY)
     , core_(core)
 {
-    splitter_ = new wxSplitterWindow(this, wxID_ANY,
+    notebook_ = new wxNotebook(this, wxID_ANY);
+
+    // -- Tab 1: Log -----------------------------------------------------------
+    auto* log_pane = new wxPanel(notebook_, wxID_ANY);
+
+    splitter_ = new wxSplitterWindow(log_pane, wxID_ANY,
                                      wxDefaultPosition, wxDefaultSize,
                                      wxSP_LIVE_UPDATE | wxSP_3DSASH);
 
@@ -67,8 +76,23 @@ ActivityPanel::ActivityPanel(wxWindow* parent, ILocusCore& core)
     splitter_->SplitHorizontally(list_, detail_, -160);
     splitter_->SetMinimumPaneSize(60);
 
+    auto* log_sizer = new wxBoxSizer(wxVERTICAL);
+    log_sizer->Add(splitter_, 1, wxEXPAND);
+    log_pane->SetSizer(log_sizer);
+
+    notebook_->AddPage(log_pane, "Log");
+
+    // -- Tab 2: Metrics -------------------------------------------------------
+    // The metrics tab works only when the core is an AgentCore (the only
+    // implementation today). dynamic_cast falls back to nullptr so non-Agent
+    // wrappers won't crash — the Metrics tab just won't be added.
+    if (auto* agent = dynamic_cast<AgentCore*>(&core_)) {
+        metrics_view_ = new MetricsView(notebook_, agent->metrics(), core_);
+        notebook_->AddPage(metrics_view_, "Metrics");
+    }
+
     auto* sizer = new wxBoxSizer(wxVERTICAL);
-    sizer->Add(splitter_, 1, wxEXPAND);
+    sizer->Add(notebook_, 1, wxEXPAND);
     SetSizer(sizer);
 
     // Color hints per kind.
@@ -93,6 +117,8 @@ void ActivityPanel::append(const ActivityEvent& event)
     if (!events_.empty())
         list_->EnsureVisible(static_cast<long>(events_.size()) - 1);
     list_->Refresh();
+
+    if (metrics_view_) metrics_view_->refresh_now();
 }
 
 void ActivityPanel::clear()
@@ -103,6 +129,7 @@ void ActivityPanel::clear()
     detail_->SetReadOnly(false);
     detail_->ClearAll();
     detail_->SetReadOnly(true);
+    if (metrics_view_) metrics_view_->refresh_now();
 }
 
 wxString ActivityPanel::list_text_for(long item, long col) const

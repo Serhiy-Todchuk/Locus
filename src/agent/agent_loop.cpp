@@ -3,10 +3,13 @@
 #include "activity_log.h"
 #include "context_budget.h"
 #include "frontend.h"
+#include "metrics.h"
 #include "tool_registry.h"
 #include "workspace.h"
 
 #include <spdlog/spdlog.h>
+
+#include <chrono>
 
 namespace locus {
 
@@ -15,13 +18,15 @@ AgentLoop::AgentLoop(ILLMClient& llm,
                      IWorkspaceServices& services,
                      ActivityLog& activity,
                      ContextBudget& budget,
-                     FrontendRegistry& frontends)
+                     FrontendRegistry& frontends,
+                     MetricsAggregator* metrics)
     : llm_(llm)
     , tools_(tools)
     , services_(services)
     , activity_(activity)
     , budget_(budget)
     , frontends_(frontends)
+    , metrics_(metrics)
 {}
 
 int AgentLoop::manifest_warn_tokens() const
@@ -77,6 +82,9 @@ AgentStepResult AgentLoop::run_step(const ConversationHistory& history)
     std::string accumulated_reasoning;
     std::vector<ToolCallRequest> tool_call_requests;
     int reasoning_tokens_reported = 0;
+    CompletionUsage usage_reported{};
+    int prev_total_for_metrics = budget_.prev_turn_total();
+    auto stream_t0 = std::chrono::steady_clock::now();
 
     llm_.stream_completion(history.messages(), tool_schemas, {
         /* on_token */
@@ -110,12 +118,18 @@ AgentStepResult AgentLoop::run_step(const ConversationHistory& history)
         [&](const CompletionUsage& u) {
             budget_.set_server_total(u.total_tokens);
             reasoning_tokens_reported = u.reasoning_tokens;
+            usage_reported = u;
             spdlog::trace("AgentLoop: server reports {} total tokens "
                           "(prompt={}, completion={}, reasoning={})",
                           u.total_tokens, u.prompt_tokens, u.completion_tokens,
                           u.reasoning_tokens);
         }
     });
+
+    auto stream_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                         std::chrono::steady_clock::now() - stream_t0).count();
+    if (metrics_)
+        metrics_->record_llm_step(usage_reported, stream_ms, prev_total_for_metrics);
 
     if (out.had_error)
         return out;

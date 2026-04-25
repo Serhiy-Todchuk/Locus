@@ -2,11 +2,13 @@
 
 #include "activity_log.h"
 #include "checkpoint_store.h"
+#include "metrics.h"
 #include "tools/shared.h"
 #include "workspace.h"
 
 #include <spdlog/spdlog.h>
 
+#include <chrono>
 #include <utility>
 
 namespace locus {
@@ -15,12 +17,14 @@ ToolDispatcher::ToolDispatcher(IToolRegistry& tools,
                                IWorkspaceServices& services,
                                ActivityLog& activity,
                                FrontendRegistry& frontends,
-                               std::atomic<bool>& cancel_flag)
+                               std::atomic<bool>& cancel_flag,
+                               MetricsAggregator* metrics)
     : tools_(tools)
     , services_(services)
     , activity_(activity)
     , frontends_(frontends)
     , cancel_flag_(cancel_flag)
+    , metrics_(metrics)
 {}
 
 void ToolDispatcher::submit_decision(ToolDecision decision,
@@ -178,11 +182,32 @@ void ToolDispatcher::dispatch(const ToolCall& call, const AppendFn& append_resul
     // mutates anything — so an Undo restores the bytes the user actually saw.
     maybe_snapshot(effective_call);
 
+    auto exec_t0 = std::chrono::steady_clock::now();
     auto result = tool->execute(effective_call, services_);
+    auto exec_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                       std::chrono::steady_clock::now() - exec_t0).count();
 
     spdlog::info("ToolDispatcher: tool '{}' result: success={}, content={} chars",
                  call.tool_name, result.success, result.content.size());
     spdlog::trace("ToolDispatcher: tool result content: {}", result.content);
+
+    if (metrics_) {
+        std::optional<int> rcount = parse_search_result_count(call.tool_name,
+                                                              result.content);
+        std::optional<int> rcap;
+        if (rcount.has_value()) {
+            // search_text/symbols default to 20, semantic/hybrid 10, regex 50.
+            int default_cap = 20;
+            if (call.tool_name == "search_semantic"
+                || call.tool_name == "search_hybrid")
+                default_cap = 10;
+            else if (call.tool_name == "search_regex")
+                default_cap = 50;
+            rcap = effective_call.args.value("max_results", default_cap);
+        }
+        metrics_->record_tool(call.tool_name, result.success, exec_ms,
+                              result.content.size(), rcount, rcap);
+    }
 
     {
         std::string sum = "Tool result: " + call.tool_name;

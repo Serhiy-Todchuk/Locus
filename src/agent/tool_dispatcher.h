@@ -18,6 +18,7 @@ namespace locus {
 
 class ActivityLog;
 class CheckpointStore;
+class MetricsAggregator;
 
 // Runs a single tool call through the approval gate, executes it, and
 // injects the tool-result message back into conversation via the supplied
@@ -34,7 +35,8 @@ public:
                    IWorkspaceServices& services,
                    ActivityLog& activity,
                    FrontendRegistry& frontends,
-                   std::atomic<bool>& cancel_flag);
+                   std::atomic<bool>& cancel_flag,
+                   MetricsAggregator* metrics = nullptr);
 
     // Look up, gate, execute, and inject one tool call.
     // The unknown-tool case is handled here — a tool-error result is
@@ -65,6 +67,7 @@ private:
     ActivityLog&        activity_;
     FrontendRegistry&   frontends_;
     std::atomic<bool>&  cancel_flag_;
+    MetricsAggregator*  metrics_ = nullptr;
 
     std::mutex                  decision_mutex_;
     std::condition_variable     decision_cv_;

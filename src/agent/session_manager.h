@@ -3,6 +3,7 @@
 #include "conversation.h"
 
 #include <filesystem>
+#include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
 
@@ -27,10 +28,14 @@ public:
     explicit SessionManager(const fs::path& sessions_dir);
 
     // Save a conversation to a new session file. Returns the session ID.
-    std::string save(const ConversationHistory& history);
+    // `extras` is merged into the top-level JSON (e.g. a "metrics" snapshot
+    // from MetricsAggregator). Pass an empty/null value to skip.
+    std::string save(const ConversationHistory& history,
+                     const nlohmann::json& extras = {});
 
     // Save with an explicit ID (overwrites if exists).
-    void save(const std::string& id, const ConversationHistory& history);
+    void save(const std::string& id, const ConversationHistory& history,
+              const nlohmann::json& extras = {});
 
     // Load a session by ID. Throws std::runtime_error if not found.
     ConversationHistory load(const std::string& id) const;

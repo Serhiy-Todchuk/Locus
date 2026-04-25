@@ -236,6 +236,7 @@ add_library(locus_core STATIC
     src/agent/system_prompt.cpp
     src/agent/activity_log.cpp
     src/agent/context_budget.cpp
+    src/agent/metrics.cpp
     src/agent/tool_dispatcher.cpp
     src/agent/agent_loop.cpp
     src/agent/slash_commands.cpp
@@ -303,6 +304,7 @@ add_executable(locus_gui WIN32
     src/gui/ops_status_view.cpp
     src/gui/wx_frontend.cpp
     src/gui/activity_panel.cpp
+    src/gui/metrics_view.cpp
     src/gui/chat_panel.cpp
     src/gui/slash_popup.cpp
     src/gui/tool_approval_panel.cpp
