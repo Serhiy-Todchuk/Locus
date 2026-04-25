@@ -149,7 +149,7 @@ Core is a static lib (`locus_core`). Both `locus` (exe) and `locus_tests` link i
 | `src/tools/index_tools.h/cpp` | Index-sourced listing and outline tools. | `ListDirectoryTool`, `GetFileOutlineTool` |
 | `src/tools/process_tools.h/cpp` | Shell execution tool (Win32 CreateProcess pipeline with timeout). | `RunCommandTool` |
 | `src/tools/interactive_tools.h/cpp` | Tools that go through the approval gate to solicit user input. | `AskUserTool` |
-| `src/embedder.h/cpp` | llama.cpp session wrapper. Loads a GGUF model, tokenises via the embedded vocab, runs inference, returns an L2-normalised embedding vector. Dimension is read from the GGUF (`llama_model_n_embd`) and exposed via `dimensions()`; n_ctx defaults to 1024 (clamped to `n_ctx_train`). | `Embedder` |
+| `src/embedder.h/cpp` | llama.cpp session wrapper. Loads a GGUF model, tokenises via the embedded vocab, runs inference, returns an L2-normalised embedding vector. Dimension is read from the GGUF (`llama_model_n_embd`) and exposed via `dimensions()`; n_ctx defaults to 1024 (clamped to `n_ctx_train`). Workspace owns it as a `shared_ptr` so a process-wide `Workspace::set_embedder_provider` hook (used by the test suite) can hand the same instance to many Workspaces — single-Workspace production is unaffected. | `Embedder` |
 | `src/reranker.h/cpp` | llama.cpp wrapper for cross-encoder GGUFs (e.g. `bge-reranker-v2-m3`) with `LLAMA_POOLING_TYPE_RANK`. `score(query, passage)` returns a single relevance logit; `score_batch()` is a convenience over many passages. Used by `search_semantic` / `search_hybrid` when `WorkspaceConfig::reranker_enabled` is true. | `Reranker` |
 | `src/chunker.h/cpp` | Content chunking: code (Tree-sitter boundaries), document (heading boundaries), sliding window fallback. | `Chunk`, `SymbolSpan`, `chunk_code()`, `chunk_document()`, `chunk_sliding_window()` |
 | `src/embedding_worker.h/cpp` | Background thread: consumes chunk queue, calls Embedder, writes embeddings to vectors_db (its own connection — no lock contention with the indexer writing to main_db). | `EmbeddingWorker` |
@@ -190,7 +190,7 @@ Core is a static lib (`locus_core`). Both `locus` (exe) and `locus_tests` link i
 | `src/gui/settings_dialog.h/cpp` | Settings modal: LLM endpoint/model/temperature/context, index exclude patterns. | `SettingsDialog` |
 | `src/gui/autostart.h/cpp` | Windows startup-on-login via HKCU Run key (opt-in). | `is_autostart_enabled()`, `set_autostart_enabled()` |
 
-**Test files** follow `tests/test_<topic>.cpp` — one per subsystem, tagged by stage.
+**Test files** follow `tests/test_<topic>.cpp` — one per subsystem, tagged by stage. `tests/support/shared_embedder.h/cpp` lazily loads `bge-small-en-v1.5-Q8_0.gguf` once per process and installs a `Workspace::set_embedder_provider` hook via a Catch2 EventListener; the listener clears the hook + drops the cached model at `testRunEnded`. Without this the suite reloaded bge-m3 (~6 s × 38 Workspace-creating tests = ~240 s); with it the full suite runs in ~21 s.
 
 **Integration tests** live in `tests/integration/` — a separate `locus_integration_tests` executable that drives `AgentCore` against a live LM Studio LLM end-to-end. Manual-only (not in `ctest`). See [tests/integration/README.md](tests/integration/README.md) for what each tag area covers.
 

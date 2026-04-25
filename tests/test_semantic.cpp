@@ -27,9 +27,13 @@ namespace fs = std::filesystem;
 // Walk up to 6 levels looking for a "models/<name>" sibling.
 static fs::path find_model()
 {
+    // Smallest model first — these tests only exercise embed() mechanics, not
+    // multilingual quality, so the 37 MB bge-small load (~600 ms) beats the
+    // 600 MB bge-m3 load (~6 s) every time. bge-m3 stays as a fallback for
+    // environments that only have the recommended profile installed.
     const char* names[] = {
-        "bge-m3-Q8_0.gguf",
         "bge-small-en-v1.5-Q8_0.gguf",
+        "bge-m3-Q8_0.gguf",
         "all-MiniLM-L6-v2.Q8_0.gguf",
         "all-MiniLM-L6-v2.f16.gguf",
         "all-MiniLM-L6-v2.gguf",

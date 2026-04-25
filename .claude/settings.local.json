@@ -207,7 +207,10 @@
       "Bash(git -C d:/Projects/AICodeAss show 2956663 -- architecture/tech-stack.md)",
       "Bash(git mv *)",
       "Bash(cmake --build build/debug --target locus_core)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(cmake --build d:/Projects/AICodeAss/build/debug --config Debug --target locus_tests)",
+      "Bash(time d:/Projects/AICodeAss/build/debug/tests/Debug/locus_tests.exe --durations yes --reporter compact)",
+      "Bash(echo \"EXIT=$?\")"
     ]
   }
 }

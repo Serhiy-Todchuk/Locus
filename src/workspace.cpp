@@ -19,6 +19,7 @@
 #include <spdlog/spdlog.h>
 
 #include <fstream>
+#include <mutex>
 #include <stdexcept>
 
 #ifdef _WIN32
@@ -30,6 +31,20 @@
 namespace locus {
 
 using json = nlohmann::json;
+
+namespace {
+// Process-wide override for embedder construction (S4.B-followup test speedup).
+// Guarded by a mutex because tests may set/clear it from a fixture thread while
+// other tests are mid-Workspace-construction in the same process.
+std::mutex                  g_embedder_provider_mu;
+Workspace::EmbedderProvider g_embedder_provider;
+} // namespace
+
+void Workspace::set_embedder_provider(EmbedderProvider p)
+{
+    std::lock_guard lock(g_embedder_provider_mu);
+    g_embedder_provider = std::move(p);
+}
 
 Workspace::Workspace(const fs::path& root)
     : root_(fs::absolute(root))
@@ -131,6 +146,47 @@ bool Workspace::enable_semantic_search()
     if (embedder_ && embedding_worker_)
         return true;  // already active
 
+    // Test-only fast path: if a process-wide provider is registered, take its
+    // (already-loaded) embedder rather than mmap+initialising a fresh GGUF.
+    EmbedderProvider provider;
+    {
+        std::lock_guard lock(g_embedder_provider_mu);
+        provider = g_embedder_provider;
+    }
+    if (provider) {
+        try {
+            embedder_ = provider();
+        } catch (const std::exception& e) {
+            spdlog::error("EmbedderProvider threw: {}", e.what());
+            return false;
+        }
+        if (!embedder_) {
+            spdlog::warn("EmbedderProvider returned null; semantic search disabled");
+            return false;
+        }
+        const int dim = embedder_->dimensions();
+        std::string model_id = embedder_->model_path().filename().string();
+
+        if (!vectors_db_) {
+            auto vpath = locus_dir_ / "vectors.db";
+            spdlog::info("Opening vectors database at {}", vpath.string());
+            vectors_db_ = std::make_unique<Database>(vpath, DbKind::Vectors);
+        }
+        vectors_db_->ensure_vectors_schema(dim, model_id);
+
+        embedding_worker_ = std::make_unique<EmbeddingWorker>(
+            *vectors_db_, *embedder_);
+        if (indexer_) {
+            indexer_->on_chunks_created = [this](std::vector<int64_t> ids) {
+                embedding_worker_->enqueue(std::move(ids));
+            };
+        }
+        embedding_worker_->start();
+        spdlog::info("Semantic search enabled via shared embedder "
+                     "(model: {}, dim: {})", model_id, dim);
+        return true;
+    }
+
     // Find models/<name> by walking up from the exe dir.  Supports both packaged
     // layout (models/ next to exe) and dev layout (exe in build/<cfg>/<cfg>/,
     // models/ at repo root — up to 4 levels up).
@@ -164,7 +220,7 @@ bool Workspace::enable_semantic_search()
     try {
         // Embedder first - we need its native dimension before opening
         // (or migrating) the vectors schema.
-        embedder_ = std::make_unique<Embedder>(model_path);
+        embedder_ = std::make_shared<Embedder>(model_path);
         const int dim = embedder_->dimensions();
 
         if (!vectors_db_) {
