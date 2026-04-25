@@ -1,8 +1,12 @@
 #include "harness_fixture.h"
 
 #include <catch2/catch_session.hpp>
+#include <catch2/catch_test_case_info.hpp>
 #include <catch2/reporters/catch_reporter_event_listener.hpp>
 #include <catch2/reporters/catch_reporter_registrars.hpp>
+
+#include <set>
+#include <string>
 
 #include <cstdio>
 #include <cstring>
@@ -158,16 +162,42 @@ int relaunch_in_new_console(int argc, char** argv)
 }
 #endif
 
-// Catch2 listener that tears down the shared integration harness once all
-// tests have finished running.
+// Catch2 listener that:
+//   * resets the harness's conversation history at most ONCE per area, where
+//     "area" is the source file of the TEST_CASE (each test_int_<topic>.cpp
+//     is one area: [search], [outline], ...). Catch2's default test order
+//     can interleave files, so a "reset whenever the file changes" strategy
+//     thrashes -- here we track areas already reset and skip subsequent
+//     re-entries. Per-case reset was correct but slow (every case re-paid
+//     the system prompt + tool-manifest tokens); per-area reset keeps the
+//     full-suite conversation from drifting toward Gemma 4 E4B's 16k ceiling
+//     while paying the reset cost at most N-areas times per run;
+//   * tears down the shared harness once all tests have finished running.
+//
+// Reset uses the non-constructing peek so the first area boundary (before
+// any test body has called harness()) is a no-op rather than forcing LM
+// Studio init.
 class IntegrationSessionListener : public Catch::EventListenerBase {
 public:
     using Catch::EventListenerBase::EventListenerBase;
+
+    void testCaseStarting(const Catch::TestCaseInfo& info) override
+    {
+        const char* file = info.lineInfo.file ? info.lineInfo.file : "";
+        if (!areas_reset_.insert(file).second) return;  // already reset this area
+
+        if (auto* h = locus::integration::IntegrationHarness::shared_if_alive()) {
+            h->agent().reset_conversation();
+        }
+    }
 
     void testRunEnded(const Catch::TestRunStats& /*stats*/) override
     {
         locus::integration::IntegrationHarness::shutdown_shared();
     }
+
+private:
+    std::set<std::string> areas_reset_;
 };
 
 } // namespace

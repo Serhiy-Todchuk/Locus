@@ -43,6 +43,11 @@ public:
     // already-built harness.
     static IntegrationHarness& shared();
 
+    // Non-constructing peek -- nullptr if the harness has not yet been built.
+    // Used by the per-test-case reset listener so it doesn't force LM Studio
+    // initialisation before any test body has actually asked for the harness.
+    static IntegrationHarness* shared_if_alive();
+
     // Explicit teardown (called once from a Catch2 event listener at session
     // end). Safe to call more than once.
     static void shutdown_shared();
