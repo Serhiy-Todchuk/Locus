@@ -75,9 +75,15 @@ public:
     // depend on the index seeing them.
     void wait_for_index_idle(std::chrono::milliseconds timeout = std::chrono::seconds(20));
 
-    // Wait until the embedding worker queue has drained. No-op if semantic
-    // search is disabled (embedding_worker() == nullptr).
-    void wait_for_embedding_idle(std::chrono::milliseconds timeout = std::chrono::minutes(2));
+    // Wait until the embedding worker queue has drained. No-op (returns true)
+    // if semantic search is disabled (embedding_worker() == nullptr).
+    // Returns false on timeout so callers can REQUIRE the result and fail
+    // fast with a clear message rather than letting downstream semantic
+    // assertions fail against partial vectors. Default sized for a cold
+    // re-embed of WS1 with the small bge-small-en-v1.5 + ms-marco profile
+    // (~3.5 min observed); override per-test if needed.
+    [[nodiscard]] bool wait_for_embedding_idle(
+        std::chrono::milliseconds timeout = std::chrono::minutes(10));
 
 private:
     IntegrationHarness();

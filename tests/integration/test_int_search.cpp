@@ -71,8 +71,9 @@ TEST_CASE("symbol search locates a class definition", "[integration][llm][search
 TEST_CASE("semantic / hybrid search finds embedding code", "[integration][llm][search][semantic]")
 {
     auto& h = harness();
-    // Make sure embeddings are caught up before running semantic query.
-    h.wait_for_embedding_idle();
+    // Make sure embeddings are caught up before running semantic query -
+    // a partial index makes the assertion below flake unpredictably.
+    REQUIRE(h.wait_for_embedding_idle());
 
     PromptResult r = h.prompt(
         "Use the search tool in semantic mode to find code responsible for "
@@ -94,7 +95,7 @@ TEST_CASE("semantic / hybrid search finds embedding code", "[integration][llm][s
 TEST_CASE("hybrid search returns RRF-merged results", "[integration][llm][search]")
 {
     auto& h = harness();
-    h.wait_for_embedding_idle();
+    REQUIRE(h.wait_for_embedding_idle());
 
     PromptResult r = h.prompt(
         "Use the search tool in hybrid mode to find code related to atomic "
