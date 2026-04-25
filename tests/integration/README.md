@@ -20,7 +20,7 @@ Tag filters match [Catch2 test tags](https://github.com/catchorg/Catch2/blob/dev
 | Tag | Source | What it exercises |
 |---|---|---|
 | `[smoke]`    | [test_int_smoke.cpp](test_int_smoke.cpp)        | LLM reachability gate, workspace opens + indexes, `read_file` via LLM. |
-| `[search]`   | [test_int_search.cpp](test_int_search.cpp)      | Unified `search` tool — text (FTS5), regex (raw-content `std::regex`), symbols (tree-sitter), semantic (vectors), hybrid (RRF merge). |
+| `[search]`   | [test_int_search.cpp](test_int_search.cpp)      | Unified `search` tool — text (FTS5), regex (raw-content `std::regex`), symbols (tree-sitter), ast (Tree-sitter S-expression queries), semantic (vectors), hybrid (RRF merge). |
 | `[outline]`  | [test_int_outline.cpp](test_int_outline.cpp)    | `get_file_outline` against every extractor — `.md`, `.pdf` (PDFium), `.docx` (miniz+pugixml), `.xlsx`. |
 | `[fs]`       | [test_int_fs_lifecycle.cpp](test_int_fs_lifecycle.cpp) | Full lifecycle in a scratch dir: `write_file` → `read_file` + `edit_file` (with `replace_all`) → indexer picks up change → `delete_file`. Also covers `list_directory`. |
 | `[shell]`    | [test_int_shell.cpp](test_int_shell.cpp)        | `run_command` executes and captures stdout. |

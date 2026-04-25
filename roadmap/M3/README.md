@@ -29,7 +29,7 @@
 2. *S3.F (file-watcher pump into Core) — ~½ day; removes 3-way duplication before M5 adds a 4th.*
 3. *S3.A (agent-core split) — ~3 days; the single biggest unblock for M4.*
 4. *S3.J (slash commands) — falls out of S3.A naturally.*
-5. **S3.D**, *S3.E* — when the relevant M4 stage triggers them (S4.M). Do not do both up-front.
+5. *S3.D, S3.E — when the relevant M4 stage triggers them. Do not do both up-front.*
 6. *S3.L — before the first M4 stage that adds new tools (realistically S4.A). Gating hooks + search consolidation should exist before M4 starts piling tools onto the catalog.*
 7. **S3.B** — defer until M4 S4.N (tool-format robustness) or S4.Q (weak/strong) starts.
 8. *S3.G (LocusSession) — when M4 S4.B (checkpoint store) starts; the first new lifecycle subsystem is the natural moment.*
