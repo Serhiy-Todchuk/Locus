@@ -1,9 +1,7 @@
 #include "workspace.h"
+#include "core/locus_session.h"
 #include "core/watcher_pump.h"
-#include "indexer.h"
 #include "llm_client.h"
-#include "tool_registry.h"
-#include "tools/tools.h"
 #include "agent/agent_core.h"
 #include "frontends/cli_frontend.h"
 
@@ -219,72 +217,24 @@ int main(int argc, char* argv[])
         spdlog::trace("Verbose logging active");
 
     try {
-        // Open workspace: config, DB, file watcher, index.
-        locus::Workspace ws(workspace_path);
-
-        if (!ws.locus_md().empty())
-            spdlog::info("LOCUS.md loaded ({} bytes)", ws.locus_md().size());
-
-        auto& st = ws.indexer().stats();
-        spdlog::info("Index: {} files ({} text, {} binary), {} symbols, {} headings",
-                     st.files_total, st.files_indexed, st.files_binary,
-                     st.symbols_total, st.headings_total);
-
-        // LLM client.
+        // Build the LLM seed config from CLI args. context_limit==0 is the
+        // sentinel that tells LocusSession to fall back to the server-reported
+        // value (or 8192 if the server is silent).
         locus::LLMConfig llm_cfg;
         llm_cfg.base_url      = args.endpoint;
         llm_cfg.model         = args.model;
         llm_cfg.context_limit = args.context;
-        auto llm = locus::create_llm_client(llm_cfg);
 
-        // Query server for model info (context length, model name).
-        auto model_info = llm->query_model_info();
-        if (!model_info.id.empty() && llm_cfg.model.empty()) {
-            llm_cfg.model = model_info.id;
-            spdlog::info("Model auto-detected: {}", llm_cfg.model);
-        }
-        if (args.context > 0) {
-            // Explicit CLI override takes priority.
-            llm_cfg.context_limit = args.context;
-            spdlog::info("Context limit (from --context): {}", llm_cfg.context_limit);
-        } else if (model_info.context_length > 0) {
-            llm_cfg.context_limit = model_info.context_length;
-            spdlog::info("Context limit (from server): {}", llm_cfg.context_limit);
-        } else {
-            llm_cfg.context_limit = 8192;  // fallback default
-            spdlog::info("Context limit (default): {}", llm_cfg.context_limit);
-        }
-
-        // Tool system.
-        locus::ToolRegistry tool_registry;
-        locus::register_builtin_tools(tool_registry);
-        spdlog::info("Tools: {} registered", tool_registry.all().size());
-
-        // Agent core.
-        locus::WorkspaceMetadata ws_meta;
-        ws_meta.root          = workspace_path;
-        ws_meta.file_count    = static_cast<int>(st.files_total);
-        ws_meta.symbol_count  = static_cast<int>(st.symbols_total);
-        ws_meta.heading_count = static_cast<int>(st.headings_total);
-
-        fs::path sessions_dir    = locus_dir / "sessions";
-        fs::path checkpoints_dir = locus_dir / "checkpoints";
-        locus::AgentCore agent(*llm, tool_registry, ws,
-                               ws.locus_md(), ws_meta, llm_cfg,
-                               sessions_dir, checkpoints_dir);
+        // Bundle: workspace + LLM client + tool registry + agent core, started.
+        // Destructor (end of try block) joins the agent thread before tearing
+        // anything down — same ordering as the old hand-wired path.
+        locus::LocusSession session(workspace_path, llm_cfg);
+        auto& ws    = session.workspace();
+        auto& agent = session.agent();
 
         // CLI frontend.
         locus::CliFrontend cli(agent);
         agent.register_frontend(&cli);
-
-        // Route indexer activity through the agent's event bus.
-        ws.indexer().on_activity =
-            [&agent](const std::string& s, const std::string& d) {
-                agent.emit_index_event(s, d);
-            };
-
-        // Start the agent thread.
-        agent.start();
 
         // REPL.
         std::cout << "Locus ready. Type a message, or /quit to exit.\n\n";
@@ -414,7 +364,9 @@ int main(int argc, char* argv[])
         // the mode to whatever shell runs next.
         std::cout << "\x1b[?2004l" << std::flush;
 
-        agent.stop();
+        // The session destructor will stop() the agent — but unregister the
+        // CLI first so it doesn't receive a final on_turn_complete from the
+        // not-yet-joined agent thread after we've left this scope.
         agent.unregister_frontend(&cli);
 
     } catch (const std::exception& ex) {
