@@ -42,7 +42,7 @@ TEST_CASE("WorkspaceLock: second lock on same workspace fails", "[s4.a][lock]")
     fs::remove_all(ws);
 }
 
-TEST_CASE("WorkspaceLock: releases on destruction — next acquirer succeeds", "[s4.a][lock]")
+TEST_CASE("WorkspaceLock: releases on destruction - next acquirer succeeds", "[s4.a][lock]")
 {
     auto ws = fresh_dir("release");
     {

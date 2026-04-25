@@ -673,7 +673,7 @@ TEST_CASE("EditFileTool: applies every batched edit in order", "[s4.a]")
     fs::remove_all(tmp);
 }
 
-TEST_CASE("EditFileTool: batch is atomic — one bad edit aborts all", "[s4.a]")
+TEST_CASE("EditFileTool: batch is atomic - one bad edit aborts all", "[s4.a]")
 {
     locus::tools::ReadTracker::instance().clear();
     auto tmp = make_temp_workspace();
