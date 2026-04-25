@@ -20,6 +20,7 @@ class ExtractorRegistry;
 class FileWatcher;
 class IndexQuery;
 class Indexer;
+class ProcessRegistry;
 class Reranker;
 class WatcherPump;
 class WorkspaceLock;
@@ -68,6 +69,13 @@ struct WorkspaceConfig {
     // this threshold. 4000 ≈ 12% of a 32K context — a reasonable "we've grown
     // too much" signal once M4 adds ~20 more tools.
     int tool_manifest_warn_tokens = 4000;
+
+    // S4.I — per-background-process output ring buffer cap. The reader thread
+    // appends stdout+stderr until this many bytes are buffered; older bytes
+    // are dropped from the front (the LLM is told how many it missed). 256 KB
+    // covers a verbose dev-server log between turns without paging the agent
+    // thread, and is still cheap (a few processes × 256 KB is negligible).
+    int process_output_buffer_kb = 256;
 };
 
 // Owns all workspace-level resources: config, database, file watcher, LOCUS.md.
@@ -88,6 +96,7 @@ public:
     IndexQuery*      index() override      { return query_.get(); }
     EmbeddingWorker* embedder() override   { return embedding_worker_.get(); }
     Reranker*        reranker() override   { return reranker_.get(); }
+    ProcessRegistry* processes() override  { return processes_.get(); }
     Workspace*       workspace() override  { return this; }
 
     // -- Workspace-specific ---------------------------------------------------
@@ -151,6 +160,10 @@ private:
     // Owned after `indexer_` so it stops + joins before the indexer is torn
     // down (the pump's background thread feeds events into the indexer).
     std::unique_ptr<WatcherPump> watcher_pump_;
+    // S4.I — long-running shell processes spawned by the agent. The dtor
+    // terminates every still-running child so workspace close never leaks
+    // background processes.
+    std::unique_ptr<ProcessRegistry> processes_;
 };
 
 } // namespace locus

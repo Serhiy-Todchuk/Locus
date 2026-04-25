@@ -13,6 +13,7 @@ add_executable(locus_integration_tests
     test_int_outline.cpp
     test_int_fs_lifecycle.cpp
     test_int_shell.cpp
+    test_int_bg.cpp
     test_int_interactive.cpp
     test_int_slash.cpp
 )

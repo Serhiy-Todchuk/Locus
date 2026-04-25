@@ -33,7 +33,13 @@ std::string SystemPromptBuilder::build(const std::string& locus_md,
           "- Before calling `edit_file`, call `read_file` on the same path in this session — "
           "the editor refuses edits on files it has not seen to prevent hallucinated changes.\n"
           "- Each `old_string` must match byte-for-byte (including indentation and trailing whitespace) and must be "
-          "unique in the file; widen the match with surrounding context if it is not, or set `replace_all=true`.\n\n";
+          "unique in the file; widen the match with surrounding context if it is not, or set `replace_all=true`.\n\n"
+          "## Running shell commands\n"
+          "- Use `run_command` for short, synchronous commands (under ~30 seconds): build steps, scripts, queries.\n"
+          "- Use `run_command_bg` for dev servers, file watchers, long builds, or anything that streams output. "
+          "It returns a `process_id` that survives across turns. Read its output with `read_process_output` "
+          "(omit `since_offset` to get only what's new since your last read), terminate with `stop_process`, "
+          "and enumerate live processes with `list_processes`.\n\n";
 
     // -- Workspace metadata ---------------------------------------------------
     ss << "## Workspace\n"
