@@ -4,7 +4,7 @@
 
 #include "agent/agent_core.h"
 #include "agent/system_prompt.h"
-#include "llm_client.h"
+#include "llm/llm_client.h"
 #include "tool_registry.h"
 #include "workspace.h"
 

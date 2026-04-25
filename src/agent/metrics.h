@@ -1,6 +1,6 @@
 #pragma once
 
-#include "llm_client.h"
+#include "llm/llm_client.h"
 
 #include <chrono>
 #include <map>

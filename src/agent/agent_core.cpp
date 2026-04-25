@@ -1,6 +1,7 @@
 #include "agent_core.h"
 
 #include "index/index_query.h"
+#include "llm/token_counter.h"
 #include "tool_registry.h"
 #include "workspace.h"
 
@@ -82,7 +83,7 @@ AgentCore::AgentCore(ILLMClient& llm,
                      checkpoints_dir.string(), session_id_);
     }
 
-    int sys_tokens = ILLMClient::estimate_tokens(system_prompt_);
+    int sys_tokens = TokenCounter::estimate(system_prompt_);
     spdlog::info("AgentCore: system prompt ~{} tokens, context limit {}",
                  sys_tokens, llm_config_.context_limit);
 

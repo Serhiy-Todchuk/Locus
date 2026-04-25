@@ -1,7 +1,8 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include "llm_client.h"
-#include "sse_parser.h"
+#include "llm/llm_client.h"
+#include "llm/sse_parser.h"
+#include "llm/token_counter.h"
 
 #include <string>
 #include <vector>
@@ -188,17 +189,17 @@ TEST_CASE("Token estimation: basic heuristic", "[s0.5]")
 {
     // Empty string = 0 tokens (rounds to 0 with (0+3)/4 = 0).
     // Actually (0+3)/4 = 0 in integer division.
-    CHECK(ILLMClient::estimate_tokens("") == 0);
+    CHECK(TokenCounter::estimate("") == 0);
 
     // 4 chars = 1 token
-    CHECK(ILLMClient::estimate_tokens("abcd") == 1);
+    CHECK(TokenCounter::estimate("abcd") == 1);
 
     // 5 chars = 2 tokens
-    CHECK(ILLMClient::estimate_tokens("abcde") == 2);
+    CHECK(TokenCounter::estimate("abcde") == 2);
 
     // 100 chars = 25 tokens
     std::string hundred(100, 'x');
-    CHECK(ILLMClient::estimate_tokens(hundred) == 25);
+    CHECK(TokenCounter::estimate(hundred) == 25);
 }
 
 TEST_CASE("Token estimation: conversation", "[s0.5]")
@@ -207,7 +208,7 @@ TEST_CASE("Token estimation: conversation", "[s0.5]")
     msgs.push_back({MessageRole::system, "You are helpful."});
     msgs.push_back({MessageRole::user,   "Hello"});
 
-    int tokens = ILLMClient::estimate_tokens(msgs);
+    int tokens = TokenCounter::estimate(msgs);
     // system: 4 overhead + 16/4=4 = 8
     // user:   4 overhead + 5/4=1 (rounds: (5+3)/4=2) = 6
     // total = 14

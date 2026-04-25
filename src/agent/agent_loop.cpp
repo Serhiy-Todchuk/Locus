@@ -3,6 +3,7 @@
 #include "activity_log.h"
 #include "context_budget.h"
 #include "frontend.h"
+#include "llm/token_counter.h"
 #include "metrics.h"
 #include "tool_registry.h"
 #include "workspace.h"
@@ -59,7 +60,7 @@ std::vector<ToolSchema> AgentLoop::build_tool_schemas() const
     // Token-cost guardrail: log the manifest footprint every turn, warn when
     // it exceeds the configured threshold. Serialised JSON length is a close
     // proxy for what the backend actually sends as the tools parameter.
-    int manifest_tokens = ILLMClient::estimate_tokens(schema_json.dump());
+    int manifest_tokens = TokenCounter::estimate(schema_json.dump());
     int threshold = manifest_warn_tokens();
     if (manifest_tokens > threshold) {
         spdlog::warn("Tool manifest: {} tools, ~{} tokens (threshold {}). "

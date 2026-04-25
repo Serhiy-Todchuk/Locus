@@ -1,11 +1,10 @@
-#include "llm_client.h"
-#include "sse_parser.h"
+#include "llm/llm_client.h"
+#include "llm/openai_transport.h"
+#include "llm/stream_decoders/openai_decoder.h"
 
 #include <cpr/cpr.h>
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
-
-#include <stdexcept>
 
 using json = nlohmann::json;
 
@@ -63,29 +62,6 @@ ChatMessage ChatMessage::from_json(const json& j)
     return m;
 }
 
-// ---- Token estimation -------------------------------------------------------
-
-int ILLMClient::estimate_tokens(const std::string& text)
-{
-    // Heuristic: ~4 characters per token (good enough for local models).
-    return static_cast<int>((text.size() + 3) / 4);
-}
-
-int ILLMClient::estimate_tokens(const std::vector<ChatMessage>& messages)
-{
-    int total = 0;
-    for (auto& m : messages) {
-        // Role overhead: ~4 tokens per message framing.
-        total += 4;
-        total += estimate_tokens(m.content);
-        for (auto& tc : m.tool_calls) {
-            total += estimate_tokens(tc.name);
-            total += estimate_tokens(tc.arguments);
-        }
-    }
-    return total;
-}
-
 // ---- LMStudioClient ---------------------------------------------------------
 
 class LMStudioClient : public ILLMClient {
@@ -104,13 +80,14 @@ private:
         const std::vector<ChatMessage>& messages,
         const std::vector<ToolSchema>&  tools) const;
 
-    void do_stream(const json& body, const StreamCallbacks& callbacks, bool is_retry);
-
-    LLMConfig config_;
+    LLMConfig         config_;
+    OpenAiTransport   transport_;
+    OpenAiDecoder     decoder_;
 };
 
 LMStudioClient::LMStudioClient(LLMConfig config)
     : config_(std::move(config))
+    , transport_(config_)
 {
     // Strip trailing slash from base URL.
     while (!config_.base_url.empty() && config_.base_url.back() == '/')
@@ -154,7 +131,7 @@ static ModelInfo find_model_in(const json& data, const std::string& preferred_mo
         return info;
     }
 
-    // Preferred model not found — fall back to first.
+    // Preferred model not found -- fall back to first.
     if (!data.empty()) {
         auto& first = data[0];
         ModelInfo info;
@@ -168,7 +145,7 @@ static ModelInfo find_model_in(const json& data, const std::string& preferred_mo
 
 ModelInfo LMStudioClient::query_model_info()
 {
-    // Try LM Studio proprietary API first — it includes loaded_context_length.
+    // Try LM Studio proprietary API first -- it includes loaded_context_length.
     {
         std::string url = config_.base_url + "/api/v0/models";
         spdlog::trace("LLM GET {}", url);
@@ -290,19 +267,10 @@ void LMStudioClient::stream_completion(
 {
     json body = build_request_body(messages, tools);
     spdlog::trace("LLM request: {} messages, {} tools", messages.size(), tools.size());
-    do_stream(body, callbacks, false);
-}
 
-void LMStudioClient::do_stream(
-    const json& body, const StreamCallbacks& callbacks, bool is_retry)
-{
-    std::string url = config_.base_url + "/v1/chat/completions";
-    std::string body_str = body.dump();
-
-    spdlog::trace("LLM POST {}", url);
-
-    // Accumulator for tool calls across SSE events.
-    // Key: tool call index → partially accumulated call.
+    // Per-call accumulator: tool-call fragments arrive indexed; we
+    // assemble them here and deliver completed calls after the stream
+    // ends. The decoder is stateless -- accumulation is the client's job.
     struct ToolCallAccum {
         std::string id;
         std::string name;
@@ -310,172 +278,55 @@ void LMStudioClient::do_stream(
     };
     std::vector<ToolCallAccum> tool_accum;
     bool got_tool_calls = false;
-
-    // Track whether we received any data at all (for error detection).
-    bool got_data = false;
+    bool got_data       = false;
+    bool errored        = false;
     CompletionUsage usage;
 
-    // Helper: safely extract a string from a JSON value that might be null or wrong type.
-    auto safe_string = [](const json& j) -> std::string {
-        if (j.is_string()) return j.get<std::string>();
-        return {};
+    decoder_.reset();
+
+    StreamDecoderSink sink;
+    sink.on_text = [&](const std::string& token) {
+        if (callbacks.on_token)
+            callbacks.on_token(token);
+    };
+    sink.on_reasoning = [&](const std::string& token) {
+        if (callbacks.on_reasoning_token)
+            callbacks.on_reasoning_token(token);
+    };
+    sink.on_tool_call_delta = [&](const StreamDecoderSink::ToolCallDelta& d) {
+        got_tool_calls = true;
+        while (static_cast<int>(tool_accum.size()) <= d.index)
+            tool_accum.push_back({});
+        auto& a = tool_accum[d.index];
+        if (!d.id_frag.empty())
+            a.id = d.id_frag;
+        a.name      += d.name_frag;
+        a.arguments += d.args_frag;
+    };
+    sink.on_usage = [&](const CompletionUsage& u) {
+        usage = u;
+        spdlog::trace("LLM usage: prompt={}, completion={} (reasoning={}), total={}",
+                      u.prompt_tokens, u.completion_tokens,
+                      u.reasoning_tokens, u.total_tokens);
     };
 
-    // SSE parser feeds on raw response bytes.
-    SseParser parser([&](const std::string& data) -> bool {
+    OpenAiTransport::Callbacks tcbs;
+    tcbs.on_data = [&](const std::string& data) -> bool {
         got_data = true;
-
-        if (data == "[DONE]") {
-            spdlog::trace("LLM stream: [DONE]");
-            return false;  // stop parsing
-        }
-
-        try {
-            auto delta_json = json::parse(data);
-
-            // Navigate: choices[0].delta
-            if (!delta_json.contains("choices") || delta_json["choices"].empty())
-                return true;
-
-            auto& choice = delta_json["choices"][0];
-
-            if (!choice.contains("delta"))
-                return true;
-
-            auto& delta = choice["delta"];
-
-            // Visible answer tokens.
-            if (delta.contains("content") && delta["content"].is_string()) {
-                std::string token = delta["content"].get<std::string>();
-                if (!token.empty() && callbacks.on_token)
-                    callbacks.on_token(token);
-            }
-
-            // Chain-of-thought tokens (reasoning models, e.g. Gemma via
-            // LM Studio). Routed to a separate callback so the frontend can
-            // render them distinctly (or hide them).
-            if (delta.contains("reasoning_content") && delta["reasoning_content"].is_string()) {
-                std::string token = delta["reasoning_content"].get<std::string>();
-                if (!token.empty() && callbacks.on_reasoning_token)
-                    callbacks.on_reasoning_token(token);
-            }
-
-            // Tool calls (streamed incrementally)
-            if (delta.contains("tool_calls") && delta["tool_calls"].is_array()) {
-                got_tool_calls = true;
-                for (auto& tc_delta : delta["tool_calls"]) {
-                    int idx = tc_delta.value("index", 0);
-
-                    // Grow accumulator if needed.
-                    while (static_cast<int>(tool_accum.size()) <= idx)
-                        tool_accum.push_back({});
-
-                    auto& accum = tool_accum[idx];
-
-                    if (tc_delta.contains("id"))
-                        accum.id = safe_string(tc_delta["id"]);
-
-                    if (tc_delta.contains("function") && tc_delta["function"].is_object()) {
-                        auto& fn = tc_delta["function"];
-                        if (fn.contains("name"))
-                            accum.name += safe_string(fn["name"]);
-                        if (fn.contains("arguments"))
-                            accum.arguments += safe_string(fn["arguments"]);
-                    }
-                }
-            }
-
-            // Usage (typically in the final chunk).
-            if (delta_json.contains("usage") && delta_json["usage"].is_object()) {
-                auto& u = delta_json["usage"];
-                usage.prompt_tokens     = u.value("prompt_tokens", 0);
-                usage.completion_tokens = u.value("completion_tokens", 0);
-                usage.total_tokens      = u.value("total_tokens", 0);
-                if (u.contains("completion_tokens_details") &&
-                    u["completion_tokens_details"].is_object()) {
-                    usage.reasoning_tokens =
-                        u["completion_tokens_details"].value("reasoning_tokens", 0);
-                }
-                spdlog::trace("LLM usage: prompt={}, completion={} (reasoning={}), total={}",
-                              usage.prompt_tokens, usage.completion_tokens,
-                              usage.reasoning_tokens, usage.total_tokens);
-            }
-        } catch (const json::exception& e) {
-            spdlog::warn("LLM stream: JSON error in chunk: {}", e.what());
-        } catch (const std::exception& e) {
-            spdlog::warn("LLM stream: error processing chunk: {}", e.what());
-        }
-
-        return true;
-    });
-
-    // Use cpr WriteCallback to feed SSE parser incrementally.
-    cpr::WriteCallback write_cb{[&](std::string_view data,
-                                    intptr_t /*userdata*/) -> bool {
-        parser.feed(std::string(data));
-        return true;
-    }};
-
-    // Use a stall-based timeout, not a total-transfer cap: thinking models
-    // can emit reasoning tokens for minutes without exceeding the old
-    // cpr::Timeout. LowSpeed aborts only if fewer than 1 B/s flows for
-    // timeout_ms — i.e. the stream truly stopped.
-    const long stall_seconds =
-        std::max<long>(1, static_cast<long>(config_.timeout_ms) / 1000);
-    cpr::Response response = cpr::Post(
-        cpr::Url{url},
-        cpr::Header{
-            {"Content-Type", "application/json"},
-            {"Accept",       "text/event-stream"}
-        },
-        cpr::Body{body_str},
-        cpr::ConnectTimeout{10000},
-        cpr::LowSpeed{1, stall_seconds},
-        std::move(write_cb)
-    );
-
-    // Flush any remaining data in SSE buffer.
-    parser.finish();
-
-    // Check for transport-level errors.
-    if (response.error.code != cpr::ErrorCode::OK) {
-        std::string err_msg;
-        if (response.error.code == cpr::ErrorCode::COULDNT_CONNECT) {
-            err_msg = "Cannot connect to LLM server at " + config_.base_url +
-                      " - is LM Studio running?";
-        } else if (response.error.code == cpr::ErrorCode::OPERATION_TIMEDOUT) {
-            if (!is_retry) {
-                spdlog::warn("LLM stream stalled (no data for {}s), retrying once...",
-                             stall_seconds);
-                do_stream(body, callbacks, true);
-                return;
-            }
-            err_msg = "LLM stream stalled after retry (no data for " +
-                      std::to_string(stall_seconds) + "s)";
-        } else {
-            err_msg = "LLM request failed: " + response.error.message;
-        }
-
-        spdlog::error("{}", err_msg);
+        return decoder_.decode(data, sink);
+    };
+    tcbs.on_error = [&](const std::string& err) {
+        errored = true;
         if (callbacks.on_error)
-            callbacks.on_error(err_msg);
+            callbacks.on_error(err);
+    };
+
+    transport_.post_chat(body.dump(), tcbs);
+
+    if (errored)
         return;
-    }
 
-    // Check HTTP status.
-    if (response.status_code != 200) {
-        std::string err_msg = "LLM server returned HTTP " +
-                              std::to_string(response.status_code);
-        if (!response.text.empty())
-            err_msg += ": " + response.text.substr(0, 500);
-
-        spdlog::error("{}", err_msg);
-        if (callbacks.on_error)
-            callbacks.on_error(err_msg);
-        return;
-    }
-
-    // No data received at all.
+    // No data received at all (transport ok but server sent empty body).
     if (!got_data) {
         std::string err_msg = "LLM server returned empty response";
         spdlog::error("{}", err_msg);
@@ -487,9 +338,8 @@ void LMStudioClient::do_stream(
     // Deliver accumulated tool calls.
     if (got_tool_calls && !tool_accum.empty() && callbacks.on_tool_calls) {
         std::vector<ToolCallRequest> calls;
-        for (auto& a : tool_accum) {
+        for (auto& a : tool_accum)
             calls.push_back({a.id, a.name, a.arguments});
-        }
         spdlog::trace("LLM tool calls: {}", calls.size());
         for (auto& c : calls)
             spdlog::trace("  tool: {} id={} args={}", c.name, c.id, c.arguments);

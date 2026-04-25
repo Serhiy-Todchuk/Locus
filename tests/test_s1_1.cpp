@@ -4,7 +4,7 @@
 #include "frontend_registry.h"
 #include "agent/session_manager.h"
 #include "agent/conversation.h"
-#include "llm_client.h"
+#include "llm/llm_client.h"
 
 #include <filesystem>
 #include <string>
