@@ -7,12 +7,41 @@ Copyright (c) Alex Garcia
 License: MIT / Apache-2.0
 Source: https://github.com/asg017/sqlite-vec
 
-all-MiniLM-L6-v2 (GGUF, Q8_0 quantized)
+bge-m3 (GGUF, Q8_0 quantized)
+-----------------------------
+Default embedder shipped with Locus since S4.J. 1024-dim, 8K context,
+multilingual + code.
+Copyright (c) Beijing Academy of Artificial Intelligence (BAAI)
+License: MIT
+Source: https://huggingface.co/BAAI/bge-m3
+GGUF conversion: https://huggingface.co/ggml-org/bge-m3-Q8_0-GGUF
+
+bge-reranker-v2-m3 (GGUF, Q8_0 quantized)
 -----------------------------------------
-Copyright (c) Microsoft Corporation / Sentence-Transformers Authors
+Optional cross-encoder reranker shipped with Locus since S4.J.
+Multilingual, ~568M params.
+Copyright (c) Beijing Academy of Artificial Intelligence (BAAI)
 License: Apache-2.0
-Source: https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2
-GGUF conversion: https://huggingface.co/second-state/All-MiniLM-L6-v2-Embedding-GGUF
+Source: https://huggingface.co/BAAI/bge-reranker-v2-m3
+GGUF conversion: https://huggingface.co/gpustack/bge-reranker-v2-m3-GGUF
+
+bge-small-en-v1.5 (GGUF, Q8_0 quantized)
+----------------------------------------
+Test fixture only (loaded once per process by tests/support/shared_embedder).
+384-dim, 512 ctx, English. Not bundled with end-user releases.
+Copyright (c) Beijing Academy of Artificial Intelligence (BAAI)
+License: MIT
+Source: https://huggingface.co/BAAI/bge-small-en-v1.5
+GGUF conversion: https://huggingface.co/ggml-org/bge-small-en-v1.5-Q8_0-GGUF
+
+ms-marco-MiniLM-L6-v2 (GGUF, Q4_K_M quantized)
+----------------------------------------------
+Test fixture only (preferred reranker for tests/test_reranker.cpp when present).
+22M-param cross-encoder. Not bundled with end-user releases.
+Copyright (c) UKP Lab / Sentence-Transformers Authors
+License: Apache-2.0
+Source: https://huggingface.co/cross-encoder/ms-marco-MiniLM-L-6-v2
+GGUF conversion: https://huggingface.co/sinjab/ms-marco-MiniLM-L6-v2-Q4_K_M-GGUF
 
 llama.cpp
 ---------
