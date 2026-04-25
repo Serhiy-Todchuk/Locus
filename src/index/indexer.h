@@ -1,18 +1,16 @@
 #pragma once
 
 #include "file_watcher.h"
+#include "index/prepared_statements.h"
+#include "index/symbol_extractor.h"
+#include "index/tree_sitter_registry.h"
 
 #include <filesystem>
 #include <functional>
 #include <mutex>
 #include <string>
 #include <vector>
-#include <unordered_map>
 #include <cstdint>
-
-struct sqlite3_stmt;
-typedef struct TSParser TSParser;
-typedef struct TSLanguage TSLanguage;
 
 namespace locus {
 
@@ -20,6 +18,8 @@ namespace fs = std::filesystem;
 
 class Database;
 class ExtractorRegistry;
+struct ExtractedHeading;
+struct SymbolSpan;
 struct WorkspaceConfig;
 
 // Walks the workspace, reads files, and populates the FTS5, symbols, and
@@ -77,18 +77,18 @@ private:
     static bool is_binary_content(const char* data, size_t len);
     static std::string detect_language(const std::string& ext);
 
-    // Content extraction
+    // FTS / heading persistence
     void insert_fts(const std::string& rel_path_str, const std::string& content);
     void delete_fts(const std::string& rel_path_str);
     void insert_headings(int64_t file_id,
-                         const std::vector<struct ExtractedHeading>& headings);
+                         const std::vector<ExtractedHeading>& headings);
+
+    // Symbol extraction: parses `content`, runs the language's `ISymbolExtractor`,
+    // persists each symbol via `stmts_.insert_sym`, and returns the per-symbol
+    // line spans for downstream chunking.
     void extract_symbols(int64_t file_id, const std::string& content,
                          const std::string& language,
-                         std::vector<struct SymbolSpan>& out_spans);
-
-    // Tree-sitter helpers
-    void init_tree_sitter();
-    const TSLanguage* ts_language_for(const std::string& language) const;
+                         std::vector<SymbolSpan>& out_spans);
 
     Database& main_db_;
     Database* vectors_db_;  // nullable — null when semantic disabled
@@ -97,25 +97,12 @@ private:
     const ExtractorRegistry& extractors_;
     Stats stats_;
 
-    // Prepared statements (owned, finalised in destructor)
-    sqlite3_stmt* stmt_upsert_file_  = nullptr;
-    sqlite3_stmt* stmt_delete_file_  = nullptr;
-    sqlite3_stmt* stmt_file_id_      = nullptr;
-    sqlite3_stmt* stmt_file_stat_    = nullptr;  // (id, size_bytes, modified_at, is_binary) by path
-    sqlite3_stmt* stmt_insert_fts_   = nullptr;
-    sqlite3_stmt* stmt_delete_fts_   = nullptr;
-    sqlite3_stmt* stmt_insert_sym_   = nullptr;
-    sqlite3_stmt* stmt_delete_syms_  = nullptr;
-    sqlite3_stmt* stmt_insert_head_  = nullptr;
-    sqlite3_stmt* stmt_delete_heads_ = nullptr;
-    sqlite3_stmt* stmt_insert_chunk_   = nullptr;
-    sqlite3_stmt* stmt_delete_chunks_  = nullptr;
-    sqlite3_stmt* stmt_delete_chunk_vecs_ = nullptr;
-    sqlite3_stmt* stmt_file_has_chunks_   = nullptr;  // EXISTS chunks(file_id=?) — vectors.db
-
-    // Tree-sitter
-    TSParser* ts_parser_ = nullptr;
-    std::unordered_map<std::string, const TSLanguage*> ts_languages_;
+    // Prepared statements + Tree-sitter + per-language symbol extractors are
+    // grouped here so the destructor stays trivial and so future subsystems
+    // (S4.M ast_search) can share `ts_registry_`.
+    IndexerStatements        stmts_;
+    TreeSitterRegistry       ts_registry_;
+    SymbolExtractorRegistry  symbol_extractors_;
 
     // Serialises process_events callers (WatcherPump background thread vs
     // synchronous test calls). Prepared statements are not safe under

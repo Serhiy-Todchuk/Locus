@@ -219,8 +219,19 @@ add_library(locus_core STATIC
     src/core/locus_session.cpp
     src/database.cpp
     src/file_watcher.cpp
-    src/indexer.cpp
-    src/index_query.cpp
+    src/index/indexer.cpp
+    src/index/index_query.cpp
+    src/index/chunker.cpp
+    src/index/tree_sitter_registry.cpp
+    src/index/symbol_extractor.cpp
+    src/index/symbol_extractors/cpp_extractor.cpp
+    src/index/symbol_extractors/python_extractor.cpp
+    src/index/symbol_extractors/js_ts_extractor.cpp
+    src/index/symbol_extractors/go_extractor.cpp
+    src/index/symbol_extractors/rust_extractor.cpp
+    src/index/symbol_extractors/java_extractor.cpp
+    src/index/symbol_extractors/csharp_extractor.cpp
+    src/index/prepared_statements.cpp
     src/sse_parser.cpp
     src/llm_client.cpp
     src/tool_registry.cpp
@@ -252,7 +263,6 @@ add_library(locus_core STATIC
     src/extractors/xlsx_extractor.cpp
     src/extractors/zip_reader.cpp
     src/embedder.cpp
-    src/chunker.cpp
     src/embedding_worker.cpp
     src/reranker.cpp
 )

@@ -1,5 +1,5 @@
 #include "file_watcher.h"
-#include "glob_match.h"
+#include "index/glob_match.h"
 
 #include <spdlog/spdlog.h>
 #include <efsw/efsw.hpp>

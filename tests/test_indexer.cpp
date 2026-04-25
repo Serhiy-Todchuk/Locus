@@ -1,7 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "database.h"
-#include "indexer.h"
+#include "index/indexer.h"
 #include "workspace.h"
 
 #include <sqlite3.h>

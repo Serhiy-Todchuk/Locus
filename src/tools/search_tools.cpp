@@ -3,8 +3,8 @@
 
 #include "core/workspace_services.h"
 #include "embedding_worker.h"
-#include "glob_match.h"
-#include "index_query.h"
+#include "index/glob_match.h"
+#include "index/index_query.h"
 #include "reranker.h"
 #include "workspace.h"
 

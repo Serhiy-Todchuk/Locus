@@ -1,8 +1,8 @@
 #include "core/locus_session.h"
 
 #include "agent/system_prompt.h"
-#include "index_query.h"
-#include "indexer.h"
+#include "index/index_query.h"
+#include "index/indexer.h"
 #include "tools/tools.h"
 
 #include <spdlog/spdlog.h>

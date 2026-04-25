@@ -2,7 +2,7 @@
 
 #include "embedder.h"
 #include "embedding_worker.h"
-#include "index_query.h"
+#include "index/index_query.h"
 #include "workspace.h"
 
 #include <nlohmann/json.hpp>
