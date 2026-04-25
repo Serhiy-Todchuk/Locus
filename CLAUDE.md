@@ -178,7 +178,6 @@ Core is a static lib (`locus_core`). Both `locus` (exe) and `locus_tests` link i
 | `src/extractors/docx_extractor.h/cpp` | Extracts text + `HeadingN` headings from `.docx` (unzip + parse `word/document.xml`). | `DocxExtractor` |
 | `src/extractors/xlsx_extractor.h/cpp` | Extracts text from `.xlsx` sheets (resolves shared strings, emits one heading per sheet). | `XlsxExtractor` |
 | `src/extractors/zip_reader.h/cpp` | miniz helper: read a single named entry from a .zip (shared by docx + xlsx). | `read_zip_entry()` |
-| `src/glob_match.h` | Header-only glob pattern matching for exclude patterns. | `glob_match()` |
 | `src/frontend.h` | Frontend/core interfaces (no .cpp — pure abstract + enums). | `IFrontend`, `ILocusCore`, `ToolDecision`, `CompactionStrategy` |
 | `src/frontend_registry.h` | Thread-safe frontend registry with exception-isolated fan-out. Header-only. | `FrontendRegistry` |
 | `src/agent/conversation.h/cpp` | Conversation history with JSON serialization and compaction. | `ConversationHistory` |
@@ -217,7 +216,7 @@ Core is a static lib (`locus_core`). Both `locus` (exe) and `locus_tests` link i
 
 **Data flow**: `main` → `Workspace` (owns `Database`, `ExtractorRegistry`, `FileWatcher`, `Indexer`, `IndexQuery`; implements `IWorkspaceServices`) → `AgentCore` (owns `ConversationHistory`, `SessionManager`, bridges `ILLMClient` + `IToolRegistry` + `IWorkspaceServices&`) → frontends receive events via `IFrontend` through `FrontendRegistry`.
 
-**Adding a new file format extractor**: Create `src/extractors/<format>_extractor.h/cpp` implementing `ITextExtractor`. Register it in `Workspace::Workspace()` (`workspace.cpp`) with `extractors_->register_extractor(".ext", ...)`. Add the `.cpp` to `locus_core` in `CMakeLists.txt`. No changes to `indexer.cpp` needed.
+**Adding a new file format extractor**: Create `src/extractors/<format>_extractor.h/cpp` implementing `ITextExtractor`. Register it in `Workspace::Workspace()` (`workspace.cpp`) with `extractors_->register_extractor(".ext", ...)`. Add the `.cpp` to `locus_core` in `CMakeLists.txt`. No changes to `src/index/indexer.cpp` needed.
 
 ---
 

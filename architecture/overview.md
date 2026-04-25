@@ -80,11 +80,17 @@ locus/
 │   ├── workspace.{h,cpp}   Workspace class — owns DB, watcher, indexer, query
 │   ├── database.{h,cpp}    SQLite RAII wrapper, schema creation
 │   ├── file_watcher.{h,cpp} efsw wrapper, FileEvent queue with debounce
-│   ├── indexer.{h,cpp}     Full/incremental indexing: FTS5, symbols, headings
-│   ├── index_query.{h,cpp} Read-only query API over the index
+│   ├── index/              Indexing subsystem (S3.D)
+│   │   ├── indexer.{h,cpp}      Full/incremental indexing: orchestrates extractors + symbols + chunks
+│   │   ├── index_query.{h,cpp}  Read-only query API over the index
+│   │   ├── tree_sitter_registry.{h,cpp}  TSParser + name→TSLanguage* map (shared with future ast_search)
+│   │   ├── symbol_extractor.{h,cpp}      ISymbolExtractor + RuleBasedSymbolExtractor + per-language registry
+│   │   ├── symbol_extractors/   Per-language SymbolRule tables (cpp, python, js_ts, go, rust, java, csharp)
+│   │   ├── prepared_statements.{h,cpp}   IndexerStatements RAII holder for the 14 sqlite_stmts
+│   │   ├── chunker.{h,cpp}      Code/document/sliding-window chunking
+│   │   └── glob_match.h         Glob pattern matching for exclude filters
 │   ├── llm_client.{h,cpp}  ILLMClient interface + LMStudioClient (SSE streaming)
-│   ├── sse_parser.{h,cpp}  Incremental SSE line parser
-│   └── glob_match.h        Glob pattern matching for exclude filters
+│   └── sse_parser.{h,cpp}  Incremental SSE line parser
 ├── tests/                  Catch2 test files (one per subsystem)
 ├── tools/                  (reserved for future tool implementations)
 ├── build/                  CMake build output (git-ignored)
