@@ -1,10 +1,6 @@
 #include "locus_app.h"
 #include "locus_frame.h"
 #include "recent_workspaces.h"
-#include "../tools/tools.h"
-#include "../indexer.h"
-#include "../index_query.h"
-#include "../agent/system_prompt.h"
 
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
@@ -185,75 +181,16 @@ bool LocusApp::OnInit()
 
     prompt_semantic_search_if_first_open(locus_dir);
 
-    try {
-        // Open workspace.
-        workspace_ = std::make_unique<Workspace>(ws_path);
+    // Seed LLM config from the user's startup args. Empty/zero fields are
+    // filled in by LocusSession from .locus/config.json + the live model
+    // probe — see src/core/locus_session.cpp.
+    LLMConfig seed;
+    seed.base_url      = endpoint;
+    seed.model         = model;
+    seed.context_limit = context;
 
-        if (!workspace_->locus_md().empty())
-            spdlog::info("LOCUS.md loaded ({} bytes)", workspace_->locus_md().size());
-
-        auto& st = workspace_->indexer().stats();
-        spdlog::info("Index: {} files ({} text, {} binary), {} symbols, {} headings",
-                     st.files_total, st.files_indexed, st.files_binary,
-                     st.symbols_total, st.headings_total);
-
-        // LLM client.
-        LLMConfig llm_cfg;
-        llm_cfg.base_url      = endpoint;
-        llm_cfg.model         = model;
-        llm_cfg.context_limit = context;
-        llm_ = create_llm_client(llm_cfg);
-
-        auto model_info = llm_->query_model_info();
-        if (!model_info.id.empty() && llm_cfg.model.empty()) {
-            llm_cfg.model = model_info.id;
-            spdlog::info("Model auto-detected: {}", llm_cfg.model);
-        }
-        if (context > 0) {
-            llm_cfg.context_limit = context;
-        } else if (model_info.context_length > 0) {
-            llm_cfg.context_limit = model_info.context_length;
-        } else {
-            llm_cfg.context_limit = 8192;
-        }
-        spdlog::info("Context limit: {}", llm_cfg.context_limit);
-
-        // Tool system.
-        tools_ = std::make_unique<ToolRegistry>();
-        register_builtin_tools(*tools_);
-        spdlog::info("Tools: {} registered", tools_->all().size());
-
-        // Agent core.
-        WorkspaceMetadata ws_meta;
-        ws_meta.root          = ws_path;
-        ws_meta.file_count    = static_cast<int>(st.files_total);
-        ws_meta.symbol_count  = static_cast<int>(st.symbols_total);
-        ws_meta.heading_count = static_cast<int>(st.headings_total);
-
-        fs::path sessions_dir    = locus_dir / "sessions";
-        fs::path checkpoints_dir = locus_dir / "checkpoints";
-        agent_ = std::make_unique<AgentCore>(
-            *llm_, *tools_, *workspace_,
-            workspace_->locus_md(), ws_meta, llm_cfg,
-            sessions_dir, checkpoints_dir);
-
-        workspace_->indexer().on_activity =
-            [agent = agent_.get()](const std::string& s, const std::string& d) {
-                agent->emit_index_event(s, d);
-            };
-
-        agent_->start();
-
-        // Create the main frame (wxWidgets owns it after Show).
-        frame_ = new LocusFrame(*agent_, *workspace_);
-        frame_->Show(true);
-
-    } catch (const std::exception& ex) {
-        spdlog::error("Fatal: {}", ex.what());
-        wxMessageBox(wxString::Format("Startup failed: %s", ex.what()),
-                     "Locus", wxOK | wxICON_ERROR);
+    if (!spawn_session(ws_path, seed))
         return false;
-    }
 
 #if defined(_WIN32) && defined(_DEBUG)
     _CrtMemCheckpoint(&s_startup_mem_state);
@@ -277,7 +214,6 @@ void LocusApp::open_workspace(const std::string& path)
     // Record in recent workspaces list.
     RecentWorkspaces::add(ws_path.string());
 
-    // Tear down current subsystems in reverse order.
     spdlog::info("Switching workspace to: {}", ws_path.string());
 
     // Close the old frame (triggers ~LocusFrame which unregisters frontend).
@@ -286,13 +222,10 @@ void LocusApp::open_workspace(const std::string& path)
         frame_ = nullptr;
     }
 
-    if (agent_) {
-        agent_->stop();
-        agent_.reset();
-    }
-    tools_.reset();
-    llm_.reset();
-    workspace_.reset();
+    // ~LocusSession joins the agent thread, then drops tools / llm /
+    // workspace in reverse declaration order — same teardown sequence as
+    // the old hand-wired code.
+    session_.reset();
 
     // Set up .locus/ dir and logging for the new workspace.
     fs::path locus_dir = ws_path / ".locus";
@@ -306,92 +239,38 @@ void LocusApp::open_workspace(const std::string& path)
 
     prompt_semantic_search_if_first_open(locus_dir);
 
-    try {
-        workspace_ = std::make_unique<Workspace>(ws_path);
-
-        if (!workspace_->locus_md().empty())
-            spdlog::info("LOCUS.md loaded ({} bytes)", workspace_->locus_md().size());
-
-        auto& st = workspace_->indexer().stats();
-        spdlog::info("Index: {} files ({} text, {} binary), {} symbols, {} headings",
-                     st.files_total, st.files_indexed, st.files_binary,
-                     st.symbols_total, st.headings_total);
-
-        // Reuse LLM settings from workspace config if available,
-        // otherwise fall back to defaults.
-        LLMConfig llm_cfg;
-        auto& wc = workspace_->config();
-        if (!wc.llm_endpoint.empty())
-            llm_cfg.base_url = wc.llm_endpoint;
-        if (!wc.llm_model.empty())
-            llm_cfg.model = wc.llm_model;
-        if (wc.llm_context_limit > 0)
-            llm_cfg.context_limit = wc.llm_context_limit;
-        if (wc.llm_temperature > 0.0)
-            llm_cfg.temperature = wc.llm_temperature;
-
-        llm_ = create_llm_client(llm_cfg);
-
-        auto model_info = llm_->query_model_info();
-        if (!model_info.id.empty() && llm_cfg.model.empty()) {
-            llm_cfg.model = model_info.id;
-            spdlog::info("Model auto-detected: {}", llm_cfg.model);
-        }
-        if (llm_cfg.context_limit <= 0) {
-            if (model_info.context_length > 0)
-                llm_cfg.context_limit = model_info.context_length;
-            else
-                llm_cfg.context_limit = 8192;
-        }
-        spdlog::info("Context limit: {}", llm_cfg.context_limit);
-
-        tools_ = std::make_unique<ToolRegistry>();
-        register_builtin_tools(*tools_);
-        spdlog::info("Tools: {} registered", tools_->all().size());
-
-        WorkspaceMetadata ws_meta;
-        ws_meta.root          = ws_path;
-        ws_meta.file_count    = static_cast<int>(st.files_total);
-        ws_meta.symbol_count  = static_cast<int>(st.symbols_total);
-        ws_meta.heading_count = static_cast<int>(st.headings_total);
-
-        fs::path sessions_dir    = locus_dir / "sessions";
-        fs::path checkpoints_dir = locus_dir / "checkpoints";
-        agent_ = std::make_unique<AgentCore>(
-            *llm_, *tools_, *workspace_,
-            workspace_->locus_md(), ws_meta, llm_cfg,
-            sessions_dir, checkpoints_dir);
-
-        workspace_->indexer().on_activity =
-            [agent = agent_.get()](const std::string& s, const std::string& d) {
-                agent->emit_index_event(s, d);
-            };
-
-        agent_->start();
-
-        frame_ = new LocusFrame(*agent_, *workspace_);
-        frame_->Show(true);
-
+    // Switching workspaces from the menu doesn't carry CLI overrides; the
+    // new session pulls everything from .locus/config.json + the live
+    // model probe.
+    if (spawn_session(ws_path, LLMConfig{}))
         spdlog::info("Workspace switch complete");
+}
 
+bool LocusApp::spawn_session(const std::filesystem::path& ws_path,
+                             const LLMConfig&             seed_cfg)
+{
+    try {
+        session_ = std::make_unique<LocusSession>(ws_path, seed_cfg);
     } catch (const std::exception& ex) {
-        spdlog::error("Workspace switch failed: {}", ex.what());
+        spdlog::error("Session start failed: {}", ex.what());
         wxMessageBox(wxString::Format("Failed to open workspace: %s", ex.what()),
                      "Locus", wxOK | wxICON_ERROR);
+        session_.reset();
+        return false;
     }
+
+    frame_ = new LocusFrame(session_->agent(), session_->workspace());
+    frame_->Show(true);
+    return true;
 }
 
 int LocusApp::OnExit()
 {
     spdlog::info("Locus GUI shutting down");
 
-    if (agent_) {
-        agent_->stop();
-        agent_.reset();
-    }
-    tools_.reset();
-    llm_.reset();
-    workspace_.reset();
+    // ~LocusSession stops the agent thread and tears down tools/llm/workspace
+    // in reverse declaration order.
+    session_.reset();
 
     spdlog::shutdown();
     int rc = wxApp::OnExit();

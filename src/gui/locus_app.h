@@ -1,9 +1,7 @@
 #pragma once
 
-#include "../workspace.h"
-#include "../agent/agent_core.h"
+#include "../core/locus_session.h"
 #include "../llm_client.h"
-#include "../tool_registry.h"
 
 #include <wx/wx.h>
 
@@ -13,9 +11,10 @@ namespace locus {
 
 class LocusFrame;
 
-// wxApp entry point. Owns the core subsystems (workspace, LLM, agent) and
-// the main frame. Single-instance enforcement is per-workspace via the
-// Workspace's internal `WorkspaceLock` (file lock inside `.locus/`), not a
+// wxApp entry point. Owns one `LocusSession` (workspace + LLM + tools +
+// agent, bundled — see src/core/locus_session.h) plus the main frame.
+// Single-instance enforcement is per-workspace via the Workspace's
+// internal `WorkspaceLock` (file lock inside `.locus/`), not a
 // process-global wxSingleInstanceChecker — so two GUIs on different folders
 // coexist, but two on the same (or nested) folder fail cleanly.
 class LocusApp : public wxApp {
@@ -24,17 +23,20 @@ public:
     int  OnExit() override;
 
     // Switch to a different workspace folder. Tears down the current
-    // agent/frame and reinitializes everything with the new path.
+    // session/frame and reinitializes everything with the new path.
     void open_workspace(const std::string& path);
 
 private:
     void init_logging(const std::filesystem::path& locus_dir);
 
-    // Core subsystems (owned, constructed in OnInit).
-    std::unique_ptr<Workspace>    workspace_;
-    std::unique_ptr<ILLMClient>   llm_;
-    std::unique_ptr<ToolRegistry> tools_;
-    std::unique_ptr<AgentCore>    agent_;
+    // Build a fresh session + frame for `ws_path`. seed_cfg is the LLM
+    // override layer (CLI args at startup; empty on workspace switch).
+    // On failure shows a wxMessageBox and leaves session_ null.
+    bool spawn_session(const std::filesystem::path& ws_path,
+                       const LLMConfig&             seed_cfg);
+
+    // The whole core-subsystem bundle (owned).
+    std::unique_ptr<LocusSession> session_;
 
     LocusFrame* frame_ = nullptr;  // owned by wxWidgets
 };
