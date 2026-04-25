@@ -24,6 +24,7 @@ Tag filters match [Catch2 test tags](https://github.com/catchorg/Catch2/blob/dev
 | `[outline]`  | [test_int_outline.cpp](test_int_outline.cpp)    | `get_file_outline` against every extractor — `.md`, `.pdf` (PDFium), `.docx` (miniz+pugixml), `.xlsx`. |
 | `[fs]`       | [test_int_fs_lifecycle.cpp](test_int_fs_lifecycle.cpp) | Full lifecycle in a scratch dir: `write_file` → `read_file` + `edit_file` (with `replace_all`) → indexer picks up change → `delete_file`. Also covers `list_directory`. |
 | `[shell]`    | [test_int_shell.cpp](test_int_shell.cpp)        | `run_command` executes and captures stdout. |
+| `[bg]`       | [test_int_bg.cpp](test_int_bg.cpp)              | S4.I background-process tools — `run_command_bg` + `read_process_output` + `list_processes` + `stop_process` chained in single turns. |
 | `[ask_user]` | [test_int_interactive.cpp](test_int_interactive.cpp) | `ask_user` routes through the approval gate, harness supplies a scripted response via `ToolDecision::modify`. |
 | `[slash]`    | [test_int_slash.cpp](test_int_slash.cpp)        | `/help` and `/read_file` routed through `SlashCommandDispatcher`. |
 
@@ -76,6 +77,7 @@ build\release\tests\integration\Release\locus_integration_tests.exe "[search]"
 build\release\tests\integration\Release\locus_integration_tests.exe "[outline]"
 build\release\tests\integration\Release\locus_integration_tests.exe "[fs]"
 build\release\tests\integration\Release\locus_integration_tests.exe "[shell]"
+build\release\tests\integration\Release\locus_integration_tests.exe "[bg]"
 build\release\tests\integration\Release\locus_integration_tests.exe "[ask_user]"
 build\release\tests\integration\Release\locus_integration_tests.exe "[slash]"
 

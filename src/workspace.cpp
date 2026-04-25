@@ -13,6 +13,7 @@
 #include "file_watcher.h"
 #include "index_query.h"
 #include "indexer.h"
+#include "process_registry.h"
 #include "reranker.h"
 
 #include <nlohmann/json.hpp>
@@ -118,11 +119,19 @@ Workspace::Workspace(const fs::path& root)
     watcher_pump_ = std::make_unique<WatcherPump>(*watcher_, *indexer_);
     watcher_pump_->start();
 
+    // Background-process registry (S4.I). Empty at startup; tools spawn into it.
+    processes_ = std::make_unique<ProcessRegistry>(
+        root_, static_cast<std::size_t>(config_.process_output_buffer_kb) * 1024);
+
     spdlog::info("Workspace opened: {}", root_.string());
 }
 
 Workspace::~Workspace()
 {
+    // Terminate any background processes the agent left running before the
+    // subsystems they might be talking to (file watcher, indexer) go away.
+    processes_.reset();
+
     // Stop the pump first so no late tick fires into a half-destructed
     // indexer. The pump's stop() also performs a final synchronous flush so
     // edits made right before close still get indexed.
@@ -355,6 +364,8 @@ static WorkspaceConfig config_from_json(const json& j)
         auto& ag = j["agent"];
         if (ag.contains("tool_manifest_warn_tokens"))
             cfg.tool_manifest_warn_tokens = ag["tool_manifest_warn_tokens"].get<int>();
+        if (ag.contains("process_output_buffer_kb"))
+            cfg.process_output_buffer_kb = ag["process_output_buffer_kb"].get<int>();
     }
 
     if (j.contains("tool_approvals") && j["tool_approvals"].is_object()) {
@@ -398,7 +409,8 @@ static json config_to_json(const WorkspaceConfig& cfg)
             {"context_limit", cfg.llm_context_limit}
         }},
         {"agent", {
-            {"tool_manifest_warn_tokens", cfg.tool_manifest_warn_tokens}
+            {"tool_manifest_warn_tokens", cfg.tool_manifest_warn_tokens},
+            {"process_output_buffer_kb",  cfg.process_output_buffer_kb}
         }},
         {"tool_approvals", approvals}
     };

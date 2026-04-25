@@ -15,6 +15,11 @@ void register_builtin_tools(IToolRegistry& registry)
     registry.register_tool(std::make_unique<SearchTool>());
     registry.register_tool(std::make_unique<GetFileOutlineTool>());
     registry.register_tool(std::make_unique<RunCommandTool>());
+    // S4.I — long-running shell processes.
+    registry.register_tool(std::make_unique<RunCommandBgTool>());
+    registry.register_tool(std::make_unique<ReadProcessOutputTool>());
+    registry.register_tool(std::make_unique<StopProcessTool>());
+    registry.register_tool(std::make_unique<ListProcessesTool>());
     registry.register_tool(std::make_unique<AskUserTool>());
 }
 

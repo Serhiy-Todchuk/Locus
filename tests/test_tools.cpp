@@ -52,7 +52,7 @@ TEST_CASE("ToolRegistry: build_schema_json produces valid OpenAI schema", "[s0.6
     // S3.L: 4 search tools collapsed into a single unified `search` face (9 total).
     // S4.A: +1 `edit_file` (exact-string edits, single or atomic batch),
     //       -1 `create_file` (merged into `write_file` with optional `overwrite`).
-    REQUIRE(schema.size() == 9);
+    REQUIRE(schema.size() == 13);
 
     // One `search` entry, no split search_* tools.
     bool has_search = false;
@@ -95,7 +95,7 @@ TEST_CASE("ToolRegistry: all returns all tools", "[s0.6]")
     locus::register_builtin_tools(registry);
 
     auto all = registry.all();
-    REQUIRE(all.size() == 9);
+    REQUIRE(all.size() == 13);
 }
 
 TEST_CASE("ToolRegistry: parse_tool_call handles valid and empty JSON", "[s0.6]")
@@ -468,6 +468,9 @@ TEST_CASE("ITool defaults: available()=true, visible_in_mode only in agent", "[s
     auto agent = registry.build_schema_json(ws, locus::ToolMode::agent);
     auto plan  = registry.build_schema_json(ws, locus::ToolMode::plan);
 
+    // 9 baseline + 4 background-process tools (S4.I). The bg tools mark
+    // themselves unavailable when the workspace has no ProcessRegistry,
+    // which the FakeWorkspaceServices used here does not.
     REQUIRE(agent.size() == 9);
     REQUIRE(plan.size()  == 0);  // defaults hide everything in plan mode
 }
@@ -490,6 +493,12 @@ TEST_CASE("Tool approval policies are correct", "[s0.6]")
     REQUIRE(registry.find("edit_file")->approval_policy() == locus::ToolApprovalPolicy::ask);
     REQUIRE(registry.find("delete_file")->approval_policy() == locus::ToolApprovalPolicy::ask);
     REQUIRE(registry.find("run_command")->approval_policy() == locus::ToolApprovalPolicy::ask);
+
+    // S4.I — background-process tools.
+    REQUIRE(registry.find("run_command_bg")->approval_policy() == locus::ToolApprovalPolicy::ask);
+    REQUIRE(registry.find("read_process_output")->approval_policy() == locus::ToolApprovalPolicy::auto_approve);
+    REQUIRE(registry.find("stop_process")->approval_policy() == locus::ToolApprovalPolicy::ask);
+    REQUIRE(registry.find("list_processes")->approval_policy() == locus::ToolApprovalPolicy::auto_approve);
 }
 
 // -- EditFileTool tests (S4.A) ---------------------------------------------

@@ -6,6 +6,7 @@ namespace locus {
 
 class EmbeddingWorker;
 class IndexQuery;
+class ProcessRegistry;
 class Reranker;
 class Workspace;
 
@@ -25,6 +26,7 @@ public:
     // Optional subsystems.
     virtual EmbeddingWorker* embedder()  { return nullptr; }
     virtual Reranker*        reranker()  { return nullptr; }
+    virtual ProcessRegistry* processes() { return nullptr; }
     virtual Workspace*       workspace() { return nullptr; }
 };
 

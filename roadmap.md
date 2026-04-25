@@ -121,7 +121,7 @@ Listed in execution order. Letters are identity, not sequence (retained for link
 | [S4.P](roadmap/M4/S4.P-grep.md) | Grep Tool (Regex over Raw Content) ✔ |
 | [S4.J](roadmap/M4/S4.J-embeddings-reranker.md) | Better Embeddings + Reranker ✔ |
 | [S4.K](roadmap/M4/S4.K-retrieval-eval.md) | Retrieval Evaluation Harness ✔ |
-| [S4.I](roadmap/M4/S4.I-background-commands.md) | Background / Long-Running Commands |
+| [S4.I](roadmap/M4/S4.I-background-commands.md) | Background / Long-Running Commands ✔ |
 | [S4.S](roadmap/M4/S4.S-telemetry.md) | Telemetry & Agent Performance Metrics |
 | [S4.L](roadmap/M4/S4.L-git-native.md) | Git-Native Features |
 | [S4.M](roadmap/M4/S4.M-ast-search.md) | Tree-Sitter Query Tool (Structural Grep) |
