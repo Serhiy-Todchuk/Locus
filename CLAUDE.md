@@ -124,7 +124,12 @@ file events, and diagnostic detail (visible under `-verbose`). `spdlog::warn`/`e
 `snake_case` for struct members. Constants: `k_name` or `constexpr`.
 
 **Tests**: Catch2. One `test_<topic>.cpp` per subsystem. Tag tests with stage: `[s0.2]`, `[s0.3]`.
-Test names use ASCII only (no Unicode — CTest mangles it on Windows).
+Test names use ASCII only (no Unicode - CTest mangles it on Windows).
+
+**No em-dashes anywhere.** Use ASCII `-` (or `--`) in code, comments, commit messages, docs,
+test names, and log strings. Em-dashes (`—`, U+2014) break ctest test-name dispatch on Windows
+(no CP437 mapping) and complicate grep/diff. This rule applies to anything written into the
+repo, including this file.
 
 **Static CRT**: vcpkg triplet `x64-windows-static` with custom overlay at `cmake/triplets/`
 that adds `-D_USE_STD_VECTOR_ALGORITHMS=0` to work around missing SIMD intrinsics in `libcpmt.lib`.
