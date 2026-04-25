@@ -2,7 +2,7 @@
 #include "tools/shared.h"
 
 #include "core/workspace_services.h"
-#include "index_query.h"
+#include "index/index_query.h"
 
 #include <spdlog/spdlog.h>
 

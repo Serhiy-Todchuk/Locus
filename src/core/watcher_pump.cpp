@@ -1,5 +1,5 @@
 #include "watcher_pump.h"
-#include "../indexer.h"
+#include "../index/indexer.h"
 
 #include <spdlog/spdlog.h>
 

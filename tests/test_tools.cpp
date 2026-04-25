@@ -6,7 +6,7 @@
 #include "tool_registry.h"
 #include "tools/tools.h"
 #include "workspace.h"
-#include "index_query.h"
+#include "index/index_query.h"
 #include "support/fake_workspace_services.h"
 
 #include <filesystem>

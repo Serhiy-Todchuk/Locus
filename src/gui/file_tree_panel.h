@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../index_query.h"
+#include "../index/index_query.h"
 
 #include <wx/wx.h>
 #include <wx/treectrl.h>

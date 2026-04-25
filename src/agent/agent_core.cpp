@@ -1,6 +1,6 @@
 #include "agent_core.h"
 
-#include "index_query.h"
+#include "index/index_query.h"
 #include "tool_registry.h"
 #include "workspace.h"
 

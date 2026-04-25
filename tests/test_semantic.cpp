@@ -1,10 +1,10 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
-#include "chunker.h"
 #include "embedder.h"
 #include "extractors/text_extractor.h"
-#include "index_query.h"
+#include "index/chunker.h"
+#include "index/index_query.h"
 
 #include <cmath>
 #include <filesystem>

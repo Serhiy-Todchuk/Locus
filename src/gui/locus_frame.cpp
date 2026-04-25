@@ -3,7 +3,7 @@
 
 #include "../core/watcher_pump.h"
 #include "../embedding_worker.h"
-#include "../indexer.h"
+#include "../index/indexer.h"
 
 #include <spdlog/spdlog.h>
 

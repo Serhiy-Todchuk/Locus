@@ -11,8 +11,8 @@
 #include "extractors/pdf_extractor.h"
 #include "extractors/xlsx_extractor.h"
 #include "file_watcher.h"
-#include "index_query.h"
-#include "indexer.h"
+#include "index/index_query.h"
+#include "index/indexer.h"
 #include "process_registry.h"
 #include "reranker.h"
 

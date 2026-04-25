@@ -2,7 +2,7 @@
 
 #include "core/watcher_pump.h"
 #include "embedding_worker.h"
-#include "indexer.h"
+#include "index/indexer.h"
 #include "tools/tools.h"
 
 #include <spdlog/sinks/rotating_file_sink.h>

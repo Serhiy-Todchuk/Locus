@@ -1,6 +1,6 @@
 #include "harness_fixture.h"
 
-#include "indexer.h"
+#include "index/indexer.h"
 
 #include <catch2/catch_test_macros.hpp>
 
