@@ -235,9 +235,11 @@ add_library(locus_core STATIC
     src/llm/sse_parser.cpp
     src/llm/llm_client.cpp
     src/llm/openai_transport.cpp
+    src/llm/xml_tool_call_extractor.cpp
     src/llm/stream_decoders/openai_decoder.cpp
     src/llm/stream_decoders/qwen_xml_decoder.cpp
     src/llm/stream_decoders/claude_xml_decoder.cpp
+    src/llm/stream_decoders/auto_decoder.cpp
     src/llm/llm_router.cpp
     src/llm/token_counter.cpp
     src/tool_registry.cpp

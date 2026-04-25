@@ -129,7 +129,7 @@ Listed in execution order. Letters are identity, not sequence (retained for link
 | [S4.U](roadmap/M4/S4.U-subagents.md) | Subagent / Task Delegation |
 | [S4.Q](roadmap/M4/S4.Q-multi-model.md) | Multi-Model Split (Weak + Strong) |
 | [S4.F](roadmap/M4/S4.F-kv-cache.md) | KV / Prompt Cache Preservation |
-| [S4.N](roadmap/M4/S4.N-tool-call-robustness.md) | Tool-Call Robustness Across Model Families |
+| [S4.N](roadmap/M4/S4.N-tool-call-robustness.md) | Tool-Call Robustness Across Model Families ✔ |
 | [S4.E](roadmap/M4/S4.E-lsp.md) | LSP Integration |
 | [S4.R](roadmap/M4/S4.R-memory-bank.md) | Memory Bank / Session Scratchpad |
 | [S4.G](roadmap/M4/S4.G-mcp.md) | MCP (Model Context Protocol) Client |

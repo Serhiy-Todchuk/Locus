@@ -48,7 +48,8 @@ AgentCore::AgentCore(ILLMClient& llm,
     , llm_config_(llm_config)
     , sessions_(sessions_dir)
 {
-    base_system_prompt_ = SystemPromptBuilder::build(locus_md, ws_meta, tools);
+    base_system_prompt_ = SystemPromptBuilder::build(
+        locus_md, ws_meta, tools, llm_config_.tool_format);
     system_prompt_ = base_system_prompt_;
 
     activity_   = std::make_unique<ActivityLog>(frontends_);

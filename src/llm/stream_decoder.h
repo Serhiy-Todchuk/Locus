@@ -45,6 +45,13 @@ public:
     // Returns false to abort the stream early.
     virtual bool decode(const std::string& payload, const StreamDecoderSink& sink) = 0;
 
+    // Stream is closing -- emit any text or tool-call deltas the decoder
+    // was holding back waiting for more bytes (XML decoders that buffer
+    // a few bytes to disambiguate partial-tag prefixes). Called once
+    // after the transport finishes, before the client emits its own
+    // on_complete. No-op for stateless decoders (OpenAI).
+    virtual void finish_stream(const StreamDecoderSink& /*sink*/) {}
+
     // Reset any per-stream accumulator state. No-op for stateless
     // decoders (OpenAI). XML decoders flush partial-tag buffers here.
     virtual void reset() {}
