@@ -267,9 +267,11 @@ int main(int argc, char* argv[])
         ws_meta.symbol_count  = static_cast<int>(st.symbols_total);
         ws_meta.heading_count = static_cast<int>(st.headings_total);
 
-        fs::path sessions_dir = locus_dir / "sessions";
+        fs::path sessions_dir    = locus_dir / "sessions";
+        fs::path checkpoints_dir = locus_dir / "checkpoints";
         locus::AgentCore agent(*llm, tool_registry, ws,
-                               ws.locus_md(), ws_meta, llm_cfg, sessions_dir);
+                               ws.locus_md(), ws_meta, llm_cfg,
+                               sessions_dir, checkpoints_dir);
 
         // CLI frontend.
         locus::CliFrontend cli(agent);

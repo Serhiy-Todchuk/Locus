@@ -13,13 +13,31 @@
 
 namespace locus {
 
+// Generate a timestamp-based session id like SessionManager — keeps the on-
+// disk layout under .locus/checkpoints/<session_id>/ readable and sortable.
+static std::string make_session_id()
+{
+    auto now = std::chrono::system_clock::now();
+    auto t = std::chrono::system_clock::to_time_t(now);
+    std::tm tm{};
+#ifdef _WIN32
+    localtime_s(&tm, &t);
+#else
+    localtime_r(&t, &tm);
+#endif
+    std::ostringstream os;
+    os << std::put_time(&tm, "%Y-%m-%d_%H%M%S");
+    return os.str();
+}
+
 AgentCore::AgentCore(ILLMClient& llm,
                      IToolRegistry& tools,
                      IWorkspaceServices& services,
                      const std::string& locus_md,
                      const WorkspaceMetadata& ws_meta,
                      const LLMConfig& llm_config,
-                     const std::filesystem::path& sessions_dir)
+                     const std::filesystem::path& sessions_dir,
+                     const std::filesystem::path& checkpoints_dir)
     : llm_(llm)
     , tools_(tools)
     , services_(services)
@@ -36,6 +54,14 @@ AgentCore::AgentCore(ILLMClient& llm,
     dispatcher_ = std::make_unique<ToolDispatcher>(tools_, services_, *activity_,
                                                    frontends_, cancel_requested_);
     slash_      = std::make_unique<SlashCommandDispatcher>(tools_, services_);
+
+    session_id_ = make_session_id();
+    turn_id_    = 0;
+    if (!checkpoints_dir.empty()) {
+        checkpoints_ = std::make_unique<CheckpointStore>(checkpoints_dir);
+        spdlog::info("AgentCore: checkpoints at {} (session '{}')",
+                     checkpoints_dir.string(), session_id_);
+    }
 
     int sys_tokens = ILLMClient::estimate_tokens(system_prompt_);
     spdlog::info("AgentCore: system prompt ~{} tokens, context limit {}",
@@ -290,6 +316,14 @@ void AgentCore::process_message(const std::string& content)
         return;
     }
 
+    // Bump the turn counter and arm the dispatcher to snapshot any mutating
+    // tool call. Slash commands above don't bump — they bypass the dispatcher.
+    ++turn_id_;
+    if (checkpoints_) {
+        dispatcher_->set_turn_context(checkpoints_.get(), session_id_, turn_id_);
+        checkpoints_->gc_session(session_id_);
+    }
+
     history_.add({MessageRole::user, content});
 
     activity_->emit(ActivityKind::user_message,
@@ -348,6 +382,17 @@ void AgentCore::process_message(const std::string& content)
         frontends_.broadcast([](IFrontend& fe) {
             fe.on_error("Agent reached the maximum number of tool call rounds.");
         });
+    }
+
+    // Drop the turn context so any background activity past this point won't
+    // accidentally tag a snapshot to the just-finished turn. (Inter-turn
+    // mutations from outside the agent thread are rare, but we keep the
+    // window tight.) If the turn touched no files, drop the (still-empty)
+    // turn directory so /undo doesn't see phantom no-op turns.
+    if (checkpoints_) {
+        if (checkpoints_->entry_count(session_id_, turn_id_) == 0)
+            checkpoints_->drop_turn(session_id_, turn_id_);
+        dispatcher_->set_turn_context(nullptr, {}, 0);
     }
 
     frontends_.broadcast([](IFrontend& fe) { fe.on_turn_complete(); });
@@ -415,12 +460,71 @@ void AgentCore::reset_conversation()
     system_prompt_ = compose_system_prompt();
     history_.add({MessageRole::system, system_prompt_});
     budget_->reset();
+
+    // Drop checkpoint history with the conversation; start a fresh session
+    // so the on-disk layout doesn't keep accumulating across resets.
+    if (checkpoints_) {
+        checkpoints_->drop_session(session_id_);
+        session_id_ = make_session_id();
+        turn_id_ = 0;
+    }
+
     spdlog::info("AgentCore: conversation reset");
 
     frontends_.broadcast([&](IFrontend& fe) {
         fe.on_context_meter(current_token_count(), llm_config_.context_limit);
     });
     frontends_.broadcast([](IFrontend& fe) { fe.on_session_reset(); });
+}
+
+// -- undo_turn / list_checkpoints (S4.B) -------------------------------------
+
+std::string AgentCore::undo_turn(int turn_id)
+{
+    if (!checkpoints_)
+        return "Undo unavailable: checkpoint store not configured for this workspace.";
+
+    // turn_id == 0 → resolve to the highest turn that actually has a manifest.
+    int target = turn_id;
+    if (target <= 0) {
+        auto turns = checkpoints_->list_turns(session_id_);
+        if (turns.empty())
+            return "Nothing to undo: no checkpointed turns in this session.";
+        target = turns.back().turn_id;
+    }
+
+    auto info = checkpoints_->read_turn(session_id_, target);
+    if (!info)
+        return "Nothing to undo: turn " + std::to_string(target) +
+               " has no checkpoint.";
+
+    auto result = checkpoints_->restore_turn(session_id_, target,
+                                             services_.root());
+    // Drop the manifest so the same turn can't be undone twice and
+    // list_checkpoints() reflects the current state of the world.
+    checkpoints_->drop_turn(session_id_, target);
+
+    std::ostringstream summary;
+    summary << "Undo turn " << target << ": "
+            << result.restored << " restored, "
+            << result.deleted << " deleted, "
+            << result.skipped << " skipped";
+    if (!result.errors.empty()) {
+        summary << "\nErrors:";
+        for (const auto& e : result.errors) summary << "\n  - " << e;
+    }
+
+    activity_->emit(ActivityKind::index_event,
+                    "Undid turn " + std::to_string(target),
+                    summary.str());
+    spdlog::info("AgentCore: {}", summary.str());
+    return summary.str();
+}
+
+std::vector<TurnInfo> AgentCore::list_checkpoints() const
+{
+    if (!checkpoints_) return {};
+    return checkpoints_->list_turns(session_id_);
 }
 
 // -- save_session / load_session ---------------------------------------------
@@ -458,6 +562,36 @@ int AgentCore::current_token_count() const
 
 bool AgentCore::try_slash_command(const std::string& content)
 {
+    // Built-in non-tool slash commands handled directly by AgentCore.
+    // /undo  → revert the last checkpointed turn (or a specific id).
+    auto trim_left = [](std::string_view s) {
+        while (!s.empty() && (s.front() == ' ' || s.front() == '\t')) s.remove_prefix(1);
+        return std::string(s);
+    };
+    std::string s = trim_left(content);
+    if (!s.empty() && s.front() == '/') {
+        // Split "/cmd rest"
+        size_t end = s.find_first_of(" \t", 1);
+        std::string cmd = s.substr(1, end == std::string::npos ? std::string::npos : end - 1);
+        std::string rest = end == std::string::npos ? std::string{}
+                                                    : trim_left(s.substr(end));
+        if (cmd == "undo") {
+            int target = 0;
+            if (!rest.empty()) {
+                try { target = std::stoi(rest); }
+                catch (...) {
+                    frontends_.broadcast([&](IFrontend& fe) {
+                        fe.on_error("Usage: /undo [turn_id]");
+                    });
+                    return true;
+                }
+            }
+            std::string msg = undo_turn(target);
+            frontends_.broadcast([&](IFrontend& fe) { fe.on_token(msg); });
+            return true;
+        }
+    }
+
     return slash_->try_dispatch(
         content,
         [this](std::string s) {

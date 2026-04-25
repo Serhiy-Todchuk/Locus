@@ -138,6 +138,11 @@ public:
     // late-joining frontends (e.g. web clients) to catch up.
     virtual std::vector<ActivityEvent> get_activity(uint64_t since_id = 0) const = 0;
 
+    // Roll back every file mutation from a single agent turn (S4.B).
+    // turn_id == 0 means "the most recent turn that has a checkpoint".
+    // Returns a human-readable summary of what was restored / skipped.
+    virtual std::string undo_turn(int turn_id = 0) = 0;
+
     // Pin a workspace file to the conversation. The file's path + outline are
     // injected into the system prompt so the LLM is aware of it on every turn.
     // clear_attached_context() removes the pin.

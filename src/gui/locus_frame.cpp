@@ -228,7 +228,14 @@ void LocusFrame::setup_aui_layout()
             agent_.send_message(msg);
         },
         [this]() { show_compaction_dialog(); },
-        [this]() { agent_.cancel_turn(); });
+        [this]() { agent_.cancel_turn(); },
+        [this]() {
+            // Undo the most recent checkpointed turn. Surface the summary as
+            // a system note in chat — the same string the /undo command emits.
+            std::string summary = agent_.undo_turn();
+            wxString html = "<pre>" + wxString::FromUTF8(summary) + "</pre>";
+            chat_panel_->append_system_note(html);
+        });
 
     // Chip "✕" → detach the pinned file from the conversation context.
     chat_panel_->set_on_detach([this]() {
@@ -244,6 +251,7 @@ void LocusFrame::setup_aui_layout()
             {"save",     "Save the current session to disk",      false},
             {"settings", "Open the Settings dialog",              false},
             {"clear",    "Alias for /reset",                      false},
+            {"undo",     "Revert files mutated by the last turn", false},
         };
         for (const auto& c : agent_.slash_dispatcher().complete("")) {
             std::string desc = c.signature.empty()

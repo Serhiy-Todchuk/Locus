@@ -1,6 +1,8 @@
 #include "tool_dispatcher.h"
 
 #include "activity_log.h"
+#include "checkpoint_store.h"
+#include "tools/shared.h"
 #include "workspace.h"
 
 #include <spdlog/spdlog.h>
@@ -33,6 +35,36 @@ void ToolDispatcher::submit_decision(ToolDecision decision,
 void ToolDispatcher::wake()
 {
     decision_cv_.notify_all();
+}
+
+void ToolDispatcher::set_turn_context(CheckpointStore* store,
+                                      std::string session_id,
+                                      int turn_id)
+{
+    checkpoints_     = store;
+    checkpoint_sid_  = std::move(session_id);
+    checkpoint_turn_ = turn_id;
+}
+
+void ToolDispatcher::maybe_snapshot(const ToolCall& call)
+{
+    if (!checkpoints_ || checkpoint_sid_.empty()) return;
+
+    // Map tool name -> action label. Only mutating tools snapshot.
+    std::string action;
+    if      (call.tool_name == "edit_file")   action = "edit";
+    else if (call.tool_name == "write_file")  action = "write";
+    else if (call.tool_name == "delete_file") action = "delete";
+    else                                      return;
+
+    std::string rel = call.args.value("path", "");
+    if (rel.empty()) return;
+
+    auto full = tools::resolve_path(services_, rel);
+    if (full.empty()) return;  // outside workspace; tool will reject too
+
+    checkpoints_->snapshot_before(checkpoint_sid_, checkpoint_turn_,
+                                  services_.root(), full, action);
 }
 
 void ToolDispatcher::dispatch(const ToolCall& call, const AppendFn& append_result)
@@ -141,6 +173,10 @@ void ToolDispatcher::dispatch(const ToolCall& call, const AppendFn& append_resul
                          call.tool_name);
         }
     }
+
+    // Snapshot the file *after* approval/modification but *before* the tool
+    // mutates anything — so an Undo restores the bytes the user actually saw.
+    maybe_snapshot(effective_call);
 
     auto result = tool->execute(effective_call, services_);
 
