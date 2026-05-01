@@ -222,6 +222,13 @@ void LocusApp::open_workspace(const std::string& path)
         frame_ = nullptr;
     }
 
+    // Drain the pending-delete queue so the old frame is actually gone before
+    // session_.reset() frees the MetricsAggregator that MetricsView's 1 s
+    // timer still references. Without this, a nested event loop spun up by
+    // prompt_semantic_search_if_first_open() below (or any other modal in
+    // this window) would fire the timer against freed mutex memory.
+    DeletePendingObjects();
+
     // ~LocusSession joins the agent thread, then drops tools / llm /
     // workspace in reverse declaration order — same teardown sequence as
     // the old hand-wired code.

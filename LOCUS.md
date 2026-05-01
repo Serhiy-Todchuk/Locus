@@ -30,11 +30,20 @@ Target: instant UI, low RAM, low CPU. User rejects bloat. Prefer direct code ove
 
 ## Build + test (Windows MSVC static CRT)
 
+Build dirs are per-config: `build/debug/` and `build/release/`. Plain `build/` is wrong.
+
 ```
-cmake --build build --config Debug
-build/Debug/locus_tests.exe
-build/Debug/locus.exe . -verbose
+cmake --build build/debug --config Debug
+build/debug/tests/Debug/locus_tests.exe
+build/debug/Debug/locus.exe . -verbose          # CLI
+build/debug/Debug/locus_gui.exe .               # GUI
 ```
+
+Swap `debug`->`release` and `Debug`->`Release` for Release. Targets:
+`locus`, `locus_gui`, `locus_tests` build by default;
+`locus_integration_tests` and `locus_retrieval_eval` are off by default,
+add `--target <name>` to build them. Full reference: `CLAUDE.md` ->
+*Build & Test Commands* and `CONTRIBUTING.md`.
 
 `-verbose` writes trace to `.locus/locus.log`. Read the log after changes.
 

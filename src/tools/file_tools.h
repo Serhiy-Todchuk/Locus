@@ -32,10 +32,12 @@ class WriteFileTool : public ITool {
 public:
     std::string name()        const override { return "write_file"; }
     std::string description() const override {
-        return "Create a new file at the given path. Parent directories are created "
-               "automatically. Fails if the file already exists unless `overwrite=true` "
-               "is set — set that only when you intend to replace the whole file. "
-               "For modifying existing files, prefer `edit_file`.";
+        return "Create a new file at the given path. Any missing parent directories "
+               "are created automatically -- there is no separate mkdir / "
+               "create_directory tool, write_file is sufficient for scaffolding a "
+               "fresh project tree. Fails if the file already exists unless "
+               "`overwrite=true` is set -- set that only when you intend to replace "
+               "the whole file. For modifying existing files, prefer `edit_file`.";
     }
     std::vector<ToolParam> params() const override {
         return {
