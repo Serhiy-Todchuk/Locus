@@ -26,6 +26,10 @@ void merge_workspace_defaults(LLMConfig& cfg, const WorkspaceConfig& wc)
         cfg.model = wc.llm_model;
     if (cfg.context_limit <= 0 && wc.llm_context_limit > 0)
         cfg.context_limit = wc.llm_context_limit;
+    // Stall watchdog. Same shape as context_limit: workspace value wins
+    // when positive; the LLMConfig default (180s) holds otherwise.
+    if (wc.llm_timeout_ms > 0)
+        cfg.timeout_ms = wc.llm_timeout_ms;
     // Temperature has a non-zero default (0.7) so we can't tell "user set it"
     // from "default". Treat any non-default workspace value as an override.
     if (wc.llm_temperature > 0.0 && wc.llm_temperature != cfg.temperature)

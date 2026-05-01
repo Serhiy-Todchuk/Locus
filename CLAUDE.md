@@ -144,6 +144,122 @@ This flag must be set both in the triplet (for vcpkg deps) and in `CMakeLists.tx
 
 ---
 
+## Build & Test Commands
+
+Copy-pasteable commands. Full reference and rationale in [CONTRIBUTING.md](CONTRIBUTING.md).
+
+**Build dirs are per-config, not per-`-DCMAKE_BUILD_TYPE`.** The repo expects
+`build/release/` and `build/debug/` as separate configured trees -- using a single `build/`
+will fail with "not a CMake build directory (missing CMakeCache.txt)". Both are already
+configured in this checkout.
+
+### Configure (only needed once per dir, or after CMakeLists changes)
+
+```
+cmake -B build/release -G "Visual Studio 18 2026" \
+  -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake \
+  -DVCPKG_TARGET_TRIPLET=x64-windows-static \
+  -DVCPKG_OVERLAY_TRIPLETS=cmake/triplets
+
+cmake -B build/debug -G "Visual Studio 18 2026" \
+  -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake \
+  -DVCPKG_TARGET_TRIPLET=x64-windows-static \
+  -DVCPKG_OVERLAY_TRIPLETS=cmake/triplets
+```
+
+### Build
+
+```
+# Default target = locus + locus_gui + locus_tests (skips manual harnesses)
+cmake --build build/release --config Release
+cmake --build build/debug   --config Debug
+
+# Single target
+cmake --build build/release --config Release --target locus
+cmake --build build/release --config Release --target locus_gui
+cmake --build build/release --config Release --target locus_tests
+cmake --build build/release --config Release --target locus_integration_tests
+cmake --build build/release --config Release --target locus_retrieval_eval
+```
+
+| Target | Output (Release) |
+|---|---|
+| `locus` (CLI)         | `build/release/Release/locus.exe` |
+| `locus_gui`           | `build/release/Release/locus_gui.exe` |
+| `locus_tests`         | `build/release/tests/Release/locus_tests.exe` |
+| `locus_integration_tests` | `build/release/tests/integration/Release/locus_integration_tests.exe` |
+| `locus_retrieval_eval`    | `build/release/tests/retrieval_eval/Release/locus_retrieval_eval.exe` |
+
+`pdfium.dll` is auto-copied next to `locus.exe` and `locus_gui.exe` by a `POST_BUILD`
+step on each app target.
+
+### Run
+
+```
+# CLI
+build/release/Release/locus.exe <workspace_path> [--endpoint URL] [--model NAME] [--context N] [-verbose]
+
+# GUI
+build/release/Release/locus_gui.exe [<workspace_path>]
+```
+
+Always run against `d:/Projects/AICodeAss/` (WS1) for stage verification.
+
+### Unit tests (Catch2, fast, hermetic)
+
+```
+# Whole suite
+build/release/tests/Release/locus_tests.exe
+
+# Through ctest (optional wrapper)
+(cd build/release && ctest -C Release --output-on-failure)
+
+# Tag filter
+build/release/tests/Release/locus_tests.exe "[s4.t]"
+build/release/tests/Release/locus_tests.exe "[indexer]"
+
+# Test-name filter (whole-name match, supports wildcards)
+build/release/tests/Release/locus_tests.exe "WriteFileTool: *"
+
+# List
+build/release/tests/Release/locus_tests.exe --list-tests
+build/release/tests/Release/locus_tests.exe --list-tags
+```
+
+### Integration tests (live LLM, manual only -- do NOT run by default)
+
+Need LM Studio at `http://127.0.0.1:1234` with a tool-calling model loaded
+(min: Gemma 4 E4B @ 8k context).
+
+```
+# Always pass -console when running on user request -- it pops a dedicated trace
+# console window. Without it stderr stays at warning-level only.
+build/release/tests/integration/Release/locus_integration_tests.exe -console
+
+# One tag area
+build/release/tests/integration/Release/locus_integration_tests.exe "[smoke]" -console
+build/release/tests/integration/Release/locus_integration_tests.exe "[search]" -console
+# (also: [outline] [fs] [shell] [bg] [ask_user] [slash] [file_change_awareness])
+```
+
+When you launch with `-console` from Bash/subprocess, captured stdout looks empty
+(stdout is redirected into the new window). For pass/fail rely on the exit code;
+for post-mortem detail point the user at `<workspace>/.locus/integration_test.log`.
+
+### Retrieval eval (manual)
+
+```
+build/release/tests/retrieval_eval/Release/locus_retrieval_eval.exe \
+    --workspace . \
+    --queries tests/retrieval_eval/queries.json \
+    --out tests/retrieval_eval/results.md
+```
+
+See [tests/retrieval_eval/README.md](tests/retrieval_eval/README.md) for baseline
+management and the regression-check protocol.
+
+---
+
 ## Code Map
 
 Source is in `src/`, tests in `tests/`, architecture docs in `architecture/`.
@@ -285,12 +401,15 @@ Core is a static lib (`locus_core`). Both `locus` (exe) and `locus_tests` link i
 itself during development. What Locus indexes is exactly what is visible here.
 
 **After every completed stage:**
-1. Build the project
-2. Run `locus.exe <workspace_path> -verbose`
+1. `cmake --build build/release --config Release` (full build)
+2. `build/release/Release/locus.exe d:/Projects/AICodeAss -verbose` (or `locus_gui.exe` for GUI work)
 3. Exercise the stage's features
-4. Quit locus.exe
-5. Read `.locus/locus.log` — verify expected behavior, catch errors
+4. Quit the exe
+5. Read `.locus/locus.log` -- verify expected behavior, catch errors
 6. Fix issues before moving to the next stage
+
+For a unit-test sweep: `build/release/tests/Release/locus_tests.exe`. Full command
+reference is in the [Build & Test Commands](#build--test-commands) section above.
 
 **`-verbose` flag** (implemented in S0.1):
 - spdlog level drops to `trace` (vs default `info`)

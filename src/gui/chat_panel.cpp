@@ -470,32 +470,55 @@ void ChatPanel::on_turn_start()
     reasoning_buffer_.clear();
     reasoning_id_ = 0;
 
+    waiting_for_first_token_ = true;
+    wait_ticks_              = 0;
+    turn_start_time_         = std::chrono::steady_clock::now();
+
     stop_btn_->Enable();
     if (undo_btn_) undo_btn_->Disable();
 
-    // Create an empty assistant message div.
+    // Create the assistant bubble pre-populated with a "Thinking..."
+    // placeholder. The flush timer ticks the elapsed-seconds counter once
+    // per second until the first text or reasoning token arrives.
     ++message_id_;
     assistant_id_ = message_id_;
     run_script(wxString::Format(
-        "addMsg(%d, 'msg-assistant streaming-cursor', '');", assistant_id_));
+        "addMsg(%d, 'msg-assistant streaming-cursor', "
+        "'<em style=\"color:#888\">Thinking...</em>');",
+        assistant_id_));
 
     flush_timer_.Start(k_flush_interval_ms);
 }
 
 void ChatPanel::on_token(const wxString& token)
 {
+    if (waiting_for_first_token_) {
+        waiting_for_first_token_ = false;
+        // Wipe the "Thinking..." placeholder so the streaming text starts
+        // from a clean bubble. on_flush_timer will rebuild the body from
+        // current_response_ via md4c on its next tick.
+        run_script(wxString::Format("setMsgHtml(%d, '');", assistant_id_));
+    }
     // Accumulate into buffer. on_flush_timer will render it.
     token_buffer_.append(token.ToUTF8().data());
 }
 
 void ChatPanel::on_reasoning_token(const wxString& token)
 {
+    if (waiting_for_first_token_) {
+        waiting_for_first_token_ = false;
+        // Reasoning lands in the separate <details> block above the assistant
+        // bubble, so the bubble itself goes back to empty until a content
+        // token arrives.
+        run_script(wxString::Format("setMsgHtml(%d, '');", assistant_id_));
+    }
     reasoning_buffer_.append(token.ToUTF8().data());
 }
 
 void ChatPanel::on_turn_complete()
 {
     flush_timer_.Stop();
+    waiting_for_first_token_ = false;
 
     // Final flush of any remaining reasoning tokens.
     if (!reasoning_buffer_.empty()) {
@@ -555,6 +578,7 @@ void ChatPanel::on_session_reset()
     current_reasoning_.clear();
     reasoning_buffer_.clear();
     streaming_ = false;
+    waiting_for_first_token_ = false;
     stop_btn_->Disable();
     message_id_ = 0;
     assistant_id_ = 0;
@@ -659,6 +683,23 @@ void ChatPanel::set_on_detach(std::function<void()> cb)
 
 void ChatPanel::on_flush_timer(wxTimerEvent& /*evt*/)
 {
+    // While we're still waiting for the first token, tick the elapsed-seconds
+    // counter inside the placeholder once per second. Returns early so the
+    // token-flush path below is skipped (buffers are empty anyway).
+    if (waiting_for_first_token_) {
+        ++wait_ticks_;
+        // 33 ms timer interval: every 30 ticks ~= every 1 s.
+        if (wait_ticks_ % 30 == 1) {
+            auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
+                std::chrono::steady_clock::now() - turn_start_time_).count();
+            run_script(wxString::Format(
+                "setMsgHtml(%d, '<em style=\"color:#888\">"
+                "Thinking... (%llds)</em>');",
+                assistant_id_, static_cast<long long>(elapsed)));
+        }
+        return;
+    }
+
     // Flush reasoning first (it arrives before content for Gemma etc.).
     if (!reasoning_buffer_.empty()) {
         if (reasoning_id_ == 0) {

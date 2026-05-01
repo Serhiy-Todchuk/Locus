@@ -92,7 +92,7 @@ struct LLMConfig {
     double      temperature   = 0.7;
     int         max_tokens    = 2048;
     int         context_limit = 8192;        // total context window size
-    int         timeout_ms    = 60000;       // stream stall timeout: abort if no bytes flow for this long. Not a total-request cap — long reasoning streams are fine.
+    int         timeout_ms    = 180000;      // stream stall timeout: abort if no bytes flow for this long. Not a total-request cap -- long reasoning streams are fine. 180s default covers a 4K-token prefill on a 35B-MoE model on consumer GPU; configurable per workspace via .locus/config.json llm.timeout_ms.
     ToolFormat  tool_format   = ToolFormat::Auto;
 };
 

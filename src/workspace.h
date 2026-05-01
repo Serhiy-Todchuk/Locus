@@ -60,6 +60,14 @@ struct WorkspaceConfig {
     double      llm_temperature = 0.7;
     int         llm_context_limit = 0; // 0 = auto-detect from server
 
+    // Stream-stall watchdog (ms): abort the request if zero bytes flow for
+    // this long. Not a total-request cap -- a reasoning stream that keeps
+    // emitting tokens stays connected indefinitely. The 180s default covers
+    // a multi-K-token prefill on a 30-40B-class local model on consumer GPU
+    // (LM Studio may send no SSE bytes during prefill). Bump higher if your
+    // hardware needs it; drop to 60000 to match older Locus behaviour.
+    int         llm_timeout_ms = 180000;
+
     // S4.N -- tool-call wire format. Stored as a string so a config.json
     // edited by the user reads naturally; parsed via tool_format_from_string.
     // "auto" runs OpenAI JSON tool_calls + Qwen/Claude XML extraction in

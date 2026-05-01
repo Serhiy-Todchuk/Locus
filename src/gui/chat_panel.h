@@ -6,6 +6,7 @@
 #include <wx/wx.h>
 #include <wx/webview.h>
 
+#include <chrono>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -146,6 +147,14 @@ private:
     int           assistant_id_ = 0;   // id of the assistant bubble for this turn
     int           reasoning_id_ = 0;   // id of the <details> thought block for this turn
     bool          streaming_  = false;  // true between turn_start and turn_complete
+
+    // "Thinking..." placeholder state. Local LLMs can prefill for 60+s with
+    // zero bytes on the wire, so the empty bubble + cursor alone looked dead.
+    // Holds until the first text or reasoning token clears it; the existing
+    // flush_timer drives the once-per-second elapsed-seconds update.
+    bool                                  waiting_for_first_token_ = false;
+    int                                   wait_ticks_ = 0;
+    std::chrono::steady_clock::time_point turn_start_time_;
 
     // WebView readiness: SetPage() is async in WebView2.
     bool                         page_ready_ = false;
