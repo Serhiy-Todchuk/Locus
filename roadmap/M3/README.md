@@ -11,7 +11,7 @@
 | Stage | File | Summary |
 |---|---|---|
 | S3.A ✔ | [agent-core-split](S3.A-agent-core-split.md) | Split 850-LOC `AgentCore` into loop / dispatcher / activity / budget collaborators |
-| S3.B | [llm-client-split](S3.B-llm-client-split.md) | Split transport / stream-decoder / token-counter; prepare for multi-format + weak/strong |
+| S3.B ✔ | [llm-client-split](S3.B-llm-client-split.md) | Split transport / stream-decoder / token-counter; prepare for multi-format + weak/strong |
 | S3.C ✔ | [workspace-services](S3.C-workspace-services.md) | Replace `WorkspaceContext` raw-pointer struct with `IWorkspaceServices` interface |
 | S3.D ✔ | [indexer-split](S3.D-indexer-split.md) | Extract Tree-sitter symbol rules + language registry + prepared-statement holder |
 | S3.E ✔ | [tools-folder](S3.E-tools-folder.md) | Split `tools.cpp` into `src/tools/` subfolder by family |
@@ -31,7 +31,7 @@
 4. *S3.J (slash commands) — falls out of S3.A naturally.*
 5. *S3.D, S3.E — when the relevant M4 stage triggers them. Do not do both up-front.*
 6. *S3.L — before the first M4 stage that adds new tools (realistically S4.A). Gating hooks + search consolidation should exist before M4 starts piling tools onto the catalog.*
-7. **S3.B** — defer until M4 S4.N (tool-format robustness) or S4.Q (weak/strong) starts.
+7. *S3.B — landed alongside S4.N (tool-format robustness); also seeds the `LlmRouter` skeleton for S4.Q (weak/strong).*
 8. *S3.G (LocusSession) — when M4 S4.B (checkpoint store) starts; the first new lifecycle subsystem is the natural moment.*
 9. **S3.H** (src layering) — emerges from S3.A/S3.D/S3.E; do not big-bang.
 10. *S3.I, S3.K (docs) — opportunistic, touch when adjacent code changes.*
