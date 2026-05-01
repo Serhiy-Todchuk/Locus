@@ -222,7 +222,15 @@ void Indexer::index_file(const fs::path& rel_path)
     std::replace(rel_str.begin(), rel_str.end(), '\\', '/');
 
     std::error_code ec;
-    if (!fs::exists(abs_path, ec)) return;
+    // Reject anything that isn't a regular file -- directories, symlinks,
+    // etc. The initial-scan path already filters via
+    // `entry.is_regular_file()` in the recursive_directory_iterator loop,
+    // but watcher events for newly-created directories (most commonly
+    // `.locus/` itself when opening a fresh workspace) reach this function
+    // directly. fs::file_size() on a directory on Windows returns 4096
+    // instead of failing, so without this check we'd insert a bogus file
+    // row for every created directory.
+    if (!fs::is_regular_file(abs_path, ec)) return;
 
     auto fsize = fs::file_size(abs_path, ec);
     if (ec) return;
