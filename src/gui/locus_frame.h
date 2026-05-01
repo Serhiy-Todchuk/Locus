@@ -37,6 +37,17 @@ public:
     LocusFrame(const LocusFrame&) = delete;
     LocusFrame& operator=(const LocusFrame&) = delete;
 
+    // Drop every reference into AgentCore + Workspace (frontend registration,
+    // indexer / embedding-worker callbacks). Idempotent. Call this BEFORE
+    // tearing down the LocusSession the frame was constructed against -- the
+    // destructor cannot do it safely on its own because wxWindow::Destroy()
+    // queues deletion for an idle event that may fire after session_.reset()
+    // has freed the Workspace, leaving `workspace_` / `agent_` dangling.
+    // After this returns, ~LocusFrame is safe to run regardless of session
+    // state. The destructor calls this too for the normal-shutdown path
+    // (where the frame is destroyed before OnExit and the session is alive).
+    void detach_from_session();
+
 private:
     void create_status_bar();
     void setup_aui_layout();
@@ -94,6 +105,11 @@ private:
     ChatPanel*         chat_panel_     = nullptr;   // chat UI (S1.3)
     ToolApprovalPanel* approval_panel_ = nullptr;   // tool approval (S1.4)
     ActivityPanel*     activity_panel_ = nullptr;   // activity log (S2.2)
+
+    // Set true once detach_from_session() has run. Guards both the destructor
+    // (to avoid touching freed agent_ / workspace_ refs after a workspace
+    // switch) and any queued wxThreadEvent handlers that touch the session.
+    bool               session_detached_ = false;
 
     wxDECLARE_EVENT_TABLE();
 };

@@ -28,7 +28,18 @@ public:
             case efsw::Actions::Moved:     fa = FileAction::Moved;    break;
             default: return;
         }
-        owner_->push_raw(fa, fs::path(dir), filename, oldFilename);
+        // efsw runs its own thread; an exception escaping here would propagate
+        // into the watch loop and terminate the process. fs::relative + path
+        // construction can throw filesystem_error on weird Windows paths.
+        try {
+            owner_->push_raw(fa, fs::path(dir), filename, oldFilename);
+        } catch (const std::exception& ex) {
+            spdlog::warn("File watcher: dropped event for {}/{}: {}",
+                         dir, filename, ex.what());
+        } catch (...) {
+            spdlog::warn("File watcher: dropped event for {}/{}: unknown error",
+                         dir, filename);
+        }
     }
 
 private:
@@ -59,8 +70,15 @@ void FileWatcher::start()
 
 void FileWatcher::stop()
 {
-    // efsw::FileWatcher destructor stops the watch thread
-    spdlog::trace("File watcher stopping");
+    // Reset the efsw watcher first. Its destructor synchronously joins the
+    // OS-specific watch thread, so no callback can fire into our Listener
+    // (or push_raw) after this returns. Without this, the implicit member-
+    // destruction order tears down mutex_, pending_, and listener_ while the
+    // efsw thread is still alive — racing with handleFileAction → push_raw.
+    if (watcher_) {
+        watcher_.reset();
+        spdlog::trace("File watcher stopped");
+    }
 }
 
 bool FileWatcher::is_excluded(const fs::path& rel_path) const
