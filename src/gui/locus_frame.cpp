@@ -20,7 +20,9 @@ wxBEGIN_EVENT_TABLE(LocusFrame, wxFrame)
 wxEND_EVENT_TABLE()
 
 LocusFrame::LocusFrame(AgentCore& agent, Workspace& workspace)
-    : wxFrame(nullptr, wxID_ANY, "Locus",
+    : wxFrame(nullptr, wxID_ANY,
+              wxString::Format("Locus - %s",
+                               wxString::FromUTF8(workspace.root().string())),
               wxDefaultPosition, wxSize(1200, 800))
     , agent_(agent)
     , workspace_(workspace)
@@ -604,9 +606,16 @@ void LocusFrame::on_agent_indexing_progress(wxThreadEvent& evt)
     ops_status_.set_indexing(done, total);
     refresh_ops_status();
 
-    // Batch finished — pull fresh totals into the file tree footer.
-    if (total > 0 && done >= total)
+    // Batch finished -- refresh the file tree footer counters AND repopulate
+    // the tree itself so files added/removed externally show up without
+    // requiring a workspace re-open. The tree currently rebuilds from
+    // scratch on each batch (state like expanded folders + selection is
+    // lost); a tree-diff version is doable but isn't worth the complexity
+    // until users complain.
+    if (total > 0 && done >= total) {
         refresh_index_stats();
+        if (file_tree_panel_) file_tree_panel_->rebuild();
+    }
 }
 
 void LocusFrame::refresh_ops_status()
