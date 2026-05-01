@@ -161,15 +161,30 @@ LocusFrame::LocusFrame(AgentCore& agent, Workspace& workspace)
 
 LocusFrame::~LocusFrame()
 {
-    // Detach the embedding-worker progress callback before tearing down
-    // wx_frontend_ — the worker runs on its own thread and may still fire
-    // progress events after the frame starts destructing.
+    // Idempotent: no-op if open_workspace already detached us before
+    // queueing Destroy(). On the normal-shutdown path the frame is
+    // destroyed before LocusApp::OnExit resets the session, so the call
+    // here finds workspace_ + agent_ still alive and does the real work.
+    detach_from_session();
+    aui_.UnInit();
+}
+
+void LocusFrame::detach_from_session()
+{
+    if (session_detached_) return;
+    session_detached_ = true;
+
+    // Order: stop the indexer / embedding worker from broadcasting first
+    // (their threads can fire callbacks at any moment), then unregister the
+    // wx_frontend_ from the agent so no further wxThreadEvents land in the
+    // wx event queue. wx_frontend_ itself is freed by the unique_ptr after
+    // ~LocusFrame body returns, which is fine -- nothing references it once
+    // we're past this point.
     if (workspace_.embedding_worker())
         workspace_.embedding_worker()->on_progress = nullptr;
     workspace_.indexer().on_progress = nullptr;
 
     agent_.unregister_frontend(wx_frontend_.get());
-    aui_.UnInit();
 }
 
 // ---------------------------------------------------------------------------
@@ -408,8 +423,8 @@ void LocusFrame::refresh_index_stats()
 void LocusFrame::on_close(wxCloseEvent& evt)
 {
     // The embedding worker runs on its own thread and fires on_progress
-    // callbacks into this frame.  Stop it here — before destruction — so no
-    // callback can fire into freed memory.  stop() joins the thread.
+    // callbacks into this frame. Stop it here -- before destruction -- so no
+    // callback can fire into freed memory. stop() joins the thread.
     if (auto* ew = workspace_.embedding_worker()) {
         ew->on_progress = nullptr;
         ew->stop();
@@ -419,6 +434,14 @@ void LocusFrame::on_close(wxCloseEvent& evt)
     if (tray_)
         tray_->RemoveIcon();
     tray_.reset();
+
+    // Detach session-dependent refs synchronously, while workspace_ + agent_
+    // are guaranteed alive. wx queues the actual ~LocusFrame for an idle
+    // event; on the normal app-shutdown path that idle event fires AFTER
+    // LocusApp::OnExit has already reset the session, leaving workspace_ /
+    // agent_ dangling. detach_from_session() is idempotent, so the
+    // destructor's call later just early-returns.
+    detach_from_session();
 
     evt.Skip();  // proceed with destruction
 }

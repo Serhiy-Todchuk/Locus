@@ -216,17 +216,33 @@ void LocusApp::open_workspace(const std::string& path)
 
     spdlog::info("Switching workspace to: {}", ws_path.string());
 
-    // Close the old frame (triggers ~LocusFrame which unregisters frontend).
+    // wxApp shuts down when the last top-level window is destroyed (the
+    // default SetExitOnFrameDelete behaviour). The swap below has a brief
+    // window with zero TLWs -- DeletePendingObjects() destroys the old
+    // frame before spawn_session() creates the new one. Without disabling
+    // the auto-exit, that gap trips wxApp::ExitMainLoop, so the new frame
+    // we then spawn is shown for a few seconds inside an already-exiting
+    // event loop and gets ripped out by DeleteAllTLWs after OnExit has
+    // reset the session, which lands ~LocusFrame on a freed Workspace.
+    SetExitOnFrameDelete(false);
+
+    // Close the old frame. wxWindow::Destroy() queues deletion for the next
+    // idle event, which may fire AFTER session_.reset() below -- so we
+    // detach the frame's references into the session synchronously here,
+    // while workspace_ + agent_ are still alive. ~LocusFrame is then safe
+    // to run whenever wx finally gets to it (the destructor calls
+    // detach_from_session() too, but it's a no-op once we've already done it).
     if (frame_) {
+        frame_->detach_from_session();
         frame_->Destroy();
         frame_ = nullptr;
     }
 
-    // Drain the pending-delete queue so the old frame is actually gone before
-    // session_.reset() frees the MetricsAggregator that MetricsView's 1 s
-    // timer still references. Without this, a nested event loop spun up by
-    // prompt_semantic_search_if_first_open() below (or any other modal in
-    // this window) would fire the timer against freed mutex memory.
+    // Drain the pending-delete queue now so the old frame is fully gone
+    // before session_.reset() frees the MetricsAggregator that the old
+    // frame's MetricsView 1 s timer still references. The detach above
+    // already made ~LocusFrame safe; this prevents a different timer-vs-
+    // freed-mutex race during the modal dialog below.
     DeletePendingObjects();
 
     // ~LocusSession joins the agent thread, then drops tools / llm /
@@ -240,6 +256,7 @@ void LocusApp::open_workspace(const std::string& path)
     if (ec) {
         wxMessageBox("Cannot create .locus/ directory", "Locus",
                      wxOK | wxICON_ERROR);
+        SetExitOnFrameDelete(true);
         return;
     }
     init_logging(locus_dir);
@@ -251,6 +268,9 @@ void LocusApp::open_workspace(const std::string& path)
     // model probe.
     if (spawn_session(ws_path, LLMConfig{}))
         spdlog::info("Workspace switch complete");
+
+    // Restore the default so closing the new frame eventually exits the app.
+    SetExitOnFrameDelete(true);
 }
 
 bool LocusApp::spawn_session(const std::filesystem::path& ws_path,
