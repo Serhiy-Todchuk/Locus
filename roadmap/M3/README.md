@@ -4,7 +4,7 @@
 
 **Goal**: Reshape the codebase so the next two milestones (Agent Quality, Connected) land without triggering god-classes, merge-conflict hotspots, or pointer-soup. Zero user-visible behavior change; every refactor is verified by existing tests + manual WS1 run.
 
-**Why now**: M2 is functionally complete. M4 (old M3) adds ~22 stages and ~20 new tools — every one of them wants a hook into `AgentCore`, `ILLMClient`, `WorkspaceContext`, or `tools.cpp`. Reshape those seams *first* so each M4/M5 stage becomes a local edit instead of a god-class bloat.
+**Why now**: M2 is functionally complete. M4 (old M3) adds ~22 stages and ~20 new tools — every one of them wants a hook into `AgentCore`, `ILLMClient`, `WorkspaceContext`, or `tools.cpp`. Reshape those seams *first* so each M4/M6 stage becomes a local edit instead of a god-class bloat.
 
 **Scope discipline**: no new features, no behavior changes that a user could notice. Build + `locus.exe <ws> -verbose` + existing Catch2 suite pass after every stage.
 
@@ -28,7 +28,7 @@
 ## Suggested order
 
 1. *S3.C (workspace-services) — ~1 day; cheap; unblocks tool authors immediately.*
-2. *S3.F (file-watcher pump into Core) — ~½ day; removes 3-way duplication before M5 adds a 4th.*
+2. *S3.F (file-watcher pump into Core) — ~½ day; removes 3-way duplication before M6 adds a 4th.*
 3. *S3.A (agent-core split) — ~3 days; the single biggest unblock for M4.*
 4. *S3.J (slash commands) — falls out of S3.A naturally.*
 5. *S3.D, S3.E — when the relevant M4 stage triggers them. Do not do both up-front.*

@@ -31,9 +31,10 @@ This file is the milestone index. Stage detail lives in each milestone's own doc
 | **[M2 -- Full Workspace Support](roadmap/M2.md)** ✔ | All 3 test workspaces functional | WS1, WS2 (Wikipedia), WS3 (Docs) |
 | **[M3 -- Refactoring](roadmap/M3/README.md)** ✔ | Pay down architectural debt before the next big feature push (split god-classes, regularize layering, document threading model) | WS1 |
 | **[M4 -- Agent Quality](roadmap/M4/README.md)** | Close the gap vs RooCode/Aider/Cline/OpenCode/Claude Code on the tech fundamentals of a coding agent (editing, verification, undo, planning, extensibility, retrieval quality) | WS1 |
-| **[M5 -- Connected](roadmap/M5/README.md)** | Remote access, VS Code shim, web frontend | All, from any device |
+| **[M5 -- Polish, UX & Performance](roadmap/M5/README.md)** | Sand down the user-visible edges before multiplying frontends -- UX refinements, performance optimization, robustness, quality-of-life touches | WS1, WS2, WS3 |
+| **[M6 -- Connected](roadmap/M6/README.md)** | Remote access, VS Code shim, web frontend | All, from any device |
 
-M0-M2 each live in a single milestone file (completed history). M3, M4, M5 use one folder per milestone with a `README.md` index plus one file per stage so each stays individually greppable as it moves from planned -> scoping -> in-progress.
+M0-M2 each live in a single milestone file (completed history). M3, M4, M5, M6 use one folder per milestone with a `README.md` index plus one file per stage so each stays individually greppable as it moves from planned -> scoping -> in-progress.
 
 ---
 
@@ -59,11 +60,17 @@ Close the gap against leading agents (RooCode, Cline, Aider, OpenCode, Claude Co
 
 Stage list, execution order, and M3 prerequisites: [roadmap/M4/README.md](roadmap/M4/README.md).
 
-## M5 -- Connected
+## M5 -- Polish, UX & Performance
+
+With the M4 engine in place, sand down the user-visible edges. UX refinements, performance optimization, robustness work, and quality-of-life touches that make the existing capability set feel fast, predictable, and discoverable. Lands before M6 so each new frontend in the Connected milestone inherits a well-shaped foundation.
+
+Stage list: [roadmap/M5/README.md](roadmap/M5/README.md).
+
+## M6 -- Connected
 
 Core accessible over LAN. VS Code sends editor context. Browser frontend works. Wikipedia works end-to-end.
 
-Stage list and inter-stage dependencies: [roadmap/M5/README.md](roadmap/M5/README.md).
+Stage list and inter-stage dependencies: [roadmap/M6/README.md](roadmap/M6/README.md).
 
 ---
 

@@ -1,25 +1,19 @@
-# M5 — Connected
+# M5 -- Polish, UX & Performance
 
-**Goal**: Core accessible over LAN. VS Code sends editor context. Browser frontend works. Wikipedia works end-to-end.
+**Goal**: With the M4 engine in place, sand down the user-visible edges. UX refinements, performance optimization, robustness work, and quality-of-life touches that make the existing capability set feel fast, predictable, and discoverable. No big new subsystems -- this milestone is about the experience of using what we've built.
 
-**Test workspaces unlocked**: All, from any device.
+**Test workspaces unlocked**: WS1, WS2, WS3 (no new workspace requirements).
+
+**Why before M6 (Connected)**: M6 multiplies surface area (remote frontends, web UI, VS Code shim, ZIM reader). Polishing the local experience first means each new frontend in M6 inherits a well-shaped foundation rather than papering over rough edges in three places.
 
 ## Stages
 
-| Stage | Title |
-|---|---|
-| [S5.1](S5.1-web-retrieval.md) | Web Retrieval (RAG) |
-| [S5.2](S5.2-zim-reader.md) | ZIM Reader (Wikipedia / Kiwix) |
-| [S5.3](S5.3-crow-frontend.md) | CrowServer Frontend |
-| [S5.4](S5.4-remote-access.md) | Remote Access |
-| [S5.5](S5.5-web-frontend.md) | Web / Browser Frontend |
-| [S5.6](S5.6-vscode-shim.md) | VS Code Shim |
-| [S5.7](S5.7-skills.md) | Skills (On-Demand Capability Packs) |
+| Stage | Title | Theme |
+|---|---|---|
+| [S5.A](S5.A-capability-toggles.md) | Workspace Capability Toggles | UX / Tokens |
 
-## Dependencies
+More stages will be added here as polish/UX/perf candidates surface.
 
-- S5.4 (remote auth) requires S5.3 (Crow server).
-- S5.5 (browser frontend) requires S5.3 and is unlocked further by S5.4 for cross-device use.
-- S5.6 (VS Code shim) requires S5.3's HTTP endpoints.
-- S5.2 (ZIM) is independent and can land any time.
-- S5.7 (skills) requires M4 [S4.G](../M4/S4.G-mcp.md) (MCP) and [S4.X](../M4/S4.X-prompt-templates.md) (Prompt Templates); the install CLI is unlocked further by S5.5 for the public skill registry.
+## Suggested order
+
+Stages in this milestone are mostly independent; pick the one whose pain is most acute at the moment. The first-open dialog work in S5.A is a natural early target because it directly cashes in the manifest-pruning opportunity captured during the Pi comparison.

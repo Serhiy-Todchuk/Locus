@@ -1,0 +1,27 @@
+# M6 -- Connected
+
+**Goal**: Core accessible over LAN. VS Code sends editor context. Browser frontend works. Wikipedia works end-to-end.
+
+**Test workspaces unlocked**: All, from any device.
+
+**Note**: This milestone was previously numbered M5 (the "Connected" milestone). It was renumbered to M6 when a new M5 ("Polish, UX & Performance") was inserted ahead of it. Stage IDs were renumbered S5.x -> S6.x at the same time. File-level link stability is preserved within the new layout (all `S6.x-*.md` filenames match the new IDs).
+
+## Stages
+
+| Stage | Title |
+|---|---|
+| [S6.1](S6.1-web-retrieval.md) | Web Retrieval (RAG) |
+| [S6.2](S6.2-zim-reader.md) | ZIM Reader (Wikipedia / Kiwix) |
+| [S6.3](S6.3-crow-frontend.md) | CrowServer Frontend |
+| [S6.4](S6.4-remote-access.md) | Remote Access |
+| [S6.5](S6.5-web-frontend.md) | Web / Browser Frontend |
+| [S6.6](S6.6-vscode-shim.md) | VS Code Shim |
+| [S6.7](S6.7-skills.md) | Skills (On-Demand Capability Packs) |
+
+## Dependencies
+
+- S6.4 (remote auth) requires S6.3 (Crow server).
+- S6.5 (browser frontend) requires S6.3 and is unlocked further by S6.4 for cross-device use.
+- S6.6 (VS Code shim) requires S6.3's HTTP endpoints.
+- S6.2 (ZIM) is independent and can land any time.
+- S6.7 (skills) requires M4 [S4.G](../M4/S4.G-mcp.md) (MCP) and [S4.X](../M4/S4.X-prompt-templates.md) (Prompt Templates); the install CLI is unlocked further by S6.5 for the public skill registry.

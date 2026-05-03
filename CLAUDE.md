@@ -66,7 +66,7 @@ data into context, and keeps the user in full transparent control of every step.
 
 See [roadmap/M4/](roadmap/M4/) for remaining stages.
 
-**M3 is now Refactoring** (not Agent Quality). Old M3 → M4 (Agent Quality), old M4 → M5 (Connected). Per-stage docs live under [roadmap/M3/](roadmap/M3/), [roadmap/M4/](roadmap/M4/), [roadmap/M5/](roadmap/M5/). [roadmap.md](roadmap.md) is the index.
+**M3 is now Refactoring** (not Agent Quality). The renumbering trail: original M3 → M4 (Agent Quality), original M4 → was M5, now M6 (Connected). A new M5 (Polish, UX & Performance) was inserted between M4 and the old Connected milestone. Per-stage docs live under [roadmap/M3/](roadmap/M3/), [roadmap/M4/](roadmap/M4/), [roadmap/M5/](roadmap/M5/), [roadmap/M6/](roadmap/M6/). [roadmap.md](roadmap.md) is the index.
 
 ---
 
@@ -364,11 +364,13 @@ Core is a static lib (`locus_core`). Both `locus` (exe) and `locus_tests` link i
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Code style, build/run/test instructions for humans |
 | [tests/integration/README.md](tests/integration/README.md) | Manual LLM-driven integration test suite — tags, harness design, update rules |
 | [tests/retrieval_eval/README.md](tests/retrieval_eval/README.md) | Retrieval eval harness — gold queries, recall/MRR/nDCG, baseline + regression check |
-| [roadmap.md](roadmap.md) | Roadmap index — milestones M0–M5 with one-table summaries. Real detail lives in `roadmap/`. |
-| [roadmap/M0.md](roadmap/M0.md), [M1.md](roadmap/M1.md), [M2.md](roadmap/M2.md) | Completed/in-progress milestones — full task lists, one file per milestone |
-| [roadmap/M3/](roadmap/M3/) | M3 Refactoring — one file per stage (S3.A–S3.K) |
-| [roadmap/M4/](roadmap/M4/) | M4 Agent Quality — one file per stage (S4.A–S4.V) |
-| [roadmap/M5/](roadmap/M5/) | M5 Connected — one file per stage (S5.1–S5.6) |
+| [roadmap.md](roadmap.md) | Roadmap index — milestones M0–M6 with one-table summaries. Real detail lives in `roadmap/`. |
+| [roadmap/M0.md](roadmap/M0.md), [M1.md](roadmap/M1.md), [M2.md](roadmap/M2.md) | Completed milestones — full task lists, one file per milestone |
+| [roadmap/M3/](roadmap/M3/) | M3 Refactoring ✔ — one file per stage (S3.A–S3.L) |
+| [roadmap/M4/](roadmap/M4/) | M4 Agent Quality — one file per stage (S4.A–S4.Y) |
+| [roadmap/M5/](roadmap/M5/) | M5 Polish, UX & Performance — one file per stage (S5.A...) |
+| [roadmap/M6/](roadmap/M6/) | M6 Connected — one file per stage (S6.1–S6.7) |
+| [backlog/README.md](backlog/README.md) | Unscheduled tasks — items recognised as worth doing but not yet promoted to a milestone |
 | [test-workspaces.md](test-workspaces.md) | Three concrete test cases — read when scoping features |
 | [vision.md](vision.md) | Understanding the *why* behind any design decision |
 | [DIFFERENTIATORS.md](DIFFERENTIATORS.md) | Who this is for, what makes it different |
