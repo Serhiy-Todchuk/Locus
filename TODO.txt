@@ -4,15 +4,19 @@
 - terminal for LLM run_command calls? terminal item in view menu?
 - sample.docx has no heading
 
+- if we switch to wxHtmlWindow instead of WebView2 for chat window will we be able to hide/unhide (collapse/expand) thinking section?
+- chat window: when tool call happens - it appears after LLM's output textbubble, but after that - textbubble got extended further with newer text even though it hapened later tool call. It breaks the feel of history for the user.
+- code diff in chat: dtl or Shell out to diff / git diff. 
+- max_soft_tokens
+- open workspace folder, open global locus folder menu items.
 - Tool approval - allow all for this session
 - small embedding models by default in GUI settings
 - load last session by default after closing. Do we have [reset session]/[new session] button in UI?
 - increase run_command timeout to 30 min
-- what is our AST-search?
 
-- what about extensions? how does pi handle mcp, extensions and other?
-- regarding S4.F... do we really have system prompt being changed between turns?
 
 manifest pruning idea
 
 - context review
+
+- break down settings to global and workspace. Same with MCP, etc.?

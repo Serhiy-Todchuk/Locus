@@ -130,7 +130,7 @@ Listed in execution order. Letters are identity, not sequence (retained for link
 | [S4.Q](roadmap/M4/S4.Q-multi-model.md) | Multi-Model Split (Weak + Strong) |
 | [S4.F](roadmap/M4/S4.F-kv-cache.md) | KV / Prompt Cache Preservation |
 | [S4.N](roadmap/M4/S4.N-tool-call-robustness.md) | Tool-Call Robustness Across Model Families ✔ |
-| [S4.E](roadmap/M4/S4.E-lsp.md) | LSP Integration |
+| [S4.E](roadmap/M4/S4.E-lsp.md) | LSP Integration (via MCP) |
 | [S4.R](roadmap/M4/S4.R-memory-bank.md) | Memory Bank / Session Scratchpad |
 | [S4.G](roadmap/M4/S4.G-mcp.md) | MCP (Model Context Protocol) Client |
 | [S4.C](roadmap/M4/S4.C-auto-verify.md) | Auto-Verify Feedback Loop |
@@ -138,6 +138,8 @@ Listed in execution order. Letters are identity, not sequence (retained for link
 | [S4.H](roadmap/M4/S4.H-parallel-tools.md) | Parallel Tool Calls |
 | [S4.O](roadmap/M4/S4.O-streaming-tool-results.md) | Streaming / Partial Tool Results |
 | [S4.W](roadmap/M4/S4.W-list-directory-completeness.md) | list_directory: Surface Unindexed Files |
+| [S4.X](roadmap/M4/S4.X-prompt-templates.md) | Prompt Templates |
+| [S4.Y](roadmap/M4/S4.Y-grammar-coverage.md) | Tree-sitter Grammar Coverage Expansion |
 | [S4.V](roadmap/M4/S4.V-misc-gaps.md) | Miscellaneous Smaller Gaps |
 
 ---
@@ -156,6 +158,7 @@ Per-stage detail: [roadmap/M5/](roadmap/M5/) — see [README](roadmap/M5/README.
 | [S5.4](roadmap/M5/S5.4-remote-access.md) | Remote Access |
 | [S5.5](roadmap/M5/S5.5-web-frontend.md) | Web / Browser Frontend |
 | [S5.6](roadmap/M5/S5.6-vscode-shim.md) | VS Code Shim |
+| [S5.7](roadmap/M5/S5.7-skills.md) | Skills (On-Demand Capability Packs) |
 
 ---
 
@@ -170,7 +173,6 @@ Items from requirements Nice-to-Have — not scheduled yet:
 - Full VS Code extension (embedded UI panel, not just shim)
 - Plugin system for community tools
 - Approve or modify tool actions
-- Keep working when context fills up
 - Line-level diff viewer for AI-proposed file changes (wxStyledTextCtrl, dtl library)
 - Multiple workspaces open simultaneously (tabbed sessions)
 - Export session as markdown report

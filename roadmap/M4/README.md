@@ -26,13 +26,15 @@
 | [S4.C](S4.C-auto-verify.md) | Auto-Verify Feedback Loop | Verification |
 | [S4.L](S4.L-git-native.md) | Git-Native Features | Tools |
 | [S4.F](S4.F-kv-cache.md) | KV / Prompt Cache Preservation | Performance |
-| [S4.E](S4.E-lsp.md) | LSP Integration | Semantic depth |
+| [S4.E](S4.E-lsp.md) | LSP Integration (via MCP) | Semantic depth |
 
 | [S4.U](S4.U-subagents.md) | Subagent / Task Delegation | Workflow |
 | [S4.Q](S4.Q-multi-model.md) | Multi-Model Split (Weak + Strong) | Performance |
 | [S4.H](S4.H-parallel-tools.md) | Parallel Tool Calls | Performance |
 | [S4.O](S4.O-streaming-tool-results.md) | Streaming / Partial Tool Results | UX latency |
 | [S4.W](S4.W-list-directory-completeness.md) | list_directory: Surface Unindexed Files | Tools |
+| [S4.X](S4.X-prompt-templates.md) | Prompt Templates | Workflow |
+| [S4.Y](S4.Y-grammar-coverage.md) | Tree-sitter Grammar Coverage Expansion | Tools |
 | [S4.V](S4.V-misc-gaps.md) | Miscellaneous Smaller Gaps | Mixed |
 
 ## Prerequisites from M3

@@ -14,6 +14,7 @@
 | [S5.4](S5.4-remote-access.md) | Remote Access |
 | [S5.5](S5.5-web-frontend.md) | Web / Browser Frontend |
 | [S5.6](S5.6-vscode-shim.md) | VS Code Shim |
+| [S5.7](S5.7-skills.md) | Skills (On-Demand Capability Packs) |
 
 ## Dependencies
 
@@ -21,3 +22,4 @@
 - S5.5 (browser frontend) requires S5.3 and is unlocked further by S5.4 for cross-device use.
 - S5.6 (VS Code shim) requires S5.3's HTTP endpoints.
 - S5.2 (ZIM) is independent and can land any time.
+- S5.7 (skills) requires M4 [S4.G](../M4/S4.G-mcp.md) (MCP) and [S4.X](../M4/S4.X-prompt-templates.md) (Prompt Templates); the install CLI is unlocked further by S5.5 for the public skill registry.
