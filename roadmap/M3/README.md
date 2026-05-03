@@ -1,4 +1,6 @@
-# M3 — Refactoring
+# M3 — Refactoring ✔
+
+**Status**: Complete. All 12 stages (S3.A–S3.L) landed; verified against WS1 with the existing Catch2 suite + `-verbose` run.
 
 **Goal**: Reshape the codebase so the next two milestones (Agent Quality, Connected) land without triggering god-classes, merge-conflict hotspots, or pointer-soup. Zero user-visible behavior change; every refactor is verified by existing tests + manual WS1 run.
 
