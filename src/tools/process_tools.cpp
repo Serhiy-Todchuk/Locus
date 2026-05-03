@@ -31,7 +31,11 @@ std::string RunCommandTool::preview(const ToolCall& call) const
 ToolResult RunCommandTool::execute(const ToolCall& call, IWorkspaceServices& ws)
 {
     std::string command = call.args.value("command", "");
-    int timeout_ms = call.args.value("timeout_ms", 30000);
+    // Default 30 minutes — matches Pi's bash tool. Long-enough builds, test
+    // suites, and one-shot scripts complete without the agent having to
+    // override the cap; truly long-running things (servers, watchers) still
+    // belong on `run_command_bg`.
+    int timeout_ms = call.args.value("timeout_ms", 1800000);
 
     if (command.empty())
         return error_result("Error: 'command' parameter is required");

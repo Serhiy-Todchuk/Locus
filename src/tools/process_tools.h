@@ -8,15 +8,17 @@ class RunCommandTool : public ITool {
 public:
     std::string name()        const override { return "run_command"; }
     std::string description() const override {
-        return "Execute a short shell command synchronously in the workspace directory and "
-               "return stdout/stderr + exit code. Use this for commands that finish in under "
-               "30 seconds (build steps, scripts, queries). For dev servers, watchers, "
-               "long builds, and anything that streams output, use `run_command_bg` instead.";
+        return "Execute a shell command synchronously in the workspace directory and "
+               "return stdout/stderr + exit code. Use this for commands you expect to "
+               "terminate -- builds, tests, scripts, queries. Default timeout 30 minutes. "
+               "For dev servers, watchers, and anything that streams output without "
+               "terminating, use `run_command_bg` instead.";
     }
     std::vector<ToolParam> params() const override {
         return {
-            {"command",    "string",  "The command to execute",                        true},
-            {"timeout_ms", "integer", "Timeout in milliseconds (default 30000)",       false},
+            {"command",    "string",  "The command to execute", true},
+            {"timeout_ms", "integer",
+             "Timeout in milliseconds (default 1800000 = 30 minutes).", false},
         };
     }
     std::string preview(const ToolCall& call) const override;
