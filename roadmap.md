@@ -76,4 +76,4 @@ Stage list and inter-stage dependencies: [roadmap/M6/README.md](roadmap/M6/READM
 
 ## Backlog
 
-Unscheduled items -- recognised as worth doing eventually, not yet scoped or sequenced into a milestone. See [backlog/README.md](backlog/README.md).
+Unscheduled items + parked drafts -- recognised as worth doing eventually, not yet scoped or sequenced into a milestone. See [roadmap/backlog/README.md](roadmap/backlog/README.md).

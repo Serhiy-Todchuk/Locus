@@ -24,9 +24,8 @@
 | [S4.G](S4.G-mcp.md) | MCP (Model Context Protocol) Client | Extensibility |
 | [S4.R](S4.R-memory-bank.md) | Memory Bank / Session Scratchpad | Context |
 | [S4.C](S4.C-auto-verify.md) | Auto-Verify Feedback Loop | Verification |
-| [S4.L](S4.L-git-native.md) | Git-Native Features | Tools |
+| [S4.L](S4.L-git-native.md) | Git Integration (.gitignore + Auto-Commit) | Workspace policy |
 | [S4.F](S4.F-kv-cache.md) | KV / Prompt Cache Preservation | Performance |
-| [S4.E](S4.E-lsp.md) | LSP Integration (via MCP) | Semantic depth |
 
 | [S4.U](S4.U-subagents.md) | Subagent / Task Delegation | Workflow |
 | [S4.Q](S4.Q-multi-model.md) | Multi-Model Split (Weak + Strong) | Performance |

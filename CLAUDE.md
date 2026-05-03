@@ -370,7 +370,7 @@ Core is a static lib (`locus_core`). Both `locus` (exe) and `locus_tests` link i
 | [roadmap/M4/](roadmap/M4/) | M4 Agent Quality — one file per stage (S4.A–S4.Y) |
 | [roadmap/M5/](roadmap/M5/) | M5 Polish, UX & Performance — one file per stage (S5.A...) |
 | [roadmap/M6/](roadmap/M6/) | M6 Connected — one file per stage (S6.1–S6.7) |
-| [backlog/README.md](backlog/README.md) | Unscheduled tasks — items recognised as worth doing but not yet promoted to a milestone |
+| [roadmap/backlog/README.md](roadmap/backlog/README.md) | Unscheduled tasks + parked drafts (e.g. S4.E LSP) — items recognised as worth doing but not yet promoted to a milestone |
 | [test-workspaces.md](test-workspaces.md) | Three concrete test cases — read when scoping features |
 | [vision.md](vision.md) | Understanding the *why* behind any design decision |
 | [DIFFERENTIATORS.md](DIFFERENTIATORS.md) | Who this is for, what makes it different |
