@@ -20,6 +20,7 @@ Until then, items live here as one-line entries (or short paragraphs when the ra
 
 ## Items
 
+- Tool-result caching (dedup identical tool calls in a session). Originally an S4.V bullet; dropped because it solves a problem that doesn't exist on local hardware -- a repeat `search_symbols("foo")` is sub-100 ms and agents rarely make exact-duplicate calls in practice. Engineering cost (cache key including watcher state, eviction) is real for invisible savings. Reactivate if telemetry surfaces a real workload where tool-time dominates.
 - Native mobile app (CrowServer client).
 - Voice chat.
 - Feeding an image as an input to LLM.

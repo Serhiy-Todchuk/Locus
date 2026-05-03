@@ -3,23 +3,18 @@
 - Replace file content tool with such args: start line/pos, end line/pos, what to insert
 - terminal for LLM run_command calls? terminal item in view menu?
 - sample.docx has no heading
-
 - if we switch to wxHtmlWindow instead of WebView2 for chat window will we be able to hide/unhide (collapse/expand) thinking section?
-- chat window: when tool call happens - it appears after LLM's output textbubble, but after that - prepended textbubble got extended further with newer text even though it aready contains info after tool call. It breaks the feel of history for the user.
+- chat window: when tool call happens - it it fails - it appears after LLM's output textbubble, but after that - prepended textbubble got extended further with newer text even though it aready contains info after tool call. It breaks the feel of history for the user. Shall we also add short tool messages in chat history (even when tool didn't fail)? e.g. "read_file, edit_file, run_command and 3 more tools were called..."
 - code diff in chat: dtl or Shell out to diff / git diff. 
 - max_soft_tokens
 - open workspace folder, open global locus folder menu items.
 - Tool approval - allow all for this session
 - small embedding models by default in GUI settings
 - load last session by default after closing. Do we have [reset session]/[new session] button in UI?
-- increase run_command timeout to 30 min
-
 - Tool approval - modal window
-
 - what is symbols mode in search tool?
-
-
-
-- context review
-
 - break down settings to global and workspace. Same with MCP, etc.?
+
+
+- !!! context review !!!
+

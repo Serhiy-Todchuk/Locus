@@ -6,14 +6,15 @@
 
 **Why before M6 (Connected)**: M6 multiplies surface area (remote frontends, web UI, VS Code shim, ZIM reader). Polishing the local experience first means each new frontend in M6 inherits a well-shaped foundation rather than papering over rough edges in three places.
 
-## Stages
+## Stages (in execution order)
 
 | Stage | Title | Theme |
 |---|---|---|
+| [S5.B](S5.B-terminal-panel.md) | Live Terminal Panel | UX |
 | [S5.A](S5.A-capability-toggles.md) | Workspace Capability Toggles | UX / Tokens |
 
-More stages will be added here as polish/UX/perf candidates surface.
+More stages will be added here as polish/UX/perf candidates surface. Letters are identity, not order -- listed top-down in execution order.
 
 ## Suggested order
 
-Stages in this milestone are mostly independent; pick the one whose pain is most acute at the moment. The first-open dialog work in S5.A is a natural early target because it directly cashes in the manifest-pruning opportunity captured during the Pi comparison.
+S5.B (Terminal Panel) lands first: it is the most visible UX gap (long-running commands give the user no live feedback today) and reuses the existing `ProcessRegistry` + `RunCommandTool` plumbing without new agent-loop or LLM-side changes -- pure frontend work. S5.A (Capability Toggles) follows as the manifest-pruning win for short-context local LLMs. Both are independent; reorder if priorities shift.
