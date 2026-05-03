@@ -27,9 +27,6 @@
 | [S4.L](S4.L-git-native.md) | Git Integration (.gitignore + Auto-Commit) | Workspace policy |
 | [S4.F](S4.F-kv-cache.md) | KV / Prompt Cache Preservation | Performance |
 
-| [S4.U](S4.U-subagents.md) | Subagent / Task Delegation | Workflow |
-| [S4.Q](S4.Q-multi-model.md) | Multi-Model Split (Weak + Strong) | Performance |
-| [S4.H](S4.H-parallel-tools.md) | Parallel Tool Calls | Performance |
 | [S4.O](S4.O-streaming-tool-results.md) | Streaming / Partial Tool Results | UX latency |
 | [S4.W](S4.W-list-directory-completeness.md) | list_directory: Surface Unindexed Files | Tools |
 | [S4.X](S4.X-prompt-templates.md) | Prompt Templates | Workflow |
@@ -45,7 +42,7 @@ Already landed (no action required):
 - [S3.L — tool-catalog-hygiene](../M3/S3.L-tool-catalog-hygiene.md) — every M4 stage that adds tools is authored against the `available()` / `visible_in_mode()` hooks instead of retrofitted.
 - [S3.G — locus-session](../M3/S3.G-locus-session.md) — bundles the per-workspace lifecycle so future M4 subsystems (LSP, MCP, process registry) slot in as one more `unique_ptr` member.
 - [S3.D — indexer-split](../M3/S3.D-indexer-split.md).
-- [S3.B — llm-client-split](../M3/S3.B-llm-client-split.md) — `OpenAiTransport` + `IStreamDecoder` + `TokenCounter` + `LlmRouter` skeleton landed with [S4.N](S4.N-tool-call-robustness.md); also seeds [S4.Q](S4.Q-multi-model.md) (weak/strong split).
+- [S3.B — llm-client-split](../M3/S3.B-llm-client-split.md) — `OpenAiTransport` + `IStreamDecoder` + `TokenCounter` + `LlmRouter` skeleton landed with [S4.N](S4.N-tool-call-robustness.md); the weak/strong split it seeded ([S4.Q](../backlog/S4.Q-multi-model.md)) is now parked in the backlog.
 
 Still outstanding:
 
