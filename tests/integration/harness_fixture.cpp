@@ -1,7 +1,7 @@
 #include "harness_fixture.h"
 
 #include "core/watcher_pump.h"
-#include "embedding_worker.h"
+#include "index/embedding_worker.h"
 #include "index/indexer.h"
 #include "tools/tools.h"
 

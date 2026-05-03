@@ -1,5 +1,5 @@
 #include "index_query.h"
-#include "database.h"
+#include "../core/database.h"
 
 #include <spdlog/spdlog.h>
 #include <sqlite3.h>

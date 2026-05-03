@@ -5,8 +5,8 @@
 #include "agent/agent_core.h"
 #include "agent/system_prompt.h"
 #include "llm/llm_client.h"
-#include "tool_registry.h"
-#include "workspace.h"
+#include "tools/tool_registry.h"
+#include "core/workspace.h"
 
 #include <chrono>
 #include <filesystem>

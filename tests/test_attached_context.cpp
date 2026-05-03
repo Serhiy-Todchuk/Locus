@@ -1,8 +1,8 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "agent/agent_core.h"
-#include "frontend.h"
-#include "tool_registry.h"
+#include "core/frontend.h"
+#include "tools/tool_registry.h"
 #include "tools/tools.h"
 #include "support/fake_workspace_services.h"
 

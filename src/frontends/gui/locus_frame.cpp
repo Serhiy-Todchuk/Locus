@@ -1,9 +1,9 @@
 #include "locus_frame.h"
 #include "locus_app.h"
 
-#include "../core/watcher_pump.h"
-#include "../embedding_worker.h"
-#include "../index/indexer.h"
+#include "../../core/watcher_pump.h"
+#include "../../index/embedding_worker.h"
+#include "../../index/indexer.h"
 
 #include <spdlog/spdlog.h>
 

@@ -1,6 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include "reranker.h"
+#include "index/reranker.h"
 
 #include <chrono>
 #include <filesystem>

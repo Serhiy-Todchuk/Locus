@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../agent/conversation.h"
-#include "../frontend.h"
+#include "../../agent/conversation.h"
+#include "../../core/frontend.h"
 
 #include <wx/wx.h>
 #include <wx/listbox.h>

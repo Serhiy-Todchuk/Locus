@@ -1,6 +1,6 @@
 #pragma once
 
-#include "frontend_registry.h"
+#include "../core/frontend_registry.h"
 
 namespace locus {
 

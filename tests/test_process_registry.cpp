@@ -2,8 +2,8 @@
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <nlohmann/json.hpp>
 
-#include "process_registry.h"
-#include "tool.h"
+#include "tools/process_registry.h"
+#include "tools/tool.h"
 #include "tools/process_tools.h"
 #include "support/fake_workspace_services.h"
 

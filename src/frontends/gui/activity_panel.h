@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../activity_event.h"
-#include "../frontend.h"
+#include "../../core/activity_event.h"
+#include "../../core/frontend.h"
 
 #include <wx/wx.h>
 #include <wx/listctrl.h>

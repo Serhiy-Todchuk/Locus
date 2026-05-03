@@ -2,8 +2,8 @@
 #include <catch2/matchers/catch_matchers_string.hpp>
 
 #include "agent/slash_commands.h"
-#include "tool.h"
-#include "tool_registry.h"
+#include "tools/tool.h"
+#include "tools/tool_registry.h"
 #include "support/fake_workspace_services.h"
 
 #include <filesystem>

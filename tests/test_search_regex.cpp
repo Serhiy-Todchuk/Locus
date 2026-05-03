@@ -7,9 +7,9 @@
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <nlohmann/json.hpp>
 
-#include "tool.h"
+#include "tools/tool.h"
 #include "tools/search_tools.h"
-#include "workspace.h"
+#include "core/workspace.h"
 
 #include <filesystem>
 #include <fstream>

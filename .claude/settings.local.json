@@ -219,7 +219,8 @@
       "Bash(awk 'NR>=13237' .locus/integration_test.log)",
       "Bash(awk -F: '$1>=13237')",
       "Bash(rm -rf /c/vcpkg/buildtrees/onnx /c/vcpkg/buildtrees/onnxruntime)",
-      "Bash(rm -f /c/vcpkg/downloads/microsoft-onnxruntime-v1.23.2.tar.gz /c/vcpkg/downloads/onnx-onnx-v1.19.0.tar.gz)"
+      "Bash(rm -f /c/vcpkg/downloads/microsoft-onnxruntime-v1.23.2.tar.gz /c/vcpkg/downloads/onnx-onnx-v1.19.0.tar.gz)",
+      "Bash(python _s3h_migrate.py)"
     ]
   }
 }

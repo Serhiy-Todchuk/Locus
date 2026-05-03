@@ -14,8 +14,8 @@
 #include "curate.h"
 #include "eval_runner.h"
 
-#include "embedding_worker.h"
-#include "workspace.h"
+#include "index/embedding_worker.h"
+#include "core/workspace.h"
 
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>

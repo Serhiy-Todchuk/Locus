@@ -1,5 +1,5 @@
 #include "embedding_worker.h"
-#include "database.h"
+#include "../core/database.h"
 #include "embedder.h"
 
 #include <spdlog/spdlog.h>

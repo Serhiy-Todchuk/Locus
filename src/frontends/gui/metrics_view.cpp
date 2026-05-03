@@ -1,7 +1,7 @@
 #include "metrics_view.h"
 
-#include "../agent/metrics.h"
-#include "../frontend.h"
+#include "../../agent/metrics.h"
+#include "../../core/frontend.h"
 
 #include <wx/dcbuffer.h>
 #include <wx/filedlg.h>

@@ -11,8 +11,8 @@
 #include "ask_user_dialog.h"
 #include "tool_approval_panel.h"
 #include "wx_frontend.h"
-#include "../agent/agent_core.h"
-#include "../workspace.h"
+#include "../../agent/agent_core.h"
+#include "../../core/workspace.h"
 
 #include <wx/wx.h>
 #include <wx/aui/aui.h>

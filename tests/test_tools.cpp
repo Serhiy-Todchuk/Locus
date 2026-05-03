@@ -2,10 +2,10 @@
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <nlohmann/json.hpp>
 
-#include "tool.h"
-#include "tool_registry.h"
+#include "tools/tool.h"
+#include "tools/tool_registry.h"
 #include "tools/tools.h"
-#include "workspace.h"
+#include "core/workspace.h"
 #include "index/index_query.h"
 #include "support/fake_workspace_services.h"
 

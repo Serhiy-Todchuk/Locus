@@ -44,7 +44,7 @@ Three C++ frontends, all implementing `IFrontend` and linking `locus_core`:
 
 | Frontend | Location | Purpose |
 |---|---|---|
-| **CLI** | `src/frontends/cli_frontend.*` | Terminal REPL, y/n tool approval, M0 prototype |
+| **CLI** | `src/frontends/cli/cli_frontend.*` | Terminal REPL, y/n tool approval, M0 prototype |
 | **wxWidgets** | `src/frontends/wx/*` (M1) | Desktop GUI with system tray, chat UI, tool panels |
 | **CrowServer** | `src/frontends/crow/*` (M3) | HTTP/WebSocket server for external clients |
 

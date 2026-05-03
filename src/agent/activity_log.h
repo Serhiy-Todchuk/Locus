@@ -1,7 +1,7 @@
 #pragma once
 
-#include "activity_event.h"
-#include "frontend_registry.h"
+#include "../core/activity_event.h"
+#include "../core/frontend_registry.h"
 
 #include <mutex>
 #include <optional>

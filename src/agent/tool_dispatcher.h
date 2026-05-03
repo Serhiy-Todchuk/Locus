@@ -1,10 +1,10 @@
 #pragma once
 
 #include "core/workspace_services.h"
-#include "frontend.h"
-#include "frontend_registry.h"
+#include "../core/frontend.h"
+#include "../core/frontend_registry.h"
 #include "llm/llm_client.h"
-#include "tool.h"
+#include "../tools/tool.h"
 
 #include <atomic>
 #include <condition_variable>

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "file_watcher.h"
+#include "../core/file_watcher.h"
 #include "index/prepared_statements.h"
 #include "index/symbol_extractor.h"
 #include "index/tree_sitter_registry.h"

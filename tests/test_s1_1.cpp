@@ -1,7 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include "frontend.h"
-#include "frontend_registry.h"
+#include "core/frontend.h"
+#include "core/frontend_registry.h"
 #include "agent/session_manager.h"
 #include "agent/conversation.h"
 #include "llm/llm_client.h"

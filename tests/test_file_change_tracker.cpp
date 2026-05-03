@@ -10,10 +10,10 @@
 #include <catch2/matchers/catch_matchers_string.hpp>
 
 #include "agent/file_change_tracker.h"
-#include "file_watcher.h"
+#include "core/file_watcher.h"
 #include "index/index_query.h"
 #include "index/indexer.h"
-#include "workspace.h"
+#include "core/workspace.h"
 
 #include <algorithm>
 #include <chrono>

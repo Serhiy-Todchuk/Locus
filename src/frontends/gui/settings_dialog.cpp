@@ -1,6 +1,6 @@
 #include "settings_dialog.h"
 
-#include "../tool.h"
+#include "../../tools/tool.h"
 
 #include <wx/scrolwin.h>
 #include <spdlog/spdlog.h>

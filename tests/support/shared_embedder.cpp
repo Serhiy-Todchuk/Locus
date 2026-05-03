@@ -1,7 +1,7 @@
 #include "shared_embedder.h"
 
-#include "embedder.h"
-#include "workspace.h"
+#include "index/embedder.h"
+#include "core/workspace.h"
 
 #include <catch2/catch_session.hpp>
 #include <catch2/reporters/catch_reporter_event_listener.hpp>

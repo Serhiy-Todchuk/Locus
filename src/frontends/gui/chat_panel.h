@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../frontend.h"
+#include "../../core/frontend.h"
 #include "slash_popup.h"
 
 #include <wx/wx.h>

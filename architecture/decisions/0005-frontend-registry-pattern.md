@@ -46,7 +46,7 @@ Properties:
   `ActivityLog` ring buffer owns the history. A late-joining frontend calls
   `AgentCore::get_activity(since_id=N)` once on attach and then consumes live events from
   the registry. No replay semantics baked into the registry itself.
-- **Header-only.** Small enough to live in `src/frontend_registry.h`. No .cpp, no
+- **Header-only.** Small enough to live in `src/core/frontend_registry.h`. No .cpp, no
   translation-unit cost.
 
 ## Consequences

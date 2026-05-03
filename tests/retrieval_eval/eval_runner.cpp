@@ -1,9 +1,9 @@
 #include "eval_runner.h"
 
-#include "embedder.h"
-#include "embedding_worker.h"
+#include "index/embedder.h"
+#include "index/embedding_worker.h"
 #include "index/index_query.h"
-#include "workspace.h"
+#include "core/workspace.h"
 
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>

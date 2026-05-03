@@ -8,13 +8,13 @@
 #include "file_change_tracker.h"
 #include "metrics.h"
 #include "core/workspace_services.h"
-#include "frontend.h"
-#include "frontend_registry.h"
+#include "../core/frontend.h"
+#include "../core/frontend_registry.h"
 #include "llm/llm_client.h"
 #include "session_manager.h"
 #include "slash_commands.h"
 #include "system_prompt.h"
-#include "tool.h"
+#include "../tools/tool.h"
 #include "tool_dispatcher.h"
 
 #include <atomic>

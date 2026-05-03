@@ -1,7 +1,7 @@
 #pragma once
 
 #include "llm/llm_client.h"   // ToolFormat
-#include "tool.h"
+#include "../tools/tool.h"
 
 #include <filesystem>
 #include <string>

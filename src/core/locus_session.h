@@ -2,7 +2,7 @@
 
 #include "agent/agent_core.h"
 #include "llm/llm_client.h"
-#include "tool_registry.h"
+#include "../tools/tool_registry.h"
 #include "workspace.h"
 
 #include <filesystem>

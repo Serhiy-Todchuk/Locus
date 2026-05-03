@@ -2,8 +2,8 @@
 #include "core/watcher_pump.h"
 #include "core/workspace_lock.h"
 #include "database.h"
-#include "embedder.h"
-#include "embedding_worker.h"
+#include "../index/embedder.h"
+#include "../index/embedding_worker.h"
 #include "extractors/docx_extractor.h"
 #include "extractors/extractor_registry.h"
 #include "extractors/html_extractor.h"
@@ -13,8 +13,8 @@
 #include "file_watcher.h"
 #include "index/index_query.h"
 #include "index/indexer.h"
-#include "process_registry.h"
-#include "reranker.h"
+#include "../tools/process_registry.h"
+#include "../index/reranker.h"
 
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>

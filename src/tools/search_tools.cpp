@@ -2,12 +2,12 @@
 #include "tools/shared.h"
 
 #include "core/workspace_services.h"
-#include "embedding_worker.h"
+#include "../index/embedding_worker.h"
 #include "index/glob_match.h"
 #include "index/index_query.h"
 #include "index/tree_sitter_registry.h"
-#include "reranker.h"
-#include "workspace.h"
+#include "../index/reranker.h"
+#include "../core/workspace.h"
 
 #include <spdlog/spdlog.h>
 #include <tree_sitter/api.h>

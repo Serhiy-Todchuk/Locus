@@ -1,7 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
-#include "embedder.h"
+#include "index/embedder.h"
 #include "extractors/text_extractor.h"
 #include "index/chunker.h"
 #include "index/index_query.h"

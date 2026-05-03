@@ -30,7 +30,7 @@ together into a conversation.
 | Compaction | `AgentCore::compact_context`, delegating to `ConversationHistory` | [conversation.h](../src/agent/conversation.h) |
 | Session I/O | `SessionManager` | [session_manager.h](../src/agent/session_manager.h) |
 | System prompt (+ attached context) | `SystemPromptBuilder` + `AgentCore::compose_system_prompt` | [system_prompt.h](../src/agent/system_prompt.h) |
-| Frontend fan-out | `FrontendRegistry` | [frontend_registry.h](../src/frontend_registry.h) |
+| Frontend fan-out | `FrontendRegistry` | [frontend_registry.h](../src/core/frontend_registry.h) |
 | Tool-facing workspace surface | `IWorkspaceServices` (implemented by `Workspace`) | [core/workspace_services.h](../src/core/workspace_services.h) |
 
 **Invariant:** only the agent thread writes `history_`. Collaborators never hold conversation
@@ -68,7 +68,7 @@ Key rules:
 - `send_message()` is **non-blocking** from any thread. It enqueues and returns.
 - `send_message_sync()` (CLI) enqueues, then blocks on `sync_cv_` until the turn finishes.
 - Every `IFrontend` callback fires on the **agent thread**. wxWidgets frontend marshals to
-  the UI thread via `wxQueueEvent` ([src/gui/wx_frontend.h](../src/gui/wx_frontend.h)); the CLI
+  the UI thread via `wxQueueEvent` ([src/frontends/gui/wx_frontend.h](../src/frontends/gui/wx_frontend.h)); the CLI
   is already on the main thread (see `send_message_sync`).
 - `tool_decision()` may be called from **any** thread. `AgentCore` forwards it to
   `ToolDispatcher::submit_decision`, which grabs the dispatcher-owned `decision_mutex_` and
@@ -455,7 +455,7 @@ up without replaying conversation history. Ring buffer cap: `k_activity_buffer_m
 - [src/agent/slash_commands.cpp](../src/agent/slash_commands.cpp) — parser + dispatcher + autocomplete
 - [src/agent/conversation.h](../src/agent/conversation.h) — `ConversationHistory`, `ChatMessage`, token estimation
 - [src/core/workspace_services.h](../src/core/workspace_services.h) — `IWorkspaceServices` tool-facing surface
-- [src/frontend.h](../src/frontend.h) — `IFrontend`, `ILocusCore`, `ToolDecision`, `CompactionStrategy`
+- [src/core/frontend.h](../src/core/frontend.h) — `IFrontend`, `ILocusCore`, `ToolDecision`, `CompactionStrategy`
 - [tool-protocol.md](tool-protocol.md) — `ITool`, approval policies, adding new tools
 - [overview.md](overview.md) — system-wide component map and context strategy
 - [decisions/](decisions/) — ADR trail for load-bearing architectural decisions

@@ -2,11 +2,11 @@
 
 #include "activity_log.h"
 #include "context_budget.h"
-#include "frontend.h"
+#include "../core/frontend.h"
 #include "llm/token_counter.h"
 #include "metrics.h"
-#include "tool_registry.h"
-#include "workspace.h"
+#include "../tools/tool_registry.h"
+#include "../core/workspace.h"
 
 #include <spdlog/spdlog.h>
 

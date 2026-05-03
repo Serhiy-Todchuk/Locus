@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../tool.h"
-#include "../workspace.h"
+#include "../../tools/tool.h"
+#include "../../core/workspace.h"
 
 #include <wx/wx.h>
 #include <wx/spinctrl.h>

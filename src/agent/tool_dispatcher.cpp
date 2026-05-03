@@ -5,7 +5,7 @@
 #include "file_change_tracker.h"
 #include "metrics.h"
 #include "tools/shared.h"
-#include "workspace.h"
+#include "../core/workspace.h"
 
 #include <spdlog/spdlog.h>
 

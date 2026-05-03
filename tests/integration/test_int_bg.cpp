@@ -1,6 +1,6 @@
 #include "harness_fixture.h"
 
-#include "process_registry.h"
+#include "tools/process_registry.h"
 
 #include <catch2/catch_test_macros.hpp>
 

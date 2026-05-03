@@ -1,8 +1,8 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include "workspace.h"
-#include "database.h"
-#include "file_watcher.h"
+#include "core/workspace.h"
+#include "core/database.h"
+#include "core/file_watcher.h"
 
 #include <filesystem>
 #include <fstream>

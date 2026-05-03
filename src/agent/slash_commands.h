@@ -1,7 +1,7 @@
 #pragma once
 
 #include "core/workspace_services.h"
-#include "tool.h"
+#include "../tools/tool.h"
 
 #include <nlohmann/json.hpp>
 

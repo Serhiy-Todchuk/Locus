@@ -213,12 +213,12 @@ set_target_properties(sqlite_vec PROPERTIES
 # -- Core library (shared between main exe and tests) --------------------------
 
 add_library(locus_core STATIC
-    src/workspace.cpp
+    src/core/workspace.cpp
     src/core/watcher_pump.cpp
     src/core/workspace_lock.cpp
     src/core/locus_session.cpp
-    src/database.cpp
-    src/file_watcher.cpp
+    src/core/database.cpp
+    src/core/file_watcher.cpp
     src/index/indexer.cpp
     src/index/index_query.cpp
     src/index/chunker.cpp
@@ -232,6 +232,9 @@ add_library(locus_core STATIC
     src/index/symbol_extractors/java_extractor.cpp
     src/index/symbol_extractors/csharp_extractor.cpp
     src/index/prepared_statements.cpp
+    src/index/embedder.cpp
+    src/index/embedding_worker.cpp
+    src/index/reranker.cpp
     src/llm/sse_parser.cpp
     src/llm/llm_client.cpp
     src/llm/openai_transport.cpp
@@ -242,7 +245,7 @@ add_library(locus_core STATIC
     src/llm/stream_decoders/auto_decoder.cpp
     src/llm/llm_router.cpp
     src/llm/token_counter.cpp
-    src/tool_registry.cpp
+    src/tools/tool_registry.cpp
     src/tools/shared.cpp
     src/tools/file_tools.cpp
     src/tools/search_tools.cpp
@@ -250,7 +253,7 @@ add_library(locus_core STATIC
     src/tools/process_tools.cpp
     src/tools/interactive_tools.cpp
     src/tools/tools.cpp
-    src/process_registry.cpp
+    src/tools/process_registry.cpp
     src/agent/conversation.cpp
     src/agent/system_prompt.cpp
     src/agent/activity_log.cpp
@@ -263,7 +266,7 @@ add_library(locus_core STATIC
     src/agent/session_manager.cpp
     src/agent/checkpoint_store.cpp
     src/agent/file_change_tracker.cpp
-    src/frontends/cli_frontend.cpp
+    src/frontends/cli/cli_frontend.cpp
     src/extractors/extractor_registry.cpp
     src/extractors/markdown_extractor.cpp
     src/extractors/html_extractor.cpp
@@ -271,9 +274,6 @@ add_library(locus_core STATIC
     src/extractors/docx_extractor.cpp
     src/extractors/xlsx_extractor.cpp
     src/extractors/zip_reader.cpp
-    src/embedder.cpp
-    src/embedding_worker.cpp
-    src/reranker.cpp
 )
 
 target_include_directories(locus_core PUBLIC src third_party/sqlite-vec)
@@ -316,23 +316,23 @@ find_package(unofficial-webview2 CONFIG REQUIRED)
 find_package(md4c CONFIG REQUIRED)
 
 add_executable(locus_gui WIN32
-    src/gui/locus_app.cpp
-    src/gui/locus_frame.cpp
-    src/gui/locus_tray.cpp
-    src/gui/menu_controller.cpp
-    src/gui/ops_status_view.cpp
-    src/gui/wx_frontend.cpp
-    src/gui/activity_panel.cpp
-    src/gui/metrics_view.cpp
-    src/gui/chat_panel.cpp
-    src/gui/slash_popup.cpp
-    src/gui/tool_approval_panel.cpp
-    src/gui/ask_user_dialog.cpp
-    src/gui/compaction_dialog.cpp
-    src/gui/file_tree_panel.cpp
-    src/gui/settings_dialog.cpp
-    src/gui/markdown.cpp
-    src/gui/autostart.cpp
+    src/frontends/gui/locus_app.cpp
+    src/frontends/gui/locus_frame.cpp
+    src/frontends/gui/locus_tray.cpp
+    src/frontends/gui/menu_controller.cpp
+    src/frontends/gui/ops_status_view.cpp
+    src/frontends/gui/wx_frontend.cpp
+    src/frontends/gui/activity_panel.cpp
+    src/frontends/gui/metrics_view.cpp
+    src/frontends/gui/chat_panel.cpp
+    src/frontends/gui/slash_popup.cpp
+    src/frontends/gui/tool_approval_panel.cpp
+    src/frontends/gui/ask_user_dialog.cpp
+    src/frontends/gui/compaction_dialog.cpp
+    src/frontends/gui/file_tree_panel.cpp
+    src/frontends/gui/settings_dialog.cpp
+    src/frontends/gui/markdown.cpp
+    src/frontends/gui/autostart.cpp
 )
 
 target_link_libraries(locus_gui PRIVATE

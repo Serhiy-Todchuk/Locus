@@ -1,6 +1,6 @@
 #include "prepared_statements.h"
 
-#include "database.h"
+#include "../core/database.h"
 
 #include <sqlite3.h>
 

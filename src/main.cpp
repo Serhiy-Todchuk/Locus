@@ -1,9 +1,9 @@
-#include "workspace.h"
+#include "core/workspace.h"
 #include "core/locus_session.h"
 #include "core/watcher_pump.h"
 #include "llm/llm_client.h"
 #include "agent/agent_core.h"
-#include "frontends/cli_frontend.h"
+#include "frontends/cli/cli_frontend.h"
 
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/stdout_color_sinks.h>

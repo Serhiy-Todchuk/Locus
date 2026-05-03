@@ -1,7 +1,7 @@
 #pragma once
 
 #include "core/workspace_services.h"
-#include "tool.h"  // for ToolApprovalPolicy
+#include "../tools/tool.h"  // for ToolApprovalPolicy
 
 #include <filesystem>
 #include <functional>

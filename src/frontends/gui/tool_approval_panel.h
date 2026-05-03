@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../frontend.h"
+#include "../../core/frontend.h"
 
 #include <wx/wx.h>
 #include <wx/stc/stc.h>

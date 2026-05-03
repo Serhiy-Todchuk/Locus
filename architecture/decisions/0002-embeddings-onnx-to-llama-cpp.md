@@ -31,7 +31,7 @@ Replace ONNX Runtime with **llama.cpp's C API** (vcpkg `llama-cpp`, transitively
 
 - Embedding models are distributed as single `.gguf` files (weights + vocab + metadata in one
   blob). Default model: `all-MiniLM-L6-v2.Q8_0.gguf` (~25 MB, 384-dim).
-- `Embedder` in [src/embedder.h/cpp](../../src/embedder.h) loads the GGUF, tokenises via the
+- `Embedder` in [src/index/embedder.h/cpp](../../src/index/embedder.h) loads the GGUF, tokenises via the
   WordPiece vocab baked into the file, runs inference, and returns an L2-normalised vector.
 - The embedding worker runs on its own thread and writes to `vectors.db` on its own connection
   (see [ADR 0001](0001-split-index-into-main-and-vectors.md)).

@@ -1,6 +1,6 @@
 #include "compaction_dialog.h"
 
-#include "../llm/token_counter.h"
+#include "../../llm/token_counter.h"
 
 #include <algorithm>
 

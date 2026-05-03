@@ -2,8 +2,8 @@
 
 #include "index/index_query.h"
 #include "llm/token_counter.h"
-#include "tool_registry.h"
-#include "workspace.h"
+#include "../tools/tool_registry.h"
+#include "../core/workspace.h"
 
 #include <spdlog/spdlog.h>
 

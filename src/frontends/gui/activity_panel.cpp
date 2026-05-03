@@ -1,7 +1,7 @@
 #include "activity_panel.h"
 
 #include "metrics_view.h"
-#include "../agent/agent_core.h"
+#include "../../agent/agent_core.h"
 
 #include <wx/listctrl.h>
 #include <wx/notebook.h>

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "activity_event.h"
-#include "tool.h"
+#include "../tools/tool.h"
 
 #include <cstdint>
 #include <optional>

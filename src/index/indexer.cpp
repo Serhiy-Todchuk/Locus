@@ -1,10 +1,10 @@
 #include "indexer.h"
 #include "chunker.h"
-#include "database.h"
+#include "../core/database.h"
 #include "extractors/extractor_registry.h"
 #include "extractors/text_extractor.h"
 #include "glob_match.h"
-#include "workspace.h"
+#include "../core/workspace.h"
 
 #include <spdlog/spdlog.h>
 #include <sqlite3.h>

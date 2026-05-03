@@ -1,6 +1,6 @@
 #include "activity_log.h"
 
-#include "frontend.h"
+#include "../core/frontend.h"
 
 #include <chrono>
 #include <utility>

@@ -20,7 +20,7 @@ starts / stops.
 | **Main / UI thread** | process entry | everything (owns `AgentCore`, `Workspace`, frontends) | invokes `ILocusCore` methods; forwards tool decisions | spawned by OS at `main` / `WinMain`; exits last |
 | **Agent thread** | `AgentCore::agent_thread_` | `message_queue_`, `history_`, `llm_`, `tools_`, `services_`, `activity_`, `budget_`, `frontends_` | `history_` (exclusive during a turn), `activity_.buffer_`, `budget_` counters, `busy_` / `cancel_requested_` | `AgentCore::start()` → `std::thread` wrapping `agent_thread_func()`; joined in `AgentCore::stop()` after `running_=false` + `queue_cv_.notify_one()` + `dispatcher_->wake()` |
 | **WatcherPump thread** | `WatcherPump::thread_` ([src/core/watcher_pump.cpp](../src/core/watcher_pump.cpp)) | `FileWatcher::pending_` (via `drain`) | `Indexer` prepared statements (via `process_events`), main DB, vectors DB | `WatcherPump::start()` during `Workspace` ctor; joined in `stop()` (via dtor) with `stopping_=true` + `cv_.notify_all()` |
-| **Embedding worker thread** | `EmbeddingWorker::thread_` ([src/embedding_worker.cpp](../src/embedding_worker.cpp)) | its own SQLite prepared statements against the vectors DB, `Embedder` (CPU llama.cpp session), `pending_ids_` | `chunk_vectors` rows, `done_`/`total_` counters | `EmbeddingWorker::start()` during `Workspace` ctor (when semantic enabled); joined in `stop()` via `running_.exchange(false)` + `queue_cv_.notify_all()` |
+| **Embedding worker thread** | `EmbeddingWorker::thread_` ([src/index/embedding_worker.cpp](../src/index/embedding_worker.cpp)) | its own SQLite prepared statements against the vectors DB, `Embedder` (CPU llama.cpp session), `pending_ids_` | `chunk_vectors` rows, `done_`/`total_` counters | `EmbeddingWorker::start()` during `Workspace` ctor (when semantic enabled); joined in `stop()` via `running_.exchange(false)` + `queue_cv_.notify_all()` |
 | **efsw internal watch thread(s)** | `efsw::FileWatcher` (owned by `locus::FileWatcher::watcher_`) | OS change notifications | `FileWatcher::pending_` via `push_raw` (callback path) | starts on `FileWatcher::start()` → `watcher_->watch()`; stops when `efsw::FileWatcher` destructs |
 
 **Caller threads that never form a dedicated loop but touch core state:**
@@ -204,7 +204,7 @@ Captured here so future readers don't assume they're bugs or rediscover them the
 - [src/agent/conversation.cpp](../src/agent/conversation.cpp) — `assert_owner_thread()` fence
 - [src/agent/tool_dispatcher.cpp](../src/agent/tool_dispatcher.cpp) — approval condvar, cancel flag
 - [src/core/watcher_pump.cpp](../src/core/watcher_pump.cpp) — background drain thread
-- [src/embedding_worker.cpp](../src/embedding_worker.cpp) — worker thread, own DB connection
-- [src/file_watcher.cpp](../src/file_watcher.cpp) — efsw listener bridge
-- [src/frontend_registry.h](../src/frontend_registry.h) — fan-out + per-frontend exception isolation
+- [src/index/embedding_worker.cpp](../src/index/embedding_worker.cpp) — worker thread, own DB connection
+- [src/core/file_watcher.cpp](../src/core/file_watcher.cpp) — efsw listener bridge
+- [src/core/frontend_registry.h](../src/core/frontend_registry.h) — fan-out + per-frontend exception isolation
 - [agent-loop.md](agent-loop.md) §8 — turn-level invariants that intersect with §3 above

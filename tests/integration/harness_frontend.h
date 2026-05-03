@@ -1,8 +1,8 @@
 #pragma once
 
-#include "activity_event.h"
-#include "frontend.h"
-#include "tool.h"
+#include "core/activity_event.h"
+#include "core/frontend.h"
+#include "tools/tool.h"
 
 #include <atomic>
 #include <condition_variable>

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../file_watcher.h"
+#include "file_watcher.h"
 
 #include <atomic>
 #include <chrono>
