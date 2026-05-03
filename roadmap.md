@@ -137,6 +137,7 @@ Listed in execution order. Letters are identity, not sequence (retained for link
 | [S4.D](roadmap/M4/S4.D-plan-mode.md) | Plan Mode |
 | [S4.H](roadmap/M4/S4.H-parallel-tools.md) | Parallel Tool Calls |
 | [S4.O](roadmap/M4/S4.O-streaming-tool-results.md) | Streaming / Partial Tool Results |
+| [S4.W](roadmap/M4/S4.W-list-directory-completeness.md) | list_directory: Surface Unindexed Files |
 | [S4.V](roadmap/M4/S4.V-misc-gaps.md) | Miscellaneous Smaller Gaps |
 
 ---

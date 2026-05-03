@@ -323,9 +323,9 @@ std::string extract_regex_snippet(const std::string& content,
 
 ToolResult SearchRegexTool::execute(const ToolCall& call, IWorkspaceServices& ws)
 {
-    std::string pattern = call.args.value("pattern", "");
+    std::string pattern = call.args.value("query", "");
     if (pattern.empty())
-        return error_result("Error: 'pattern' parameter is required");
+        return error_result("Error: 'query' parameter is required (regex mode)");
 
     std::string path_glob    = call.args.value("path_glob", "");
     bool        case_sens    = call.args.value("case_sensitive", true);

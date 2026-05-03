@@ -124,10 +124,21 @@ heavy-lifter that does exactly what the user directs.
 
 ### 4. Token Efficiency as Engineering Discipline
 On local hardware, every token has a real cost in inference time.
-Locus treats token usage as a first-class engineering concern:
+Locus treats token usage as a first-class engineering concern.
+
+Two axes matter when working with short-context local LLMs:
+**per-turn rent** (how heavy is each prompt) and **cross-turn signal density**
+(how much value the agent extracts per token spent across a whole session).
+Minimal harnesses optimize the first; Locus deliberately spends a bit more
+on per-turn rent to compound far more value across turns — the persistent
+index, file-change awareness, and symbol catalog mean the agent stops
+re-paying tokens to learn the workspace it already knows.
+
+Concretely:
 - Tools and targeted retrieval over context pre-loading
-- Paginated reads — never full-file dumps
+- Paginated reads -- never full-file dumps
 - Tool results summarized before injection
+- Persistent index so codebase knowledge survives compaction
 - Context window always visible to the user
 - Compaction strategies that the user controls
 

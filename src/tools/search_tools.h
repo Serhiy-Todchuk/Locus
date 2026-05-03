@@ -23,15 +23,14 @@ public:
             {"query",          "string",  "Search query. Keywords for text/hybrid, "
                                           "symbol name/prefix for symbols, "
                                           "natural language for semantic, "
+                                          "ECMAScript regex for regex (preserves "
+                                          "punctuation and case -- good for exact "
+                                          "identifiers like `->m_cache` or `TODO(XXX)`), "
                                           "Tree-sitter S-expression for ast "
                                           "(e.g. `(call_expression function: "
-                                          "(identifier) @fn (#eq? @fn \"malloc\"))`). "
-                                          "Ignored in regex mode (use `pattern`).", false},
+                                          "(identifier) @fn (#eq? @fn \"malloc\"))`).", false},
             {"mode",           "string",  "One of: text, regex, symbols, ast, semantic, hybrid. "
                                           "Defaults to text.", false},
-            {"pattern",        "string",  "regex mode only: ECMAScript regex pattern to match. "
-                                          "Preserves punctuation and case -- good for exact "
-                                          "identifiers like `->m_cache` or `TODO(XXX)`.", false},
             {"path_glob",      "string",  "regex/ast modes: optional glob to limit which "
                                           "indexed files are searched (e.g. `**/*.cpp`).", false},
             {"case_sensitive", "boolean", "regex mode only: defaults to true.", false},
@@ -121,7 +120,7 @@ public:
     }
     std::vector<ToolParam> params() const override {
         return {
-            {"pattern",        "string",  "ECMAScript regex pattern.", true},
+            {"query",          "string",  "ECMAScript regex pattern.", true},
             {"path_glob",      "string",  "Optional glob to limit which indexed files "
                                           "are searched (matched against relative path).", false},
             {"case_sensitive", "boolean", "Defaults to true.", false},

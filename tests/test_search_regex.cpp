@@ -62,7 +62,7 @@ TEST_CASE("search mode=regex dispatches to regex backend", "[s4.p][search][regex
         locus::SearchTool tool;
         auto result = tool.execute(regex_call({
             {"mode", "regex"},
-            {"pattern", "int\\s+\\w+"},
+            {"query", "int\\s+\\w+"},
         }), ws);
 
         REQUIRE(result.success);
@@ -71,9 +71,9 @@ TEST_CASE("search mode=regex dispatches to regex backend", "[s4.p][search][regex
     cleanup(tmp);
 }
 
-TEST_CASE("search mode=regex requires pattern", "[s4.p][search][regex]")
+TEST_CASE("search mode=regex requires query", "[s4.p][search][regex]")
 {
-    auto tmp = make_test_dir("needs_pattern");
+    auto tmp = make_test_dir("needs_query");
     write_file(tmp / "a.txt", "hello");
 
     {
@@ -82,7 +82,7 @@ TEST_CASE("search mode=regex requires pattern", "[s4.p][search][regex]")
         auto result = tool.execute(regex_call({{"mode", "regex"}}), ws);
 
         REQUIRE_FALSE(result.success);
-        REQUIRE_THAT(result.content, ContainsSubstring("pattern"));
+        REQUIRE_THAT(result.content, ContainsSubstring("query"));
     }
     cleanup(tmp);
 }
@@ -98,7 +98,7 @@ TEST_CASE("search mode=regex rejects malformed pattern", "[s4.p][search][regex]"
         // Unclosed group — invalid ECMAScript regex.
         auto result = tool.execute(regex_call({
             {"mode", "regex"},
-            {"pattern", "foo("},
+            {"query", "foo("},
         }), ws);
 
         REQUIRE_FALSE(result.success);
@@ -127,14 +127,14 @@ TEST_CASE("search regex matches punctuation-heavy identifiers", "[s4.p][search][
         // Arrow + member — FTS5 would lose the punctuation entirely.
         auto arrow = tool.execute(
             locus::ToolCall{"r", "search_regex",
-                {{"pattern", "->m_cache"}}}, ws);
+                {{"query", "->m_cache"}}}, ws);
         REQUIRE(arrow.success);
         REQUIRE_THAT(arrow.content, ContainsSubstring("cache.cpp:2"));
 
         // TODO marker with parenthesised tag.
         auto todo = tool.execute(
             locus::ToolCall{"r", "search_regex",
-                {{"pattern", "TODO\\(XXX\\)"}}}, ws);
+                {{"query", "TODO\\(XXX\\)"}}}, ws);
         REQUIRE(todo.success);
         REQUIRE_THAT(todo.content, ContainsSubstring("cache.cpp:3"));
     }
@@ -154,13 +154,13 @@ TEST_CASE("search regex is case-sensitive by default", "[s4.p][search][regex]")
 
         auto hit = tool.execute(
             locus::ToolCall{"r", "search_regex",
-                {{"pattern", "Hello"}}}, ws);
+                {{"query", "Hello"}}}, ws);
         REQUIRE(hit.success);
         REQUIRE_THAT(hit.content, ContainsSubstring("a.txt:1"));
 
         auto miss = tool.execute(
             locus::ToolCall{"r", "search_regex",
-                {{"pattern", "hello"}}}, ws);
+                {{"query", "hello"}}}, ws);
         REQUIRE(miss.success);
         REQUIRE_THAT(miss.content, ContainsSubstring("0 matches"));
     }
@@ -178,7 +178,7 @@ TEST_CASE("search regex case_sensitive=false finds mixed-case", "[s4.p][search][
 
         auto hit = tool.execute(
             locus::ToolCall{"r", "search_regex",
-                {{"pattern", "hello"},
+                {{"query", "hello"},
                  {"case_sensitive", false}}}, ws);
         REQUIRE(hit.success);
         REQUIRE_THAT(hit.content, ContainsSubstring("2 matches"));
@@ -206,7 +206,7 @@ TEST_CASE("search regex can span multiple lines via [\\s\\S]", "[s4.p][search][r
         // `.` does not match newlines in ECMAScript; [\s\S] is the idiom.
         auto hit = tool.execute(
             locus::ToolCall{"r", "search_regex",
-                {{"pattern", "class Foo[\\s\\S]*?bar\\(\\)"}}}, ws);
+                {{"query", "class Foo[\\s\\S]*?bar\\(\\)"}}}, ws);
         REQUIRE(hit.success);
         REQUIRE_THAT(hit.content, ContainsSubstring("block.cpp:1"));
     }
@@ -230,7 +230,7 @@ TEST_CASE("search regex output includes line numbers and 1-line context", "[s4.p
 
         auto result = tool.execute(
             locus::ToolCall{"r", "search_regex",
-                {{"pattern", "target"}}}, ws);
+                {{"query", "target"}}}, ws);
         REQUIRE(result.success);
         // Line number appears.
         REQUIRE_THAT(result.content, ContainsSubstring("multi.txt:2"));
@@ -256,7 +256,7 @@ TEST_CASE("search regex path_glob narrows the file set", "[s4.p][search][regex]"
 
         auto result = tool.execute(
             locus::ToolCall{"r", "search_regex",
-                {{"pattern", "needle"},
+                {{"query", "needle"},
                  {"path_glob", "*.cpp"}}}, ws);
         REQUIRE(result.success);
         REQUIRE_THAT(result.content, ContainsSubstring("keep.cpp"));
@@ -280,7 +280,7 @@ TEST_CASE("search regex respects max_results", "[s4.p][search][regex]")
 
         auto result = tool.execute(
             locus::ToolCall{"r", "search_regex",
-                {{"pattern", "hit"},
+                {{"query", "hit"},
                  {"max_results", 5}}}, ws);
         REQUIRE(result.success);
         REQUIRE_THAT(result.content, ContainsSubstring("5 matches"));
@@ -309,7 +309,7 @@ TEST_CASE("search regex skips binary files", "[s4.p][search][regex]")
 
         auto result = tool.execute(
             locus::ToolCall{"r", "search_regex",
-                {{"pattern", "needle"}}}, ws);
+                {{"query", "needle"}}}, ws);
         REQUIRE(result.success);
         REQUIRE_THAT(result.content, ContainsSubstring("text.txt"));
         REQUIRE_THAT(result.content, !ContainsSubstring("blob.bin"));
@@ -324,17 +324,21 @@ TEST_CASE("search tool exposes regex params in its schema", "[s4.p][search][rege
     locus::SearchTool tool;
     auto params = tool.params();
 
-    bool has_pattern = false, has_glob = false, has_case = false, has_mode = false;
+    bool has_query = false, has_glob = false, has_case = false, has_mode = false;
+    bool has_pattern_leftover = false;
     for (auto& p : params) {
-        if (p.name == "pattern")        has_pattern = true;
+        if (p.name == "query")          has_query   = true;
         if (p.name == "path_glob")      has_glob    = true;
         if (p.name == "case_sensitive") has_case    = true;
         if (p.name == "mode")           has_mode    = true;
+        if (p.name == "pattern")        has_pattern_leftover = true;
     }
-    REQUIRE(has_pattern);
+    REQUIRE(has_query);
     REQUIRE(has_glob);
     REQUIRE(has_case);
     REQUIRE(has_mode);
+    // Regex mode reuses `query`; the legacy `pattern` arg is gone.
+    REQUIRE_FALSE(has_pattern_leftover);
 
     REQUIRE_THAT(tool.description(), ContainsSubstring("regex"));
 }

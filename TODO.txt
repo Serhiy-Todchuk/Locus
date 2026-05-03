@@ -3,3 +3,16 @@
 - Replace file content tool with such args: start line/pos, end line/pos, what to insert
 - terminal for LLM run_command calls? terminal item in view menu?
 - sample.docx has no heading
+
+- Tool approval - allow all for this session
+- small embedding models by default in GUI settings
+- load last session by default after closing. Do we have [reset session]/[new session] button in UI?
+- increase run_command timeout to 30 min
+- what is our AST-search?
+
+- what about extensions? how does pi handle mcp, extensions and other?
+- regarding S4.F... do we really have system prompt being changed between turns?
+
+manifest pruning idea
+
+- context review

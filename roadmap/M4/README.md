@@ -32,6 +32,7 @@
 | [S4.Q](S4.Q-multi-model.md) | Multi-Model Split (Weak + Strong) | Performance |
 | [S4.H](S4.H-parallel-tools.md) | Parallel Tool Calls | Performance |
 | [S4.O](S4.O-streaming-tool-results.md) | Streaming / Partial Tool Results | UX latency |
+| [S4.W](S4.W-list-directory-completeness.md) | list_directory: Surface Unindexed Files | Tools |
 | [S4.V](S4.V-misc-gaps.md) | Miscellaneous Smaller Gaps | Mixed |
 
 ## Prerequisites from M3
