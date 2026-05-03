@@ -62,11 +62,12 @@ struct WorkspaceConfig {
 
     // Stream-stall watchdog (ms): abort the request if zero bytes flow for
     // this long. Not a total-request cap -- a reasoning stream that keeps
-    // emitting tokens stays connected indefinitely. The 180s default covers
-    // a multi-K-token prefill on a 30-40B-class local model on consumer GPU
-    // (LM Studio may send no SSE bytes during prefill). Bump higher if your
-    // hardware needs it; drop to 60000 to match older Locus behaviour.
-    int         llm_timeout_ms = 180000;
+    // emitting tokens stays connected indefinitely. The 600s default covers
+    // both prefill and the (LM-Studio-template-buffered) <think> block on a
+    // 30-40B-class thinking model with multi-K-token context on consumer
+    // GPU. Bump higher if your hardware needs it; drop to 60000 to match
+    // pre-S4 Locus behaviour.
+    int         llm_timeout_ms = 600000;
 
     // S4.N -- tool-call wire format. Stored as a string so a config.json
     // edited by the user reads naturally; parsed via tool_format_from_string.

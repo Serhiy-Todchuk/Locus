@@ -206,8 +206,8 @@ log file then captures every SQL query, tool call, and LLM token.
 **"Cannot connect to LLM server"** -- LM Studio isn't running, or its server
 isn't started. Open LM Studio, load a model, click *Start Server*.
 
-**"LLM stream stalled after retry (no data for 180s)"** -- a local LLM took
-longer than 180 s to send the first byte. Common with large models on a fresh
+**"LLM stream stalled after retry (no data for 600s)"** -- a local LLM took
+longer than 600 s to send the first byte. Common with large models on a fresh
 prompt where prefill alone takes minutes. Raise the watchdog in
 `<workspace>/.locus/config.json`:
 
