@@ -27,6 +27,7 @@ Two binaries ship from the same codebase:
 | [DIFFERENTIATORS.md](DIFFERENTIATORS.md) | Who this is for vs existing tools |
 | [requirements.md](requirements.md) | Features, capabilities, constraints |
 | [architecture/overview.md](architecture/overview.md) | High-level system design, context strategy |
+| [architecture/diagrams.md](architecture/diagrams.md) | Visual map -- eight Mermaid diagrams covering agent loop, index pipeline, LLM stack, threading, compaction, edit safety |
 | [architecture/tool-protocol.md](architecture/tool-protocol.md) | ITool interface and approval flow |
 | [architecture/workspace-index.md](architecture/workspace-index.md) | The workspace indexing subsystem design |
 | [architecture/tech-stack.md](architecture/tech-stack.md) | Technology stack -- decided choices and future frontend options |

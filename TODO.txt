@@ -1,8 +1,6 @@
 - Create an app icon
-- Memory bank by Lilu
 - sample.docx has no heading
 - open workspace folder, open global locus folder menu items.
 - break down settings to global and workspace. Same with MCP, etc.?
 - use monospace font for chat
 - merge statistics/activity log with chat window
-

@@ -25,7 +25,7 @@ flowchart TB
         direction LR
         CLI[CliFrontend<br/>terminal]
         GUI[wxWidgets GUI<br/>via WxFrontend bridge]
-        Future[Future:<br/>Crow / VSCode shim]
+        Future["Future:<br/>Crow / VSCode shim"]
     end
 
     Frontends <-->|FrontendRegistry<br/>thread-safe fan-out| Session
@@ -35,13 +35,13 @@ flowchart TB
         Agent[AgentCore<br/>orchestrator + agent thread]
         LLM[ILLMClient]
         Tools[ToolRegistry<br/>13 built-ins]
-        WS[Workspace<br/>: IWorkspaceServices]
+        WS["Workspace<br/>: IWorkspaceServices"]
     end
 
     Agent -->|stream tokens<br/>+ tool calls| LLM
     Agent -->|dispatch| Tools
     Tools -->|read / write| WS
-    LLM -->|HTTP + SSE| LMS[(LM Studio<br/>localhost:1234)]
+    LLM -->|HTTP + SSE| LMS[("LM Studio<br/>localhost:1234")]
 
     subgraph WSI["Workspace internals"]
         direction LR
@@ -120,30 +120,30 @@ sequenceDiagram
     autonumber
     participant Loop as AgentLoop
     participant Disp as ToolDispatcher
-    participant Front as Frontend(s)
+    participant Front as Frontend
     participant User
     participant Ckpt as CheckpointStore
     participant Tool as ITool
     participant Hist as ConversationHistory
     participant Met as MetricsAggregator
 
-    Loop->>Disp: dispatch(ToolCall)
+    Loop->>Disp: dispatch ToolCall
     Disp->>Front: emit tool_approval_request
     Front->>User: render diff / args / Modify pane
-    User-->>Front: approve | modify | reject
+    User-->>Front: approve, modify, or reject
     Front-->>Disp: ToolDecision
 
     alt rejected
-        Disp->>Hist: append rejection tool_result
+        Disp->>Hist: append rejection tool result
     else approved or modified
-        opt mutating: edit_file / write_file / delete_file
-            Disp->>Ckpt: snapshot(rel_path)
-            Note over Ckpt: .locus/checkpoints/<br/>session_id/turn_id/files/...
+        opt mutating tool (edit, write, delete)
+            Disp->>Ckpt: snapshot rel_path
+            Note over Ckpt: stored under .locus/checkpoints/sid/tid/files/
         end
-        Disp->>Tool: execute(args, IWorkspaceServices&)
+        Disp->>Tool: execute args + IWorkspaceServices
         Tool-->>Disp: ToolResult
-        Disp->>Met: record(name, ok, ms, content_size)
-        Disp->>Hist: append tool_result
+        Disp->>Met: record name, ok, ms, content_size
+        Disp->>Hist: append tool result
     end
 ```
 
@@ -219,7 +219,7 @@ selected -- XML extraction is purely additive.
 ```mermaid
 flowchart TB
     Caller[AgentLoop.complete_streaming]
-    Caller --> Cli[LMStudioClient<br/>: ILLMClient]
+    Caller --> Cli["LMStudioClient<br/>: ILLMClient"]
 
     Cli --> Tx[OpenAiTransport<br/>cpr POST + SSE +<br/>1-shot stall retry]
     Tx -->|raw SSE 'data:'<br/>payloads| Pick
@@ -229,7 +229,7 @@ flowchart TB
     Pick -->|OpenAi| OAI[OpenAiDecoder<br/>native JSON tool_calls]
     Pick -->|Qwen| QW[QwenXmlDecoder]
     Pick -->|Claude| CL[ClaudeXmlDecoder]
-    Pick -->|None| NN[OpenAiDecoder<br/>tools[] omitted]
+    Pick -->|None| NN["OpenAiDecoder<br/>tools array omitted"]
 
     QW -.uses.-> Xml[XmlToolCallExtractor<br/>boundary-safe<br/>partial-marker hold-back]
     CL -.uses.-> Xml
@@ -277,11 +277,11 @@ flowchart TB
     end
 
     subgraph TPump["WatcherPump thread"]
-        WP[Drain efsw events<br/>-> Indexer.process_events]
+        WP["Drain efsw events<br/>then Indexer.process_events"]
     end
 
     subgraph TEmbed["EmbeddingWorker thread"]
-        EWk[Drain queue<br/>-> Embedder<br/>-> vectors.db]
+        EWk["Drain queue<br/>through Embedder<br/>into vectors.db"]
     end
 
     subgraph TProcs["N process-reader threads"]
@@ -321,21 +321,21 @@ flowchart TB
     Up --> Track[track delta vs<br/>previous-turn total]
     Track --> Pct{usage / max}
 
-    Pct -->|< 80%| Cont[Continue]
-    Pct -->|>= 80%| Soft[Fire SOFT<br/>compaction event]
-    Pct -->|>= 100%| Hard[Fire HARD<br/>compaction event]
+    Pct -->|under 80 pct| Cont[Continue]
+    Pct -->|80 pct or more| Soft[Fire SOFT<br/>compaction event]
+    Pct -->|100 pct or more| Hard[Fire HARD<br/>compaction event]
 
     Soft --> Prompt[Frontend prompts user]
     Hard --> Prompt
 
     Prompt --> Strat{CompactionStrategy}
-    Strat -->|B: drop oldest N| SB[Drop oldest N turns]
-    Strat -->|C: summarize| SC[LLM summarizes<br/>older turns -> 1 msg]
+    Strat -->|B drop oldest N| SB[Drop oldest N turns]
+    Strat -->|C summarize| SC["LLM summarizes<br/>older turns into one msg"]
 
-    SB --> Arch[(Archive original<br/>history.before-*.json)]
+    SB --> Arch[("Archive original<br/>history.before-*.json")]
     SC --> Arch
     Arch --> Repl[Replace history in place]
-    Repl --> Foot[Footnote in new context:<br/>'archived to file X']
+    Repl --> Foot["Footnote in new context:<br/>archived to file X"]
     Foot --> Cont
 ```
 
@@ -349,29 +349,29 @@ all-or-nothing.
 
 ```mermaid
 flowchart TB
-    Call[edit_file call] --> RT{ReadTracker:<br/>path read this session?}
-    RT -->|no| R1[Refuse:<br/>'read_file first']
+    Call[edit_file call] --> RT{"ReadTracker:<br/>path read this session?"}
+    RT -->|no| R1["Refuse:<br/>read_file first"]
     RT -->|yes| Loc[Locate each old_string<br/>in current bytes]
 
-    Loc --> Uni{All edits unique<br/>(unless replace_all)?}
-    Uni -->|no| R2[Refuse:<br/>not unique]
+    Loc --> Uni{"All edits unique?<br/>(replace_all bypasses)"}
+    Uni -->|no| R2["Refuse:<br/>not unique"]
     Uni -->|yes| Apply[Apply edits<br/>sequentially in memory]
 
-    Apply --> Snap[CheckpointStore.snapshot<br/>writes original byte-for-byte<br/>to checkpoints/<sid>/<tid>/files/]
-    Snap --> Tmp[Write new bytes to<br/>path.tmp.<rand>]
-    Tmp --> Ren[Atomic rename<br/>tmp -> path]
+    Apply --> Snap["CheckpointStore.snapshot<br/>writes original byte-for-byte<br/>to checkpoints/sid/tid/files/"]
+    Snap --> Tmp["Write new bytes to<br/>path.tmp.rand"]
+    Tmp --> Ren["Atomic rename<br/>tmp into path"]
 
     Ren --> MAT[FileChangeTracker.<br/>mark_agent_touched]
     MAT --> Sum[Return unified diff<br/>summary]
 
-    R1 --> Err[(ToolResult error<br/>visible to model)]
+    R1 --> Err[("ToolResult error<br/>visible to model")]
     R2 --> Err
 
     subgraph Undo["/undo turn_id (later)"]
         direction LR
         US[Read manifest] --> URe[Restore each file<br/>from snapshot]
         URe --> URem[Remove created files]
-        URem --> URep[Report skipped<br/>files (>1 MB)]
+        URem --> URep["Report skipped<br/>files over 1 MB"]
     end
 ```
 
