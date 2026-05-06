@@ -20,10 +20,11 @@ Until then, items live here as one-line entries (or short paragraphs when the ra
 
 ## Items
 
+- **Agent-side history-archive recovery tool** (conditional on user demand). [S5.F](../M5/S5.F-compaction-v2.md) writes a chained history archive before each compaction and tells the *user* about it via a footnote in the new context. The LLM does not currently get a tool to read these archives -- a deliberate v1 cut to avoid the agent burning tokens re-reading content that was compacted on purpose. **Reactivate when**: a real workload demonstrates the agent saying "I summarized X earlier; I need the original," and the user friction of manual archive inspection outweighs the manifest cost of a `read_history_archive(path)` tool. Implementation would be small (one new tool, scoped to `.locus/sessions/<id>/history.before-*.json` paths) once the gate is met.
 - Tool-result caching (dedup identical tool calls in a session). Originally an S4.V bullet; dropped because it solves a problem that doesn't exist on local hardware -- a repeat `search_symbols("foo")` is sub-100 ms and agents rarely make exact-duplicate calls in practice. Engineering cost (cache key including watcher state, eviction) is real for invisible savings. Reactivate if telemetry surfaces a real workload where tool-time dominates.
 - Native mobile app (CrowServer client).
 - Voice chat.
-- Feeding an image as an input to LLM.
+- Feeding an image as an input to LLM (increase default max_soft_tokens value?).
 - Online model backends (Claude, OpenAI, Gemini).
 - Full VS Code extension (embedded UI panel, not just shim).
 - Plugin system for community tools.

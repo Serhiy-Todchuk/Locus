@@ -497,7 +497,13 @@ void LocusFrame::on_agent_reasoning_token(wxThreadEvent& evt)
 void LocusFrame::on_agent_tool_pending(wxThreadEvent& evt)
 {
     try {
-        auto payload = nlohmann::json::parse(evt.GetString().ToStdString());
+        // ToUTF8() preserves the original UTF-8 bytes the agent thread
+        // produced. ToStdString() applies the narrow C locale (CP-1252 on
+        // Windows) and silently mangles characters outside Latin-1 -- e.g. an
+        // em-dash inside an LLM-emitted write_file payload becomes '?', the
+        // JSON parse fails, the approval UI never appears, and the agent
+        // thread blocks forever waiting for a tool_decision.
+        auto payload = nlohmann::json::parse(evt.GetString().ToUTF8().data());
         std::string tool    = payload.value("tool", "");
         std::string call_id = payload.value("id", "");
         std::string preview = payload.value("preview", "");
@@ -539,7 +545,11 @@ void LocusFrame::on_agent_tool_result(wxThreadEvent& evt)
     }
 
     try {
-        auto payload = nlohmann::json::parse(evt.GetString().ToStdString());
+        // Same UTF-8 round-trip discipline as on_agent_tool_pending above --
+        // tool results commonly contain non-ASCII (UI display strings, file
+        // contents, error messages) that would otherwise be corrupted by the
+        // narrow C locale and silently dropped.
+        auto payload = nlohmann::json::parse(evt.GetString().ToUTF8().data());
         wxString display = wxString::FromUTF8(payload.value("display", ""));
         chat_panel_->on_tool_result(display);
     } catch (...) {}

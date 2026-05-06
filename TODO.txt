@@ -1,11 +1,12 @@
 - Create an app icon
 - Memory bank by Lilu
-- Replace file content tool with such args: start line/pos, end line/pos, what to insert
 - sample.docx has no heading
-- max_soft_tokens
 - open workspace folder, open global locus folder menu items.
-- small embedding models by default in GUI settings
 - break down settings to global and workspace. Same with MCP, etc.?
+- use monospace font for chat
 - merge statistics with chat window
 - !!! context review !!!
+- multiple tabs for multiple conversations/sessions (as in Claude Code's ext in VSCode). Requires redesign of sessions menu as well.
+- code design: do we have robust context acrictecture so it is exetendable and can handle all these changes?
+- can we use memory bank (or sme smart database) for context compaction?
 
