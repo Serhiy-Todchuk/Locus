@@ -10,6 +10,7 @@
 
 | Stage | Title |
 |---|---|
+| S6.0 | Prompt-Injection Scanner (5-category: instruction override, role impersonation, exfiltration, encoding evasion, social eng) -- lands before S6.1 so untrusted HTML pulled by web RAG is vetted on ingress. Inspired by Thoth's defense layers. Stage doc TBD. |
 | [S6.1](S6.1-web-retrieval.md) | Web Retrieval (RAG) |
 | [S6.2](S6.2-zim-reader.md) | ZIM Reader (Wikipedia / Kiwix) |
 | [S6.3](S6.3-crow-frontend.md) | CrowServer Frontend |
@@ -20,6 +21,7 @@
 
 ## Dependencies
 
+- S6.0 (prompt-injection scanner) lands before S6.1 -- web RAG is the first ingress for untrusted text and should not run unscanned.
 - S6.4 (remote auth) requires S6.3 (Crow server).
 - S6.5 (browser frontend) requires S6.3 and is unlocked further by S6.4 for cross-device use.
 - S6.6 (VS Code shim) requires S6.3's HTTP endpoints.
