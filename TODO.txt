@@ -4,3 +4,5 @@
 - break down settings to global and workspace. Same with MCP, etc.?
 - use monospace font for chat
 - merge statistics/activity log with chat window
+- append prompt during running turn
+- search in chat
