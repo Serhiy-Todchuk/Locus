@@ -141,13 +141,28 @@ void ToolDispatcher::dispatch(const ToolCall& call, const AppendFn& append_resul
         return;
     }
 
+    // Always notify frontends that a tool call is in flight, regardless of
+    // policy. The chat panel needs this to render the tool-name header above
+    // the eventual result; without it, results land in the chat with no
+    // identifying header (and visually attach to whatever DOM element the
+    // chat panel last rendered, which is usually the reasoning <details>
+    // block). The approval panel (GUI) checks the policy itself and skips
+    // popping for auto-approved calls -- see locus_frame.cpp.
+    {
+        std::string preview = tool->preview(call);
+        bool needs_approval = (policy != ToolApprovalPolicy::auto_approve);
+        frontends_.broadcast([&](IFrontend& fe) {
+            fe.on_tool_call_pending(call, preview, needs_approval);
+        });
+    }
+
     if (policy == ToolApprovalPolicy::auto_approve) {
         spdlog::trace("ToolDispatcher: auto-approve '{}'", call.tool_name);
     } else {
-        std::string preview = tool->preview(call);
-        frontends_.broadcast([&](IFrontend& fe) {
-            fe.on_tool_call_pending(call, preview);
-        });
+        // Approval gate for non-auto-approved calls. The frontend already
+        // received on_tool_call_pending above, which is where the GUI's
+        // approval panel was opened. We just need to wait for the user's
+        // decision now.
 
         std::unique_lock lock(decision_mutex_);
         decision_cv_.wait(lock, [&] {

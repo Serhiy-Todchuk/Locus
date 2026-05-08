@@ -11,6 +11,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace locus {
@@ -48,9 +49,15 @@ public:
     void on_session_reset();
     void on_error(const wxString& message);
 
-    // Tool call / result display (shown inline in chat).
-    void on_tool_pending(const wxString& tool_name, const wxString& preview);
-    void on_tool_result(const wxString& display);
+    // Tool call / result display (shown inline in chat). The call_id is
+    // remembered so the eventual on_tool_result(call_id, ...) can attach
+    // the result to the *correct* tool-call DOM node, even if other
+    // messages (errors, reasoning blocks) intervened between call and
+    // result.
+    void on_tool_pending(const wxString& call_id,
+                         const wxString& tool_name,
+                         const wxString& preview);
+    void on_tool_result(const wxString& call_id, const wxString& display);
 
     // Footer updates.
     void set_context_meter(int used, int limit);
@@ -137,6 +144,11 @@ private:
     std::function<void()> on_detach_;
 
     wxTimer       flush_timer_;
+
+    // call_id -> message_id mapping so on_tool_result attaches to the
+    // matching tool-pending message rather than whatever the latest
+    // addMsg incremented to (which might be an error or reasoning bubble).
+    std::unordered_map<std::string, int> tool_call_msg_ids_;
 
     // Token buffer (written from UI thread via on_token, read by timer).
     std::string   token_buffer_;

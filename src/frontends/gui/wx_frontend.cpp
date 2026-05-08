@@ -46,16 +46,20 @@ void WxFrontend::on_reasoning_token(std::string_view token)
 }
 
 void WxFrontend::on_tool_call_pending(const ToolCall& call,
-                                      const std::string& preview)
+                                      const std::string& preview,
+                                      bool needs_approval)
 {
     auto* evt = new wxThreadEvent(EVT_AGENT_TOOL_PENDING);
-    // Pack tool name, call id, args JSON, and preview into the event payload.
-    // Use a simple wxStringClientData with JSON-encoded string.
+    // Pack tool name, call id, args JSON, preview, and approval flag into
+    // the event payload. The approval flag lets the frame skip popping the
+    // approval panel for auto-approved calls (which still need to render in
+    // chat -- the dispatcher fires this for ALL calls, not just gated ones).
     nlohmann::json payload;
-    payload["id"]      = call.id;
-    payload["tool"]    = call.tool_name;
-    payload["args"]    = call.args;
-    payload["preview"] = preview;
+    payload["id"]              = call.id;
+    payload["tool"]            = call.tool_name;
+    payload["args"]            = call.args;
+    payload["preview"]         = preview;
+    payload["needs_approval"]  = needs_approval;
     evt->SetString(wxString::FromUTF8(payload.dump()));
     wxQueueEvent(handler_, evt);
 }

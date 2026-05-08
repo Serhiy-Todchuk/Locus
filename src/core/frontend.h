@@ -48,11 +48,15 @@ public:
     // Streamed chain-of-thought token (reasoning models). Default: ignore.
     virtual void on_reasoning_token(std::string_view /*token*/) {}
 
-    // A tool call needs approval. Frontend should display info and eventually
-    // call ILocusCore::tool_decision(). For auto-approve tools this is NOT
-    // called — the tool executes immediately and on_tool_result fires.
+    // A tool call is starting. Always fired -- once per call -- regardless
+    // of approval policy, so frontends can render the call in chat. When
+    // `needs_approval` is true the frontend should additionally display the
+    // approval UI and eventually call `ILocusCore::tool_decision()`. When
+    // false the tool will execute immediately after this returns and
+    // `on_tool_result` fires; frontends should NOT show approval UI.
     virtual void on_tool_call_pending(const ToolCall& call,
-                                      const std::string& preview) = 0;
+                                      const std::string& preview,
+                                      bool needs_approval = true) = 0;
 
     // Tool execution finished. display is the user-facing result text.
     virtual void on_tool_result(const std::string& call_id,

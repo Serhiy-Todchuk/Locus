@@ -249,19 +249,35 @@ void AgentCore::agent_thread_func()
 
     while (running_.load()) {
         std::string message;
+        bool have_message = false;
 
         {
             std::unique_lock lock(queue_mutex_);
             queue_cv_.wait(lock, [&] {
-                return !message_queue_.empty() || !running_.load();
+                return !message_queue_.empty()
+                       || pending_compact_.load(std::memory_order_acquire)
+                       || !running_.load();
             });
 
             if (!running_.load())
                 break;
 
-            message = std::move(message_queue_.front());
-            message_queue_.pop();
+            if (!message_queue_.empty()) {
+                message = std::move(message_queue_.front());
+                message_queue_.pop();
+                have_message = true;
+            }
         }
+
+        // Drain a pending compaction request before the turn starts. Mutating
+        // history_ here is safe because we hold the owner scope.
+        if (pending_compact_.load(std::memory_order_acquire)) {
+            ConversationOwnerScope owner_scope(history_);
+            apply_pending_compaction();
+        }
+
+        if (!have_message)
+            continue;  // wake-up was for compaction only
 
         // Gate the history to this thread for the duration of the turn. S3.I:
         // inter-turn mutations (e.g. CLI REPL /reset) run with owner cleared.
@@ -412,6 +428,11 @@ void AgentCore::process_message(const std::string& content)
         ++round;
         spdlog::trace("AgentCore: LLM round {}", round);
 
+        // Service a queued compaction (e.g. user clicked Compact in response
+        // to the on_compaction_needed prompt fired by the previous round).
+        // Owner scope is already held by the calling agent_thread_func.
+        apply_pending_compaction();
+
         if (budget_->check_overflow(current_token_count()))
             break;
 
@@ -513,6 +534,32 @@ void AgentCore::tool_decision(const std::string& call_id,
 
 void AgentCore::compact_context(CompactionStrategy strategy, int n)
 {
+    // Caller is the GUI thread (or CLI main thread). ConversationHistory's
+    // owner-thread fence (S3.I) bites if we mutate from here directly while a
+    // turn is in flight, so flag a request and let the agent thread drain it
+    // at a safe point (between rounds, or in the idle wait loop). queue_cv_
+    // is shared with message_queue_, so the wait predicate sees pending work
+    // immediately even if the queue itself is empty.
+    pending_compact_strategy_.store(strategy, std::memory_order_relaxed);
+    pending_compact_n_.store(n, std::memory_order_relaxed);
+    pending_compact_.store(true, std::memory_order_release);
+    {
+        std::lock_guard lock(queue_mutex_);
+    }
+    queue_cv_.notify_one();
+    spdlog::info("AgentCore: compaction queued (strategy={}, n={})",
+                 strategy == CompactionStrategy::drop_tool_results
+                     ? "drop_tool_results" : "drop_oldest", n);
+}
+
+void AgentCore::apply_pending_compaction()
+{
+    if (!pending_compact_.exchange(false, std::memory_order_acq_rel))
+        return;
+
+    auto strategy = pending_compact_strategy_.load(std::memory_order_relaxed);
+    int  n        = pending_compact_n_.load(std::memory_order_relaxed);
+
     int before = history_.estimate_tokens();
 
     switch (strategy) {

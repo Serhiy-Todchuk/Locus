@@ -143,6 +143,13 @@ private:
     // history_ in place. Called whenever the attached context changes.
     void refresh_system_prompt();
 
+    // Service a pending compaction request on the agent thread. Caller must
+    // already hold the conversation owner scope. No-op when the flag is
+    // clear. Called from agent_thread_func before/after process_message
+    // and from the round loop in process_message between LLM rounds so
+    // mid-turn compactions take effect on the next request.
+    void apply_pending_compaction();
+
     // Current token count = budget_.current(history_.estimate_tokens()).
     int current_token_count() const;
 
@@ -186,6 +193,15 @@ private:
     std::atomic<bool>        running_{false};
     std::atomic<bool>        busy_{false};
     std::atomic<bool>        cancel_requested_{false};
+
+    // Compaction request from a non-agent thread (GUI). The mutator on
+    // ConversationHistory carries an owner-thread fence (S3.I), so direct
+    // mutation from a foreign thread asserts. The agent thread services
+    // this request between rounds (or while idle) under its owner scope.
+    std::atomic<bool>            pending_compact_{false};
+    std::atomic<CompactionStrategy> pending_compact_strategy_{
+        CompactionStrategy::drop_tool_results};
+    std::atomic<int>             pending_compact_n_{0};
 
     // Sync-mode completion signal.
     std::mutex               sync_mutex_;

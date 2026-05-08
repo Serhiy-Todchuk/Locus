@@ -68,13 +68,20 @@ void HarnessFrontend::on_token(std::string_view token)
 void HarnessFrontend::on_reasoning_token(std::string_view /*token*/) {}
 
 void HarnessFrontend::on_tool_call_pending(const ToolCall& call,
-                                           const std::string& preview)
+                                           const std::string& preview,
+                                           bool needs_approval)
 {
     // Record the observation first.
     {
         std::lock_guard lock(mutex_);
         tool_calls_.push_back({call.id, call.tool_name, call.args, preview});
     }
+
+    // Auto-approved calls bypass the dispatcher's wait -- there is no
+    // decision to make. Just record and return; the dispatcher will
+    // execute and emit on_tool_result on its own.
+    if (!needs_approval)
+        return;
 
     if (!core_) {
         spdlog::error("HarnessFrontend: tool_call_pending fired but core not attached");

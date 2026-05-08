@@ -20,7 +20,7 @@ struct StubFrontend : IFrontend {
 
     void on_turn_start() override { events.push_back("turn_start"); }
     void on_token(std::string_view t) override { events.push_back("token:" + std::string(t)); }
-    void on_tool_call_pending(const ToolCall&, const std::string&) override {
+    void on_tool_call_pending(const ToolCall&, const std::string&, bool) override {
         events.push_back("tool_pending");
     }
     void on_tool_result(const std::string& id, const std::string&) override {
@@ -41,7 +41,7 @@ struct StubFrontend : IFrontend {
 struct ThrowingFrontend : IFrontend {
     void on_turn_start() override { throw std::runtime_error("boom"); }
     void on_token(std::string_view) override { throw std::runtime_error("boom"); }
-    void on_tool_call_pending(const ToolCall&, const std::string&) override {
+    void on_tool_call_pending(const ToolCall&, const std::string&, bool) override {
         throw std::runtime_error("boom");
     }
     void on_tool_result(const std::string&, const std::string&) override {

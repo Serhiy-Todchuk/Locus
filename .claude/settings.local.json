@@ -222,7 +222,9 @@
       "Bash(rm -f /c/vcpkg/downloads/microsoft-onnxruntime-v1.23.2.tar.gz /c/vcpkg/downloads/onnx-onnx-v1.19.0.tar.gz)",
       "Bash(python _s3h_migrate.py)",
       "Bash(ls \"D:\\\\Projects\\\\TestLocalVibe4\\\\.locus\\\\\" 2>&1 | head -30)",
-      "Read(//d/Projects/TestLocalVibe4/**)"
+      "Read(//d/Projects/TestLocalVibe4/**)",
+      "Bash(curl -s -m 5 'http://127.0.0.1:1234/api/v0/models')",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); [print\\(m['id'], m.get\\('state','?'\\)\\) for m in d.get\\('data',[]\\)]\")"
     ]
   }
 }

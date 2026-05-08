@@ -508,10 +508,24 @@ void LocusFrame::on_agent_tool_pending(wxThreadEvent& evt)
         std::string call_id = payload.value("id", "");
         std::string preview = payload.value("preview", "");
         nlohmann::json args = payload.value("args", nlohmann::json::object());
+        // S4-followup: dispatcher fires on_tool_call_pending for every tool
+        // call (including auto-approved). The flag tells us whether to also
+        // pop the approval UI; chat rendering happens unconditionally so the
+        // result has a header to attach to.
+        bool needs_approval = payload.value("needs_approval", true);
 
-        // Show tool call inline in chat.
+        // Show tool call inline in chat (always, regardless of policy).
         chat_panel_->on_tool_pending(
-            wxString::FromUTF8(tool), wxString::FromUTF8(preview));
+            wxString::FromUTF8(call_id),
+            wxString::FromUTF8(tool),
+            wxString::FromUTF8(preview));
+
+        if (!needs_approval) {
+            // Auto-approved -- the dispatcher will not wait. Don't pop the
+            // approval panel; the chat header above is the user-visible
+            // record of the call.
+            return;
+        }
 
         if (tool == "ask_user") {
             // Pop-up modal — disappears immediately after answer/cancel.
@@ -550,8 +564,9 @@ void LocusFrame::on_agent_tool_result(wxThreadEvent& evt)
         // contents, error messages) that would otherwise be corrupted by the
         // narrow C locale and silently dropped.
         auto payload = nlohmann::json::parse(evt.GetString().ToUTF8().data());
+        wxString call_id = wxString::FromUTF8(payload.value("call_id", ""));
         wxString display = wxString::FromUTF8(payload.value("display", ""));
-        chat_panel_->on_tool_result(display);
+        chat_panel_->on_tool_result(call_id, display);
     } catch (...) {}
 }
 

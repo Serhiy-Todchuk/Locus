@@ -357,9 +357,38 @@ void LMStudioClient::stream_completion(
     };
     sink.on_tool_call_delta = [&](const StreamDecoderSink::ToolCallDelta& d) {
         got_tool_calls = true;
-        while (static_cast<int>(tool_accum.size()) <= d.index)
+        int slot = d.index;
+        while (static_cast<int>(tool_accum.size()) <= slot)
             tool_accum.push_back({});
-        auto& a = tool_accum[d.index];
+
+        // Some chat templates (notably certain Qwen/Gemma builds in LM Studio)
+        // keep `index` at 0 for *sequential* tool calls in one assistant
+        // turn, instead of incrementing it. Without this guard the
+        // accumulator concatenates the names ("write_file" + "delete_file" =
+        // "write_filedelete_file") and the arguments, sending a malformed
+        // call to the dispatcher. Detect via two signals:
+        //   1. id_frag is non-empty and differs from the slot's recorded id
+        //      (the cleanest signal; ids are unique per call).
+        //   2. a non-empty name_frag arrives after the slot already collected
+        //      arguments (once arguments started streaming, the name is
+        //      complete -- a fresh name means a fresh call).
+        bool different_id =
+            !d.id_frag.empty() && !tool_accum[slot].id.empty() &&
+            tool_accum[slot].id != d.id_frag;
+        bool name_after_args =
+            !d.name_frag.empty() && !tool_accum[slot].arguments.empty();
+        if (different_id || name_after_args) {
+            spdlog::warn(
+                "LMStudioClient: tool call delta at reused index {} "
+                "(prev id='{}' name='{}', args_len={}, new id_frag='{}', "
+                "name_frag='{}'); allocating a new slot",
+                d.index, tool_accum[slot].id, tool_accum[slot].name,
+                tool_accum[slot].arguments.size(), d.id_frag, d.name_frag);
+            slot = static_cast<int>(tool_accum.size());
+            tool_accum.push_back({});
+        }
+
+        auto& a = tool_accum[slot];
         if (!d.id_frag.empty())
             a.id = d.id_frag;
         a.name      += d.name_frag;

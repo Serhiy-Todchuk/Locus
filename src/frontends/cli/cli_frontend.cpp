@@ -18,8 +18,17 @@ void CliFrontend::on_token(std::string_view token)
 }
 
 void CliFrontend::on_tool_call_pending(const ToolCall& call,
-                                       const std::string& preview)
+                                       const std::string& preview,
+                                       bool needs_approval)
 {
+    // Auto-approved calls: just announce the call (no prompt, no decision).
+    if (!needs_approval) {
+        std::cout << "\n--- Tool call (auto-approved): " << call.tool_name
+                  << " ---\n";
+        if (!preview.empty()) std::cout << "Preview: " << preview << "\n";
+        return;
+    }
+
     // Special handling for ask_user: show the question and prompt for a response.
     if (call.tool_name == "ask_user") {
         std::string question = call.args.value("question", "");

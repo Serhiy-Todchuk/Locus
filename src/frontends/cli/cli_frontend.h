@@ -17,7 +17,8 @@ public:
     void on_turn_start() override;
     void on_token(std::string_view token) override;
     void on_tool_call_pending(const ToolCall& call,
-                              const std::string& preview) override;
+                              const std::string& preview,
+                              bool needs_approval) override;
     void on_tool_result(const std::string& call_id,
                         const std::string& display) override;
     void on_turn_complete() override;

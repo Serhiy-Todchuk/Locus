@@ -583,6 +583,7 @@ void ChatPanel::on_session_reset()
     message_id_ = 0;
     assistant_id_ = 0;
     reasoning_id_ = 0;
+    tool_call_msg_ids_.clear();
 }
 
 void ChatPanel::on_error(const wxString& message)
@@ -593,9 +594,17 @@ void ChatPanel::on_error(const wxString& message)
         message_id_, "'" + js_escape(message) + "'"));
 }
 
-void ChatPanel::on_tool_pending(const wxString& tool_name, const wxString& preview)
+void ChatPanel::on_tool_pending(const wxString& call_id,
+                                const wxString& tool_name,
+                                const wxString& preview)
 {
     ++message_id_;
+    // Remember which DOM message id belongs to this tool call so the eventual
+    // on_tool_result -- which can arrive after other unrelated chat events
+    // (errors, reasoning blocks, even other tool calls) -- can attach its
+    // <details> to the *matching* node, not the latest one.
+    tool_call_msg_ids_[std::string(call_id.utf8_string())] = message_id_;
+
     wxString content = "<span class=\"tool-name\">" + js_escape(tool_name) + "</span>";
     if (!preview.empty())
         content += "<br><span class=\"tool-preview\">" + js_escape(preview) + "</span>";
@@ -605,9 +614,19 @@ void ChatPanel::on_tool_pending(const wxString& tool_name, const wxString& previ
         message_id_, "'" + js_escape(content) + "'"));
 }
 
-void ChatPanel::on_tool_result(const wxString& display)
+void ChatPanel::on_tool_result(const wxString& call_id, const wxString& display)
 {
     if (display.empty()) return;
+
+    // Resolve the matching tool-pending message id. If we never saw the
+    // matching pending (shouldn't happen, but defend against it), fall back
+    // to "latest message" so the result still surfaces somewhere visible.
+    int target_id = message_id_;
+    auto it = tool_call_msg_ids_.find(std::string(call_id.utf8_string()));
+    if (it != tool_call_msg_ids_.end()) {
+        target_id = it->second;
+        tool_call_msg_ids_.erase(it);
+    }
 
     // Truncate long results for display.
     wxString truncated = display;
@@ -615,7 +634,7 @@ void ChatPanel::on_tool_result(const wxString& display)
         truncated = truncated.Left(500) + "... (" +
                     wxString::Format("%zu", display.length() - 500) + " chars truncated)";
 
-    // Append result to the last tool message as a collapsible <details> block.
+    // Append result to the matching tool message as a collapsible <details>.
     run_script(wxString::Format(
         "var d=document.getElementById('msg-%d');"
         "if(d){var det=document.createElement('details');"
@@ -628,7 +647,7 @@ void ChatPanel::on_tool_result(const wxString& display)
         "det.appendChild(pre);"
         "d.appendChild(det);"
         "window.scrollTo(0,document.body.scrollHeight);}",
-        message_id_, "'" + js_escape(truncated) + "'"));
+        target_id, "'" + js_escape(truncated) + "'"));
 }
 
 void ChatPanel::set_context_meter(int used, int limit)
