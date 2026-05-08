@@ -30,6 +30,8 @@ struct Capture {
     std::vector<StreamDecoderSink::ToolCallDelta>     tool_calls;
     bool                                              had_usage = false;
     CompletionUsage                                   usage{};
+    std::string                                       finish_reason;
+    std::string                                       stream_error;
 
     StreamDecoderSink make_sink()
     {
@@ -49,6 +51,12 @@ struct Capture {
         s.on_usage = [this](const CompletionUsage& u) {
             had_usage = true;
             usage = u;
+        };
+        s.on_finish_reason = [this](const std::string& reason) {
+            finish_reason = reason;
+        };
+        s.on_stream_error = [this](const std::string& msg) {
+            stream_error = msg;
         };
         return s;
     }
@@ -555,4 +563,146 @@ TEST_CASE("XmlToolCallExtractor: emits truncated body as text on finish",
     // as text so the user can see what came through.
     CHECK(calls.empty());
     CHECK(text.find("\"name\":\"q\"") != std::string::npos);
+}
+
+// ============================================================================
+// S4.U -- finish_reason / refusal / stream-error / cached_tokens decoding
+// ============================================================================
+
+namespace {
+
+// Build an OpenAI-style chunk that carries a finish_reason on the
+// terminal delta (mirrors what LM Studio emits when the model stops).
+std::string finish_reason_chunk(const std::string& reason)
+{
+    json j = {
+        {"choices", json::array({
+            json::object({
+                {"index", 0},
+                {"delta", json::object()},
+                {"finish_reason", reason}
+            })
+        })}
+    };
+    return j.dump();
+}
+
+} // namespace
+
+TEST_CASE("OpenAiDecoder: finish_reason is decoded", "[s4.u][decoders]")
+{
+    OpenAiDecoder d;
+    Capture cap;
+    auto sink = cap.make_sink();
+    d.decode(content_chunk("hi"), sink);
+    d.decode(finish_reason_chunk("length"), sink);
+    CHECK(cap.text == "hi");
+    CHECK(cap.finish_reason == "length");
+}
+
+TEST_CASE("OpenAiDecoder: null finish_reason is ignored", "[s4.u][decoders]")
+{
+    // Mid-stream chunks normally carry "finish_reason": null. Make sure
+    // that does NOT fire the callback (which would make every chunk look
+    // like a stop event).
+    OpenAiDecoder d;
+    Capture cap;
+    auto sink = cap.make_sink();
+
+    json mid = {
+        {"choices", json::array({
+            json::object({
+                {"index", 0},
+                {"delta", json::object({{"content", "x"}})},
+                {"finish_reason", nullptr}
+            })
+        })}
+    };
+    d.decode(mid.dump(), sink);
+    CHECK(cap.text == "x");
+    CHECK(cap.finish_reason.empty());
+}
+
+TEST_CASE("OpenAiDecoder: refusal channel routed to text with prefix",
+          "[s4.u][decoders]")
+{
+    OpenAiDecoder d;
+    Capture cap;
+    auto sink = cap.make_sink();
+    json chunk = {
+        {"choices", json::array({
+            json::object({
+                {"index", 0},
+                {"delta", json::object({{"refusal", "I can't help with that."}})}
+            })
+        })}
+    };
+    d.decode(chunk.dump(), sink);
+    CHECK(cap.text == "[refusal] I can't help with that.");
+}
+
+TEST_CASE("OpenAiDecoder: top-level error chunk lands on on_stream_error",
+          "[s4.u][decoders]")
+{
+    OpenAiDecoder d;
+    Capture cap;
+    auto sink = cap.make_sink();
+    std::string chunk = R"({"error":{"message":"OOM, try again","type":"server"}})";
+    d.decode(chunk, sink);
+    CHECK(cap.stream_error.find("OOM") != std::string::npos);
+}
+
+TEST_CASE("OpenAiDecoder: cached_tokens flows through prompt_tokens_details",
+          "[s4.u][decoders]")
+{
+    OpenAiDecoder d;
+    Capture cap;
+    auto sink = cap.make_sink();
+    json chunk = {
+        {"choices", json::array({
+            json::object({{"index", 0}, {"delta", json::object()}})
+        })},
+        {"usage", json::object({
+            {"prompt_tokens", 1000},
+            {"completion_tokens", 200},
+            {"total_tokens", 1200},
+            {"prompt_tokens_details", json::object({{"cached_tokens", 750}})}
+        })}
+    };
+    d.decode(chunk.dump(), sink);
+    REQUIRE(cap.had_usage);
+    CHECK(cap.usage.prompt_tokens == 1000);
+    CHECK(cap.usage.cached_tokens == 750);
+}
+
+TEST_CASE("AutoToolFormatDecoder: forwards finish_reason from inner",
+          "[s4.u][decoders][auto]")
+{
+    AutoToolFormatDecoder d;
+    Capture cap;
+    auto sink = cap.make_sink();
+    d.decode(content_chunk("text"), sink);
+    d.decode(finish_reason_chunk("length"), sink);
+    CHECK(cap.finish_reason == "length");
+}
+
+TEST_CASE("QwenXmlDecoder: forwards finish_reason from inner",
+          "[s4.u][decoders][qwen]")
+{
+    QwenXmlDecoder d;
+    Capture cap;
+    auto sink = cap.make_sink();
+    d.decode(content_chunk("text"), sink);
+    d.decode(finish_reason_chunk("stop"), sink);
+    CHECK(cap.finish_reason == "stop");
+}
+
+TEST_CASE("ClaudeXmlDecoder: forwards on_stream_error from inner",
+          "[s4.u][decoders][claude]")
+{
+    ClaudeXmlDecoder d;
+    Capture cap;
+    auto sink = cap.make_sink();
+    d.decode(R"({"error":{"message":"server died"}})", sink);
+    CHECK(cap.stream_error.find("server died") != std::string::npos);
 }

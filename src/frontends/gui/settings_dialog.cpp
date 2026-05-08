@@ -53,14 +53,29 @@ SettingsDialog::SettingsDialog(wxWindow* parent, WorkspaceConfig& config,
     context_ctrl_->SetValue(config.llm_context_limit);
     llm_grid->Add(context_ctrl_, 0);
 
+    llm_grid->Add(new wxStaticText(this, wxID_ANY, "Max tokens (per response):"),
+                  0, wxALIGN_CENTER_VERTICAL);
+    max_tokens_ctrl_ = new wxSpinCtrl(this, wxID_ANY);
+    // 0 is reserved as "use default" -- the request body always sends a
+    // positive value because LLMConfig::max_tokens has a non-zero default.
+    max_tokens_ctrl_->SetRange(256, 1048576);
+    max_tokens_ctrl_->SetValue(config.llm_max_tokens > 0 ? config.llm_max_tokens : 8192);
+    llm_grid->Add(max_tokens_ctrl_, 0);
+
     auto* ctx_hint = new wxStaticText(this, wxID_ANY, "(0 = auto-detect from server)");
     ctx_hint->SetForegroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_GRAYTEXT));
     auto hint_font = ctx_hint->GetFont();
     hint_font.SetPointSize(hint_font.GetPointSize() - 1);
     ctx_hint->SetFont(hint_font);
 
+    auto* mt_hint = new wxStaticText(this, wxID_ANY,
+        "Max tokens caps a single response. Bump if multi-file edits get cut off.");
+    mt_hint->SetForegroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_GRAYTEXT));
+    mt_hint->SetFont(hint_font);
+
     llm_box->Add(llm_grid, 0, wxEXPAND | wxALL, 4);
     llm_box->Add(ctx_hint, 0, wxLEFT | wxBOTTOM, 8);
+    llm_box->Add(mt_hint,  0, wxLEFT | wxBOTTOM, 8);
 
     main_sizer->Add(llm_box, 0, wxEXPAND | wxALL, 8);
 
@@ -190,6 +205,7 @@ void SettingsDialog::on_ok(wxCommandEvent& evt)
     std::string new_model    = model_ctrl_->GetValue().ToStdString();
     double      new_temp     = temperature_ctrl_->GetValue();
     int         new_context  = context_ctrl_->GetValue();
+    int         new_max_tok  = max_tokens_ctrl_->GetValue();
 
     // Parse exclude patterns from multiline text.
     std::vector<std::string> new_patterns;
@@ -208,7 +224,8 @@ void SettingsDialog::on_ok(wxCommandEvent& evt)
     if (new_endpoint != config_.llm_endpoint ||
         new_model    != config_.llm_model ||
         new_temp     != config_.llm_temperature ||
-        new_context  != config_.llm_context_limit) {
+        new_context  != config_.llm_context_limit ||
+        new_max_tok  != config_.llm_max_tokens) {
         llm_changed_ = true;
     }
 
@@ -252,6 +269,7 @@ void SettingsDialog::on_ok(wxCommandEvent& evt)
         config_.llm_model         = new_model;
         config_.llm_temperature   = new_temp;
         config_.llm_context_limit = new_context;
+        config_.llm_max_tokens    = new_max_tok;
         config_.exclude_patterns  = new_patterns;
         config_.semantic_search_enabled = new_semantic;
         config_.embedding_model   = new_sem_model;

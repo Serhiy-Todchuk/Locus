@@ -358,6 +358,8 @@ static WorkspaceConfig config_from_json(const json& j)
             cfg.llm_temperature = llm["temperature"].get<double>();
         if (llm.contains("context_limit"))
             cfg.llm_context_limit = llm["context_limit"].get<int>();
+        if (llm.contains("max_tokens"))
+            cfg.llm_max_tokens = llm["max_tokens"].get<int>();
         if (llm.contains("tool_format"))
             cfg.llm_tool_format = llm["tool_format"].get<std::string>();
         if (llm.contains("timeout_ms"))
@@ -413,6 +415,7 @@ static json config_to_json(const WorkspaceConfig& cfg)
             {"model", cfg.llm_model},
             {"temperature", cfg.llm_temperature},
             {"context_limit", cfg.llm_context_limit},
+            {"max_tokens", cfg.llm_max_tokens},
             {"tool_format", cfg.llm_tool_format},
             {"timeout_ms", cfg.llm_timeout_ms}
         }},

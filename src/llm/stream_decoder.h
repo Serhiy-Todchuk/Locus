@@ -31,6 +31,19 @@ struct StreamDecoderSink {
 
     // Server-reported token usage (typically arrives in the final chunk).
     std::function<void(const CompletionUsage& usage)> on_usage;
+
+    // Finish reason from the server. Arrives on the chunk where the model
+    // stops generating: "stop" (normal), "length" (max_tokens hit),
+    // "tool_calls" (model emitted tool calls and stopped), "content_filter"
+    // (server-side filter), or anything else the backend reports. Decoders
+    // may also synthesize a value when they detect end-of-stream conditions.
+    std::function<void(const std::string& reason)> on_finish_reason;
+
+    // Server-side error reported inside the SSE stream itself (some backends
+    // -- vLLM, sglang -- emit `{"error":{"message":"..."}}` chunks instead
+    // of failing the HTTP request). Routed separately from transport errors
+    // so the LMStudioClient can surface them with a clean message.
+    std::function<void(const std::string& message)> on_stream_error;
 };
 
 // Translates one SSE data payload into typed events. Decoders may keep

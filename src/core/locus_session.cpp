@@ -26,6 +26,10 @@ void merge_workspace_defaults(LLMConfig& cfg, const WorkspaceConfig& wc)
         cfg.model = wc.llm_model;
     if (cfg.context_limit <= 0 && wc.llm_context_limit > 0)
         cfg.context_limit = wc.llm_context_limit;
+    // max_tokens: same shape as context_limit -- workspace value wins
+    // when positive, default in LLMConfig (8192) holds otherwise.
+    if (wc.llm_max_tokens > 0)
+        cfg.max_tokens = wc.llm_max_tokens;
     // Stall watchdog. Same shape as context_limit: workspace value wins
     // when positive; the LLMConfig default (600s) holds otherwise.
     if (wc.llm_timeout_ms > 0)

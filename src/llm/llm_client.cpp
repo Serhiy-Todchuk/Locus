@@ -341,6 +341,7 @@ void LMStudioClient::stream_completion(
     bool got_tool_calls = false;
     bool got_data       = false;
     bool errored        = false;
+    std::string finish_reason;
     CompletionUsage usage;
 
     decoder_->reset();
@@ -366,14 +367,31 @@ void LMStudioClient::stream_completion(
     };
     sink.on_usage = [&](const CompletionUsage& u) {
         usage = u;
-        spdlog::trace("LLM usage: prompt={}, completion={} (reasoning={}), total={}",
-                      u.prompt_tokens, u.completion_tokens,
-                      u.reasoning_tokens, u.total_tokens);
+        spdlog::trace("LLM usage: prompt={} (cached={}), completion={} "
+                      "(reasoning={}), total={}",
+                      u.prompt_tokens, u.cached_tokens,
+                      u.completion_tokens, u.reasoning_tokens, u.total_tokens);
+    };
+    sink.on_finish_reason = [&](const std::string& reason) {
+        // Last writer wins; servers normally emit at most one non-null
+        // finish_reason per stream, but be defensive against backends
+        // that resend on the trailing chunk.
+        finish_reason = reason;
+        spdlog::trace("LLM finish_reason: {}", reason);
+    };
+    sink.on_stream_error = [&](const std::string& message) {
+        std::string err = "LLM stream error: " + message;
+        spdlog::error("{}", err);
+        errored = true;
+        if (callbacks.on_error)
+            callbacks.on_error(err);
     };
 
     OpenAiTransport::Callbacks tcbs;
     tcbs.on_data = [&](const std::string& data) -> bool {
         got_data = true;
+        if (errored)
+            return false;  // stop feeding the decoder once we've raised
         return decoder_->decode(data, sink);
     };
     tcbs.on_error = [&](const std::string& err) {
@@ -400,15 +418,99 @@ void LMStudioClient::stream_completion(
         return;
     }
 
-    // Deliver accumulated tool calls.
+    // S4.U -- max_tokens truncation. The server signals it via
+    // finish_reason="length"; we noticed the bug in the wild because the
+    // model emitted two write_file tool calls and the second was cut
+    // mid-arguments, leaving an empty arguments string that broke the next
+    // chat-template render with HTTP 500. Surface it loud and early so the
+    // user can bump the limit instead of staring at a cryptic 500.
+    bool truncated_by_length = (finish_reason == "length");
+    if (truncated_by_length) {
+        std::string warn_msg =
+            "Response truncated: max_tokens limit reached (max_tokens=" +
+            std::to_string(config_.max_tokens) +
+            ", completion_tokens=" + std::to_string(usage.completion_tokens) +
+            "). Increase llm.max_tokens in .locus/config.json or in "
+            "Settings -> LLM, or shorten the request.";
+        spdlog::warn("{}", warn_msg);
+        if (callbacks.on_error)
+            callbacks.on_error(warn_msg);
+    } else if (!finish_reason.empty()
+               && finish_reason != "stop"
+               && finish_reason != "tool_calls"
+               && finish_reason != "function_call") {
+        // Anything else non-trivial (e.g. "content_filter") -- surface it
+        // too so the user knows why the response stopped.
+        std::string warn_msg = "LLM stop reason: " + finish_reason;
+        spdlog::warn("{}", warn_msg);
+        if (callbacks.on_error)
+            callbacks.on_error(warn_msg);
+    }
+
+    // Deliver accumulated tool calls. Validate each call's arguments
+    // string parses as JSON before handing off; a truncated stream (case
+    // above) commonly leaves the trailing call with arguments="" or a
+    // half-finished JSON fragment. Letting that into ConversationHistory
+    // poisons the next request -- LM Studio's chat template can't render
+    // a malformed tool_calls entry and answers HTTP 500 on the round
+    // after. The XML decoders already validate their bodies inside the
+    // extractor, so this gate primarily catches OpenAI native truncation.
     if (got_tool_calls && !tool_accum.empty() && callbacks.on_tool_calls) {
         std::vector<ToolCallRequest> calls;
-        for (auto& a : tool_accum)
+        int dropped = 0;
+        for (auto& a : tool_accum) {
+            // Empty / whitespace arguments => not deliverable.
+            std::string args = a.arguments;
+            std::string trimmed = args;
+            auto is_ws = [](char c) {
+                return c == ' ' || c == '\t' || c == '\n' || c == '\r';
+            };
+            while (!trimmed.empty() && is_ws(trimmed.front())) trimmed.erase(trimmed.begin());
+            while (!trimmed.empty() && is_ws(trimmed.back()))  trimmed.pop_back();
+
+            bool valid = true;
+            if (a.name.empty()) {
+                valid = false;
+            } else if (trimmed.empty()) {
+                // Tools that legitimately take no args still expect "{}".
+                // An empty arguments string poisons LM Studio's chat
+                // template on the next round.
+                valid = false;
+            } else {
+                try { (void)json::parse(trimmed); }
+                catch (const json::exception&) { valid = false; }
+            }
+
+            if (!valid) {
+                ++dropped;
+                spdlog::warn("LMStudioClient: dropping malformed tool call "
+                             "(name='{}', id='{}', args_len={}): args do not "
+                             "parse as JSON",
+                             a.name, a.id, a.arguments.size());
+                continue;
+            }
             calls.push_back({a.id, a.name, a.arguments});
-        spdlog::trace("LLM tool calls: {}", calls.size());
+        }
+
+        if (dropped > 0) {
+            std::string err_msg =
+                "Dropped " + std::to_string(dropped) +
+                " malformed tool call(s) from the model response";
+            if (truncated_by_length)
+                err_msg += " (likely caused by max_tokens truncation; "
+                           "increase llm.max_tokens to recover)";
+            err_msg += ".";
+            if (callbacks.on_error)
+                callbacks.on_error(err_msg);
+        }
+
+        spdlog::trace("LLM tool calls: {} delivered, {} dropped",
+                      calls.size(), dropped);
         for (auto& c : calls)
             spdlog::trace("  tool: {} id={} args={}", c.name, c.id, c.arguments);
-        callbacks.on_tool_calls(calls);
+
+        if (!calls.empty())
+            callbacks.on_tool_calls(calls);
     }
 
     // Deliver usage if available.

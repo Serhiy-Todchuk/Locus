@@ -22,6 +22,8 @@ bool AutoToolFormatDecoder::decode(const std::string& payload,
     inner_sink.on_reasoning       = sink.on_reasoning;
     inner_sink.on_tool_call_delta = sink.on_tool_call_delta;
     inner_sink.on_usage           = sink.on_usage;
+    inner_sink.on_finish_reason   = sink.on_finish_reason;
+    inner_sink.on_stream_error    = sink.on_stream_error;
     inner_sink.on_text = [&](const std::string& token) {
         impl_->extractor.feed(
             token,

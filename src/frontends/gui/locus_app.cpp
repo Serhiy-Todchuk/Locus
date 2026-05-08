@@ -333,7 +333,11 @@ void LocusApp::init_logging(const std::filesystem::path& locus_dir)
         logger->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [t:%t] [%^%l%$] %v");
 
         spdlog::set_default_logger(logger);
+#if _DEBUG
         spdlog::flush_on(spdlog::level::trace);
+#else
+        spdlog::flush_on(spdlog::level::warn);
+#endif
     }
     catch (const spdlog::spdlog_ex& ex) {
         wxMessageBox(wxString::Format("Log init failed: %s", ex.what()),

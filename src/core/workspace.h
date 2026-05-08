@@ -60,6 +60,15 @@ struct WorkspaceConfig {
     double      llm_temperature = 0.7;
     int         llm_context_limit = 0; // 0 = auto-detect from server
 
+    // Per-request completion cap. The 8192 default is sized to accommodate
+    // a single big-file write_file payload plus a few hundred tokens of
+    // reasoning -- 2048 (the old default) routinely truncated multi-tool-
+    // call responses on coding tasks, leaving an empty-arguments tool call
+    // that poisoned the next round (HTTP 500 from the chat template).
+    // Bump higher if your model is happy with longer answers; the server
+    // always clamps to its own ceiling regardless of what we send.
+    int         llm_max_tokens = 8192;
+
     // Stream-stall watchdog (ms): abort the request if zero bytes flow for
     // this long. Not a total-request cap -- a reasoning stream that keeps
     // emitting tokens stays connected indefinitely. The 600s default covers

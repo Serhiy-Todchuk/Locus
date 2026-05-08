@@ -20,6 +20,7 @@
 | [S4.M](S4.M-ast-search.md) | Tree-Sitter Query Tool (Structural Grep) ✔ | Tools |
 | [S4.T](S4.T-file-change-awareness.md) | File-Change Awareness Between Turns ✔ | Context |
 | [S4.N](S4.N-tool-call-robustness.md) | Tool-Call Robustness Across Model Families ✔ | LLM compat |
+| [S4.U](S4.U-stream-decode-completeness.md) | Stream Decode Completeness + max_tokens Discipline ✔ | LLM compat |
 | [S4.D](S4.D-plan-mode.md) | Plan Mode | Workflow |
 | [S4.G](S4.G-mcp.md) | MCP (Model Context Protocol) Client | Extensibility |
 | [S4.R](S4.R-memory-bank.md) | Memory Bank (Persistent + Searchable) | Context |

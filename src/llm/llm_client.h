@@ -90,7 +90,7 @@ struct LLMConfig {
     std::string base_url      = "http://127.0.0.1:1234";
     std::string model         = "";          // empty = use server default
     double      temperature   = 0.7;
-    int         max_tokens    = 2048;
+    int         max_tokens    = 8192;
     int         context_limit = 8192;        // total context window size
     int         timeout_ms    = 600000;      // stream stall timeout: abort if no bytes flow for this long. Not a total-request cap -- long reasoning streams are fine. 600s default covers prefill + a buffered <think> block on a 35B-MoE thinking model with multi-K-token context on consumer GPU; configurable per workspace via .locus/config.json llm.timeout_ms.
     ToolFormat  tool_format   = ToolFormat::Auto;
@@ -110,6 +110,7 @@ struct CompletionUsage {
     int completion_tokens = 0;
     int total_tokens      = 0;
     int reasoning_tokens  = 0;   // subset of completion_tokens (reasoning models)
+    int cached_tokens     = 0;   // subset of prompt_tokens served from prompt cache
 };
 
 // ---- Streaming callbacks ----------------------------------------------------

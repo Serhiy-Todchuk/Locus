@@ -42,6 +42,7 @@ private:
     wxTextCtrl*        model_ctrl_       = nullptr;
     wxSpinCtrlDouble*  temperature_ctrl_ = nullptr;
     wxSpinCtrl*        context_ctrl_     = nullptr;
+    wxSpinCtrl*        max_tokens_ctrl_  = nullptr;
 
     // Index controls
     wxTextCtrl*        exclude_ctrl_     = nullptr;
