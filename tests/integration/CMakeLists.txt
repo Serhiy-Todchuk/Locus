@@ -17,6 +17,9 @@ add_executable(locus_integration_tests
     test_int_interactive.cpp
     test_int_slash.cpp
     test_int_file_change_awareness.cpp
+    test_int_undo.cpp
+    test_int_metrics.cpp
+    test_int_max_tokens.cpp
 )
 
 target_include_directories(locus_integration_tests PRIVATE

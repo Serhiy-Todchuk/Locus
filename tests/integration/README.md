@@ -28,6 +28,9 @@ Tag filters match [Catch2 test tags](https://github.com/catchorg/Catch2/blob/dev
 | `[ask_user]` | [test_int_interactive.cpp](test_int_interactive.cpp) | `ask_user` routes through the approval gate, harness supplies a scripted response via `ToolDecision::modify`. |
 | `[slash]`    | [test_int_slash.cpp](test_int_slash.cpp)        | `/help` and `/read_file` routed through `SlashCommandDispatcher`. |
 | `[file_change_awareness]` | [test_int_file_change_awareness.cpp](test_int_file_change_awareness.cpp) | S4.T -- external user edits between turns surface as `[Files changed since last turn: ...]` prefix on the next user message; agent's own writes don't echo back. |
+| `[undo]`     | [test_int_undo.cpp](test_int_undo.cpp)          | S4.B -- `/undo` slash restores files after `write_file` / `edit_file`; reports a no-op when no checkpointed turns remain. |
+| `[metrics]`  | [test_int_metrics.cpp](test_int_metrics.cpp)    | S4.S -- `/metrics` summarises tokens + per-tool counts after a real turn; `/export_metrics json|csv` writes a file under `.locus/metrics/`; bogus format reports an error. |
+| `[max_tokens]` | [test_int_max_tokens.cpp](test_int_max_tokens.cpp) | S4.U -- forces `finish_reason="length"` with `max_tokens=200`; asserts a clear `on_error` is fired. Multi-tool truncation case asserts no malformed tool call (empty / unparseable arguments) escapes the LLMClient gate into history. |
 
 Every test is also tagged `[integration][llm]` for bulk filtering.
 
@@ -81,6 +84,9 @@ build\release\tests\integration\Release\locus_integration_tests.exe "[shell]"
 build\release\tests\integration\Release\locus_integration_tests.exe "[bg]"
 build\release\tests\integration\Release\locus_integration_tests.exe "[ask_user]"
 build\release\tests\integration\Release\locus_integration_tests.exe "[slash]"
+build\release\tests\integration\Release\locus_integration_tests.exe "[undo]"
+build\release\tests\integration\Release\locus_integration_tests.exe "[metrics]"
+build\release\tests\integration\Release\locus_integration_tests.exe "[max_tokens]"
 
 # List registered tests
 build\release\tests\integration\Release\locus_integration_tests.exe --list-tests

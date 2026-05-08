@@ -241,7 +241,7 @@ build/release/tests/integration/Release/locus_integration_tests.exe -console
 # One tag area
 build/release/tests/integration/Release/locus_integration_tests.exe "[smoke]" -console
 build/release/tests/integration/Release/locus_integration_tests.exe "[search]" -console
-# (also: [outline] [fs] [shell] [bg] [ask_user] [slash] [file_change_awareness])
+# (also: [outline] [fs] [shell] [bg] [ask_user] [slash] [file_change_awareness] [undo] [metrics] [max_tokens])
 ```
 
 When you launch with `-console` from Bash/subprocess, captured stdout looks empty
@@ -426,7 +426,7 @@ This protocol means every stage is validated before the next begins.
 No accumulated debt, no "we'll debug it later."
 
 **Integration tests (`tests/integration/`, manual, LLM-driven):**
-- **Update them whenever tools, extractors, the agent loop, the approval gate, or the slash-command dispatcher change** — schema changes, new tool, retired tool, changed arg shape, new extractor, new approval path all need matching test coverage in the relevant `test_int_*.cpp`. Add a new `TEST_CASE` tagged `[integration][llm][<topic>]`; don't silently skip.
+- **Update them whenever any user-observable agent behaviour changes** — that includes tools, extractors, the agent loop, the approval gate, the slash-command dispatcher (built-in slashes too: `/undo`, `/metrics`, `/export_metrics`, `/compact`, `/save`), the LLM stream decoder (`finish_reason` / refusal / mid-stream errors / tool-call validation), checkpoint and undo behaviour, telemetry surfaces (`MetricsAggregator`, `/metrics`, `/export_metrics`), and conversation/session state transitions. Schema changes, new tool, retired tool, changed arg shape, new extractor, new approval path, new slash command, new stream-decode event, new max_tokens / context-limit / timeout behaviour all need matching test coverage in the relevant `test_int_*.cpp`. Add a new `TEST_CASE` tagged `[integration][llm][<topic>]`; don't silently skip. If a feature can be exercised without an LLM round-trip (slash-only, deterministic), it still belongs in this suite tagged `[integration]` (drop `[llm]`) so the manual sweep runs it.
 - **Do NOT run them by default.** They need a live LLM, take minutes, and are not part of the per-stage verification protocol above. Only run when explicitly asked ("run the integration tests", "run [search] integration").
 - **When running on request, always pass `-console`.** The flag pops a dedicated console window and streams trace-level logs there live. The user wants to SEE the run (tool calls, LLM stream, SQL, FTS), not a silent 5-minute wait ending in a pass/fail summary. Omit `-console` only if the user explicitly asks for silent mode.
 - **Consequence of `-console` when you launch via Bash/subprocess:** the exe redirects its stdout/stderr into the new window, so your captured output will look empty. The subprocess call still completes cleanly when tests finish (no pause). For pass/fail, rely on the exit code; for post-mortem detail point the user at `<workspace>/.locus/integration_test.log`.

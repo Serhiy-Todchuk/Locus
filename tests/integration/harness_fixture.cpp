@@ -213,12 +213,15 @@ IntegrationHarness::IntegrationHarness()
     ws_meta.symbol_count  = static_cast<int>(st.symbols_total);
     ws_meta.heading_count = static_cast<int>(st.headings_total);
 
-    fs::path sessions_dir = tmp_dir_ / "sessions";
+    fs::path sessions_dir    = tmp_dir_ / "sessions";
+    fs::path checkpoints_dir = tmp_dir_ / "checkpoints";
     fs::create_directories(sessions_dir);
+    fs::create_directories(checkpoints_dir);
 
     agent_ = std::make_unique<AgentCore>(
         *llm_, *tools_, *workspace_,
-        workspace_->locus_md(), ws_meta, llm_config_, sessions_dir);
+        workspace_->locus_md(), ws_meta, llm_config_,
+        sessions_dir, checkpoints_dir);
 
     frontend_ = std::make_unique<HarnessFrontend>();
     frontend_->attach_core(agent_.get());
