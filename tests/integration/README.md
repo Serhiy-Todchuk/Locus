@@ -31,6 +31,7 @@ Tag filters match [Catch2 test tags](https://github.com/catchorg/Catch2/blob/dev
 | `[undo]`     | [test_int_undo.cpp](test_int_undo.cpp)          | S4.B -- `/undo` slash restores files after `write_file` / `edit_file`; reports a no-op when no checkpointed turns remain. |
 | `[metrics]`  | [test_int_metrics.cpp](test_int_metrics.cpp)    | S4.S -- `/metrics` summarises tokens + per-tool counts after a real turn; `/export_metrics json|csv` writes a file under `.locus/metrics/`; bogus format reports an error. |
 | `[max_tokens]` | [test_int_max_tokens.cpp](test_int_max_tokens.cpp) | S4.U -- forces `finish_reason="length"` with `max_tokens=200`; asserts a clear `on_error` is fired. Multi-tool truncation case asserts no malformed tool call (empty / unparseable arguments) escapes the LLMClient gate into history. |
+| `[plan]`     | [test_int_plan.cpp](test_int_plan.cpp)          | S4.D plan mode -- `set_mode(plan)` filters the API tool catalog to `propose_plan` only; full `propose -> approve -> execute` flow with `on_plan_proposed` / `on_mode_changed` / `on_plan_step_advanced` event capture; reject path keeps mode=plan and clears the plan. Soft-skips assertions that depend on small-model cooperation (e.g. consistent `mark_step_done` calls). |
 
 Every test is also tagged `[integration][llm]` for bulk filtering.
 

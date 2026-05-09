@@ -243,7 +243,7 @@ build/release/tests/integration/Release/locus_integration_tests.exe -console
 # One tag area
 build/release/tests/integration/Release/locus_integration_tests.exe "[smoke]" -console
 build/release/tests/integration/Release/locus_integration_tests.exe "[search]" -console
-# (also: [outline] [fs] [shell] [bg] [ask_user] [slash] [file_change_awareness] [undo] [metrics] [max_tokens])
+# (also: [outline] [fs] [shell] [bg] [ask_user] [slash] [file_change_awareness] [undo] [metrics] [max_tokens] [plan])
 ```
 
 When you launch with `-console` from Bash/subprocess, captured stdout looks empty

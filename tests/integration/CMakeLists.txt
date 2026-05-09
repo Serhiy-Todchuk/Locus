@@ -20,6 +20,7 @@ add_executable(locus_integration_tests
     test_int_undo.cpp
     test_int_metrics.cpp
     test_int_max_tokens.cpp
+    test_int_plan.cpp
 )
 
 target_include_directories(locus_integration_tests PRIVATE

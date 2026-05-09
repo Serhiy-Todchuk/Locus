@@ -8,6 +8,7 @@
 #include <condition_variable>
 #include <deque>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -26,6 +27,19 @@ struct ObservedToolCall {
 struct ObservedToolResult {
     std::string call_id;
     std::string display;
+};
+
+// S4.D plan-mode event captures.
+struct ObservedPlanStepAdvance {
+    std::string      plan_id;
+    int              step_idx = 0;     // 0-based
+    PlanStep::Status status = PlanStep::Status::pending;
+    std::string      notes;
+};
+
+struct ObservedPlanCompletion {
+    std::string plan_id;
+    bool        success = false;
 };
 
 // Test frontend that drives the approval gate synchronously, records every
@@ -64,6 +78,18 @@ public:
     int  embedding_done()  const { return embedding_done_.load(); }
     int  embedding_total() const { return embedding_total_.load(); }
 
+    // S4.D plan event captures (thread-safe copies).
+    std::optional<Plan>                   last_plan_proposed() const;
+    std::vector<ObservedPlanStepAdvance>  plan_step_advances() const;
+    std::vector<ObservedPlanCompletion>   plan_completions()   const;
+    std::vector<AgentMode>                mode_changes()       const;
+
+    // Re-arm the turn-complete latch without clearing recorded state. Use
+    // before triggering a follow-on turn (e.g. approve_plan auto-resume)
+    // so wait_for_turn blocks for the *next* turn rather than returning
+    // immediately because the previous one already completed.
+    void arm_next_turn();
+
     // -- IFrontend ------------------------------------------------------------
 
     void on_turn_start() override;
@@ -79,6 +105,13 @@ public:
     void on_embedding_progress(int done, int total) override;
     void on_indexing_progress(int done, int total) override;
     void on_activity(const ActivityEvent& event) override;
+    // S4.D
+    void on_mode_changed(AgentMode mode) override;
+    void on_plan_proposed(const Plan& plan) override;
+    void on_plan_step_advanced(const std::string& plan_id, int step_idx,
+                                PlanStep::Status status,
+                                const std::string& notes) override;
+    void on_plan_completed(const std::string& plan_id, bool success) override;
 
 private:
     ILocusCore* core_ = nullptr;
@@ -98,6 +131,12 @@ private:
     std::mutex              turn_mutex_;
     std::condition_variable turn_cv_;
     bool                    turn_complete_ = false;
+
+    // S4.D plan event records (mutex_-guarded).
+    std::optional<Plan>                  last_plan_proposed_;
+    std::vector<ObservedPlanStepAdvance> plan_step_advances_;
+    std::vector<ObservedPlanCompletion>  plan_completions_;
+    std::vector<AgentMode>               mode_changes_;
 };
 
 } // namespace locus::integration

@@ -14,6 +14,14 @@ void HarnessFrontend::reset_turn_state()
         tool_calls_.clear();
         tool_results_.clear();
         errors_.clear();
+        // S4.D: also clear plan event records so each test_case-driven
+        // prompt() sees a clean window. Mode changes accumulate within a
+        // single test (the test asserts on the sequence) but no test
+        // expects events from a prior test to bleed in.
+        last_plan_proposed_.reset();
+        plan_step_advances_.clear();
+        plan_completions_.clear();
+        mode_changes_.clear();
     }
     {
         std::lock_guard lock(turn_mutex_);
@@ -55,6 +63,36 @@ std::vector<std::string> HarnessFrontend::errors() const
 {
     std::lock_guard lock(mutex_);
     return errors_;
+}
+
+std::optional<Plan> HarnessFrontend::last_plan_proposed() const
+{
+    std::lock_guard lock(mutex_);
+    return last_plan_proposed_;
+}
+
+std::vector<ObservedPlanStepAdvance> HarnessFrontend::plan_step_advances() const
+{
+    std::lock_guard lock(mutex_);
+    return plan_step_advances_;
+}
+
+std::vector<ObservedPlanCompletion> HarnessFrontend::plan_completions() const
+{
+    std::lock_guard lock(mutex_);
+    return plan_completions_;
+}
+
+std::vector<AgentMode> HarnessFrontend::mode_changes() const
+{
+    std::lock_guard lock(mutex_);
+    return mode_changes_;
+}
+
+void HarnessFrontend::arm_next_turn()
+{
+    std::lock_guard lock(turn_mutex_);
+    turn_complete_ = false;
 }
 
 void HarnessFrontend::on_turn_start() {}
@@ -155,5 +193,34 @@ void HarnessFrontend::on_indexing_progress(int done, int total)
 }
 
 void HarnessFrontend::on_activity(const ActivityEvent& /*event*/) {}
+
+// -- S4.D plan-mode event captures ------------------------------------------
+
+void HarnessFrontend::on_mode_changed(AgentMode mode)
+{
+    std::lock_guard lock(mutex_);
+    mode_changes_.push_back(mode);
+}
+
+void HarnessFrontend::on_plan_proposed(const Plan& plan)
+{
+    std::lock_guard lock(mutex_);
+    last_plan_proposed_ = plan;
+}
+
+void HarnessFrontend::on_plan_step_advanced(const std::string& plan_id,
+                                             int step_idx,
+                                             PlanStep::Status status,
+                                             const std::string& notes)
+{
+    std::lock_guard lock(mutex_);
+    plan_step_advances_.push_back({plan_id, step_idx, status, notes});
+}
+
+void HarnessFrontend::on_plan_completed(const std::string& plan_id, bool success)
+{
+    std::lock_guard lock(mutex_);
+    plan_completions_.push_back({plan_id, success});
+}
 
 } // namespace locus::integration
