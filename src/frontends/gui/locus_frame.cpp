@@ -132,6 +132,11 @@ LocusFrame::LocusFrame(AgentCore& agent, Workspace& workspace)
     Bind(EVT_AGENT_INDEXING_PROGRESS,  &LocusFrame::on_agent_indexing_progress,  this);
     Bind(EVT_AGENT_ACTIVITY,      &LocusFrame::on_agent_activity,      this);
     Bind(EVT_AGENT_ATTACHED_CONTEXT, &LocusFrame::on_agent_attached_context, this);
+    // S4.D plan-mode events.
+    Bind(EVT_AGENT_MODE_CHANGED,        &LocusFrame::on_agent_mode_changed,       this);
+    Bind(EVT_AGENT_PLAN_PROPOSED,       &LocusFrame::on_agent_plan_proposed,      this);
+    Bind(EVT_AGENT_PLAN_STEP_ADVANCED,  &LocusFrame::on_agent_plan_step_advanced, this);
+    Bind(EVT_AGENT_PLAN_COMPLETED,      &LocusFrame::on_agent_plan_completed,     this);
 
     // Show LOCUS.md token cost if present.
     if (!workspace_.locus_md().empty()) {
@@ -252,6 +257,13 @@ void LocusFrame::setup_aui_layout()
             std::string summary = agent_.undo_turn();
             wxString html = "<pre>" + wxString::FromUTF8(summary) + "</pre>";
             chat_panel_->append_system_note(html);
+        },
+        // S4.D mode switcher click -> AgentCore queues the change.
+        [this](AgentMode m) { agent_.set_mode(m); },
+        // S4.D plan Approve / Reject from the chat bubble.
+        [this](const std::string& decision) {
+            if      (decision == "approve") agent_.approve_plan();
+            else if (decision == "reject")  agent_.reject_plan();
         });
 
     // Chip "✕" → detach the pinned file from the conversation context.
@@ -658,6 +670,49 @@ void LocusFrame::on_agent_attached_context(wxThreadEvent& evt)
 {
     if (chat_panel_)
         chat_panel_->set_attached_chip(evt.GetString());
+}
+
+// -- S4.D plan-mode event dispatch -----------------------------------------
+
+void LocusFrame::on_agent_mode_changed(wxThreadEvent& evt)
+{
+    if (!chat_panel_) return;
+    auto mode = static_cast<AgentMode>(evt.GetInt());
+    chat_panel_->on_mode_changed(mode);
+}
+
+void LocusFrame::on_agent_plan_proposed(wxThreadEvent& evt)
+{
+    if (!chat_panel_) return;
+    chat_panel_->on_plan_proposed(evt.GetString());
+}
+
+void LocusFrame::on_agent_plan_step_advanced(wxThreadEvent& evt)
+{
+    if (!chat_panel_) return;
+    try {
+        auto j = nlohmann::json::parse(evt.GetString().utf8_string());
+        wxString plan_id = wxString::FromUTF8(j.value("plan_id", ""));
+        int      step    = j.value("step_idx", 0);
+        wxString status  = wxString::FromUTF8(j.value("status", "pending"));
+        wxString notes   = wxString::FromUTF8(j.value("notes", ""));
+        chat_panel_->on_plan_step_advanced(plan_id, step, status, notes);
+    } catch (const std::exception& ex) {
+        spdlog::warn("Failed to parse plan_step_advanced payload: {}", ex.what());
+    }
+}
+
+void LocusFrame::on_agent_plan_completed(wxThreadEvent& evt)
+{
+    if (!chat_panel_) return;
+    try {
+        auto j = nlohmann::json::parse(evt.GetString().utf8_string());
+        wxString plan_id = wxString::FromUTF8(j.value("plan_id", ""));
+        bool     success = j.value("success", false);
+        chat_panel_->on_plan_completed(plan_id, success);
+    } catch (const std::exception& ex) {
+        spdlog::warn("Failed to parse plan_completed payload: {}", ex.what());
+    }
 }
 
 } // namespace locus

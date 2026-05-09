@@ -24,6 +24,11 @@ wxDECLARE_EVENT(EVT_AGENT_EMBEDDING_PROGRESS, wxThreadEvent);
 wxDECLARE_EVENT(EVT_AGENT_INDEXING_PROGRESS,  wxThreadEvent);
 wxDECLARE_EVENT(EVT_AGENT_ACTIVITY,      wxThreadEvent);
 wxDECLARE_EVENT(EVT_AGENT_ATTACHED_CONTEXT, wxThreadEvent);
+// S4.D plan-mode events.
+wxDECLARE_EVENT(EVT_AGENT_MODE_CHANGED,      wxThreadEvent);
+wxDECLARE_EVENT(EVT_AGENT_PLAN_PROPOSED,     wxThreadEvent);
+wxDECLARE_EVENT(EVT_AGENT_PLAN_STEP_ADVANCED, wxThreadEvent);
+wxDECLARE_EVENT(EVT_AGENT_PLAN_COMPLETED,    wxThreadEvent);
 
 // Thread bridge: IFrontend callbacks (fired on the agent thread) are
 // marshalled to the wxWidgets main thread via wxQueueEvent + wxThreadEvent.
@@ -51,6 +56,13 @@ public:
     void on_activity(const ActivityEvent& event) override;
     void on_attached_context_changed(
         const std::optional<AttachedContext>& ctx) override;
+    // S4.D
+    void on_mode_changed(AgentMode mode) override;
+    void on_plan_proposed(const Plan& plan) override;
+    void on_plan_step_advanced(const std::string& plan_id, int step_idx,
+                                PlanStep::Status status,
+                                const std::string& notes) override;
+    void on_plan_completed(const std::string& plan_id, bool success) override;
 
 private:
     wxEvtHandler* handler_;

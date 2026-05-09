@@ -19,6 +19,10 @@ wxDEFINE_EVENT(EVT_AGENT_EMBEDDING_PROGRESS, wxThreadEvent);
 wxDEFINE_EVENT(EVT_AGENT_INDEXING_PROGRESS,  wxThreadEvent);
 wxDEFINE_EVENT(EVT_AGENT_ACTIVITY,      wxThreadEvent);
 wxDEFINE_EVENT(EVT_AGENT_ATTACHED_CONTEXT, wxThreadEvent);
+wxDEFINE_EVENT(EVT_AGENT_MODE_CHANGED,        wxThreadEvent);
+wxDEFINE_EVENT(EVT_AGENT_PLAN_PROPOSED,       wxThreadEvent);
+wxDEFINE_EVENT(EVT_AGENT_PLAN_STEP_ADVANCED,  wxThreadEvent);
+wxDEFINE_EVENT(EVT_AGENT_PLAN_COMPLETED,      wxThreadEvent);
 
 WxFrontend::WxFrontend(wxEvtHandler* handler)
     : handler_(handler)
@@ -139,6 +143,49 @@ void WxFrontend::on_attached_context_changed(
     auto* evt = new wxThreadEvent(EVT_AGENT_ATTACHED_CONTEXT);
     // Empty string means "detached"; otherwise carry the workspace-relative path.
     evt->SetString(ctx ? wxString::FromUTF8(ctx->file_path) : wxString{});
+    wxQueueEvent(handler_, evt);
+}
+
+// -- S4.D plan-mode event marshalling ---------------------------------------
+
+void WxFrontend::on_mode_changed(AgentMode mode)
+{
+    auto* evt = new wxThreadEvent(EVT_AGENT_MODE_CHANGED);
+    evt->SetInt(static_cast<int>(mode));
+    wxQueueEvent(handler_, evt);
+}
+
+void WxFrontend::on_plan_proposed(const Plan& plan)
+{
+    auto* evt = new wxThreadEvent(EVT_AGENT_PLAN_PROPOSED);
+    // Pack the plan as JSON so the LocusFrame handler doesn't need to know
+    // about Plan's internal layout. plan_to_json is the single point of
+    // truth for the wire format.
+    evt->SetString(wxString::FromUTF8(plan_to_json(plan).dump()));
+    wxQueueEvent(handler_, evt);
+}
+
+void WxFrontend::on_plan_step_advanced(const std::string& plan_id, int step_idx,
+                                        PlanStep::Status status,
+                                        const std::string& notes)
+{
+    auto* evt = new wxThreadEvent(EVT_AGENT_PLAN_STEP_ADVANCED);
+    nlohmann::json j;
+    j["plan_id"]  = plan_id;
+    j["step_idx"] = step_idx;
+    j["status"]   = to_string(status);
+    j["notes"]    = notes;
+    evt->SetString(wxString::FromUTF8(j.dump()));
+    wxQueueEvent(handler_, evt);
+}
+
+void WxFrontend::on_plan_completed(const std::string& plan_id, bool success)
+{
+    auto* evt = new wxThreadEvent(EVT_AGENT_PLAN_COMPLETED);
+    nlohmann::json j;
+    j["plan_id"] = plan_id;
+    j["success"] = success;
+    evt->SetString(wxString::FromUTF8(j.dump()));
     wxQueueEvent(handler_, evt);
 }
 

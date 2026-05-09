@@ -1,9 +1,11 @@
 #pragma once
 
+#include "../../agent/agent_mode.h"
 #include "../../core/frontend.h"
 #include "slash_popup.h"
 
 #include <wx/wx.h>
+#include <wx/tglbtn.h>
 #include <wx/webview.h>
 
 #include <chrono>
@@ -34,11 +36,17 @@ public:
     // on_stop is called when the user clicks Stop during generation.
     // on_undo is called when the user clicks the Undo button — should revert
     // the most recent checkpointed turn. Disabled while a turn is streaming.
+    // S4.D plan-mode callbacks. on_mode_pick is invoked when the user clicks
+    // the Chat / Plan / Execute toggle. on_plan_decision is invoked when the
+    // user clicks Approve or Reject on a plan bubble (decision == "approve"
+    // or "reject"; LocusFrame translates to AgentCore::approve_plan/reject).
     ChatPanel(wxWindow* parent,
               std::function<void(const std::string&)> on_send,
               std::function<void()> on_compact = nullptr,
               std::function<void()> on_stop = nullptr,
-              std::function<void()> on_undo = nullptr);
+              std::function<void()> on_undo = nullptr,
+              std::function<void(AgentMode)> on_mode_pick = nullptr,
+              std::function<void(const std::string&)> on_plan_decision = nullptr);
 
     // -- Called by LocusFrame in response to agent events --
 
@@ -58,6 +66,20 @@ public:
                          const wxString& tool_name,
                          const wxString& preview);
     void on_tool_result(const wxString& call_id, const wxString& display);
+
+    // S4.D plan-mode display.
+    // on_mode_changed: flip the mode-switcher toggle to match `mode`.
+    // on_plan_proposed: render a structured plan bubble + remember plan id
+    //   for follow-up step advances.
+    // on_plan_step_advanced: flip the step's status glyph + class.
+    // on_plan_completed: lock the plan bubble (Approve/Reject hidden); fire
+    //   end-of-plan footer chip update.
+    void on_mode_changed(AgentMode mode);
+    void on_plan_proposed(const wxString& plan_json);
+    void on_plan_step_advanced(const wxString& plan_id, int step_idx,
+                                const wxString& status,
+                                const wxString& notes);
+    void on_plan_completed(const wxString& plan_id, bool success);
 
     // Footer updates.
     void set_context_meter(int used, int limit);
@@ -126,6 +148,8 @@ private:
     std::function<void()> on_compact_;
     std::function<void()> on_stop_;
     std::function<void()> on_undo_;
+    std::function<void(AgentMode)> on_mode_pick_;
+    std::function<void(const std::string&)> on_plan_decision_;
     std::function<bool(const std::string&, const std::string&)> on_slash_command_;
 
     wxWebView*    webview_       = nullptr;
@@ -136,6 +160,12 @@ private:
     wxButton*     stop_btn_      = nullptr;
     wxButton*     undo_btn_      = nullptr;
     wxStaticText* locus_chip_    = nullptr;
+    // S4.D mode switcher (above the input). Mutually exclusive toggles.
+    wxToggleButton* mode_chat_btn_    = nullptr;
+    wxToggleButton* mode_plan_btn_    = nullptr;
+    wxToggleButton* mode_execute_btn_ = nullptr;
+    // S4.D plan-progress chip (next to context meter).
+    wxStaticText*   plan_chip_        = nullptr;
 
     // Attached-context chip row (sits between webview and input).
     wxPanel*      attach_panel_  = nullptr;  // the row container
@@ -149,6 +179,16 @@ private:
     // matching tool-pending message rather than whatever the latest
     // addMsg incremented to (which might be an error or reasoning bubble).
     std::unordered_map<std::string, int> tool_call_msg_ids_;
+
+    // S4.D plan-id -> message_id so on_plan_step_advanced finds the right
+    // bubble. Cleared on session reset.
+    std::unordered_map<std::string, int> plan_msg_ids_;
+    // S4.D last seen plan summary for the footer chip ("3/7 building scene
+    // graph"). When empty, the chip is hidden.
+    std::string current_plan_id_;
+    int         current_plan_total_steps_   = 0;
+    int         current_plan_done_steps_    = 0;
+    std::string current_plan_step_label_;
 
     // Token buffer (written from UI thread via on_token, read by timer).
     std::string   token_buffer_;

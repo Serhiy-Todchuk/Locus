@@ -85,6 +85,11 @@ private:
     void on_agent_indexing_progress(wxThreadEvent& evt);
     void on_agent_activity(wxThreadEvent& evt);
     void on_agent_attached_context(wxThreadEvent& evt);
+    // S4.D
+    void on_agent_mode_changed(wxThreadEvent& evt);
+    void on_agent_plan_proposed(wxThreadEvent& evt);
+    void on_agent_plan_step_advanced(wxThreadEvent& evt);
+    void on_agent_plan_completed(wxThreadEvent& evt);
 
     // Push the current ops_status_ composition into status bar pane 1.
     void refresh_ops_status();

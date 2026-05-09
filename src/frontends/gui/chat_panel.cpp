@@ -132,6 +132,92 @@ body {
     font-size: 13px;
 }
 
+/* S4.D plan bubble */
+.msg-plan {
+    align-self: stretch;
+    background: #fff8e6;
+    color: #3a2f00;
+    border: 1px solid #ffd66b;
+    border-left: 4px solid #ffb300;
+    border-radius: 8px;
+    font-size: 13px;
+    padding: 10px 12px;
+    max-width: 100%;
+}
+.msg-plan .plan-title {
+    font-weight: 600;
+    font-size: 14px;
+    margin-bottom: 2px;
+}
+.msg-plan .plan-summary {
+    color: #6b5800;
+    font-size: 12px;
+    margin-bottom: 8px;
+}
+.msg-plan ol.plan-steps {
+    list-style: none;
+    padding-left: 0;
+    margin: 0 0 8px 0;
+}
+.msg-plan li.plan-step {
+    padding: 4px 0;
+    line-height: 1.45;
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+}
+.msg-plan li.plan-step .step-glyph {
+    flex: 0 0 auto;
+    width: 18px;
+    text-align: center;
+    color: #b07800;
+}
+.msg-plan li.plan-step.done    .step-glyph { color: #2e7d32; }
+.msg-plan li.plan-step.failed  .step-glyph { color: #c62828; }
+.msg-plan li.plan-step.in_progress .step-glyph {
+    color: #1976d2;
+    animation: spin 1s linear infinite;
+}
+@keyframes spin { 100% { transform: rotate(360deg); } }
+.msg-plan li.plan-step .step-tools {
+    color: #888;
+    font-size: 11px;
+    margin-left: 4px;
+}
+.msg-plan li.plan-step .step-notes {
+    color: #555;
+    font-size: 11px;
+    margin-top: 2px;
+    font-style: italic;
+}
+.msg-plan .plan-actions {
+    margin-top: 6px;
+    display: flex;
+    gap: 8px;
+}
+.msg-plan .plan-actions a {
+    text-decoration: none;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+}
+.msg-plan .plan-actions a.approve {
+    background: #2e7d32;
+    color: #fff;
+}
+.msg-plan .plan-actions a.reject {
+    background: #fff;
+    color: #c62828;
+    border: 1px solid #c62828;
+}
+.msg-plan .plan-decided {
+    margin-top: 6px;
+    color: #6b5800;
+    font-size: 12px;
+    font-style: italic;
+}
+
 /* Markdown content styles */
 .msg-assistant p { margin: 0.4em 0; }
 .msg-assistant p:first-child { margin-top: 0; }
@@ -311,6 +397,117 @@ function finalizeReasoning(id, label) {
         if (s && label) s.textContent = label;
     }
 }
+
+// ---- S4.D plan bubble helpers ---------------------------------------------
+
+function planGlyph(status) {
+    if (status === 'done')        return '✓';   // check
+    if (status === 'failed')      return '✗';   // x
+    if (status === 'in_progress') return '⧗';   // hourglass-ish
+    return '○';                                  // pending: hollow circle
+}
+
+function escapeHtml(s) {
+    return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#39;');
+}
+
+// Add a plan bubble to the chat. plan_json is a JSON string with the shape
+// produced by plan_to_json (Plan struct in agent_mode.h):
+//   { id, title, summary, steps: [{description, tools_needed[], status, notes?}] }
+function addPlanMsg(id, plan_json) {
+    var plan;
+    try { plan = JSON.parse(plan_json); }
+    catch (e) { return; }
+
+    var d = document.createElement('div');
+    d.id = 'msg-' + id;
+    d.className = 'msg msg-plan';
+    d.setAttribute('data-plan-id', plan.id || '');
+
+    var html = '';
+    if (plan.title)
+        html += '<div class="plan-title">Plan: ' + escapeHtml(plan.title) + '</div>';
+    if (plan.summary)
+        html += '<div class="plan-summary">' + escapeHtml(plan.summary) + '</div>';
+    html += '<ol class="plan-steps">';
+    var steps = plan.steps || [];
+    for (var i = 0; i < steps.length; ++i) {
+        var s = steps[i];
+        var status = s.status || 'pending';
+        html += '<li class="plan-step ' + status +
+                '" data-step-idx="' + i + '">';
+        html += '<span class="step-glyph">' + planGlyph(status) + '</span>';
+        html += '<span class="step-body">' +
+                (i + 1) + '. ' + escapeHtml(s.description || '');
+        if (s.tools_needed && s.tools_needed.length) {
+            html += '<span class="step-tools"> &mdash; uses ' +
+                    escapeHtml(s.tools_needed.join(', ')) + '</span>';
+        }
+        if (s.notes) {
+            html += '<div class="step-notes">' + escapeHtml(s.notes) + '</div>';
+        }
+        html += '</span></li>';
+    }
+    html += '</ol>';
+    // Approve / Reject buttons. Routed through wxEVT_WEBVIEW_NAVIGATING via
+    // the locus:// scheme; the chat panel intercepts and dispatches to
+    // AgentCore::approve_plan / reject_plan.
+    html += '<div class="plan-actions" data-actions-for="' +
+            (plan.id || '') + '">';
+    html += '<a class="approve" href="locus://plan-approve/' +
+            (plan.id || '') + '">Approve &amp; execute</a>';
+    html += '<a class="reject" href="locus://plan-reject/' +
+            (plan.id || '') + '">Reject</a>';
+    html += '</div>';
+
+    d.innerHTML = html;
+    document.getElementById('chat').appendChild(d);
+    window.scrollTo(0, document.body.scrollHeight);
+}
+
+// Flip a step's status class + glyph in an existing plan bubble.
+function updatePlanStep(msgId, stepIdx, status, notes) {
+    var d = document.getElementById('msg-' + msgId);
+    if (!d) return;
+    var step = d.querySelector('li.plan-step[data-step-idx="' + stepIdx + '"]');
+    if (!step) return;
+    step.className = 'plan-step ' + (status || 'pending');
+    var glyph = step.querySelector('.step-glyph');
+    if (glyph) glyph.textContent = planGlyph(status);
+    if (notes) {
+        var existing = step.querySelector('.step-notes');
+        if (existing) existing.textContent = notes;
+        else {
+            var body = step.querySelector('.step-body');
+            if (body) {
+                var n = document.createElement('div');
+                n.className = 'step-notes';
+                n.textContent = notes;
+                body.appendChild(n);
+            }
+        }
+    }
+    window.scrollTo(0, document.body.scrollHeight);
+}
+
+// Mark the plan bubble as decided (approved / rejected / completed). Hides
+// the action buttons and replaces them with a status line.
+function setPlanDecided(msgId, label) {
+    var d = document.getElementById('msg-' + msgId);
+    if (!d) return;
+    var actions = d.querySelector('.plan-actions');
+    if (actions) actions.remove();
+    var existing = d.querySelector('.plan-decided');
+    if (existing) existing.textContent = label;
+    else {
+        var n = document.createElement('div');
+        n.className = 'plan-decided';
+        n.textContent = label;
+        d.appendChild(n);
+    }
+}
 </script>
 <script src=")html";
     html += k_prism_js_url;
@@ -331,17 +528,56 @@ ChatPanel::ChatPanel(wxWindow* parent,
                      std::function<void(const std::string&)> on_send,
                      std::function<void()> on_compact,
                      std::function<void()> on_stop,
-                     std::function<void()> on_undo)
+                     std::function<void()> on_undo,
+                     std::function<void(AgentMode)> on_mode_pick,
+                     std::function<void(const std::string&)> on_plan_decision)
     : wxPanel(parent, wxID_ANY)
     , on_send_(std::move(on_send))
     , on_compact_(std::move(on_compact))
     , on_stop_(std::move(on_stop))
     , on_undo_(std::move(on_undo))
+    , on_mode_pick_(std::move(on_mode_pick))
+    , on_plan_decision_(std::move(on_plan_decision))
     , flush_timer_(this)
 {
     create_webview();
     create_input();
     create_footer();
+
+    // S4.D mode switcher (Chat / Plan / Execute) -- a row of mutually
+    // exclusive toggles above the input. Disabled while a turn is streaming
+    // (mode change requests are queued anyway, but the visual feedback
+    // matches the "input disabled" state).
+    auto mk_toggle = [this](const wxString& label, AgentMode m,
+                            const wxString& tip) {
+        auto* btn = new wxToggleButton(this, wxID_ANY, label,
+                                       wxDefaultPosition, wxDefaultSize,
+                                       wxBU_EXACTFIT);
+        btn->SetToolTip(tip);
+        btn->Bind(wxEVT_TOGGLEBUTTON, [this, m, btn](wxCommandEvent&) {
+            // Re-enforce mutual exclusivity: clicking an already-active
+            // toggle is a no-op (keep it down), clicking a different one
+            // releases the others.
+            if (!btn->GetValue()) {
+                btn->SetValue(true);  // can't untoggle by clicking the same
+                return;
+            }
+            if (mode_chat_btn_    && mode_chat_btn_    != btn) mode_chat_btn_->SetValue(false);
+            if (mode_plan_btn_    && mode_plan_btn_    != btn) mode_plan_btn_->SetValue(false);
+            if (mode_execute_btn_ && mode_execute_btn_ != btn) mode_execute_btn_->SetValue(false);
+            if (on_mode_pick_) on_mode_pick_(m);
+        });
+        return btn;
+    };
+
+    mode_chat_btn_ = mk_toggle("Chat", AgentMode::chat,
+        "Default: full tool catalog, no plan workflow.");
+    mode_plan_btn_ = mk_toggle("Plan", AgentMode::plan,
+        "Plan mode: model proposes a structured plan; you Approve to execute.");
+    mode_execute_btn_ = mk_toggle("Execute", AgentMode::execute,
+        "Execute mode: full tool catalog plus mark_step_done. "
+        "Usually entered automatically after Approve.");
+    mode_chat_btn_->SetValue(true);  // default selection
 
     // Attached-context chip row (between chat history and input).
     attach_panel_ = new wxPanel(this, wxID_ANY);
@@ -360,10 +596,19 @@ ChatPanel::ChatPanel(wxWindow* parent,
     attach_panel_->SetSizer(attach_sizer);
     attach_panel_->Hide();  // shown when set_attached_chip() is called
 
+    // Mode switcher row (S4.D) sits between attach chip and input.
+    auto* mode_row = new wxBoxSizer(wxHORIZONTAL);
+    mode_row->Add(new wxStaticText(this, wxID_ANY, "Mode:"),
+                  0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
+    mode_row->Add(mode_chat_btn_,    0, wxRIGHT, 2);
+    mode_row->Add(mode_plan_btn_,    0, wxRIGHT, 2);
+    mode_row->Add(mode_execute_btn_, 0);
+
     // Main vertical layout.
     auto* sizer = new wxBoxSizer(wxVERTICAL);
     sizer->Add(webview_, 1, wxEXPAND);
     sizer->Add(attach_panel_, 0, wxEXPAND | wxTOP | wxBOTTOM, 2);
+    sizer->Add(mode_row, 0, wxEXPAND | wxTOP | wxLEFT | wxRIGHT, 2);
     sizer->Add(input_,   0, wxEXPAND | wxTOP, 2);
 
     // Footer bar.
@@ -374,6 +619,7 @@ ChatPanel::ChatPanel(wxWindow* parent,
     footer->Add(undo_btn_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
     footer->Add(stop_btn_, 0, wxALIGN_CENTER_VERTICAL);
     footer->AddStretchSpacer();
+    footer->Add(plan_chip_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
     footer->Add(locus_chip_, 0, wxALIGN_CENTER_VERTICAL);
     sizer->Add(footer, 0, wxEXPAND | wxALL, 4);
 
@@ -455,6 +701,8 @@ void ChatPanel::create_footer()
         if (on_undo_) on_undo_();
     });
     locus_chip_ = new wxStaticText(this, wxID_ANY, "");
+    plan_chip_  = new wxStaticText(this, wxID_ANY, "");
+    plan_chip_->Hide();  // shown only while a plan is active
 }
 
 // ---------------------------------------------------------------------------
@@ -584,6 +832,155 @@ void ChatPanel::on_session_reset()
     assistant_id_ = 0;
     reasoning_id_ = 0;
     tool_call_msg_ids_.clear();
+    // S4.D: drop plan state + flip the mode switcher back to Chat.
+    plan_msg_ids_.clear();
+    current_plan_id_.clear();
+    current_plan_total_steps_ = 0;
+    current_plan_done_steps_  = 0;
+    current_plan_step_label_.clear();
+    if (plan_chip_) {
+        plan_chip_->SetLabel("");
+        plan_chip_->Hide();
+        Layout();
+    }
+    on_mode_changed(AgentMode::chat);
+}
+
+// ---------------------------------------------------------------------------
+// S4.D plan-mode display
+// ---------------------------------------------------------------------------
+
+void ChatPanel::on_mode_changed(AgentMode mode)
+{
+    // Flip toggles WITHOUT firing the EVT_TOGGLEBUTTON handler (which would
+    // re-call on_mode_pick_ and bounce back to AgentCore). SetValue is the
+    // wx-idiomatic non-emitting setter.
+    if (mode_chat_btn_)    mode_chat_btn_->SetValue(mode == AgentMode::chat);
+    if (mode_plan_btn_)    mode_plan_btn_->SetValue(mode == AgentMode::plan);
+    if (mode_execute_btn_) mode_execute_btn_->SetValue(mode == AgentMode::execute);
+
+    // Hide the plan chip when we drop back to chat with no plan in flight.
+    if (mode == AgentMode::chat && plan_chip_) {
+        plan_chip_->SetLabel("");
+        plan_chip_->Hide();
+        Layout();
+    }
+}
+
+namespace {
+
+// Format a "Plan: X/Y -- next-step-label" footer chip text. Truncates long
+// step descriptions to keep the footer visually balanced.
+wxString format_plan_chip(int done, int total, const std::string& label)
+{
+    wxString s = wxString::Format("Plan: %d/%d", done, total);
+    if (!label.empty()) {
+        std::string head = label;
+        constexpr size_t k_max = 60;
+        if (head.size() > k_max) head = head.substr(0, k_max) + "...";
+        s += " - " + wxString::FromUTF8(head);
+    }
+    return s;
+}
+
+} // namespace
+
+void ChatPanel::on_plan_proposed(const wxString& plan_json)
+{
+    // Parse just enough to hydrate the chip + remember the message id.
+    // Full rendering is done JS-side via addPlanMsg.
+    int total = 0;
+    std::string id;
+    std::string first_step;
+    try {
+        auto j = nlohmann::json::parse(plan_json.utf8_string());
+        id = j.value("id", "");
+        if (j.contains("steps") && j["steps"].is_array()) {
+            total = static_cast<int>(j["steps"].size());
+            if (total > 0)
+                first_step = j["steps"][0].value("description", "");
+        }
+    } catch (const nlohmann::json::exception&) {
+        spdlog::warn("ChatPanel: malformed plan JSON; rendering raw");
+    }
+
+    ++message_id_;
+    if (!id.empty()) plan_msg_ids_[id] = message_id_;
+    current_plan_id_           = id;
+    current_plan_total_steps_  = total;
+    current_plan_done_steps_   = 0;
+    current_plan_step_label_   = first_step;
+
+    if (plan_chip_) {
+        plan_chip_->SetLabel(format_plan_chip(0, total, first_step));
+        plan_chip_->Show();
+        Layout();
+    }
+
+    // JS-side rendering. addPlanMsg handles the heavy lifting (status
+    // glyphs, Approve/Reject buttons, escaping). The JSON is js-escaped
+    // so it round-trips cleanly through the JS string literal.
+    run_script(wxString::Format("addPlanMsg(%d, '%s');",
+                                message_id_, js_escape(plan_json)));
+}
+
+void ChatPanel::on_plan_step_advanced(const wxString& plan_id, int step_idx,
+                                       const wxString& status,
+                                       const wxString& notes)
+{
+    auto it = plan_msg_ids_.find(std::string(plan_id.utf8_string()));
+    if (it == plan_msg_ids_.end()) {
+        spdlog::warn("ChatPanel: step advance for unknown plan id '{}'",
+                     plan_id.ToStdString());
+        return;
+    }
+    int msg_id = it->second;
+
+    run_script(wxString::Format(
+        "updatePlanStep(%d, %d, '%s', '%s');",
+        msg_id, step_idx, js_escape(status), js_escape(notes)));
+
+    // Bump the footer chip on done/failed.
+    if (plan_id == wxString::FromUTF8(current_plan_id_)
+        && (status == "done" || status == "failed")) {
+        ++current_plan_done_steps_;
+        // Try to surface the NEXT pending step as the chip label so the user
+        // sees "what's coming up" rather than "what just finished".
+        // Without re-parsing the plan we don't know the next description, so
+        // for now reuse the previously-shown label until the next on_plan_
+        // proposed clears it. (Phase 2-of-2 polish if the shipped UI feels
+        // stale.)
+        if (plan_chip_) {
+            plan_chip_->SetLabel(
+                format_plan_chip(current_plan_done_steps_,
+                                  current_plan_total_steps_,
+                                  current_plan_step_label_));
+            Layout();
+        }
+    }
+}
+
+void ChatPanel::on_plan_completed(const wxString& plan_id, bool success)
+{
+    auto it = plan_msg_ids_.find(std::string(plan_id.utf8_string()));
+    if (it != plan_msg_ids_.end()) {
+        wxString label = success ? "Plan completed."
+                                  : "Plan completed with failures.";
+        run_script(wxString::Format(
+            "setPlanDecided(%d, '%s');",
+            it->second, js_escape(label)));
+    }
+
+    if (plan_id == wxString::FromUTF8(current_plan_id_)) {
+        if (plan_chip_) {
+            plan_chip_->SetLabel(
+                wxString::Format("Plan: done (%d/%d%s)",
+                                  current_plan_done_steps_,
+                                  current_plan_total_steps_,
+                                  success ? "" : " - with failures"));
+            Layout();
+        }
+    }
 }
 
 void ChatPanel::on_error(const wxString& message)
@@ -1008,7 +1405,39 @@ void ChatPanel::on_webview_navigating(wxWebViewEvent& evt)
     if (url.StartsWith("javascript:"))
         return;
 
-    // Block all external navigation (user clicking links in chat).
+    // S4.D: intercept the locus:// scheme used by plan-bubble Approve / Reject
+    // links. URL shape: locus://plan-approve/<plan-id> or locus://plan-reject/<plan-id>.
+    // Always veto -- we just dispatch to the C++ side and the page stays put.
+    if (url.StartsWith("locus://plan-approve")) {
+        evt.Veto();
+        // Lock the bubble visually so the user can't double-click. The
+        // canonical state update arrives via on_plan_completed / mode change.
+        if (!current_plan_id_.empty()) {
+            auto it = plan_msg_ids_.find(current_plan_id_);
+            if (it != plan_msg_ids_.end()) {
+                run_script(wxString::Format(
+                    "setPlanDecided(%d, '%s');",
+                    it->second, js_escape("Approved -- executing...")));
+            }
+        }
+        if (on_plan_decision_) on_plan_decision_("approve");
+        return;
+    }
+    if (url.StartsWith("locus://plan-reject")) {
+        evt.Veto();
+        if (!current_plan_id_.empty()) {
+            auto it = plan_msg_ids_.find(current_plan_id_);
+            if (it != plan_msg_ids_.end()) {
+                run_script(wxString::Format(
+                    "setPlanDecided(%d, '%s');",
+                    it->second, js_escape("Rejected.")));
+            }
+        }
+        if (on_plan_decision_) on_plan_decision_("reject");
+        return;
+    }
+
+    // Block all other external navigation (user clicking links in chat).
     spdlog::trace("WebView navigation blocked: {}", url.ToStdString());
     evt.Veto();
 }
