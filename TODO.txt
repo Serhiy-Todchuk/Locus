@@ -6,3 +6,5 @@
 - merge statistics/activity log with chat window
 - append prompt during running turn
 - search in chat
+- FastDebug
+- tokens per second counter per each turn?

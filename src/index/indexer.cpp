@@ -522,28 +522,58 @@ void Indexer::process_events(const std::vector<FileEvent>& events)
 
     std::lock_guard<std::mutex> serial(process_mutex_);
 
+    // Filter out events that won't change the index. The OS file watcher
+    // (efsw) fires a separate "modified" event for the parent directory
+    // every time a child is added/removed; without this filter the activity
+    // log shows phantom rows like "~ src" alongside the real "+ src/main.js"
+    // and the header miscounts ("2 file events" for one actual file). For
+    // Added/Modified/Moved we filter by `fs::is_regular_file` -- the
+    // dispositive test we already use inside `index_file`. For Deleted we
+    // keep the event (the path no longer exists, so we can't probe it; if
+    // the row wasn't in the DB, `remove_file` is a cheap no-op anyway --
+    // the user-visible cost is just that a deleted directory might show
+    // up here, which is rare in our flows).
+    std::vector<FileEvent> filtered;
+    filtered.reserve(events.size());
+    for (auto& ev : events) {
+        if (is_excluded(ev.path))
+            continue;
+        if (ev.action == FileAction::Deleted) {
+            filtered.push_back(ev);
+            continue;
+        }
+        std::error_code ec;
+        fs::path abs_path = root_ / ev.path;
+        if (fs::is_regular_file(abs_path, ec))
+            filtered.push_back(ev);
+    }
+
+    if (filtered.empty()) {
+        spdlog::trace("Processed 0 file events ({} dropped as non-files)",
+                      events.size());
+        return;
+    }
+
     main_db_.exec("BEGIN TRANSACTION");
     if (vectors_db_) vectors_db_->exec("BEGIN TRANSACTION");
 
-    const int total = static_cast<int>(events.size());
+    const int total = static_cast<int>(filtered.size());
     int done = 0;
     if (on_progress) on_progress(0, total);
 
-    for (auto& ev : events) {
-        if (!is_excluded(ev.path)) {
-            switch (ev.action) {
-                case FileAction::Added:
-                case FileAction::Modified:
-                    index_file(ev.path);
-                    break;
-                case FileAction::Deleted:
-                    remove_file(ev.path);
-                    break;
-                case FileAction::Moved:
-                    remove_file(ev.old_path);
-                    index_file(ev.path);
-                    break;
-            }
+    for (auto& ev : filtered) {
+        switch (ev.action) {
+            case FileAction::Added:
+            case FileAction::Modified:
+                index_file(ev.path);
+                break;
+            case FileAction::Deleted:
+                remove_file(ev.path);
+                break;
+            case FileAction::Moved:
+                remove_file(ev.old_path);
+                index_file(ev.path);
+                break;
         }
         ++done;
         if (on_progress) on_progress(done, total);
@@ -552,13 +582,15 @@ void Indexer::process_events(const std::vector<FileEvent>& events)
     main_db_.exec("COMMIT");
     if (vectors_db_) vectors_db_->exec("COMMIT");
 
-    spdlog::trace("Processed {} file events", events.size());
+    spdlog::trace("Processed {} file events ({} raw, {} dropped as non-files)",
+                  filtered.size(), events.size(),
+                  events.size() - filtered.size());
 
     if (on_activity) {
-        std::string sum = "Indexed " + std::to_string(events.size()) + " file event" +
-                          (events.size() == 1 ? "" : "s");
+        std::string sum = "Indexed " + std::to_string(filtered.size()) + " file" +
+                          (filtered.size() == 1 ? "" : "s");
         std::string det;
-        for (auto& ev : events) {
+        for (auto& ev : filtered) {
             det += (ev.action == FileAction::Deleted ? "- " :
                     ev.action == FileAction::Added   ? "+ " :
                     ev.action == FileAction::Moved   ? "> " : "~ ");
