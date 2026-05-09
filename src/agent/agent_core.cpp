@@ -212,6 +212,170 @@ std::optional<AttachedContext> AgentCore::attached_context() const
     return attached_context_;
 }
 
+// -- Plan mode (S4.D) --------------------------------------------------------
+
+AgentMode AgentCore::mode() const
+{
+    return mode_.load(std::memory_order_acquire);
+}
+
+void AgentCore::set_mode(AgentMode m)
+{
+    // Queued onto the agent thread for the same reason compact_context is:
+    // ConversationHistory's owner-thread fence (S3.I) bites if a foreign
+    // thread tries to mutate history while a turn is in flight, and changing
+    // mode may need to append a [mode change] system marker.
+    pending_mode_.store(m, std::memory_order_relaxed);
+    pending_mode_change_.store(true, std::memory_order_release);
+    {
+        std::lock_guard lock(queue_mutex_);
+    }
+    queue_cv_.notify_one();
+    spdlog::info("AgentCore: mode change queued: {}", to_string(m));
+}
+
+void AgentCore::approve_plan()
+{
+    pending_plan_approve_.store(true, std::memory_order_release);
+    {
+        std::lock_guard lock(queue_mutex_);
+    }
+    queue_cv_.notify_one();
+    spdlog::info("AgentCore: plan approval queued");
+}
+
+void AgentCore::reject_plan()
+{
+    pending_plan_reject_.store(true, std::memory_order_release);
+    {
+        std::lock_guard lock(queue_mutex_);
+    }
+    queue_cv_.notify_one();
+    spdlog::info("AgentCore: plan rejection queued");
+}
+
+std::optional<Plan> AgentCore::current_plan() const
+{
+    std::lock_guard lock(plan_mutex_);
+    return current_plan_;
+}
+
+void AgentCore::apply_pending_mode_change()
+{
+    if (!pending_mode_change_.exchange(false, std::memory_order_acq_rel))
+        return;
+
+    AgentMode m = pending_mode_.load(std::memory_order_relaxed);
+    AgentMode prev = mode_.exchange(m, std::memory_order_acq_rel);
+    if (m == prev) return;
+
+    // Switching INTO chat or back to plan from a different mode clears any
+    // half-finished plan -- the user is starting over. Switching FROM plan
+    // to execute is handled by approve_plan separately and must not reset
+    // current_plan_ here.
+    if (m == AgentMode::chat || (m == AgentMode::plan && prev != AgentMode::plan)) {
+        std::lock_guard lock(plan_mutex_);
+        current_plan_.reset();
+        plan_awaiting_decision_ = false;
+    }
+
+    spdlog::info("AgentCore: mode {} -> {}", to_string(prev), to_string(m));
+    activity_->emit(ActivityKind::index_event,
+                    std::string("Mode: ") + to_string(m),
+                    std::string("Switched from ") + to_string(prev) +
+                        " to " + to_string(m));
+    frontends_.broadcast([&](IFrontend& fe) { fe.on_mode_changed(m); });
+}
+
+void AgentCore::apply_pending_plan_decision()
+{
+    bool approve = pending_plan_approve_.exchange(false, std::memory_order_acq_rel);
+    bool reject  = pending_plan_reject_.exchange(false, std::memory_order_acq_rel);
+    if (!approve && !reject) return;
+
+    // Snapshot the plan under lock, then operate without the lock to avoid
+    // contention if a frontend queries during the broadcast.
+    Plan plan;
+    bool have_plan = false;
+    bool awaiting  = false;
+    {
+        std::lock_guard lock(plan_mutex_);
+        if (current_plan_.has_value()) {
+            plan = *current_plan_;
+            have_plan = true;
+        }
+        awaiting = plan_awaiting_decision_;
+    }
+
+    if (!have_plan || !awaiting) {
+        spdlog::warn("AgentCore: plan decision queued but no plan awaiting");
+        return;
+    }
+
+    if (reject) {
+        // Drop the plan; user will re-prompt. Stay in plan mode.
+        {
+            std::lock_guard lock(plan_mutex_);
+            current_plan_.reset();
+            plan_awaiting_decision_ = false;
+        }
+        spdlog::info("AgentCore: plan '{}' rejected", plan.id);
+        activity_->emit(ActivityKind::index_event,
+                        "Plan rejected", plan.title);
+        return;
+    }
+
+    // approve: switch to execute mode, then enqueue a synthetic user message
+    // that recaps the plan + tells the model to begin. The recap message is
+    // what triggers the next agent turn -- the user doesn't have to type
+    // anything to resume.
+    AgentMode prev_mode = mode_.exchange(AgentMode::execute,
+                                          std::memory_order_acq_rel);
+    {
+        std::lock_guard lock(plan_mutex_);
+        plan_awaiting_decision_ = false;
+    }
+
+    std::string recap = "[Plan approved -- executing]\n" +
+                        std::string("Title: ") + plan.title + "\n";
+    if (!plan.summary.empty())
+        recap += "Summary: " + plan.summary + "\n";
+    recap += "Steps:\n";
+    for (size_t i = 0; i < plan.steps.size(); ++i) {
+        recap += "  " + std::to_string(i + 1) + ". " + plan.steps[i].description;
+        if (!plan.steps[i].tools_needed.empty()) {
+            recap += " (tools: ";
+            for (size_t k = 0; k < plan.steps[i].tools_needed.size(); ++k) {
+                if (k) recap += ", ";
+                recap += plan.steps[i].tools_needed[k];
+            }
+            recap += ")";
+        }
+        recap += "\n";
+    }
+    recap += "Use mark_step_done as you complete each step. "
+             "Begin with step 1.";
+
+    spdlog::info("AgentCore: plan '{}' approved (mode {} -> execute)",
+                 plan.id, to_string(prev_mode));
+    activity_->emit(ActivityKind::index_event,
+                    "Plan approved", plan.title);
+
+    if (prev_mode != AgentMode::execute) {
+        frontends_.broadcast([](IFrontend& fe) {
+            fe.on_mode_changed(AgentMode::execute);
+        });
+    }
+
+    // Enqueue the recap as the next user message. process_message picks it
+    // up on the next agent_thread_func iteration and runs a normal turn.
+    {
+        std::lock_guard lock(queue_mutex_);
+        message_queue_.push(std::move(recap));
+    }
+    queue_cv_.notify_one();
+}
+
 // -- Start / Stop ------------------------------------------------------------
 
 void AgentCore::start()
@@ -256,6 +420,9 @@ void AgentCore::agent_thread_func()
             queue_cv_.wait(lock, [&] {
                 return !message_queue_.empty()
                        || pending_compact_.load(std::memory_order_acquire)
+                       || pending_mode_change_.load(std::memory_order_acquire)
+                       || pending_plan_approve_.load(std::memory_order_acquire)
+                       || pending_plan_reject_.load(std::memory_order_acquire)
                        || !running_.load();
             });
 
@@ -269,15 +436,20 @@ void AgentCore::agent_thread_func()
             }
         }
 
-        // Drain a pending compaction request before the turn starts. Mutating
-        // history_ here is safe because we hold the owner scope.
-        if (pending_compact_.load(std::memory_order_acquire)) {
+        // Drain pending control requests before the turn starts. Each takes
+        // the conversation owner scope while it runs (apply_pending_*
+        // routines may mutate history_).
+        {
             ConversationOwnerScope owner_scope(history_);
             apply_pending_compaction();
+            apply_pending_mode_change();
+            // Plan-approve may itself enqueue a synthetic message; the loop
+            // re-checks the queue on the next iteration.
+            apply_pending_plan_decision();
         }
 
         if (!have_message)
-            continue;  // wake-up was for compaction only
+            continue;  // wake-up was for control only
 
         // Gate the history to this thread for the duration of the turn. S3.I:
         // inter-turn mutations (e.g. CLI REPL /reset) run with owner cleared.
@@ -428,15 +600,27 @@ void AgentCore::process_message(const std::string& content)
         ++round;
         spdlog::trace("AgentCore: LLM round {}", round);
 
-        // Service a queued compaction (e.g. user clicked Compact in response
-        // to the on_compaction_needed prompt fired by the previous round).
-        // Owner scope is already held by the calling agent_thread_func.
+        // Service queued control requests (compaction, mode change, plan
+        // decision) before the LLM round so they take effect mid-turn.
+        // Owner scope is held by the calling agent_thread_func.
         apply_pending_compaction();
+        apply_pending_mode_change();
+        apply_pending_plan_decision();
 
         if (budget_->check_overflow(current_token_count()))
             break;
 
-        auto step = loop_->run_step(history_);
+        // S4.D: map the user-facing AgentMode to the tool-catalog ToolMode.
+        // chat -> agent (full catalog, no plan tools);
+        // plan -> plan (propose_plan only);
+        // execute -> execute (full catalog + mark_step_done).
+        ToolMode tool_mode = ToolMode::agent;
+        switch (mode_.load(std::memory_order_acquire)) {
+        case AgentMode::chat:    tool_mode = ToolMode::agent;   break;
+        case AgentMode::plan:    tool_mode = ToolMode::plan;    break;
+        case AgentMode::execute: tool_mode = ToolMode::execute; break;
+        }
+        auto step = loop_->run_step(history_, tool_mode);
 
         frontends_.broadcast([&](IFrontend& fe) {
             fe.on_context_meter(current_token_count(), llm_config_.context_limit);
@@ -457,9 +641,29 @@ void AgentCore::process_message(const std::string& content)
                 spdlog::info("AgentCore: skipping remaining tool calls (cancelled)");
                 break;
             }
-            dispatcher_->dispatch(call, [this](ChatMessage m) {
+            // S4.D: capture the dispatched tool result so we can react to
+            // plan tools (propose_plan, mark_step_done). The wrapper writes
+            // through to history exactly as before, then forwards a copy
+            // to observe_plan_tool_result.
+            std::string captured_content;
+            bool        captured_success = true;
+            dispatcher_->dispatch(call, [&](ChatMessage m) {
+                captured_content = m.content;
+                // Tool messages don't carry an explicit success flag; the
+                // tools' own JSON encodes "ok" / "error" fields that
+                // observe_plan_tool_result inspects.
                 history_.add(std::move(m));
             });
+            observe_plan_tool_result(call, captured_content, captured_success);
+        }
+
+        // S4.D: in plan mode, once propose_plan fires we wait for the user's
+        // approve/reject decision. Don't keep looping the LLM -- the model's
+        // job is done until we hear back.
+        {
+            std::lock_guard lock(plan_mutex_);
+            if (plan_awaiting_decision_)
+                break;
         }
     }
 
@@ -552,6 +756,138 @@ void AgentCore::compact_context(CompactionStrategy strategy, int n)
                      ? "drop_tool_results" : "drop_oldest", n);
 }
 
+void AgentCore::observe_plan_tool_result(const ToolCall& call,
+                                          const std::string& result_content,
+                                          bool /*result_success*/)
+{
+    // The plan tools encode their own success flag inside the result JSON
+    // ("ok": true / "error": "..."). We never trust the dispatcher's
+    // captured_success placeholder -- it doesn't reflect the tool's own
+    // validation outcome.
+    if (call.tool_name != "propose_plan" && call.tool_name != "mark_step_done")
+        return;
+
+    nlohmann::json j;
+    try { j = nlohmann::json::parse(result_content); }
+    catch (const nlohmann::json::exception& e) {
+        spdlog::warn("AgentCore: plan tool '{}' returned non-JSON: {}",
+                     call.tool_name, e.what());
+        return;
+    }
+
+    bool ok = j.value("ok", false);
+    if (!ok) {
+        spdlog::info("AgentCore: plan tool '{}' reported failure: {}",
+                     call.tool_name,
+                     j.value("error", std::string{"(no message)"}));
+        return;
+    }
+
+    if (call.tool_name == "propose_plan") {
+        Plan p;
+        {
+            std::lock_guard lock(plan_mutex_);
+            p.id = "plan-" + std::to_string(++plan_seq_);
+        }
+        p.title   = j.value("title", "");
+        p.summary = j.value("summary", "");
+        if (j.contains("steps") && j["steps"].is_array()) {
+            for (auto& s : j["steps"]) {
+                PlanStep step;
+                step.description = s.value("description", "");
+                if (s.contains("tools_needed") && s["tools_needed"].is_array()) {
+                    for (auto& t : s["tools_needed"]) {
+                        if (t.is_string())
+                            step.tools_needed.push_back(t.get<std::string>());
+                    }
+                }
+                step.status = PlanStep::Status::pending;
+                p.steps.push_back(std::move(step));
+            }
+        }
+
+        if (p.steps.empty()) {
+            spdlog::warn("AgentCore: propose_plan accepted but plan has 0 steps");
+            return;
+        }
+
+        Plan snapshot;
+        {
+            std::lock_guard lock(plan_mutex_);
+            current_plan_ = p;
+            plan_awaiting_decision_ = true;
+            snapshot = *current_plan_;
+        }
+        spdlog::info("AgentCore: plan '{}' proposed ({} steps)",
+                     snapshot.id, snapshot.steps.size());
+        activity_->emit(ActivityKind::index_event,
+                        "Plan proposed: " + snapshot.title,
+                        std::to_string(snapshot.steps.size()) + " steps");
+        frontends_.broadcast([&](IFrontend& fe) { fe.on_plan_proposed(snapshot); });
+        return;
+    }
+
+    // mark_step_done
+    int step_idx_1based = j.value("step", 0);
+    std::string status_str = j.value("status", "done");
+    std::string notes      = j.value("notes", "");
+
+    PlanStep::Status new_status = PlanStep::Status::done;
+    if (status_str == "failed") new_status = PlanStep::Status::failed;
+
+    std::string plan_id;
+    int idx = step_idx_1based - 1;
+    bool advanced = false;
+    bool completed = false;
+    bool overall_success = true;
+    {
+        std::lock_guard lock(plan_mutex_);
+        if (!current_plan_.has_value()) {
+            spdlog::warn("AgentCore: mark_step_done with no active plan");
+            return;
+        }
+        plan_id = current_plan_->id;
+        if (idx < 0 || idx >= static_cast<int>(current_plan_->steps.size())) {
+            spdlog::warn("AgentCore: mark_step_done index {} out of range",
+                         step_idx_1based);
+            return;
+        }
+        current_plan_->steps[idx].status = new_status;
+        current_plan_->steps[idx].notes  = notes;
+        advanced = true;
+        completed = current_plan_->all_done();
+        if (completed) {
+            for (auto& s : current_plan_->steps) {
+                if (s.status == PlanStep::Status::failed) {
+                    overall_success = false;
+                    break;
+                }
+            }
+        }
+    }
+
+    if (!advanced) return;
+
+    spdlog::info("AgentCore: plan '{}' step {} -> {}",
+                 plan_id, step_idx_1based, to_string(new_status));
+    frontends_.broadcast([&](IFrontend& fe) {
+        fe.on_plan_step_advanced(plan_id, idx, new_status, notes);
+    });
+
+    if (completed) {
+        spdlog::info("AgentCore: plan '{}' completed (success={})",
+                     plan_id, overall_success);
+        activity_->emit(ActivityKind::index_event,
+                        "Plan completed",
+                        plan_id +
+                          (overall_success ? " (all steps done)"
+                                           : " (with failures)"));
+        frontends_.broadcast([&](IFrontend& fe) {
+            fe.on_plan_completed(plan_id, overall_success);
+        });
+    }
+}
+
 void AgentCore::apply_pending_compaction()
 {
     if (!pending_compact_.exchange(false, std::memory_order_acq_rel))
@@ -589,6 +925,24 @@ void AgentCore::reset_conversation()
     history_.add({MessageRole::system, system_prompt_});
     budget_->reset();
     metrics_->reset();
+
+    // S4.D -- reset mode + plan so a fresh conversation starts clean.
+    AgentMode prev_mode = mode_.exchange(AgentMode::chat,
+                                          std::memory_order_acq_rel);
+    pending_mode_change_.store(false, std::memory_order_relaxed);
+    pending_plan_approve_.store(false, std::memory_order_relaxed);
+    pending_plan_reject_.store(false, std::memory_order_relaxed);
+    {
+        std::lock_guard lock(plan_mutex_);
+        current_plan_.reset();
+        plan_awaiting_decision_ = false;
+        plan_seq_ = 0;
+    }
+    if (prev_mode != AgentMode::chat) {
+        frontends_.broadcast([](IFrontend& fe) {
+            fe.on_mode_changed(AgentMode::chat);
+        });
+    }
 
     // Drop checkpoint history with the conversation; start a fresh session
     // so the on-disk layout doesn't keep accumulating across resets.

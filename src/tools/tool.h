@@ -45,12 +45,13 @@ inline const char* policy_display_name(ToolApprovalPolicy p) {
 // -- Tool visibility context ------------------------------------------------
 
 // Context in which tool schemas are assembled. Individual tools opt in via
-// ITool::visible_in_mode(). Defaults keep today's behavior: every tool is
-// visible in `agent` mode and hidden from `plan` / `subagent` (S3.L — the
-// plan/subagent modes themselves land in M4, but the plumbing ships now).
+// ITool::visible_in_mode(). Defaults: every tool is visible in `agent` and
+// `execute` modes; `plan` and `subagent` are restricted role-specific
+// subsets (the plumbing shipped with S3.L; plan-mode lands in S4.D).
 enum class ToolMode {
-    agent,     // normal interactive turn (default)
-    plan,      // planning pass — execute-side tools (write, delete, run) hidden
+    agent,     // normal interactive turn (chat); full tool catalog
+    plan,      // S4.D plan pass — only propose_plan is visible
+    execute,   // S4.D execute pass — full catalog + mark_step_done
     subagent   // delegated subtask — role-specific subset
 };
 
@@ -103,9 +104,12 @@ public:
     virtual bool available(IWorkspaceServices& /*ws*/) const { return true; }
 
     // Whether this tool is exposed to the LLM in the given mode. Default
-    // `agent` only — execute-side tools stay hidden from plan/subagent modes
-    // unless they opt in.
-    virtual bool visible_in_mode(ToolMode mode) const { return mode == ToolMode::agent; }
+    // `agent` and `execute` (the two "full catalog" modes); `plan` and
+    // `subagent` are restricted -- tools that belong there opt in.
+    virtual bool visible_in_mode(ToolMode mode) const
+    {
+        return mode == ToolMode::agent || mode == ToolMode::execute;
+    }
 };
 
 // -- IToolRegistry interface ------------------------------------------------

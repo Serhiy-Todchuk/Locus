@@ -21,6 +21,10 @@ void register_builtin_tools(IToolRegistry& registry)
     registry.register_tool(std::make_unique<StopProcessTool>());
     registry.register_tool(std::make_unique<ListProcessesTool>());
     registry.register_tool(std::make_unique<AskUserTool>());
+    // S4.D — plan-mode tools. Visibility is gated by visible_in_mode so they
+    // only appear in the manifest when the agent is in plan / execute mode.
+    registry.register_tool(std::make_unique<ProposePlanTool>());
+    registry.register_tool(std::make_unique<MarkStepDoneTool>());
 }
 
 } // namespace locus

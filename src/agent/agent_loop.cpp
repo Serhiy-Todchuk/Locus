@@ -37,12 +37,11 @@ int AgentLoop::manifest_warn_tokens() const
     return 4000;  // default if no Workspace (tests, embedded use)
 }
 
-std::vector<ToolSchema> AgentLoop::build_tool_schemas() const
+std::vector<ToolSchema> AgentLoop::build_tool_schemas(ToolMode mode) const
 {
     // S3.L: filter the manifest to tools that are available in this workspace
-    // and visible in the current mode. ToolMode::agent is the only mode the
-    // loop runs in today — plan/subagent land in M4 (S4.A / S4.S).
-    auto schema_json = tools_.build_schema_json(services_, ToolMode::agent);
+    // and visible in the current mode. S4.D introduced plan/execute modes.
+    auto schema_json = tools_.build_schema_json(services_, mode);
 
     std::vector<ToolSchema> schemas;
     schemas.reserve(schema_json.size());
@@ -74,10 +73,11 @@ std::vector<ToolSchema> AgentLoop::build_tool_schemas() const
     return schemas;
 }
 
-AgentStepResult AgentLoop::run_step(const ConversationHistory& history)
+AgentStepResult AgentLoop::run_step(const ConversationHistory& history,
+                                    ToolMode tool_mode)
 {
     AgentStepResult out;
-    auto tool_schemas = build_tool_schemas();
+    auto tool_schemas = build_tool_schemas(tool_mode);
 
     std::string accumulated_text;
     std::string accumulated_reasoning;

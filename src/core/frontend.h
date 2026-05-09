@@ -1,6 +1,7 @@
 #pragma once
 
 #include "activity_event.h"
+#include "../agent/agent_mode.h"
 #include "../tools/tool.h"
 
 #include <cstdint>
@@ -95,6 +96,29 @@ public:
     // Frontends use this to show/hide a "📎 file" chip near the input.
     virtual void on_attached_context_changed(
         const std::optional<AttachedContext>& /*ctx*/) {}
+
+    // -- Plan mode (S4.D) ----------------------------------------------------
+    // Default no-op implementations so existing frontends keep compiling.
+
+    // Agent's interaction mode changed (chat / plan / execute). Frontend
+    // can update its mode-switcher UI and gate inputs accordingly.
+    virtual void on_mode_changed(AgentMode /*mode*/) {}
+
+    // Model called `propose_plan` and the dispatcher accepted the result.
+    // Plan is awaiting the user's approve/reject decision.
+    virtual void on_plan_proposed(const Plan& /*plan*/) {}
+
+    // A step in the active plan transitioned (in_progress -> done|failed).
+    // step_idx is 0-based.
+    virtual void on_plan_step_advanced(const std::string& /*plan_id*/,
+                                        int /*step_idx*/,
+                                        PlanStep::Status /*status*/,
+                                        const std::string& /*notes*/) {}
+
+    // Every step is now done or failed. `success` is true if all steps
+    // ended in `done`, false if any step ended in `failed`.
+    virtual void on_plan_completed(const std::string& /*plan_id*/,
+                                    bool /*success*/) {}
 };
 
 // -- ILocusCore ---------------------------------------------------------------
@@ -153,6 +177,24 @@ public:
     virtual void set_attached_context(AttachedContext ctx) = 0;
     virtual void clear_attached_context() = 0;
     virtual std::optional<AttachedContext> attached_context() const = 0;
+
+    // -- Plan mode (S4.D) ----------------------------------------------------
+    // Switch the agent's interaction mode. Queued onto the agent thread, so
+    // safe to call from any frontend thread. A change from chat/execute back
+    // to plan resets `current_plan` to empty.
+    virtual void set_mode(AgentMode /*mode*/) {}
+
+    // Current mode (snapshot; thread-safe).
+    virtual AgentMode mode() const { return AgentMode::chat; }
+
+    // Approve the most recently proposed plan. Switches mode to execute, pins
+    // the plan to context, and prompts the agent to begin step 1.
+    // No-op if no plan is currently awaiting approval.
+    virtual void approve_plan() {}
+
+    // Reject the most recently proposed plan. Returns to plan mode so the
+    // user can re-prompt; current_plan is cleared.
+    virtual void reject_plan() {}
 };
 
 } // namespace locus

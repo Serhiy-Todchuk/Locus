@@ -52,7 +52,8 @@ TEST_CASE("ToolRegistry: build_schema_json produces valid OpenAI schema", "[s0.6
     // S3.L: 4 search tools collapsed into a single unified `search` face (9 total).
     // S4.A: +1 `edit_file` (exact-string edits, single or atomic batch),
     //       -1 `create_file` (merged into `write_file` with optional `overwrite`).
-    REQUIRE(schema.size() == 13);
+    // S4.D: +2 `propose_plan`, `mark_step_done` (visible only in plan/execute modes).
+    REQUIRE(schema.size() == 15);
 
     // One `search` entry, no split search_* tools.
     bool has_search = false;
@@ -95,7 +96,7 @@ TEST_CASE("ToolRegistry: all returns all tools", "[s0.6]")
     locus::register_builtin_tools(registry);
 
     auto all = registry.all();
-    REQUIRE(all.size() == 13);
+    REQUIRE(all.size() == 15);  // S4.D adds propose_plan + mark_step_done
 }
 
 TEST_CASE("ToolRegistry: parse_tool_call handles valid and empty JSON", "[s0.6]")
@@ -470,9 +471,11 @@ TEST_CASE("ITool defaults: available()=true, visible_in_mode only in agent", "[s
 
     // 9 baseline + 4 background-process tools (S4.I). The bg tools mark
     // themselves unavailable when the workspace has no ProcessRegistry,
-    // which the FakeWorkspaceServices used here does not.
+    // which the FakeWorkspaceServices used here does not. plan-mode and
+    // execute-mode-only tools (S4.D propose_plan, mark_step_done) are also
+    // hidden from agent mode.
     REQUIRE(agent.size() == 9);
-    REQUIRE(plan.size()  == 0);  // defaults hide everything in plan mode
+    REQUIRE(plan.size()  == 1);  // S4.D: propose_plan is the one plan-mode tool
 }
 
 // -- Approval policies ------------------------------------------------------

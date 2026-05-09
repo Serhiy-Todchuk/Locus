@@ -2,6 +2,7 @@
 
 #include "activity_log.h"
 #include "agent_loop.h"
+#include "agent_mode.h"
 #include "checkpoint_store.h"
 #include "context_budget.h"
 #include "conversation.h"
@@ -121,6 +122,15 @@ public:
     void clear_attached_context() override;
     std::optional<AttachedContext> attached_context() const override;
 
+    // -- Plan mode (S4.D) ----------------------------------------------------
+    void       set_mode(AgentMode m) override;
+    AgentMode  mode() const override;
+    void       approve_plan() override;
+    void       reject_plan() override;
+
+    // Snapshot of the current plan, if any. Thread-safe.
+    std::optional<Plan> current_plan() const;
+
 private:
     void agent_thread_func();
     void process_message(const std::string& content);
@@ -149,6 +159,23 @@ private:
     // and from the round loop in process_message between LLM rounds so
     // mid-turn compactions take effect on the next request.
     void apply_pending_compaction();
+
+    // Service a pending mode change request on the agent thread. Caller must
+    // hold the conversation owner scope. No-op when the flag is clear.
+    void apply_pending_mode_change();
+
+    // Service a pending approve_plan / reject_plan request. Same threading
+    // requirements as apply_pending_mode_change.
+    void apply_pending_plan_decision();
+
+    // Inspect a just-completed tool message to detect propose_plan and
+    // mark_step_done invocations and update plan state accordingly. Called
+    // from process_message's tool-dispatch loop, on the agent thread,
+    // immediately after dispatcher_->dispatch returns. The result content
+    // is the JSON string the tool returned (echoed plan or step status).
+    void observe_plan_tool_result(const ToolCall& call,
+                                  const std::string& result_content,
+                                  bool result_success);
 
     // Current token count = budget_.current(history_.estimate_tokens()).
     int current_token_count() const;
@@ -211,6 +238,34 @@ private:
     // Attached file context (S2.4).
     mutable std::mutex             attached_mutex_;
     std::optional<AttachedContext> attached_context_;
+
+    // -- Plan mode (S4.D) -----------------------------------------------------
+    // Mode is mutated on the agent thread only (via queued requests, like
+    // pending_compact_). Read by frontends via the public accessor under a
+    // mutex. The atomic gives a cheap fast-path read for AgentLoop's
+    // build_tool_schemas call without locking.
+    std::atomic<AgentMode> mode_{AgentMode::chat};
+
+    // Pending mode change requested by a non-agent thread. Same pattern as
+    // pending_compact_: stored as an atomic, drained at safe points on the
+    // agent thread.
+    std::atomic<bool>      pending_mode_change_{false};
+    std::atomic<AgentMode> pending_mode_{AgentMode::chat};
+
+    // Pending plan-decision requests from the GUI: approve_plan / reject_plan.
+    // Drained on the agent thread alongside pending_mode_change_.
+    std::atomic<bool>      pending_plan_approve_{false};
+    std::atomic<bool>      pending_plan_reject_{false};
+
+    // The active plan (set when propose_plan fires and accepted by the
+    // dispatcher; cleared on reject / completion / mode reset). Owned by
+    // the agent thread; the public accessor takes plan_mutex_ to copy out.
+    mutable std::mutex     plan_mutex_;
+    std::optional<Plan>    current_plan_;
+    int                    plan_seq_ = 0;   // monotonic id source
+    // True between propose_plan and approve/reject -- the plan is awaiting
+    // the user's decision and the agent is paused (no further LLM rounds).
+    bool                   plan_awaiting_decision_ = false;
 };
 
 } // namespace locus

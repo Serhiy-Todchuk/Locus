@@ -101,8 +101,13 @@ std::string SystemPromptBuilder::build(const std::string& locus_md,
     }
 
     // -- Available tools (text description) -----------------------------------
+    // List only tools visible in `agent` (chat) mode -- the default. Plan-mode
+    // tools (propose_plan, mark_step_done) appear in the API tool catalog when
+    // the user enters those modes; they don't need to clutter the always-on
+    // system prompt and risk confusing chat-mode model calls.
     ss << "## Available Tools\n\n";
     for (auto* tool : tools.all()) {
+        if (!tool->visible_in_mode(ToolMode::agent)) continue;
         ss << "- **" << tool->name() << "**: " << tool->description() << "\n";
         for (auto& p : tool->params()) {
             ss << "  - `" << p.name << "` (" << p.type;

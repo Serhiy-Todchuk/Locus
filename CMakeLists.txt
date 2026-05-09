@@ -252,6 +252,7 @@ add_library(locus_core STATIC
     src/tools/index_tools.cpp
     src/tools/process_tools.cpp
     src/tools/interactive_tools.cpp
+    src/tools/plan_tools.cpp
     src/tools/tools.cpp
     src/tools/process_registry.cpp
     src/agent/conversation.cpp

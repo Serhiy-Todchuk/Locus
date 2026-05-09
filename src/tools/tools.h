@@ -11,6 +11,7 @@
 #include "tools/index_tools.h"
 #include "tools/process_tools.h"
 #include "tools/interactive_tools.h"
+#include "tools/plan_tools.h"
 
 namespace locus {
 

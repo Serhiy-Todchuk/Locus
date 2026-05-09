@@ -21,6 +21,7 @@ add_executable(locus_tests
     test_metrics.cpp
     test_file_change_tracker.cpp
     test_stream_decoders.cpp
+    test_plan_mode.cpp
     retrieval_eval/metrics.cpp
     support/shared_embedder.cpp
 )

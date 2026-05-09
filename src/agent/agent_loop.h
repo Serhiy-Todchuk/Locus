@@ -37,12 +37,16 @@ public:
               FrontendRegistry& frontends,
               MetricsAggregator* metrics = nullptr);
 
-    AgentStepResult run_step(const ConversationHistory& history);
+    // Run one LLM step. `tool_mode` controls which subset of the catalog is
+    // exposed to the model -- agent (default), execute (S4.D plan running),
+    // or plan (S4.D, only propose_plan visible).
+    AgentStepResult run_step(const ConversationHistory& history,
+                             ToolMode tool_mode = ToolMode::agent);
 
 private:
     // Builds the filtered per-turn tool manifest (S3.L) and logs its token
     // footprint. Returns the ToolSchema vector the LLM client consumes.
-    std::vector<ToolSchema> build_tool_schemas() const;
+    std::vector<ToolSchema> build_tool_schemas(ToolMode mode) const;
 
     // Per-workspace threshold above which we warn about manifest bloat.
     int manifest_warn_tokens() const;
