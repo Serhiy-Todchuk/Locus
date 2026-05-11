@@ -22,6 +22,7 @@ add_executable(locus_tests
     test_file_change_tracker.cpp
     test_stream_decoders.cpp
     test_plan_mode.cpp
+    test_mcp.cpp
     retrieval_eval/metrics.cpp
     support/shared_embedder.cpp
 )
@@ -37,6 +38,22 @@ add_custom_command(TARGET locus_tests POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${PDFIUM_DLL}" "$<TARGET_FILE_DIR:locus_tests>"
 )
+
+# -- Mock MCP server (S4.G) ---------------------------------------------------
+# Tiny stdio JSON-RPC server used by [s4.g][mcp] tests. Built next to the
+# test exe so the tests can spawn it from $<TARGET_FILE_DIR:locus_tests>.
+
+add_executable(locus_mock_mcp_server
+    mock_mcp_server/main.cpp
+)
+target_link_libraries(locus_mock_mcp_server PRIVATE
+    nlohmann_json::nlohmann_json
+)
+set_target_properties(locus_mock_mcp_server PROPERTIES
+    MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
+    RUNTIME_OUTPUT_DIRECTORY $<TARGET_FILE_DIR:locus_tests>
+)
+add_dependencies(locus_tests locus_mock_mcp_server)
 
 include(Catch)
 catch_discover_tests(locus_tests)

@@ -37,23 +37,33 @@ namespace {
 //   { "type": "function", "function": { "name", "description", "parameters" } }
 nlohmann::json build_entry(const ITool& t)
 {
-    nlohmann::json props = nlohmann::json::object();
-    nlohmann::json required_list = nlohmann::json::array();
+    nlohmann::json parameters = t.parameters_schema();
+    if (parameters.is_object() && !parameters.empty()) {
+        // Tool supplied a fully-formed JSON Schema (MCP); use as-is. Make
+        // sure the outer wrapper at least carries `type:"object"` so models
+        // that reject schema-less function entries (looking at you, some
+        // older Llama tool-call templates) still parse it.
+        if (!parameters.contains("type"))
+            parameters["type"] = "object";
+    } else {
+        nlohmann::json props = nlohmann::json::object();
+        nlohmann::json required_list = nlohmann::json::array();
 
-    for (auto& p : t.params()) {
-        nlohmann::json prop;
-        prop["type"] = p.type;
-        prop["description"] = p.description;
-        props[p.name] = prop;
-        if (p.required)
-            required_list.push_back(p.name);
+        for (auto& p : t.params()) {
+            nlohmann::json prop;
+            prop["type"] = p.type;
+            prop["description"] = p.description;
+            props[p.name] = prop;
+            if (p.required)
+                required_list.push_back(p.name);
+        }
+
+        parameters = nlohmann::json::object();
+        parameters["type"] = "object";
+        parameters["properties"] = props;
+        if (!required_list.empty())
+            parameters["required"] = required_list;
     }
-
-    nlohmann::json parameters;
-    parameters["type"] = "object";
-    parameters["properties"] = props;
-    if (!required_list.empty())
-        parameters["required"] = required_list;
 
     nlohmann::json func;
     func["name"] = t.name();

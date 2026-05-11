@@ -3,6 +3,7 @@
 #include "agent/system_prompt.h"
 #include "index/index_query.h"
 #include "index/indexer.h"
+#include "mcp/mcp_manager.h"
 #include "tools/tools.h"
 
 #include <spdlog/spdlog.h>
@@ -94,11 +95,21 @@ LocusSession::LocusSession(const std::filesystem::path& ws_path,
         spdlog::info("Context limit: {}", llm_config_.context_limit);
     }
 
-    // 4. Tool registry — built-ins only at this layer; MCP / plugin tools
-    //    will register themselves later through the session if M5 lands.
+    // 4. Tool registry — built-ins first, then MCP servers (S4.G).
     tools_ = std::make_unique<ToolRegistry>();
     register_builtin_tools(*tools_);
-    spdlog::info("Tools: {} registered", tools_->all().size());
+    spdlog::info("Tools: {} built-in registered", tools_->all().size());
+
+    // 4b. MCP servers from .locus/mcp.json + global mcp.json. start_all()
+    //     blocks on each server's `initialize` handshake (default 10s)
+    //     before continuing to the agent. A server that fails to start
+    //     stays in the manager (visible in settings) but contributes no
+    //     tools.
+    mcp_ = std::make_unique<McpManager>(*tools_, workspace_->root());
+    mcp_->start_all();
+    if (mcp_->server_count() > 0) {
+        spdlog::info("Tools: {} total after MCP registration", tools_->all().size());
+    }
 
     // 5. Agent core. Sessions + checkpoints land in `.locus/`.
     WorkspaceMetadata ws_meta;

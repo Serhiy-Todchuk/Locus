@@ -255,6 +255,12 @@ add_library(locus_core STATIC
     src/tools/plan_tools.cpp
     src/tools/tools.cpp
     src/tools/process_registry.cpp
+    src/mcp/json_rpc.cpp
+    src/mcp/mcp_config.cpp
+    src/mcp/stdio_transport.cpp
+    src/mcp/mcp_client.cpp
+    src/mcp/mcp_tool.cpp
+    src/mcp/mcp_manager.cpp
     src/agent/conversation.cpp
     src/agent/system_prompt.cpp
     src/agent/activity_log.cpp

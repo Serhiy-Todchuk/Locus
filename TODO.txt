@@ -4,7 +4,7 @@
 - break down settings to global and workspace. Same with MCP, etc.?
 - use monospace font for chat
 - merge statistics/activity log with chat window
-- append prompt during running turn
+- append prompt during running turn - queue next prompt
 - search in chat
 - FastDebug
 - tokens per second counter per each turn?

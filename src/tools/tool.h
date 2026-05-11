@@ -86,6 +86,13 @@ public:
     virtual std::string              description() const = 0;
     virtual std::vector<ToolParam>   params()      const = 0;
 
+    // Optional hook -- tools that want to ship a richer JSON Schema (nested
+    // objects, enums, arrays-of-objects) than the flat `ToolParam` list can
+    // express can override this. Default: empty object, in which case the
+    // registry derives the schema from `params()`. MCP-proxy tools use this
+    // to forward the server-supplied `inputSchema` verbatim.
+    virtual nlohmann::json parameters_schema() const { return nlohmann::json::object(); }
+
     virtual ToolResult execute(const ToolCall& call,
                                IWorkspaceServices& ws) = 0;
 

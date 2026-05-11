@@ -10,6 +10,9 @@
 
 namespace locus {
 
+class McpManager;
+
+
 // One bundled lifecycle for everything that hangs off an open workspace:
 // `Workspace` → `ILLMClient` → `ToolRegistry` → `AgentCore`. Frontends (CLI,
 // GUI, future Crow server) construct one of these and forget about wiring
@@ -44,15 +47,22 @@ public:
     AgentCore&     agent()     { return *agent_; }
     IToolRegistry& tools()     { return *tools_; }
     ILLMClient&    llm()       { return *llm_; }
+    McpManager*    mcp()       { return mcp_.get(); }    // null if no servers configured
 
     const LLMConfig& llm_config() const { return llm_config_; }
 
 private:
     // Declaration order = destruction order (reversed). Workspace must outlive
     // everything else; AgentCore must die first so its agent thread joins
-    // before any of the systems it touches go away.
+    // before any of the systems it touches go away. McpManager is declared
+    // BEFORE ToolRegistry so the registry's McpTool entries are destroyed
+    // before the McpClients they borrow pointers into -- even though the
+    // construction sequence is the inverse (tools first, then mcp registers
+    // into them), unique_ptr lets us assign in any order regardless of
+    // declaration position.
     std::unique_ptr<Workspace>     workspace_;
     std::unique_ptr<ILLMClient>    llm_;
+    std::unique_ptr<McpManager>    mcp_;
     std::unique_ptr<ToolRegistry>  tools_;
     std::unique_ptr<AgentCore>     agent_;
 
