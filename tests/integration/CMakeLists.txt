@@ -21,6 +21,7 @@ add_executable(locus_integration_tests
     test_int_metrics.cpp
     test_int_max_tokens.cpp
     test_int_plan.cpp
+    test_int_mcp.cpp
 )
 
 target_include_directories(locus_integration_tests PRIVATE
@@ -39,6 +40,15 @@ target_link_libraries(locus_integration_tests PRIVATE
 target_compile_definitions(locus_integration_tests PRIVATE
     LOCUS_INT_TEST_WORKSPACE_DIR="${CMAKE_SOURCE_DIR}"
 )
+
+# S4.G [mcp] test spawns the bundled mock MCP server. Inject its build-time
+# absolute path so the test exe can resolve it regardless of cwd. Generator
+# expression resolves at build time; locus_mock_mcp_server target is defined
+# in ../CMakeLists.txt.
+target_compile_definitions(locus_integration_tests PRIVATE
+    LOCUS_MOCK_MCP_SERVER_PATH="$<TARGET_FILE:locus_mock_mcp_server>"
+)
+add_dependencies(locus_integration_tests locus_mock_mcp_server)
 
 # pdfium.dll has to sit next to the exe at runtime (same as locus_tests).
 add_custom_command(TARGET locus_integration_tests POST_BUILD

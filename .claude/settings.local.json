@@ -226,7 +226,8 @@
       "Bash(curl -s -m 5 'http://127.0.0.1:1234/api/v0/models')",
       "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); [print\\(m['id'], m.get\\('state','?'\\)\\) for m in d.get\\('data',[]\\)]\")",
       "Bash(build/release/tests/Release/locus_tests.exe \"[indexer]\")",
-      "Bash(build/release/tests/Release/locus_tests.exe \"[s4.g]\")"
+      "Bash(build/release/tests/Release/locus_tests.exe \"[s4.g]\")",
+      "Bash(cmake --build build/release --config Release --target locus_integration_tests)"
     ]
   }
 }
