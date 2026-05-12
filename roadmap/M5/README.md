@@ -10,6 +10,7 @@
 
 | Stage | Title | Theme |
 |---|---|---|
+| [S5.L](S5.L-ui-automation-driver.md) | UI Automation Test Driver | Testing / Infra |
 | [S5.B](S5.B-terminal-panel.md) | Live Terminal Panel | UX |
 | [S5.A](S5.A-capability-toggles.md) | Workspace Capability Toggles | UX / Tokens |
 | [S5.C](S5.C-inline-diffs-in-chat.md) | Inline Code Diffs in Chat | UX |
@@ -41,4 +42,4 @@ Each stage is shippable independently after S5.J and the user-visible value comp
 
 ## Suggested order
 
-S5.B (Terminal Panel) lands first: it is the most visible UX gap (long-running commands give the user no live feedback today) and reuses the existing `ProcessRegistry` + `RunCommandTool` plumbing without new agent-loop or LLM-side changes -- pure frontend work. S5.A (Capability Toggles) follows as the manifest-pruning win for short-context local LLMs. Both are independent; reorder if priorities shift.
+S5.L (UI Automation Test Driver) lands first: it closes the GUI-testing gap the rest of M5 is about to widen -- every UX change in this milestone (Terminal Panel, Inline Diffs, Chat / Activity Restructure, Tabs, Memory Bank UI) adds wx widgets we currently can only verify by hand. A scripted UIA driver makes those widgets subprocess-testable from day one, before the surface area grows. S5.B (Terminal Panel) follows as the most visible UX gap. S5.A (Capability Toggles) is the manifest-pruning win for short-context local LLMs. The three are independent; reorder if priorities shift.
