@@ -23,6 +23,8 @@
 
 namespace locus {
 
+class McpManager;
+
 // Main application window. Owns the AUI layout with three panes:
 //   left:   file tree with index status
 //   center: chat panel (wxWebView + input + footer)
@@ -31,7 +33,7 @@ namespace locus {
 // Also owns the system tray icon and the WxFrontend thread bridge.
 class LocusFrame : public wxFrame {
 public:
-    LocusFrame(AgentCore& agent, Workspace& workspace);
+    LocusFrame(AgentCore& agent, Workspace& workspace, McpManager* mcp = nullptr);
     ~LocusFrame() override;
 
     LocusFrame(const LocusFrame&) = delete;
@@ -95,8 +97,9 @@ private:
     void refresh_ops_status();
 
     // Core references (not owned)
-    AgentCore& agent_;
-    Workspace& workspace_;
+    AgentCore&   agent_;
+    Workspace&   workspace_;
+    McpManager*  mcp_ = nullptr;  // null when no servers configured
 
     // Owned
     wxAuiManager                       aui_;

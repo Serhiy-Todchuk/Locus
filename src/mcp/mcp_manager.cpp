@@ -108,23 +108,14 @@ void McpManager::register_tools_locked(ServerEntry& e,
 {
     auto* client_ptr = e.client.get();
 
+    // On hot-restart the stale McpTool entries borrow pointers into the
+    // dead McpClient. Unregister them up front -- the new client gets a
+    // fresh registration for whatever its `tools/list` advertises (which
+    // may be a different set than the previous run advertised).
+    unregister_tools_locked(e);
+
     for (const auto& def : defs) {
         std::string namespaced = "mcp:" + e.cfg.name + ":" + def.name;
-
-        // If the same name was registered in a previous start cycle (hot
-        // restart), drop the registry hit -- ToolRegistry doesn't currently
-        // support unregister, so the second registration would throw on
-        // duplicate. The fresh client pointer is reachable through the
-        // existing McpTool because we never replace it; the old McpTool
-        // sees `client_ == old client` which is now dead. Worst case the
-        // user sees one extra "tool unavailable" message until they
-        // restart Locus. Documented in the stage doc.
-        if (registry_.find(namespaced)) {
-            spdlog::trace("McpManager[{}]: tool '{}' already registered; skipping",
-                          e.cfg.name, namespaced);
-            e.namespaced_tool_names.push_back(std::move(namespaced));
-            continue;
-        }
 
         try {
             registry_.register_tool(std::make_unique<McpTool>(client_ptr, def));
@@ -139,6 +130,16 @@ void McpManager::register_tools_locked(ServerEntry& e,
                  e.cfg.name, e.namespaced_tool_names.size());
 }
 
+void McpManager::unregister_tools_locked(ServerEntry& e)
+{
+    for (auto& namespaced : e.namespaced_tool_names) {
+        if (registry_.unregister_tool(namespaced))
+            spdlog::trace("McpManager[{}]: unregistered tool '{}'",
+                          e.cfg.name, namespaced);
+    }
+    e.namespaced_tool_names.clear();
+}
+
 void McpManager::stop_all()
 {
     std::vector<std::unique_ptr<ServerEntry>> drained;
@@ -147,8 +148,16 @@ void McpManager::stop_all()
         drained.swap(servers_);
         started_ = false;
     }
+    // Stop the McpClient first so its reader thread is joined and no further
+    // crash callback can fire on the listener. Then unregister the tools so
+    // the agent's tool registry can't hand out McpTool entries that borrow
+    // a torn-down client pointer.
     for (auto& e : drained) {
         if (e->client) e->client->stop();
+        for (auto& namespaced : e->namespaced_tool_names) {
+            registry_.unregister_tool(namespaced);
+        }
+        e->namespaced_tool_names.clear();
     }
     if (!drained.empty())
         spdlog::info("McpManager: stopped {} server(s)", drained.size());
@@ -174,11 +183,13 @@ std::vector<McpManager::ServerStatus> McpManager::status_snapshot() const
     out.reserve(servers_.size());
     for (auto& e : servers_) {
         ServerStatus s;
-        s.name       = e->cfg.name;
-        s.command    = e->cfg.command;
-        s.status     = e->client ? e->client->status() : McpClient::Status::not_started;
-        s.last_error = e->client ? e->client->last_error() : std::string{};
-        s.tool_names = e->namespaced_tool_names;
+        s.name          = e->cfg.name;
+        s.command       = e->cfg.command;
+        s.status        = e->client ? e->client->status() : McpClient::Status::not_started;
+        s.last_error    = e->client ? e->client->last_error() : std::string{};
+        s.tool_names    = e->namespaced_tool_names;
+        s.has_exit_code = e->client ? e->client->has_exit_code() : false;
+        s.exit_code     = e->client ? e->client->exit_code() : 0;
         out.push_back(std::move(s));
     }
     return out;
@@ -189,11 +200,13 @@ void McpManager::emit_status_locked(const ServerEntry& e)
     if (!listener_) return;
 
     ServerStatus s;
-    s.name       = e.cfg.name;
-    s.command    = e.cfg.command;
-    s.status     = e.client ? e.client->status() : McpClient::Status::not_started;
-    s.last_error = e.client ? e.client->last_error() : std::string{};
-    s.tool_names = e.namespaced_tool_names;
+    s.name          = e.cfg.name;
+    s.command       = e.cfg.command;
+    s.status        = e.client ? e.client->status() : McpClient::Status::not_started;
+    s.last_error    = e.client ? e.client->last_error() : std::string{};
+    s.tool_names    = e.namespaced_tool_names;
+    s.has_exit_code = e.client ? e.client->has_exit_code() : false;
+    s.exit_code     = e.client ? e.client->exit_code() : 0;
 
     // Listener fires on the locked thread. If the GUI listener wants to
     // touch wx widgets it must marshal back to the UI thread itself.

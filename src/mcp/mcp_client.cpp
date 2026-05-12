@@ -59,9 +59,13 @@ bool McpClient::start(const fs::path& workspace_root)
 {
     status_ = Status::initializing;
 
+    // Fresh start cycle: reset cached exit info from any previous run.
+    exit_code_.store(0);
+    has_exit_code_.store(false);
+
     transport_ = std::make_unique<StdioTransport>();
     transport_->on_message([this](std::string line) { handle_message(std::move(line)); });
-    transport_->on_closed ([this]() { handle_close(); });
+    transport_->on_closed ([this](int code, bool have) { handle_close(code, have); });
 
     fs::path cwd = cfg_.cwd.empty() ? workspace_root : fs::path(cfg_.cwd);
     try {
@@ -231,16 +235,29 @@ void McpClient::handle_message(std::string line)
     }
 }
 
-void McpClient::handle_close()
+void McpClient::handle_close(int exit_code, bool had_exit_code)
 {
+    // Cache the exit info before we touch status_, so a UI listener that
+    // reads back exit_code() / has_exit_code() in its status callback sees
+    // the real values rather than stale defaults.
+    if (had_exit_code) {
+        exit_code_.store(exit_code);
+        has_exit_code_.store(true);
+    }
+
     Status prev = status_.load();
     if (prev == Status::stopped) return;     // we initiated the shutdown
     if (prev == Status::not_started) return;
 
     {
         std::lock_guard l(err_mu_);
-        if (last_error_.empty())
-            last_error_ = "child process exited";
+        if (last_error_.empty()) {
+            if (had_exit_code)
+                last_error_ = "child process exited (code " +
+                              std::to_string(exit_code) + ")";
+            else
+                last_error_ = "child process exited";
+        }
     }
 
     Status new_status = (prev == Status::initializing) ? Status::failed : Status::crashed;

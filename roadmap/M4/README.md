@@ -22,7 +22,7 @@
 | [S4.N](S4.N-tool-call-robustness.md) | Tool-Call Robustness Across Model Families ✔ | LLM compat |
 | [S4.U](S4.U-stream-decode-completeness.md) | Stream Decode Completeness + max_tokens Discipline ✔ | LLM compat |
 | [S4.D](S4.D-plan-mode.md) | Plan Mode ✔ | Workflow |
-| [S4.G](S4.G-mcp.md) | MCP (Model Context Protocol) Client ✔ (phase 1) | Extensibility |
+| [S4.G](S4.G-mcp.md) | MCP (Model Context Protocol) Client ✔ | Extensibility |
 | [S4.R](S4.R-memory-bank.md) | Memory Bank (Persistent + Searchable) | Context |
 | [S4.C](S4.C-auto-verify.md) | Auto-Verify Feedback Loop | Verification |
 | [S4.L](S4.L-git-native.md) | Git Integration (.gitignore + Auto-Commit) | Workspace policy |

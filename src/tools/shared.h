@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <mutex>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 
 namespace locus {
@@ -12,6 +13,26 @@ class IWorkspaceServices;
 }
 
 namespace locus::tools {
+
+// Resolve the effective approval policy for `tool_name`, given the tool's
+// built-in default and the per-workspace override map.
+//
+// Lookup order (first hit wins):
+//   1. Exact override match by tool name.
+//   2. Prefix override with a ":*" suffix (e.g. "mcp:fs:*" matches
+//      "mcp:fs:read_file"). Multiple prefix entries are checked in iteration
+//      order -- callers shouldn't define overlapping prefixes.
+//   3. Tool's built-in default (`tool_default`).
+//
+// A bare "*" wildcard is intentionally NOT supported: blanket auto-approve
+// for everything would defeat the entire approval gate; if a user wants it
+// they have to set it per built-in tool. The ":*" form is the
+// per-MCP-server trust toggle added in S4.G phase 2.
+ToolApprovalPolicy resolve_approval_policy(
+    const std::string& tool_name,
+    ToolApprovalPolicy tool_default,
+    const std::unordered_map<std::string, ToolApprovalPolicy>& overrides);
+
 
 // Resolve a relative path safely within the workspace root.
 // Returns empty path if the resolved path escapes the workspace.

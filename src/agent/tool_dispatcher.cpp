@@ -117,14 +117,13 @@ void ToolDispatcher::dispatch(const ToolCall& call, const AppendFn& append_resul
 
     ToolCall effective_call = call;
 
-    // Resolve effective approval policy: per-workspace override wins over
-    // the tool's built-in default.
+    // Resolve effective approval policy. Exact override wins over prefix
+    // ("mcp:<server>:*") match, both win over the tool's built-in default.
+    // See tools::resolve_approval_policy for the full lookup contract.
     ToolApprovalPolicy policy = tool->approval_policy();
     if (auto* ws = services_.workspace()) {
-        const auto& overrides = ws->config().tool_approval_policies;
-        auto it = overrides.find(call.tool_name);
-        if (it != overrides.end())
-            policy = it->second;
+        policy = tools::resolve_approval_policy(
+            call.tool_name, policy, ws->config().tool_approval_policies);
     }
 
     if (policy == ToolApprovalPolicy::deny) {

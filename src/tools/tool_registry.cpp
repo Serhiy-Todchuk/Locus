@@ -1,6 +1,8 @@
 #include "tool_registry.h"
 
 #include <spdlog/spdlog.h>
+
+#include <algorithm>
 #include <stdexcept>
 
 namespace locus {
@@ -14,6 +16,23 @@ void ToolRegistry::register_tool(std::unique_ptr<ITool> tool)
     spdlog::trace("ToolRegistry: registered '{}'", tool_name);
     by_name_[tool_name] = tool.get();
     tools_.push_back(std::move(tool));
+}
+
+bool ToolRegistry::unregister_tool(const std::string& name)
+{
+    auto map_it = by_name_.find(name);
+    if (map_it == by_name_.end()) return false;
+
+    ITool* target = map_it->second;
+    by_name_.erase(map_it);
+
+    auto vec_it = std::find_if(tools_.begin(), tools_.end(),
+        [target](const std::unique_ptr<ITool>& p) { return p.get() == target; });
+    if (vec_it != tools_.end()) {
+        spdlog::trace("ToolRegistry: unregistered '{}'", name);
+        tools_.erase(vec_it);
+    }
+    return true;
 }
 
 ITool* ToolRegistry::find(const std::string& name) const

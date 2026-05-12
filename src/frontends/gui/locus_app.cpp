@@ -69,6 +69,30 @@ static void prompt_semantic_search_if_first_open(const fs::path& locus_dir)
     }
 }
 
+void LocusApp::OnInitCmdLine(wxCmdLineParser& parser)
+{
+    // Declare every argv shape locus_gui accepts so wxApp::OnInit's default
+    // parse pass doesn't reject them. We re-parse them ourselves in OnInit
+    // with std::filesystem semantics -- this entry is purely permissive.
+    parser.AddParam("workspace_path",
+        wxCMD_LINE_VAL_STRING,
+        wxCMD_LINE_PARAM_OPTIONAL);
+    parser.AddOption("endpoint", wxEmptyString, "LLM endpoint URL",
+        wxCMD_LINE_VAL_STRING, wxCMD_LINE_PARAM_OPTIONAL);
+    parser.AddOption("model",    wxEmptyString, "LLM model id",
+        wxCMD_LINE_VAL_STRING, wxCMD_LINE_PARAM_OPTIONAL);
+    parser.AddOption("context",  wxEmptyString, "LLM context limit (tokens)",
+        wxCMD_LINE_VAL_NUMBER, wxCMD_LINE_PARAM_OPTIONAL);
+    parser.SetSwitchChars("-");
+}
+
+bool LocusApp::OnCmdLineParsed(wxCmdLineParser& /*parser*/)
+{
+    // We don't read the parsed values here -- the OnInit path walks argv
+    // directly. Returning true is enough to keep wxApp::OnInit happy.
+    return true;
+}
+
 bool LocusApp::OnInit()
 {
     if (!wxApp::OnInit())
@@ -286,7 +310,7 @@ bool LocusApp::spawn_session(const std::filesystem::path& ws_path,
         return false;
     }
 
-    frame_ = new LocusFrame(session_->agent(), session_->workspace());
+    frame_ = new LocusFrame(session_->agent(), session_->workspace(), session_->mcp());
     frame_->Show(true);
     return true;
 }

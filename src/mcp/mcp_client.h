@@ -61,6 +61,11 @@ public:
     // Status accessors. Thread-safe.
     Status              status()       const;
     std::string         last_error()   const;
+    // Exit code of the last child run. Zero until the child has been waited
+    // on; meaningful only when `has_exit_code()` is true (the child actually
+    // exited at the OS level rather than us tearing down before it ran).
+    int                 exit_code()    const { return exit_code_.load(); }
+    bool                has_exit_code() const { return has_exit_code_.load(); }
     const McpServerConfig& config()    const { return cfg_; }
 
     // Optional callback fired (on the transport reader thread) when the
@@ -70,7 +75,7 @@ public:
 
 private:
     void handle_message(std::string line);
-    void handle_close();
+    void handle_close(int exit_code, bool had_exit_code);
 
     nlohmann::json send_request_sync(const std::string& method,
                                      nlohmann::json params,
@@ -81,6 +86,8 @@ private:
     std::function<void()>            crash_cb_;
 
     std::atomic<Status>              status_{Status::not_started};
+    std::atomic<int>                 exit_code_{0};
+    std::atomic<bool>                has_exit_code_{false};
     mutable std::mutex               err_mu_;
     std::string                      last_error_;
 

@@ -36,6 +36,30 @@ ToolResult error_result(const std::string& msg)
     return {false, msg, msg};
 }
 
+ToolApprovalPolicy resolve_approval_policy(
+    const std::string& tool_name,
+    ToolApprovalPolicy tool_default,
+    const std::unordered_map<std::string, ToolApprovalPolicy>& overrides)
+{
+    auto exact = overrides.find(tool_name);
+    if (exact != overrides.end()) return exact->second;
+
+    for (const auto& [key, val] : overrides) {
+        // Match keys ending in ":*". The matched prefix is everything up
+        // to (and including) the trailing ':'; the tool name must be
+        // strictly longer than the prefix so "mcp:fs:*" doesn't match the
+        // (impossible but well-defined) "mcp:fs:".
+        if (key.size() < 2) continue;
+        if (key.compare(key.size() - 2, 2, ":*") != 0) continue;
+        std::string prefix(key.data(), key.size() - 1);  // drop the '*', keep ':'
+        if (tool_name.size() > prefix.size() &&
+            tool_name.compare(0, prefix.size(), prefix) == 0) {
+            return val;
+        }
+    }
+    return tool_default;
+}
+
 // -- ReadTracker ------------------------------------------------------------
 
 ReadTracker& ReadTracker::instance()

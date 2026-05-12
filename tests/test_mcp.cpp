@@ -10,6 +10,7 @@
 #include "mcp/stdio_transport.h"
 #include "core/workspace_services.h"
 #include "index/index_query.h"
+#include "tools/shared.h"
 #include "tools/tool.h"
 #include "tools/tool_registry.h"
 
@@ -308,6 +309,158 @@ TEST_CASE("McpManager: registers tools as mcp:server:tool and proxies calls",
         if (!ec) break;
         std::this_thread::sleep_for(50ms);
     }
+}
+
+TEST_CASE("McpManager: stop_all unregisters MCP tools from the registry",
+          "[s4.g][mcp][manager]")
+{
+    auto bin = mock_server_path();
+    REQUIRE(fs::exists(bin));
+
+    auto root = fs::temp_directory_path() / "locus_test_mcp_stop";
+    fs::create_directories(root / ".locus");
+    {
+        std::ofstream f(root / ".locus" / "mcp.json");
+        f << R"({"mcpServers":{"mock":{"command":")"
+          << bin.generic_string()
+          << R"("}}})";
+    }
+
+    locus::ToolRegistry reg;
+    {
+        locus::McpManager mgr(reg, root);
+        mgr.start_all();
+        REQUIRE(reg.find("mcp:mock:echo") != nullptr);
+
+        mgr.stop_all();
+
+        // Phase 2 contract: stop_all unregisters every tool the manager
+        // had registered so the agent's tool registry can't hand out
+        // McpTool entries that borrow a torn-down client pointer.
+        REQUIRE(reg.find("mcp:mock:echo") == nullptr);
+        REQUIRE(reg.find("mcp:mock:fail_once") == nullptr);
+    }
+    for (int i = 0; i < 20; ++i) {
+        std::error_code ec;
+        fs::remove_all(root, ec);
+        if (!ec) break;
+        std::this_thread::sleep_for(50ms);
+    }
+}
+
+TEST_CASE("resolve_approval_policy: exact match, prefix match, fall-through",
+          "[s4.g][tools][approval]")
+{
+    using locus::ToolApprovalPolicy;
+    using locus::tools::resolve_approval_policy;
+    using Map = std::unordered_map<std::string, ToolApprovalPolicy>;
+
+    // No overrides -> tool default returned.
+    REQUIRE(resolve_approval_policy("read_file", ToolApprovalPolicy::auto_approve, {})
+            == ToolApprovalPolicy::auto_approve);
+
+    // Exact match beats default.
+    Map exact = { {"read_file", ToolApprovalPolicy::deny} };
+    REQUIRE(resolve_approval_policy("read_file", ToolApprovalPolicy::auto_approve, exact)
+            == ToolApprovalPolicy::deny);
+
+    // Prefix "mcp:fs:*" matches "mcp:fs:read_file".
+    Map prefix = { {"mcp:fs:*", ToolApprovalPolicy::auto_approve} };
+    REQUIRE(resolve_approval_policy("mcp:fs:read_file", ToolApprovalPolicy::ask, prefix)
+            == ToolApprovalPolicy::auto_approve);
+
+    // But does NOT bleed into a different server name.
+    REQUIRE(resolve_approval_policy("mcp:other:read_file", ToolApprovalPolicy::ask, prefix)
+            == ToolApprovalPolicy::ask);
+
+    // Exact override beats prefix override.
+    Map both = {
+        {"mcp:fs:*",            ToolApprovalPolicy::auto_approve},
+        {"mcp:fs:delete_file",  ToolApprovalPolicy::deny}
+    };
+    REQUIRE(resolve_approval_policy("mcp:fs:read_file",   ToolApprovalPolicy::ask, both)
+            == ToolApprovalPolicy::auto_approve);
+    REQUIRE(resolve_approval_policy("mcp:fs:delete_file", ToolApprovalPolicy::ask, both)
+            == ToolApprovalPolicy::deny);
+
+    // Bare "*" is intentionally NOT supported. It falls through.
+    Map bare_star = { {"*", ToolApprovalPolicy::auto_approve} };
+    REQUIRE(resolve_approval_policy("read_file", ToolApprovalPolicy::ask, bare_star)
+            == ToolApprovalPolicy::ask);
+}
+
+TEST_CASE("ToolRegistry: unregister removes by name", "[s4.g][tools]")
+{
+    struct DummyTool : public locus::ITool {
+        std::string n_;
+        explicit DummyTool(std::string n) : n_(std::move(n)) {}
+        std::string name()        const override { return n_; }
+        std::string description() const override { return "dummy"; }
+        std::vector<locus::ToolParam> params() const override { return {}; }
+        locus::ToolResult execute(const locus::ToolCall&, locus::IWorkspaceServices&) override
+        { return {true, "ok", "ok"}; }
+    };
+
+    locus::ToolRegistry reg;
+    reg.register_tool(std::make_unique<DummyTool>("a"));
+    reg.register_tool(std::make_unique<DummyTool>("b"));
+    REQUIRE(reg.all().size() == 2);
+
+    REQUIRE(reg.unregister_tool("a"));
+    REQUIRE(reg.find("a") == nullptr);
+    REQUIRE(reg.find("b") != nullptr);
+    REQUIRE(reg.all().size() == 1);
+
+    // Idempotent: second call returns false.
+    REQUIRE_FALSE(reg.unregister_tool("a"));
+
+    // Re-registering the same name is now allowed.
+    reg.register_tool(std::make_unique<DummyTool>("a"));
+    REQUIRE(reg.find("a") != nullptr);
+    REQUIRE(reg.all().size() == 2);
+}
+
+TEST_CASE("McpTool: caps oversized result body at 1 MB", "[s4.g][mcp][tool]")
+{
+    // Build a fake McpClient-style result manually so we don't have to
+    // teach the mock server to emit huge payloads. We exercise the cap
+    // by invoking flatten_content + truncation through McpTool::execute --
+    // but execute() takes a real client. Easier: drive the truncation
+    // path by constructing a content string and asserting the size cap is
+    // declared in the source by re-reading it from the binary's perspective.
+    //
+    // Pragmatic approach: invoke McpTool against a real mock-server call
+    // where the result is small, and separately assert the cap constant is
+    // applied by checking the visible truncation marker for a large-input
+    // round-trip. The mock server echoes text verbatim, so we send 2 MB and
+    // expect ~1 MB back with the truncation suffix.
+    auto bin = mock_server_path();
+    REQUIRE(fs::exists(bin));
+
+    locus::McpServerConfig cfg;
+    cfg.name    = "mock";
+    cfg.command = bin.string();
+
+    locus::McpClient client(cfg);
+    REQUIRE(client.start(fs::temp_directory_path()));
+
+    locus::McpToolDefinition def;
+    def.name = "echo";
+    def.input_schema = { {"type", "object"} };
+    locus::McpTool tool(&client, def);
+
+    locus::ToolCall call;
+    call.id        = "t-cap";
+    call.tool_name = "mcp:mock:echo";
+    call.args      = nlohmann::json::object();
+    call.args["text"] = std::string(2 * 1024 * 1024, 'x');  // 2 MB
+
+    NullWs ws;
+    auto r = tool.execute(call, ws);
+    REQUIRE(r.success);
+    REQUIRE(r.content.size() < 2 * 1024 * 1024);
+    REQUIRE_THAT(r.content, ContainsSubstring("[truncated"));
+    REQUIRE_THAT(r.content, ContainsSubstring("1 MB cap"));
 }
 
 TEST_CASE("McpManager: graceful degradation when a server fails to start",

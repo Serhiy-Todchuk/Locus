@@ -246,6 +246,12 @@ void StdioTransport::terminate()
 {
     if (!running_.exchange(false)) return;
 
+    // Mark this teardown as caller-initiated so the reader thread's closed
+    // callback can distinguish a polite stop from a child crash. Set BEFORE
+    // we kill the job so the reader thread (which is racing the pipe close)
+    // observes the flag if it wakes up to drain the close.
+    terminated_by_us_.store(true);
+
     HANDLE job = static_cast<HANDLE>(job_);
     if (job) TerminateJobObject(job, 1);
 
@@ -264,7 +270,7 @@ void StdioTransport::reader_loop()
     HANDLE h = static_cast<HANDLE>(stdout_r_);
     if (!h) {
         running_ = false;
-        if (closed_cb_) closed_cb_();
+        if (closed_cb_) closed_cb_(0, false);
         return;
     }
 
@@ -296,8 +302,26 @@ void StdioTransport::reader_loop()
     }
 
     running_ = false;
+
+    // Pipe closed -- the child either exited on its own or we killed it via
+    // terminate(). Wait briefly for the process handle to enter the signaled
+    // state so GetExitCodeProcess returns the real exit code rather than
+    // STILL_ACTIVE. 2s is generous; we already TerminateJobObject'd the
+    // tree when terminated_by_us_ is true.
+    int exit_code = 0;
+    bool have_exit = false;
+    HANDLE proc = static_cast<HANDLE>(process_);
+    if (proc) {
+        WaitForSingleObject(proc, 2000);
+        DWORD code = 0;
+        if (GetExitCodeProcess(proc, &code) && code != STILL_ACTIVE) {
+            exit_code = static_cast<int>(code);
+            have_exit = true;
+        }
+    }
+
     if (closed_cb_) {
-        try { closed_cb_(); }
+        try { closed_cb_(exit_code, have_exit); }
         catch (const std::exception& e) {
             spdlog::warn("StdioTransport: closed handler threw: {}", e.what());
         }
@@ -313,7 +337,7 @@ void StdioTransport::spawn(const std::string&, const std::vector<std::string>&,
     throw std::runtime_error("MCP stdio transport not implemented on this platform");
 }
 bool StdioTransport::send_line(const std::string&) { return false; }
-void StdioTransport::terminate() { running_ = false; }
+void StdioTransport::terminate() { running_ = false; terminated_by_us_ = true; }
 void StdioTransport::reader_loop() {}
 
 #endif

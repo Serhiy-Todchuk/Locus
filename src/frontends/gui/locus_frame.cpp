@@ -19,13 +19,14 @@ wxBEGIN_EVENT_TABLE(LocusFrame, wxFrame)
     EVT_AUI_PANE_CLOSE(LocusFrame::on_aui_pane_close)
 wxEND_EVENT_TABLE()
 
-LocusFrame::LocusFrame(AgentCore& agent, Workspace& workspace)
+LocusFrame::LocusFrame(AgentCore& agent, Workspace& workspace, McpManager* mcp)
     : wxFrame(nullptr, wxID_ANY,
               wxString::Format("Locus - %s",
                                wxString::FromUTF8(workspace.root().string())),
               wxDefaultPosition, wxSize(1200, 800))
     , agent_(agent)
     , workspace_(workspace)
+    , mcp_(mcp)
 {
     // AUI manager
     aui_.SetManagedWindow(this);
@@ -389,7 +390,7 @@ void LocusFrame::show_compaction_dialog()
 
 void LocusFrame::show_settings_dialog()
 {
-    SettingsDialog dlg(this, workspace_.config(), agent_.tools());
+    SettingsDialog dlg(this, workspace_.config(), agent_.tools(), mcp_);
     if (dlg.ShowModal() == wxID_OK && dlg.config_changed()) {
         workspace_.save_config();
         SetStatusText("Settings saved", 0);

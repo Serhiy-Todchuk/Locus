@@ -43,7 +43,12 @@ public:
 
     // Wire callbacks. Both fire on the reader thread.
     void on_message(std::function<void(std::string)> cb) { msg_cb_ = std::move(cb); }
-    void on_closed (std::function<void()>            cb) { closed_cb_ = std::move(cb); }
+    // `closed_cb` runs after the child has been waited on; `had_exit_code`
+    // distinguishes a real OS-level exit (GetExitCodeProcess succeeded)
+    // from a transport teardown initiated by us via `terminate()`. The
+    // exit code is the child's process exit code (0 == normal shutdown).
+    void on_closed (std::function<void(int exit_code, bool had_exit_code)> cb)
+    { closed_cb_ = std::move(cb); }
 
     // Write a single newline-terminated message. Returns false if the child
     // is no longer running or the pipe has been closed.
@@ -59,8 +64,9 @@ private:
     void reader_loop();
 
     std::atomic<bool>                running_{false};
+    std::atomic<bool>                terminated_by_us_{false};
     std::function<void(std::string)> msg_cb_;
-    std::function<void()>            closed_cb_;
+    std::function<void(int, bool)>   closed_cb_;
 
 #ifdef _WIN32
     LocusOsHandle process_  = nullptr;

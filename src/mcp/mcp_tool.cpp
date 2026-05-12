@@ -73,6 +73,12 @@ std::string McpTool::preview(const ToolCall& call) const
 
 namespace {
 
+// Hard cap on the per-call result body we feed back into the chat. Matches
+// the 1 MB-per-file cap CheckpointStore uses. A misbehaving / runaway MCP
+// server returning 10 MB of text would otherwise bloat ConversationHistory
+// before the context-budget compaction trigger has a chance to react.
+constexpr std::size_t k_max_result_bytes = 1024 * 1024;
+
 // Squash the MCP `tools/call` `result.content[]` array into a single string
 // for the LLM-facing channel. MCP returns an array of typed parts (text,
 // image, resource); we keep text parts verbatim and tag others by type.
@@ -137,6 +143,19 @@ ToolResult McpTool::execute(const ToolCall& call, IWorkspaceServices& /*ws*/)
 
     bool is_error = result.is_object() && result.value("isError", false);
     std::string body = flatten_content(result);
+
+    // Cap the per-call result body. Logged at warn level so the user sees
+    // it in the activity panel; tag the suffix so the LLM understands the
+    // tail is missing and avoids parroting partial content as authoritative.
+    if (body.size() > k_max_result_bytes) {
+        std::size_t dropped = body.size() - k_max_result_bytes;
+        spdlog::warn("McpTool[{}]: result truncated from {} to {} bytes "
+                     "({} dropped). Raise the cap or fix the server.",
+                     namespaced_, body.size(), k_max_result_bytes, dropped);
+        body.resize(k_max_result_bytes);
+        body += "\n\n[truncated " + std::to_string(dropped) +
+                " bytes -- MCP result exceeded the 1 MB cap]";
+    }
 
     ToolResult r;
     r.success = !is_error;

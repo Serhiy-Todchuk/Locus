@@ -126,6 +126,16 @@ public:
     virtual ~IToolRegistry() = default;
 
     virtual void   register_tool(std::unique_ptr<ITool> tool) = 0;
+
+    // Remove a previously-registered tool. Returns true if the tool was
+    // found and removed, false if no tool by that name exists. Used by
+    // McpManager for hot-restart of MCP servers when the server's
+    // advertised tool set changes between runs. Callers must guarantee
+    // no other thread is mid-call into the tool when unregister fires --
+    // for MCP this is enforced by the McpClient stopping (and joining its
+    // reader thread) before the manager unregisters its tools.
+    virtual bool   unregister_tool(const std::string& name) = 0;
+
     virtual ITool* find(const std::string& name) const = 0;
     virtual std::vector<ITool*> all() const = 0;
 

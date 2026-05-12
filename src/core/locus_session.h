@@ -55,15 +55,16 @@ private:
     // Declaration order = destruction order (reversed). Workspace must outlive
     // everything else; AgentCore must die first so its agent thread joins
     // before any of the systems it touches go away. McpManager is declared
-    // BEFORE ToolRegistry so the registry's McpTool entries are destroyed
-    // before the McpClients they borrow pointers into -- even though the
-    // construction sequence is the inverse (tools first, then mcp registers
-    // into them), unique_ptr lets us assign in any order regardless of
-    // declaration position.
+    // AFTER ToolRegistry so the registry is still alive when ~McpManager
+    // calls stop_all() -> registry_.unregister_tool(...) (S4.G phase 2).
+    // The remaining concern -- McpTool entries in the registry borrowing
+    // pointers into freed McpClient instances -- is handled by McpTool's
+    // dtor not dereferencing client_, so the dangling-but-unused pointer
+    // window between mcp_'s destruction and tools_' destruction is benign.
     std::unique_ptr<Workspace>     workspace_;
     std::unique_ptr<ILLMClient>    llm_;
-    std::unique_ptr<McpManager>    mcp_;
     std::unique_ptr<ToolRegistry>  tools_;
+    std::unique_ptr<McpManager>    mcp_;
     std::unique_ptr<AgentCore>     agent_;
 
     LLMConfig llm_config_;

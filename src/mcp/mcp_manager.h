@@ -37,6 +37,8 @@ public:
         McpClient::Status   status;
         std::string         last_error;     // empty when status == ready
         std::vector<std::string> tool_names; // namespaced
+        bool                has_exit_code = false;
+        int                 exit_code = 0;
     };
 
     using StatusListener = std::function<void(const ServerStatus&)>;
@@ -71,6 +73,10 @@ public:
 
     std::size_t server_count() const;
 
+    // Workspace root the manager was constructed against. Used by the GUI
+    // to resolve `<root>/.locus/mcp.json` for the "Open mcp.json" action.
+    const std::filesystem::path& workspace_root() const { return root_; }
+
 private:
     struct ServerEntry {
         McpServerConfig             cfg;
@@ -78,9 +84,10 @@ private:
         std::vector<std::string>    namespaced_tool_names;  // owned by registry, not us
     };
 
-    void start_one_locked(ServerEntry& e);   // pending_mu_ held
+    void start_one_locked(ServerEntry& e);   // mu_ held
     void register_tools_locked(ServerEntry& e,
                                const std::vector<McpToolDefinition>& defs);
+    void unregister_tools_locked(ServerEntry& e);
     void emit_status_locked(const ServerEntry& e);
 
     IToolRegistry&         registry_;

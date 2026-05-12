@@ -11,6 +11,7 @@ namespace locus {
 class ToolRegistry : public IToolRegistry {
 public:
     void   register_tool(std::unique_ptr<ITool> tool) override;
+    bool   unregister_tool(const std::string& name) override;
     ITool* find(const std::string& name) const override;
     std::vector<ITool*> all() const override;
     nlohmann::json build_schema_json() const override;

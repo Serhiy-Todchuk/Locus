@@ -4,6 +4,8 @@
 #include "../../core/workspace.h"
 
 #include <wx/wx.h>
+#include <wx/listctrl.h>
+#include <wx/notebook.h>
 #include <wx/spinctrl.h>
 
 #include <string>
@@ -12,12 +14,18 @@
 namespace locus {
 
 class IToolRegistry;
+class McpManager;
 
 // Modal dialog for editing workspace + LLM settings.
 // Reads from WorkspaceConfig on construction, writes back on OK.
+//
+// S4.G phase 2: wxNotebook tabs (LLM, Index, Tool Approvals, MCP Servers).
+// The MCP tab is populated only when a non-null McpManager is supplied;
+// otherwise it shows a hint pointing the user at the mcp.json schema doc.
 class SettingsDialog : public wxDialog {
 public:
-    SettingsDialog(wxWindow* parent, WorkspaceConfig& config, IToolRegistry& tools);
+    SettingsDialog(wxWindow* parent, WorkspaceConfig& config, IToolRegistry& tools,
+                   McpManager* mcp = nullptr);
 
     // True if user clicked OK and values changed.
     bool config_changed() const { return changed_; }
@@ -28,10 +36,21 @@ public:
     bool semantic_changed() const { return semantic_changed_; }
 
 private:
+    wxPanel* build_llm_tab();
+    wxPanel* build_index_tab();
+    wxPanel* build_approvals_tab();
+    wxPanel* build_mcp_tab();
+
     void on_ok(wxCommandEvent& evt);
+    void refresh_mcp_list();
+    void on_mcp_restart(wxCommandEvent& evt);
+    void on_mcp_open_json(wxCommandEvent& evt);
+    void on_mcp_select(wxListEvent& evt);
 
     WorkspaceConfig& config_;
     IToolRegistry&   tools_;
+    McpManager*      mcp_;
+
     bool changed_        = false;
     bool llm_changed_    = false;
     bool index_changed_  = false;
@@ -57,6 +76,18 @@ private:
     // Tool approval controls — one choice per tool, same order as tool_names_.
     std::vector<std::string> tool_names_;
     std::vector<wxChoice*>   approval_choices_;
+
+    // MCP tab controls (null when mcp_ == nullptr).
+    wxListCtrl*        mcp_list_       = nullptr;   // server list
+    wxStaticText*      mcp_detail_     = nullptr;   // last-error / status detail box
+    wxCheckBox*        mcp_trust_      = nullptr;   // trust toggle for selected server
+    wxButton*          mcp_restart_btn_ = nullptr;
+    wxButton*          mcp_open_btn_    = nullptr;
+    int                mcp_selected_   = -1;        // index into mcp_->status_snapshot()
+    // Trust toggles for each server (`mcp:<name>:*` key), captured on init and
+    // diffed on OK so we only persist changed entries.
+    std::vector<std::pair<std::string, bool>> mcp_initial_trust_;
+    std::vector<bool>                          mcp_current_trust_;
 };
 
 } // namespace locus

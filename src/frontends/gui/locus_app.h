@@ -22,6 +22,14 @@ public:
     bool OnInit() override;
     int  OnExit() override;
 
+    // Override the default cmdline parser so positional args (the workspace
+    // path) and our --endpoint / --model / --context options don't cause
+    // wxApp::OnInit() to bail with "unknown argument" before we've even
+    // started. We do our own argv parsing in OnInit -- this is just a
+    // permissive declaration.
+    void OnInitCmdLine(wxCmdLineParser& parser) override;
+    bool OnCmdLineParsed(wxCmdLineParser& parser) override;
+
     // Switch to a different workspace folder. Tears down the current
     // session/frame and reinitializes everything with the new path.
     void open_workspace(const std::string& path);
