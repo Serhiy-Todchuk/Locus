@@ -429,7 +429,9 @@ void SettingsDialog::on_mcp_open_json(wxCommandEvent&)
 
     // Create an empty stub so the user has something to edit if the file
     // doesn't exist yet. Mirrors what `git init` does for .gitignore-style
-    // touch-and-open flows.
+    // touch-and-open flows. We accept jsonc on the read side (comments
+    // ignored, see McpConfigLoader::parse_json), but the stub itself is
+    // pure JSON so editors with strict highlighters don't flag it.
     if (!std::filesystem::exists(path)) {
         std::error_code ec;
         std::filesystem::create_directories(path.parent_path(), ec);
@@ -437,7 +439,6 @@ void SettingsDialog::on_mcp_open_json(wxCommandEvent&)
         if (f.is_open()) {
             f << "{\n"
                  "  \"mcpServers\": {\n"
-                 "    // \"example\": { \"command\": \"npx\", \"args\": [\"-y\", \"@modelcontextprotocol/server-filesystem\", \".\"] }\n"
                  "  }\n"
                  "}\n";
         }

@@ -67,10 +67,17 @@ party software is required.
 
 1. Close Locus.
 2. Locate the mock server: `build/release/tests/Release/locus_mock_mcp_server.exe`.
-   Note the **absolute path** (something like
-   `D:\Projects\AICodeAss\build\release\tests\Release\locus_mock_mcp_server.exe`).
+   Note the **absolute path** and write it with **forward slashes**, e.g.
+   `D:/Projects/AICodeAss/build/release/tests/Release/locus_mock_mcp_server.exe`.
+
+   > **JSON gotcha:** backslashes are escape characters in JSON, so writing the
+   > path as `D:\Projects\...` will either fail to parse or silently produce
+   > a wrong path (`\P`, `\A`, `\b`, `\r`, `\t` are all interpreted). Either
+   > use forward slashes (recommended) or double every backslash
+   > (`D:\\Projects\\...`).
+
 3. In the workspace's `.locus/` folder, create a new file `mcp.json` with
-   this content (replace `<PATH_TO_MOCK>` with the absolute path you noted):
+   this content (replace `<PATH_TO_MOCK>` with the forward-slash path you noted):
 
    ```json
    {
@@ -81,8 +88,6 @@ party software is required.
      }
    }
    ```
-
-   Tip: forward slashes are fine in JSON (`D:/Projects/...`).
 
 ### Steps
 

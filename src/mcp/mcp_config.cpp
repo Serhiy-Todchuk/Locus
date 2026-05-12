@@ -40,7 +40,14 @@ std::vector<McpServerConfig> McpConfigLoader::parse_json(const std::string& body
     std::vector<McpServerConfig> out;
     if (body.empty()) return out;
 
-    json j = json::parse(body);
+    // Accept jsonc -- the de-facto format used by Claude Desktop, Cursor,
+    // Cline, and VS Code settings. Users routinely copy mcp.json blobs
+    // across tools with `//` / `/* */` comments still in place; rejecting
+    // them outright is a worse first-time experience than the spec
+    // strictness buys us.
+    json j = json::parse(body, /*callback=*/nullptr,
+                         /*allow_exceptions=*/true,
+                         /*ignore_comments=*/true);
     if (!j.is_object() || !j.contains("mcpServers") || !j["mcpServers"].is_object())
         return out;
 

@@ -131,6 +131,25 @@ TEST_CASE("mcp_config: parse mcpServers map", "[s4.g][mcp][config]")
     REQUIRE_FALSE(find("db")->enabled);
 }
 
+TEST_CASE("mcp_config: tolerates // and /* */ comments (jsonc)",
+          "[s4.g][mcp][config]")
+{
+    // Real-world: users paste configs across Claude Desktop / Cursor / Cline /
+    // VS Code, all of which accept comments. Locus must not reject the file
+    // just because a `//` comment slipped in.
+    std::string body = R"({
+        "mcpServers": {
+            // a server registered for kicks
+            "fs": { "command": "node", "args": ["server.js"] }
+            /* multi-line
+               comment block */
+        }
+    })";
+    auto cfgs = locus::McpConfigLoader::parse_json(body);
+    REQUIRE(cfgs.size() == 1);
+    REQUIRE(cfgs[0].name == "fs");
+}
+
 TEST_CASE("mcp_config: missing command is skipped with a warning", "[s4.g][mcp][config]")
 {
     std::string body = R"({"mcpServers": {"x":{"args":[]}}})";
