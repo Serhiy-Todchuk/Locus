@@ -8,6 +8,9 @@
 #include <spdlog/sinks/rotating_file_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>
+#if defined(_WIN32) && defined(_DEBUG)
+#include <spdlog/sinks/msvc_sink.h>
+#endif
 
 #include <algorithm>
 #include <cstdlib>
@@ -98,8 +101,15 @@ void init_integration_logging(const fs::path& locus_dir)
                                        : spdlog::level::warn);
             file_sink->set_level(spdlog::level::trace);
 
+            std::vector<spdlog::sink_ptr> sinks{ stderr_sink, file_sink };
+#if defined(_WIN32) && defined(_DEBUG)
+            auto msvc_sink = std::make_shared<spdlog::sinks::msvc_sink_mt>();
+            msvc_sink->set_level(spdlog::level::trace);
+            sinks.push_back(msvc_sink);
+#endif
+
             auto logger = std::make_shared<spdlog::logger>(
-                "locus", spdlog::sinks_init_list{stderr_sink, file_sink});
+                "locus", sinks.begin(), sinks.end());
             logger->set_level(spdlog::level::trace);
             logger->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [t:%t] [%^%l%$] %v");
             spdlog::set_default_logger(logger);

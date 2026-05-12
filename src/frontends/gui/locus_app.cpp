@@ -5,6 +5,9 @@
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/rotating_file_sink.h>
+#if defined(_WIN32) && defined(_DEBUG)
+#include <spdlog/sinks/msvc_sink.h>
+#endif
 
 #include <wx/cmdline.h>
 #include <wx/stdpaths.h>
@@ -351,8 +354,18 @@ void LocusApp::init_logging(const std::filesystem::path& locus_dir)
             10 * 1024 * 1024, 3);
         file_sink->set_level(spdlog::level::trace);
 
+        std::vector<spdlog::sink_ptr> sinks{ file_sink };
+#if defined(_WIN32) && defined(_DEBUG)
+        // Debug-only: mirror everything to OutputDebugString so the Visual
+        // Studio Output window shows live trace output under the debugger.
+        // GUI builds have no console, so this is the only live channel.
+        auto msvc_sink = std::make_shared<spdlog::sinks::msvc_sink_mt>();
+        msvc_sink->set_level(spdlog::level::trace);
+        sinks.push_back(msvc_sink);
+#endif
+
         auto logger = std::make_shared<spdlog::logger>("locus",
-            spdlog::sinks_init_list{file_sink});
+                                                       sinks.begin(), sinks.end());
         logger->set_level(spdlog::level::trace);
         logger->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [t:%t] [%^%l%$] %v");
 

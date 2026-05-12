@@ -79,6 +79,66 @@ std::string build_command_line(const std::string& command,
     return out;
 }
 
+// Resolve a command name to an absolute path honoring %PATHEXT%. CreateProcess
+// itself only tries the literal name + ".exe" -- it does NOT walk PATHEXT, so
+// `command="npx"` fails with error 2 even though `npx.cmd` exists on PATH.
+// Returns the resolved path on success, empty string when nothing matches.
+std::string resolve_pathext(const std::string& cmd)
+{
+    // Caller gave us an explicit path -- trust it.
+    if (cmd.find_first_of("\\/") != std::string::npos ||
+        (cmd.size() > 1 && cmd[1] == ':')) {
+        if (GetFileAttributesA(cmd.c_str()) != INVALID_FILE_ATTRIBUTES)
+            return cmd;
+        return {};
+    }
+
+    // Parse %PATHEXT% (";"-separated, case-insensitive on Windows). We only
+    // try the literal name (no appended extension) when the caller already
+    // wrote an extension -- otherwise Node-style installs that ship a bare
+    // "npx" *bash script* next to npx.cmd get picked up first and fed to
+    // CreateProcess, which rejects them with ERROR_BAD_EXE_FORMAT (193).
+    auto last_dot = cmd.find_last_of('.');
+    bool has_extension = (last_dot != std::string::npos) &&
+                         cmd.find_first_of("\\/", last_dot + 1) == std::string::npos;
+    std::vector<std::string> exts;
+    if (has_extension) exts.push_back("");
+    if (const char* pe = std::getenv("PATHEXT"); pe && *pe) {
+        std::string p(pe);
+        std::size_t start = 0;
+        for (std::size_t i = 0; i <= p.size(); ++i) {
+            if (i == p.size() || p[i] == ';') {
+                if (i > start) exts.push_back(p.substr(start, i - start));
+                start = i + 1;
+            }
+        }
+    } else {
+        exts.insert(exts.end(), { ".COM", ".EXE", ".BAT", ".CMD" });
+    }
+
+    for (const auto& ext : exts) {
+        char resolved[MAX_PATH] = {};
+        char* file_part = nullptr;
+        DWORD found = SearchPathA(nullptr, cmd.c_str(),
+                                  ext.empty() ? nullptr : ext.c_str(),
+                                  MAX_PATH, resolved, &file_part);
+        if (found > 0 && found <= MAX_PATH)
+            return std::string(resolved);
+    }
+    return {};
+}
+
+// Test whether the resolved path refers to a script that needs cmd.exe to
+// invoke (cmd batch, vbs, PowerShell, ...). Plain executables run directly.
+bool is_script_extension(const std::string& path)
+{
+    auto dot = path.find_last_of('.');
+    if (dot == std::string::npos) return false;
+    std::string ext = path.substr(dot);
+    for (auto& c : ext) c = static_cast<char>(::tolower(static_cast<unsigned char>(c)));
+    return ext == ".cmd" || ext == ".bat" || ext == ".vbs" || ext == ".ps1";
+}
+
 // Build a Win32 environment block from the parent's environment with the
 // caller's overrides merged on top. Returns null-terminated KEY=VALUE pairs
 // followed by a trailing null. Case-insensitive comparison on Windows.
@@ -160,7 +220,47 @@ void StdioTransport::spawn(const std::string& command,
     // Inherit our stderr so the server's diagnostics surface in our log.
     si.hStdError  = GetStdHandle(STD_ERROR_HANDLE);
 
-    std::string cmd_line = build_command_line(command, args);
+    // PATHEXT resolution + script wrapping. CreateProcess doesn't walk
+    // PATHEXT, so "npx" (which is npx.cmd on Windows) fails outright; we
+    // resolve via SearchPath ourselves and route .cmd / .bat / .vbs / .ps1
+    // through cmd /c. .exe paths (resolved or already absolute) launch
+    // directly without the extra cmd hop.
+    std::string cmd_line;
+    bool wrapped_via_cmd = false;
+    if (std::string resolved = resolve_pathext(command); !resolved.empty()) {
+        if (is_script_extension(resolved)) {
+            // cmd.exe doesn't speak the C runtime's backslash-escape rules
+            // -- it has its own quoting (just plain " around tokens with
+            // spaces). Build the inner command line with cmd-style quoting
+            // and wrap with `cmd /s /c "<inner>"` so /s strips exactly the
+            // outermost pair we add here.
+            auto cmd_quote = [](std::string& out, const std::string& a) {
+                if (a.find_first_of(" \t\"") == std::string::npos) {
+                    out.append(a);
+                } else {
+                    out.push_back('"');
+                    out.append(a);
+                    out.push_back('"');
+                }
+            };
+            std::string inner;
+            cmd_quote(inner, resolved);
+            for (auto& a : args) { inner.push_back(' '); cmd_quote(inner, a); }
+
+            cmd_line = "cmd.exe /s /c \"" + inner + "\"";
+            wrapped_via_cmd = true;
+            spdlog::info("StdioTransport: '{}' resolved to '{}' -- routing via cmd /c",
+                         command, resolved);
+        } else {
+            cmd_line = build_command_line(resolved, args);
+        }
+    }
+    if (cmd_line.empty()) {
+        // No resolution -- hand the original command line to CreateProcess
+        // and let it fail with a clear error if the binary doesn't exist.
+        cmd_line = build_command_line(command, args);
+    }
+    (void)wrapped_via_cmd;  // kept for future diagnostics
     std::string env_block = build_env_block(env_overrides);
     std::string cwd_str   = cwd.empty() ? std::string{} : cwd.string();
 

@@ -8,6 +8,9 @@
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/sinks/rotating_file_sink.h>
+#if defined(_WIN32) && defined(_DEBUG)
+#include <spdlog/sinks/msvc_sink.h>
+#endif
 
 #include <csignal>
 #include <clocale>
@@ -145,10 +148,18 @@ static void init_logging(const fs::path& locus_dir, bool verbose)
         // file: always trace (full diagnostic detail)
         file_sink->set_level(spdlog::level::trace);
 
-        auto logger = std::make_shared<spdlog::logger>(
-            "locus",
-            spdlog::sinks_init_list{stderr_sink, file_sink}
-        );
+        std::vector<spdlog::sink_ptr> sinks{ stderr_sink, file_sink };
+#if defined(_WIN32) && defined(_DEBUG)
+        // Mirror everything to OutputDebugString so the Visual Studio Output
+        // window shows live trace output when running under the debugger.
+        // Debug-only -- Release builds don't pay for the extra sink.
+        auto msvc_sink = std::make_shared<spdlog::sinks::msvc_sink_mt>();
+        msvc_sink->set_level(spdlog::level::trace);
+        sinks.push_back(msvc_sink);
+#endif
+
+        auto logger = std::make_shared<spdlog::logger>("locus",
+                                                       sinks.begin(), sinks.end());
         logger->set_level(spdlog::level::trace);
         logger->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [t:%t] [%^%l%$] %v");
 
