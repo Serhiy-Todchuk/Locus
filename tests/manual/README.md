@@ -24,3 +24,4 @@ numbered steps, expected results per step.
 | Document | Feature | Scope |
 |---|---|---|
 | [mcp.md](mcp.md) | MCP servers (Model Context Protocol) | Loading `.locus/mcp.json`, Settings panel, trust toggle, restart, error paths, end-to-end LLM call. |
+| [plan-mode.md](plan-mode.md) | Plan mode | Chat / Plan / Execute switcher, plan bubble Approve/Reject, multi-tool execute stress test. |
