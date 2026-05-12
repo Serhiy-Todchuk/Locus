@@ -97,6 +97,21 @@ AgentStepResult AgentLoop::run_step(const ConversationHistory& history,
     AgentStepResult out;
     auto tool_schemas = build_tool_schemas(tool_mode);
 
+    // S4.F -- hash the outgoing system message before the POST. The system
+    // message is the leading byte sequence the prefix cache locks onto;
+    // logging the hash next to prompt_tokens / cached_tokens makes
+    // cache-miss root causes obvious from .locus/locus.log alone.
+    std::size_t sys_hash = 0;
+    int         sys_chars = 0;
+    if (!history.empty() &&
+        history.messages().front().role == MessageRole::system) {
+        const auto& sys_content = history.messages().front().content;
+        sys_hash  = std::hash<std::string>{}(sys_content);
+        sys_chars = static_cast<int>(sys_content.size());
+        if (metrics_)
+            metrics_->record_prompt_prefix_hash(sys_hash);
+    }
+
     std::string accumulated_text;
     std::string accumulated_reasoning;
     std::vector<ToolCallRequest> tool_call_requests;
@@ -104,17 +119,54 @@ AgentStepResult AgentLoop::run_step(const ConversationHistory& history,
     CompletionUsage usage_reported{};
     int prev_total_for_metrics = budget_.prev_turn_total();
     auto stream_t0 = std::chrono::steady_clock::now();
+    bool first_token_seen = false;
+    long long ttft_ms = 0;
+
+    // S4.F generation-progress throttle: 150 ms between callbacks. The
+    // frontend receives accumulated chars + an estimate of tokens via the
+    // shared ~4 chars/token heuristic. The exact completion_tokens still
+    // arrive in the final on_usage and the frontend can reconcile.
+    auto last_progress = std::chrono::steady_clock::time_point{};
+    auto maybe_fire_progress = [&](bool force) {
+        auto now = std::chrono::steady_clock::now();
+        if (!force) {
+            auto since = std::chrono::duration_cast<std::chrono::milliseconds>(
+                             now - last_progress).count();
+            if (since < 150) return;
+        }
+        last_progress = now;
+        int chars = static_cast<int>(accumulated_text.size()
+                                       + accumulated_reasoning.size());
+        // Same heuristic as TokenCounter::estimate but avoids a dependency
+        // round-trip; ~4 chars per token.
+        int est_tokens = (chars + 2) / 4;
+        frontends_.broadcast([&](IFrontend& fe) {
+            fe.on_generation_progress(chars, est_tokens);
+        });
+    };
+    auto mark_first_token = [&]() {
+        if (first_token_seen) return;
+        first_token_seen = true;
+        ttft_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                      std::chrono::steady_clock::now() - stream_t0).count();
+        if (metrics_)
+            metrics_->record_first_token(ttft_ms);
+    };
 
     llm_.stream_completion(history.messages(), tool_schemas, {
         /* on_token */
         [&](const std::string& token) {
+            mark_first_token();
             accumulated_text += token;
             frontends_.broadcast([&](IFrontend& fe) { fe.on_token(token); });
+            maybe_fire_progress(false);
         },
         /* on_reasoning_token */
         [&](const std::string& token) {
+            mark_first_token();
             accumulated_reasoning += token;
             frontends_.broadcast([&](IFrontend& fe) { fe.on_reasoning_token(token); });
+            maybe_fire_progress(false);
         },
         /* on_tool_calls */
         [&](const std::vector<ToolCallRequest>& calls) {
@@ -149,6 +201,29 @@ AgentStepResult AgentLoop::run_step(const ConversationHistory& history,
                          std::chrono::steady_clock::now() - stream_t0).count();
     if (metrics_)
         metrics_->record_llm_step(usage_reported, stream_ms, prev_total_for_metrics);
+
+    // S4.F diagnostic log per LLM POST. One line covers everything you need
+    // to root-cause a cache miss: the system-prompt hash (byte-stable across
+    // a session if the S4.F invariant holds), prompt_tokens, cached_tokens,
+    // and time-to-first-token. When two consecutive log lines share the same
+    // sys_hash and the second has cached_tokens > 0 (or a much lower ttft),
+    // the prefix cache is working.
+    {
+        double prefill_per_token = (usage_reported.prompt_tokens > 0 && ttft_ms > 0)
+            ? (static_cast<double>(ttft_ms) /
+                 static_cast<double>(usage_reported.prompt_tokens))
+            : 0.0;
+        spdlog::info(
+            "LLM POST: sys_hash={:016x} sys_chars={} prompt={} cached={} "
+            "completion={} ttft_ms={} prefill_ms_per_prompt_token={:.2f}",
+            sys_hash, sys_chars,
+            usage_reported.prompt_tokens, usage_reported.cached_tokens,
+            usage_reported.completion_tokens, ttft_ms, prefill_per_token);
+    }
+
+    // Final progress emission so the footer chip lands on the exact
+    // streamed-character count rather than stopping at the last 150 ms tick.
+    maybe_fire_progress(true);
 
     if (out.had_error)
         return out;

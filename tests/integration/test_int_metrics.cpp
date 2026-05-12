@@ -154,6 +154,37 @@ TEST_CASE("/export_metrics csv writes a file under .locus/metrics/",
     REQUIRE(body.find(',')  != std::string::npos);
 }
 
+TEST_CASE("S4.F: /metrics shows KV-cache + prefill signals after two turns",
+          "[integration][llm][metrics][s4.f]")
+{
+    auto& h = harness();
+
+    // Two real turns -- the system prompt is stable across them (S4.F's
+    // invariant), so /metrics should report prefix_stable: yes once the
+    // aggregator has at least two samples to compare.
+    PromptResult r1 = h.prompt(
+        "Reply with the single word OK. Do not call any tool.");
+    REQUIRE_FALSE(r1.timed_out);
+    REQUIRE(r1.errors.empty());
+
+    PromptResult r2 = h.prompt(
+        "Reply with the single word DONE. Do not call any tool.");
+    REQUIRE_FALSE(r2.timed_out);
+    REQUIRE(r2.errors.empty());
+
+    PromptResult m = h.prompt("/metrics");
+    REQUIRE_FALSE(m.timed_out);
+    REQUIRE(m.errors.empty());
+    INFO("metrics output:\n" << m.tokens);
+
+    // The S4.F surface lines:
+    REQUIRE(m.tokens.find("kv-cache:")     != std::string::npos);
+    REQUIRE(m.tokens.find("prefix_stable=yes") != std::string::npos);
+    // The prefill rate only appears when TTFT was captured (always true for
+    // a successful real turn).
+    REQUIRE(m.tokens.find("prefill: ttft=") != std::string::npos);
+}
+
 TEST_CASE("/export_metrics with bogus format reports an error",
           "[integration][metrics]")
 {

@@ -17,6 +17,26 @@ namespace locus {
 // The tool schema is also available separately via IToolRegistry::build_schema_json()
 // for the OpenAI tools parameter. This text version goes into the system prompt
 // so the LLM understands tool semantics in its context window.
+//
+// ## Invariant (S4.F): byte-stable system prompt across a session
+//
+// `SystemPromptBuilder::build()` output MUST be byte-stable across turns
+// within a single session. LM Studio / llama.cpp prefix caching only fires
+// when the leading bytes (system message in particular) are identical to the
+// previous request -- any per-turn change forces a full re-prefill of the
+// system prompt + tool manifest (2K+ tokens; 10-30 s on a 26B model).
+//
+// Anything that varies per turn -- timestamps, live file counts, last-indexed
+// times, the attached-file outline, file-change deltas, retrieved memory --
+// belongs on a user message (in the volatile tail of the conversation),
+// **not** here. Workspace metadata is captured once at construction and
+// deliberately not refreshed mid-session for the same reason; if a future
+// stage needs fresh counts, expose them via a tool (`get_workspace_stats`)
+// rather than reaching back into this builder.
+//
+// LOCUS.md and the tool manifest are allowed to change *between sessions*
+// (workspace reload, tool registry edits); the cache miss on the first
+// turn after such an event is appropriate.
 
 struct WorkspaceMetadata {
     std::filesystem::path root;

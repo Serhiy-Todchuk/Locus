@@ -185,3 +185,122 @@ TEST_CASE("parse_search_result_count: non-search tools return nullopt",
     REQUIRE_FALSE(parse_search_result_count("read_file", "5 lines\n").has_value());
     REQUIRE_FALSE(parse_search_result_count("write_file", "ok").has_value());
 }
+
+// -- S4.F ---------------------------------------------------------------------
+
+TEST_CASE("S4.F: cached_tokens are summed per turn and surfaced in aggregates",
+          "[s4.f][metrics]")
+{
+    MetricsAggregator m;
+
+    // Turn 1: prompt=100, cached=80 -> cache hit.
+    m.begin_turn(1);
+    CompletionUsage u1;
+    u1.prompt_tokens = 100;
+    u1.completion_tokens = 20;
+    u1.cached_tokens = 80;
+    u1.total_tokens = 120;
+    m.record_llm_step(u1, /*stream_ms=*/100, /*prev_total=*/0);
+    m.end_turn(false);
+
+    // Turn 2: prompt=120, cached=100.
+    m.begin_turn(2);
+    CompletionUsage u2;
+    u2.prompt_tokens = 120;
+    u2.completion_tokens = 30;
+    u2.cached_tokens = 100;
+    u2.total_tokens = 150;
+    m.record_llm_step(u2, /*stream_ms=*/120, /*prev_total=*/120);
+    m.end_turn(false);
+
+    auto agg = m.aggregates();
+    REQUIRE(agg.cached_tokens_total == 180);
+    REQUIRE(agg.cached_token_ratio == Catch::Approx(180.0 / 220.0));
+
+    auto j = m.to_json();
+    REQUIRE(j["totals"]["cached_tokens_total"].get<long long>() == 180);
+    REQUIRE(j["turns"][0]["cached_tokens"].get<int>() == 80);
+    REQUIRE(j["turns"][1]["cached_tokens"].get<int>() == 100);
+}
+
+TEST_CASE("S4.F: prompt_prefix_stable detects matched system-prompt hashes",
+          "[s4.f][metrics]")
+{
+    MetricsAggregator m;
+
+    // Hash A for both turns -> stable.
+    m.begin_turn(1);
+    m.record_prompt_prefix_hash(0xAAAA);
+    CompletionUsage u; u.prompt_tokens = 50; u.total_tokens = 60;
+    m.record_llm_step(u, 10, 0);
+    m.end_turn(false);
+
+    m.begin_turn(2);
+    m.record_prompt_prefix_hash(0xAAAA);
+    m.record_llm_step(u, 10, 60);
+    m.end_turn(false);
+
+    auto agg = m.aggregates();
+    REQUIRE(agg.prompt_prefix_stable == true);
+
+    // Now break stability with a different hash on turn 3.
+    m.begin_turn(3);
+    m.record_prompt_prefix_hash(0xBBBB);
+    m.record_llm_step(u, 10, 120);
+    m.end_turn(false);
+
+    agg = m.aggregates();
+    REQUIRE(agg.prompt_prefix_stable == false);
+}
+
+TEST_CASE("S4.F: prompt_prefix_stable is false on first turn (only one sample)",
+          "[s4.f][metrics]")
+{
+    MetricsAggregator m;
+    m.begin_turn(1);
+    m.record_prompt_prefix_hash(0xDEAD);
+    CompletionUsage u; u.prompt_tokens = 50; u.total_tokens = 60;
+    m.record_llm_step(u, 10, 0);
+    m.end_turn(false);
+
+    auto agg = m.aggregates();
+    REQUIRE(agg.prompt_prefix_stable == false);
+}
+
+TEST_CASE("S4.F: TTFT is captured once per turn and yields a prefill rate",
+          "[s4.f][metrics]")
+{
+    MetricsAggregator m;
+    m.begin_turn(1);
+    m.record_first_token(200);
+    // Second record in same turn must be a no-op (first round wins).
+    m.record_first_token(50);
+    CompletionUsage u; u.prompt_tokens = 1000; u.total_tokens = 1020;
+    m.record_llm_step(u, /*stream_ms=*/300, /*prev_total=*/0);
+    m.end_turn(false);
+
+    auto agg = m.aggregates();
+    REQUIRE(agg.last_ttft_ms == 200);
+    REQUIRE(agg.last_prefill_ms_per_token == Catch::Approx(0.2));
+
+    auto snap = m.turns_snapshot();
+    REQUIRE(snap.size() == 1);
+    REQUIRE(snap[0].ttft_ms == 200);
+}
+
+TEST_CASE("S4.F: record_prompt_prefix_hash keeps the first round's value",
+          "[s4.f][metrics]")
+{
+    MetricsAggregator m;
+    m.begin_turn(1);
+    m.record_prompt_prefix_hash(0x1111);
+    // Subsequent rounds in the same turn should NOT overwrite the hash --
+    // the system prompt is stable within a turn even when assistant + tool
+    // messages get appended to history between rounds.
+    m.record_prompt_prefix_hash(0x2222);
+    m.end_turn(false);
+
+    auto snap = m.turns_snapshot();
+    REQUIRE(snap.size() == 1);
+    REQUIRE(snap[0].prompt_prefix_hash == 0x1111);
+}

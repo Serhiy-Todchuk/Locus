@@ -140,6 +140,8 @@ LocusFrame::LocusFrame(AgentCore& agent, Workspace& workspace, McpManager* mcp)
     Bind(EVT_AGENT_PLAN_COMPLETED,      &LocusFrame::on_agent_plan_completed,     this);
     // S4.L auto-commit footer chip.
     Bind(EVT_AGENT_AUTO_COMMIT,         &LocusFrame::on_agent_auto_commit,        this);
+    // S4.F live generation-progress chip.
+    Bind(EVT_AGENT_GEN_PROGRESS,        &LocusFrame::on_agent_gen_progress,       this);
 
     // Show LOCUS.md token cost if present.
     if (!workspace_.locus_md().empty()) {
@@ -730,6 +732,14 @@ void LocusFrame::on_agent_auto_commit(wxThreadEvent& evt)
     } catch (const std::exception& ex) {
         spdlog::warn("Failed to parse auto_commit payload: {}", ex.what());
     }
+}
+
+void LocusFrame::on_agent_gen_progress(wxThreadEvent& evt)
+{
+    if (!chat_panel_) return;
+    int chars      = evt.GetInt();
+    int est_tokens = static_cast<int>(evt.GetExtraLong());
+    chat_panel_->set_generation_progress(chars, est_tokens);
 }
 
 } // namespace locus

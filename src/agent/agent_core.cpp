@@ -130,27 +130,34 @@ void AgentCore::emit_index_event(const std::string& summary, const std::string& 
     activity_->emit_index_event(summary, detail);
 }
 
-// -- Attached file context (S2.4) --------------------------------------------
+// -- Attached file context (S2.4 / S4.F) -------------------------------------
+//
+// S4.F: the attached-file block used to live appended to the system prompt
+// (see compose_system_prompt / refresh_system_prompt in pre-S4.F revisions).
+// Every attach/detach rewrote the in-history system message and torched the
+// LM Studio / llama.cpp prefix cache (2K+ tokens re-prefilled per turn).
+// Now the block is composed per-user-turn and prepended to the user message,
+// matching S4.T's "[Files changed since last turn: ...]" pattern -- the
+// system prompt stays byte-stable, and the attached-file context still
+// follows the conversation into history naturally.
 
-std::string AgentCore::compose_system_prompt() const
+std::string AgentCore::compose_attached_context_block() const
 {
     std::optional<AttachedContext> ctx;
     {
         std::lock_guard lock(attached_mutex_);
         ctx = attached_context_;
     }
-    if (!ctx) return base_system_prompt_;
+    if (!ctx) return {};
 
     std::ostringstream ss;
-    ss << base_system_prompt_;
-    ss << "\n## Attached File\n";
-    ss << "[Attached: " << ctx->file_path << "]\n";
+    ss << "[Attached file: " << ctx->file_path << "]\n";
 
     if (auto* idx = services_.index()) {
         try {
             auto entries = idx->get_file_outline(ctx->file_path);
             if (!entries.empty()) {
-                ss << "\nOutline:\n";
+                ss << "Outline:\n";
                 for (const auto& e : entries) {
                     ss << "- L" << e.line << " ";
                     if (e.type == OutlineEntry::Heading) {
@@ -171,17 +178,9 @@ std::string AgentCore::compose_system_prompt() const
         }
     }
     if (!ctx->preview.empty())
-        ss << "\nPreview: " << ctx->preview << "\n";
+        ss << "Preview: " << ctx->preview << "\n";
+    ss << "\n";
     return ss.str();
-}
-
-void AgentCore::refresh_system_prompt()
-{
-    system_prompt_ = compose_system_prompt();
-    if (!history_.empty() &&
-        history_.messages().front().role == MessageRole::system) {
-        history_.replace_system_prompt(system_prompt_);
-    }
 }
 
 void AgentCore::set_attached_context(AttachedContext ctx)
@@ -190,11 +189,11 @@ void AgentCore::set_attached_context(AttachedContext ctx)
         std::lock_guard lock(attached_mutex_);
         attached_context_ = ctx;
     }
-    refresh_system_prompt();
     spdlog::info("AgentCore: attached context set to '{}'", ctx.file_path);
     activity_->emit(ActivityKind::index_event,
                     "Attached file: " + ctx.file_path,
-                    "Pinned to system prompt; outline injected on next turn.");
+                    "Outline injected on next user turn (system prompt stays "
+                    "stable for KV-cache reuse -- S4.F).");
 
     auto snapshot = std::optional<AttachedContext>{ctx};
     frontends_.broadcast([&](IFrontend& fe) {
@@ -212,7 +211,6 @@ void AgentCore::clear_attached_context()
     }
     if (!had_value) return;
 
-    refresh_system_prompt();
     spdlog::info("AgentCore: attached context cleared");
     activity_->emit(ActivityKind::index_event, "Detached file from context", "");
 
@@ -553,7 +551,16 @@ void AgentCore::process_message(const std::string& content)
     // one-liner to the user message before it lands in history. The tracker's
     // suppression set carries paths the agent itself touched last turn; reset
     // it now so this turn's edits get recorded fresh.
+    // S4.F -- the attached-file outline rides the same prepend channel; it
+    // used to live in the system prompt but that killed the prefix cache on
+    // every attach/detach. Both prepends produce volatile-tail content that
+    // the cache already expects to invalidate.
     std::string effective_content = content;
+    {
+        std::string attached_block = compose_attached_context_block();
+        if (!attached_block.empty())
+            effective_content = attached_block + effective_content;
+    }
     bool notify = true;
     if (auto* ws = services_.workspace())
         notify = ws->config().notify_external_changes;
@@ -988,7 +995,10 @@ void AgentCore::apply_pending_compaction()
 void AgentCore::reset_conversation()
 {
     history_.clear();
-    system_prompt_ = compose_system_prompt();
+    // S4.F: the system prompt is byte-stable across the session (the attached-
+    // file block now rides on user messages, not here). On reset we just
+    // re-seed the same base_system_prompt_.
+    system_prompt_ = base_system_prompt_;
     history_.add({MessageRole::system, system_prompt_});
     budget_->reset();
     metrics_->reset();
@@ -1201,7 +1211,7 @@ bool AgentCore::try_slash_command(const std::string& content)
         if (cmd == "metrics") {
             auto agg = metrics_->aggregates();
             std::ostringstream o;
-            o << "Metrics — " << agg.turn_count << " turn"
+            o << "Metrics - " << agg.turn_count << " turn"
               << (agg.turn_count == 1 ? "" : "s") << "\n";
             o << "  tokens: in="   << agg.tokens_in_total
               << "  out="          << agg.tokens_out_total
@@ -1212,6 +1222,16 @@ bool AgentCore::try_slash_command(const std::string& content)
             o << "  turn time: avg=" << agg.avg_turn_ms << "ms"
               << " p95=" << agg.p95_turn_ms << "ms"
               << " max=" << agg.max_turn_ms << "ms\n";
+            // S4.F -- KV-cache + prefill signals.
+            o << "  kv-cache: cached="    << agg.cached_tokens_total
+              << "  ratio="    << std::fixed << std::setprecision(1)
+              << (agg.cached_token_ratio * 100.0) << "%"
+              << "  prefix_stable=" << (agg.prompt_prefix_stable ? "yes" : "no")
+              << "\n";
+            if (agg.last_ttft_ms > 0)
+                o << "  prefill: ttft=" << agg.last_ttft_ms << "ms"
+                  << "  ms/prompt_tok=" << std::fixed << std::setprecision(2)
+                  << agg.last_prefill_ms_per_token << "\n";
             if (agg.retrieval_queries > 0)
                 o << "  retrieval: " << agg.retrieval_queries
                   << " queries, hit_rate="

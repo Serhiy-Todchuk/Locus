@@ -24,6 +24,7 @@ wxDEFINE_EVENT(EVT_AGENT_PLAN_PROPOSED,       wxThreadEvent);
 wxDEFINE_EVENT(EVT_AGENT_PLAN_STEP_ADVANCED,  wxThreadEvent);
 wxDEFINE_EVENT(EVT_AGENT_PLAN_COMPLETED,      wxThreadEvent);
 wxDEFINE_EVENT(EVT_AGENT_AUTO_COMMIT,         wxThreadEvent);
+wxDEFINE_EVENT(EVT_AGENT_GEN_PROGRESS,        wxThreadEvent);
 
 WxFrontend::WxFrontend(wxEvtHandler* handler)
     : handler_(handler)
@@ -200,6 +201,14 @@ void WxFrontend::on_auto_commit(const std::string& short_sha,
     j["branch"]    = branch;
     j["subject"]   = subject;
     evt->SetString(wxString::FromUTF8(j.dump()));
+    wxQueueEvent(handler_, evt);
+}
+
+void WxFrontend::on_generation_progress(int chars, int est_tokens)
+{
+    auto* evt = new wxThreadEvent(EVT_AGENT_GEN_PROGRESS);
+    evt->SetInt(chars);
+    evt->SetExtraLong(est_tokens);
     wxQueueEvent(handler_, evt);
 }
 

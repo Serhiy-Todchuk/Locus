@@ -31,6 +31,8 @@ wxDECLARE_EVENT(EVT_AGENT_PLAN_STEP_ADVANCED, wxThreadEvent);
 wxDECLARE_EVENT(EVT_AGENT_PLAN_COMPLETED,    wxThreadEvent);
 // S4.L auto-commit event.
 wxDECLARE_EVENT(EVT_AGENT_AUTO_COMMIT,       wxThreadEvent);
+// S4.F generation-progress event (live token counter).
+wxDECLARE_EVENT(EVT_AGENT_GEN_PROGRESS,      wxThreadEvent);
 
 // Thread bridge: IFrontend callbacks (fired on the agent thread) are
 // marshalled to the wxWidgets main thread via wxQueueEvent + wxThreadEvent.
@@ -69,6 +71,8 @@ public:
     void on_auto_commit(const std::string& short_sha,
                          const std::string& branch,
                          const std::string& subject) override;
+    // S4.F
+    void on_generation_progress(int chars, int est_tokens) override;
 
 private:
     wxEvtHandler* handler_;

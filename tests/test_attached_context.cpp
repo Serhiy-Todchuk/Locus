@@ -109,37 +109,50 @@ TEST_CASE("Attached context: frontends are notified", "[s2.4]")
     core.unregister_frontend(&fe);
 }
 
-TEST_CASE("Attached context: injected into system prompt", "[s2.4]")
+TEST_CASE("S4.F: attach/detach keeps system prompt byte-stable", "[s2.4][s4.f]")
 {
     auto core = make_core();
 
-    // Before attach: no marker.
-    const auto& before = core.history().messages().front().content;
-    REQUIRE(before.find("[Attached:") == std::string::npos);
+    // System message must NOT mention the attached file -- the block now
+    // rides on the next user message instead (S4.F: keep the prefix cache
+    // alive).
+    const std::string sys_before = core.history().messages().front().content;
+    REQUIRE(sys_before.find("[Attached:")      == std::string::npos);
+    REQUIRE(sys_before.find("## Attached File") == std::string::npos);
 
-    core.set_attached_context({"include/widget.h", ""});
+    core.set_attached_context({"include/widget.h", "header for the widget"});
 
-    // The seed system message (index 0) must reflect the attachment in place.
-    const auto& after = core.history().messages().front().content;
-    REQUIRE(after.find("## Attached File") != std::string::npos);
-    REQUIRE(after.find("[Attached: include/widget.h]") != std::string::npos);
+    const std::string sys_attached = core.history().messages().front().content;
+    REQUIRE(sys_attached == sys_before);  // byte-stable -- KV cache stays alive
+
+    // The block is exposed for tests + future frontend uses.
+    std::string block = core.attached_context_block();
+    REQUIRE_FALSE(block.empty());
+    REQUIRE(block.find("[Attached file: include/widget.h]") != std::string::npos);
+    REQUIRE(block.find("Preview: header for the widget")    != std::string::npos);
 
     core.clear_attached_context();
 
-    const auto& cleared = core.history().messages().front().content;
-    REQUIRE(cleared.find("[Attached:")      == std::string::npos);
-    REQUIRE(cleared.find("## Attached File") == std::string::npos);
+    const std::string sys_cleared = core.history().messages().front().content;
+    REQUIRE(sys_cleared == sys_before);  // still byte-stable after detach
+    REQUIRE(core.attached_context_block().empty());
 }
 
-TEST_CASE("Attached context: survives reset_conversation", "[s2.4]")
+TEST_CASE("S4.F: attached pin survives reset_conversation; prompt stays stable",
+          "[s2.4][s4.f]")
 {
     auto core = make_core();
-    core.set_attached_context({"path/to/file.txt", ""});
+    const std::string sys_before = core.history().messages().front().content;
 
+    core.set_attached_context({"path/to/file.txt", ""});
     core.reset_conversation();
 
-    // Pin must persist; system message must still carry the marker.
+    // Pin must persist -- the user's attachment isn't owned by a conversation.
     REQUIRE(core.attached_context().has_value());
-    const auto& sys = core.history().messages().front().content;
-    REQUIRE(sys.find("[Attached: path/to/file.txt]") != std::string::npos);
+    // System prompt must still be byte-stable, both vs. before-attach and
+    // vs. after the reset.
+    REQUIRE(core.history().messages().front().content == sys_before);
+    // The block follows the pin -- next user turn picks it up.
+    REQUIRE(core.attached_context_block().find("path/to/file.txt")
+            != std::string::npos);
 }

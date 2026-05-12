@@ -142,6 +142,17 @@ void MetricsView::rebuild_text()
         o << "\nTurn time: avg=" << agg.avg_turn_ms << "ms"
           << "  p95=" << agg.p95_turn_ms << "ms"
           << "  max=" << agg.max_turn_ms << "ms";
+        // S4.F -- KV-cache + prefill signals.
+        o << "\nKV-cache: cached=" << agg.cached_tokens_total
+          << "  ratio=" << std::fixed << std::setprecision(1)
+          << (agg.cached_token_ratio * 100.0) << "%"
+          << "    prefix_stable: "
+          << (agg.prompt_prefix_stable ? "yes" : "no");
+        if (agg.last_ttft_ms > 0) {
+            o << "\nPrefill: ttft=" << agg.last_ttft_ms << "ms"
+              << "  ms/prompt_tok=" << std::fixed << std::setprecision(2)
+              << agg.last_prefill_ms_per_token;
+        }
         if (agg.retrieval_queries > 0) {
             o << "\nRetrieval: " << agg.retrieval_queries
               << " queries, hit_rate="

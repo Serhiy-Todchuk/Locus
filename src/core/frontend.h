@@ -129,6 +129,15 @@ public:
     virtual void on_auto_commit(const std::string& /*short_sha*/,
                                  const std::string& /*branch*/,
                                  const std::string& /*subject*/) {}
+
+    // S4.F -- streaming generation progress. Fires from AgentLoop while a
+    // stream is in flight, throttled to ~150 ms. `chars` is the total
+    // accumulated stream bytes (visible + reasoning); `est_tokens` is a
+    // ~4-chars-per-token estimate. Frontends use it to render a live token
+    // counter next to the input. The post-turn `usage.completion_tokens` is
+    // the authoritative count -- frontends should reconcile on
+    // `on_turn_complete`. Default no-op so existing frontends keep compiling.
+    virtual void on_generation_progress(int /*chars*/, int /*est_tokens*/) {}
 };
 
 // -- ILocusCore ---------------------------------------------------------------

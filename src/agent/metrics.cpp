@@ -41,10 +41,30 @@ void MetricsAggregator::record_llm_step(const CompletionUsage& usage,
     s.prompt_tokens     = usage.prompt_tokens;       // last round wins
     s.completion_tokens += usage.completion_tokens;  // sum
     s.reasoning_tokens  += usage.reasoning_tokens;
+    s.cached_tokens    += usage.cached_tokens;       // sum across rounds (S4.F)
     if (usage.total_tokens > 0) {
         s.total_tokens = usage.total_tokens;
         s.tokens_delta = usage.total_tokens - prev_turn_total;
     }
+}
+
+void MetricsAggregator::record_prompt_prefix_hash(std::size_t h)
+{
+    std::lock_guard lock(mutex_);
+    if (turns_.empty()) return;
+    auto& s = turns_.back();
+    // First round of the turn wins -- subsequent rounds in the same turn
+    // can mutate the conversation (assistant + tool messages get appended),
+    // but the system prompt -- the only thing we hash -- is stable.
+    if (s.prompt_prefix_hash == 0) s.prompt_prefix_hash = h;
+}
+
+void MetricsAggregator::record_first_token(long long ttft_ms)
+{
+    std::lock_guard lock(mutex_);
+    if (turns_.empty()) return;
+    auto& s = turns_.back();
+    if (s.ttft_ms == 0) s.ttft_ms = ttft_ms;  // first round wins
 }
 
 void MetricsAggregator::record_tool(const std::string& name,
@@ -167,6 +187,36 @@ MetricsAggregator::Aggregates MetricsAggregator::aggregates() const
         a.turn_total_tokens.push_back(s.total_tokens);
     }
 
+    // -- S4.F KV-cache + prefill signals -------------------------------------
+    long long cached_total = 0;
+    long long prompt_total = 0;
+    for (const auto& s : turns_) {
+        cached_total += s.cached_tokens;
+        prompt_total += s.prompt_tokens;
+    }
+    a.cached_tokens_total = static_cast<int>(cached_total);
+    if (prompt_total > 0) {
+        a.cached_token_ratio = static_cast<double>(cached_total)
+                                 / static_cast<double>(prompt_total);
+    }
+    if (turns_.size() >= 2) {
+        auto& last = turns_[turns_.size() - 1];
+        auto& prev = turns_[turns_.size() - 2];
+        a.prompt_prefix_stable =
+            last.prompt_prefix_hash != 0 &&
+            last.prompt_prefix_hash == prev.prompt_prefix_hash;
+    }
+    // Walk from the back to pick up the most recent usable TTFT sample.
+    for (auto it = turns_.rbegin(); it != turns_.rend(); ++it) {
+        if (it->ttft_ms > 0 && it->prompt_tokens > 0) {
+            a.last_ttft_ms = it->ttft_ms;
+            a.last_prefill_ms_per_token =
+                static_cast<double>(it->ttft_ms)
+                  / static_cast<double>(it->prompt_tokens);
+            break;
+        }
+    }
+
     return a;
 }
 
@@ -187,6 +237,7 @@ nlohmann::json MetricsAggregator::to_json() const
     nlohmann::json turns = nlohmann::json::array();
     long long completion_total = 0;
     long long stream_total = 0;
+    long long cached_total = 0;
     int prompt_total = 0, reasoning_total = 0, delta_total = 0;
     for (const auto& s : turns_) {
         nlohmann::json t;
@@ -199,15 +250,19 @@ nlohmann::json MetricsAggregator::to_json() const
         t["prompt_tokens"]     = s.prompt_tokens;
         t["completion_tokens"] = s.completion_tokens;
         t["reasoning_tokens"]  = s.reasoning_tokens;
+        t["cached_tokens"]     = s.cached_tokens;          // S4.F
         t["total_tokens"]      = s.total_tokens;
         t["tokens_delta"]      = s.tokens_delta;
         t["llm_rounds"]        = s.llm_rounds;
         t["tool_calls"]        = s.tool_calls;
         t["had_error"]         = s.had_error;
+        t["prompt_prefix_hash"] = s.prompt_prefix_hash;    // S4.F
+        t["ttft_ms"]           = s.ttft_ms;                 // S4.F
         turns.push_back(std::move(t));
 
         completion_total += s.completion_tokens;
         stream_total     += s.stream_ms;
+        cached_total     += s.cached_tokens;
         prompt_total     += s.prompt_tokens;
         reasoning_total  += s.reasoning_tokens;
         if (s.tokens_delta > 0) delta_total += s.tokens_delta;
@@ -242,10 +297,22 @@ nlohmann::json MetricsAggregator::to_json() const
     totals["tokens_out_total"]  = completion_total;
     totals["reasoning_total"]   = reasoning_total;
     totals["stream_ms_total"]   = stream_total;
+    totals["cached_tokens_total"] = cached_total;
+    if (prompt_total > 0)
+        totals["cached_token_ratio"] =
+            static_cast<double>(cached_total)
+              / static_cast<double>(prompt_total);
     if (stream_total > 0)
         totals["tokens_per_second"] =
             (1000.0 * static_cast<double>(completion_total))
             / static_cast<double>(stream_total);
+    if (turns_.size() >= 2) {
+        auto& last = turns_.back();
+        auto& prev = turns_[turns_.size() - 2];
+        totals["prompt_prefix_stable"] =
+            last.prompt_prefix_hash != 0 &&
+            last.prompt_prefix_hash == prev.prompt_prefix_hash;
+    }
     j["totals"] = std::move(totals);
 
     return j;
@@ -276,21 +343,24 @@ std::string MetricsAggregator::to_csv() const
     std::ostringstream o;
 
     o << "# turns\n";
-    o << "turn_id,duration_ms,stream_ms,prompt_tokens,completion_tokens,"
-         "reasoning_tokens,total_tokens,tokens_delta,llm_rounds,tool_calls,"
-         "had_error\n";
+    o << "turn_id,duration_ms,stream_ms,ttft_ms,prompt_tokens,completion_tokens,"
+         "reasoning_tokens,cached_tokens,total_tokens,tokens_delta,llm_rounds,"
+         "tool_calls,had_error,prompt_prefix_hash\n";
     for (const auto& s : turns_) {
         o << s.turn_id           << ','
           << s.duration_ms       << ','
           << s.stream_ms         << ','
+          << s.ttft_ms           << ','
           << s.prompt_tokens     << ','
           << s.completion_tokens << ','
           << s.reasoning_tokens  << ','
+          << s.cached_tokens     << ','
           << s.total_tokens      << ','
           << s.tokens_delta      << ','
           << s.llm_rounds        << ','
           << s.tool_calls        << ','
-          << (s.had_error ? 1 : 0) << '\n';
+          << (s.had_error ? 1 : 0) << ','
+          << s.prompt_prefix_hash << '\n';
     }
     o << '\n';
 

@@ -92,6 +92,12 @@ public:
     void set_context_meter(int used, int limit);
     void set_locus_md_tokens(int tokens);
 
+    // S4.F live generation-token counter (footer, next to context meter).
+    // Updated ~150 ms throttled by AgentLoop while a stream is in flight.
+    // Reset to empty on turn complete; the post-turn context meter then
+    // carries the exact completion_tokens via on_context_meter.
+    void set_generation_progress(int chars, int est_tokens);
+
     // Attached-context chip (above input). Empty path hides it.
     // on_detach is invoked when the user clicks the chip's "✕" to detach.
     void set_attached_chip(const wxString& file_path);
@@ -176,6 +182,9 @@ private:
     // S4.L auto-commit chip ("⌘ a1b2c3d") -- shown after each agent turn
     // when WorkspaceConfig::git_auto_commit is on and a commit landed.
     wxStaticText*   commit_chip_      = nullptr;
+    // S4.F live generation chip ("GEN ~2,305 tok") -- visible while streaming,
+    // hidden between turns.
+    wxStaticText*   gen_chip_         = nullptr;
 
     // Attached-context chip row (sits between webview and input).
     wxPanel*      attach_panel_  = nullptr;  // the row container

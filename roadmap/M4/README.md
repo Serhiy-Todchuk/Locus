@@ -25,7 +25,7 @@
 | [S4.G](S4.G-mcp.md) | MCP (Model Context Protocol) Client ✔ | Extensibility |
 | [S4.R](S4.R-memory-bank.md) | Memory Bank (Persistent + Searchable) ✔ Phase 1 | Context |
 | [S4.L](S4.L-git-native.md) | Git Integration (.gitignore + Auto-Commit) ✔ | Workspace policy |
-| [S4.F](S4.F-kv-cache.md) | KV / Prompt Cache Preservation | Performance |
+| [S4.F](S4.F-kv-cache.md) | KV / Prompt Cache Preservation ✔ | Performance |
 | [S4.W](S4.W-list-directory-completeness.md) | list_directory: Surface Unindexed Files | Tools |
 | [S4.X](S4.X-prompt-templates.md) | Prompt Templates | Workflow |
 | [S4.Y](S4.Y-grammar-coverage.md) | Tree-sitter Grammar Coverage Expansion | Tools |

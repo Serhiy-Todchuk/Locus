@@ -131,6 +131,11 @@ public:
     // Snapshot of the current plan, if any. Thread-safe.
     std::optional<Plan> current_plan() const;
 
+    // S4.F -- compose the volatile-tail attached-file block that is prepended
+    // to the next user message. Public so tests can verify the content
+    // without driving an LLM round-trip. Returns "" when nothing is attached.
+    std::string attached_context_block() const { return compose_attached_context_block(); }
+
 private:
     void agent_thread_func();
     void process_message(const std::string& content);
@@ -146,12 +151,12 @@ public:
 
 private:
 
-    // Compose system prompt from base + (optional) attached-context section.
-    std::string compose_system_prompt() const;
-
-    // Recompute system_prompt_ and overwrite the seed system message in
-    // history_ in place. Called whenever the attached context changes.
-    void refresh_system_prompt();
+    // Compose the volatile-tail block injected on the next user message for
+    // the currently attached file (S4.F: this used to live in the system
+    // prompt; moving it to the user-message tail keeps the system prompt
+    // byte-stable across turns so LM Studio / llama.cpp's prefix cache fires).
+    // Returns an empty string when no file is attached.
+    std::string compose_attached_context_block() const;
 
     // Service a pending compaction request on the agent thread. Caller must
     // already hold the conversation owner scope. No-op when the flag is

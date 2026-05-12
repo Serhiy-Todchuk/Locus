@@ -621,6 +621,7 @@ ChatPanel::ChatPanel(wxWindow* parent,
     footer->AddStretchSpacer();
     footer->Add(plan_chip_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
     footer->Add(commit_chip_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+    footer->Add(gen_chip_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
     footer->Add(locus_chip_, 0, wxALIGN_CENTER_VERTICAL);
     sizer->Add(footer, 0, wxEXPAND | wxALL, 4);
 
@@ -706,6 +707,12 @@ void ChatPanel::create_footer()
     plan_chip_->Hide();  // shown only while a plan is active
     commit_chip_ = new wxStaticText(this, wxID_ANY, "");
     commit_chip_->Hide(); // shown only when git auto-commit is on AND fired
+    // S4.F live generation chip.
+    gen_chip_ = new wxStaticText(this, wxID_ANY, "");
+    gen_chip_->SetToolTip(
+        "Live token estimate of the current generation. Resets between turns."
+        "\nExact completion_tokens land in the context meter on turn complete.");
+    gen_chip_->Hide();
 }
 
 // ---------------------------------------------------------------------------
@@ -819,6 +826,14 @@ void ChatPanel::on_turn_complete()
     // Disable() forces Windows' light "disabled control" colour.
     input_->SetEditable(true);
     input_->SetFocus();
+    // S4.F -- hide the live gen chip; the post-turn context meter carries the
+    // exact completion_tokens via on_context_meter so the user has the
+    // authoritative number anyway.
+    if (gen_chip_) {
+        gen_chip_->SetLabel("");
+        gen_chip_->Hide();
+        Layout();
+    }
 }
 
 void ChatPanel::on_session_reset()
@@ -1092,6 +1107,29 @@ void ChatPanel::set_locus_md_tokens(int tokens)
         locus_chip_->SetLabel(wxString::Format("[LOCUS.md: %d tk]", tokens));
     else
         locus_chip_->SetLabel("");
+}
+
+void ChatPanel::set_generation_progress(int /*chars*/, int est_tokens)
+{
+    if (!gen_chip_) return;
+    if (est_tokens <= 0) {
+        if (gen_chip_->IsShown()) { gen_chip_->Hide(); Layout(); }
+        return;
+    }
+    // Format with thousands separator for readability on long generations.
+    auto thousands = [](int n) {
+        std::string s = std::to_string(n);
+        for (int i = static_cast<int>(s.size()) - 3; i > 0; i -= 3)
+            s.insert(static_cast<size_t>(i), ",");
+        return s;
+    };
+    wxString label = wxString::Format("GEN ~%s tok",
+                                       thousands(est_tokens).c_str());
+    gen_chip_->SetLabel(label);
+    if (!gen_chip_->IsShown()) {
+        gen_chip_->Show();
+        Layout();
+    }
 }
 
 void ChatPanel::set_attached_chip(const wxString& file_path)

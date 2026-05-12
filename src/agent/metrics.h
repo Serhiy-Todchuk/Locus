@@ -23,11 +23,19 @@ struct TurnSample {
     int                                   prompt_tokens     = 0; // last LLM step's prompt
     int                                   completion_tokens = 0; // sum across rounds
     int                                   reasoning_tokens  = 0; // sum across rounds
+    int                                   cached_tokens     = 0; // S4.F: sum across rounds, server-reported
     int                                   total_tokens      = 0; // last server-reported total
     int                                   tokens_delta      = 0; // total minus prev_turn_total
     int                                   llm_rounds        = 0;
     int                                   tool_calls        = 0;
     bool                                  had_error         = false;
+    // S4.F -- KV-cache + prefill signals. The hash is std::hash over the
+    // outgoing system message (messages[0].content); two adjacent turns with
+    // matching hashes mean the cache CAN fire even when the backend doesn't
+    // populate cached_tokens. ttft_ms is time-to-first-token of the first LLM
+    // round in the turn -- the ground-truth signal that prefill ran short.
+    std::size_t                           prompt_prefix_hash = 0;
+    long long                             ttft_ms            = 0;
 };
 
 // Per-tool aggregate. Counts and latency only — fine-grained per-call detail
@@ -72,6 +80,17 @@ public:
                          long long stream_ms,
                          int prev_turn_total);
 
+    // S4.F -- record the system-prompt hash for the current turn. Called once
+    // per turn (from AgentLoop's first round); subsequent rounds ignore it
+    // to keep the per-turn hash stable. Pass std::hash over messages[0].content.
+    void record_prompt_prefix_hash(std::size_t h);
+
+    // S4.F -- record time-to-first-token for the current turn (first round
+    // only). Subsequent rounds are ignored. Used to derive a prefill rate
+    // (ms / prompt_token) that signals KV cache hits when the backend
+    // doesn't populate `prompt_tokens_details.cached_tokens`.
+    void record_first_token(long long ttft_ms);
+
     // One tool invocation. retrieval_count == nullopt for non-search tools.
     void record_tool(const std::string& name,
                      bool ok,
@@ -115,6 +134,26 @@ public:
         // Per-turn series for spark bars.
         std::vector<long long> turn_durations_ms;
         std::vector<int>       turn_total_tokens;
+
+        // -- S4.F: KV-cache + prefill signals --------------------------------
+        // Sum of server-reported cached_tokens across every turn -- a direct
+        // signal of cache hits when the backend populates it. Zero on
+        // backends that don't report (LM Studio + some llama.cpp versions).
+        int       cached_tokens_total   = 0;
+        // cached / prompt over the whole session, 0..1. Useful for "is the
+        // cache actually doing anything" eyeballing.
+        double    cached_token_ratio    = 0.0;
+        // True iff the last >=2 turns share the same system-prompt hash --
+        // a cheap signal that the cache CAN fire even when the server
+        // doesn't surface cached_tokens. False until we've seen two turns.
+        bool      prompt_prefix_stable  = false;
+        // Per-prompt-token prefill cost from the most recent turn that had
+        // both a non-zero TTFT and non-zero prompt_tokens. Drops sharply
+        // across consecutive turns with stable prefixes when caching works.
+        // Zero when we don't have a usable sample yet.
+        double    last_prefill_ms_per_token = 0.0;
+        // Time-to-first-token of the most recent turn, in ms.
+        long long last_ttft_ms          = 0;
     };
 
     Aggregates aggregates() const;
