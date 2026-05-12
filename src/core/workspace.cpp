@@ -339,6 +339,8 @@ static WorkspaceConfig config_from_json(const json& j)
             cfg.max_file_size_kb = idx["max_file_size_kb"].get<int>();
         if (idx.contains("code_parsing_enabled"))
             cfg.code_parsing_enabled = idx["code_parsing_enabled"].get<bool>();
+        if (idx.contains("respect_gitignore"))
+            cfg.respect_gitignore = idx["respect_gitignore"].get<bool>();
 
         if (idx.contains("semantic_search")) {
             auto& ss = idx["semantic_search"];
@@ -403,6 +405,16 @@ static WorkspaceConfig config_from_json(const json& j)
             cfg.memory_recency_half_life_days = m["recency_half_life_days"].get<int>();
     }
 
+    if (j.contains("git")) {
+        auto& g = j["git"];
+        if (g.contains("auto_commit"))
+            cfg.git_auto_commit = g["auto_commit"].get<bool>();
+        if (g.contains("commit_branch"))
+            cfg.git_commit_branch = g["commit_branch"].get<std::string>();
+        if (g.contains("commit_prefix"))
+            cfg.git_commit_prefix = g["commit_prefix"].get<std::string>();
+    }
+
     if (j.contains("tool_approvals") && j["tool_approvals"].is_object()) {
         for (auto it = j["tool_approvals"].begin();
              it != j["tool_approvals"].end(); ++it) {
@@ -427,6 +439,7 @@ static json config_to_json(const WorkspaceConfig& cfg)
             {"exclude_patterns", cfg.exclude_patterns},
             {"max_file_size_kb", cfg.max_file_size_kb},
             {"code_parsing_enabled", cfg.code_parsing_enabled},
+            {"respect_gitignore", cfg.respect_gitignore},
             {"semantic_search", {
                 {"enabled", cfg.semantic_search_enabled},
                 {"model", cfg.embedding_model},
@@ -457,6 +470,11 @@ static json config_to_json(const WorkspaceConfig& cfg)
             {"max_entries",                cfg.memory_max_entries},
             {"search_response_max_tokens", cfg.memory_search_response_max_tokens},
             {"recency_half_life_days",     cfg.memory_recency_half_life_days}
+        }},
+        {"git", {
+            {"auto_commit",   cfg.git_auto_commit},
+            {"commit_branch", cfg.git_commit_branch},
+            {"commit_prefix", cfg.git_commit_prefix}
         }},
         {"tool_approvals", approvals}
     };

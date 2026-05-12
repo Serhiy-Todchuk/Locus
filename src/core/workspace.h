@@ -35,6 +35,25 @@ struct WorkspaceConfig {
     int max_file_size_kb = 1024;
     bool code_parsing_enabled = true;
 
+    // S4.L -- when true, the indexer reads `.gitignore` files at workspace
+    // open and on watcher-driven `.gitignore` changes, and merges those
+    // patterns into its exclude set. Off-switch for the rare workspace that
+    // wants `.gitignore`'d files indexed (e.g. archived generated docs).
+    bool respect_gitignore = true;
+
+    // S4.L -- per-turn auto-commit. When `git_auto_commit` is true AND the
+    // workspace contains a `.git/` directory AND at least one file mutation
+    // happened this turn, AgentCore runs `git add -A && git commit -m
+    // "<prefix><agent-summary>"` after the turn yields. Failures surface as a
+    // single warning and don't block the agent; the user resolves manually.
+    // `git_commit_branch` (default empty -> use current branch) lets users
+    // park agent commits on a side branch; if the named branch doesn't exist,
+    // it's created once and a warning is logged. `git_commit_prefix` is
+    // prepended to the commit message body.
+    bool        git_auto_commit   = false;
+    std::string git_commit_branch = "";
+    std::string git_commit_prefix = "[locus] ";
+
     // Semantic search (on by default - gracefully disabled if model missing).
     // Embedding dimension is derived from the loaded GGUF, never from config:
     // swapping models triggers an automatic re-embed on next workspace open.

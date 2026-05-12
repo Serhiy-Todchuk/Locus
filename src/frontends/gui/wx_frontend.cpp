@@ -23,6 +23,7 @@ wxDEFINE_EVENT(EVT_AGENT_MODE_CHANGED,        wxThreadEvent);
 wxDEFINE_EVENT(EVT_AGENT_PLAN_PROPOSED,       wxThreadEvent);
 wxDEFINE_EVENT(EVT_AGENT_PLAN_STEP_ADVANCED,  wxThreadEvent);
 wxDEFINE_EVENT(EVT_AGENT_PLAN_COMPLETED,      wxThreadEvent);
+wxDEFINE_EVENT(EVT_AGENT_AUTO_COMMIT,         wxThreadEvent);
 
 WxFrontend::WxFrontend(wxEvtHandler* handler)
     : handler_(handler)
@@ -185,6 +186,19 @@ void WxFrontend::on_plan_completed(const std::string& plan_id, bool success)
     nlohmann::json j;
     j["plan_id"] = plan_id;
     j["success"] = success;
+    evt->SetString(wxString::FromUTF8(j.dump()));
+    wxQueueEvent(handler_, evt);
+}
+
+void WxFrontend::on_auto_commit(const std::string& short_sha,
+                                 const std::string& branch,
+                                 const std::string& subject)
+{
+    auto* evt = new wxThreadEvent(EVT_AGENT_AUTO_COMMIT);
+    nlohmann::json j;
+    j["short_sha"] = short_sha;
+    j["branch"]    = branch;
+    j["subject"]   = subject;
     evt->SetString(wxString::FromUTF8(j.dump()));
     wxQueueEvent(handler_, evt);
 }

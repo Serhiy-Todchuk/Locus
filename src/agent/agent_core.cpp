@@ -1,5 +1,6 @@
 #include "agent_core.h"
 
+#include "auto_commit.h"
 #include "index/index_query.h"
 #include "llm/token_counter.h"
 #include "../tools/tool_registry.h"
@@ -700,6 +701,58 @@ void AgentCore::process_message(const std::string& content)
         if (checkpoints_->entry_count(session_id_, turn_id_) == 0)
             checkpoints_->drop_turn(session_id_, turn_id_);
         dispatcher_->set_turn_context(nullptr, {}, 0);
+    }
+
+    // S4.L -- per-turn auto-commit. Fire ONLY when:
+    //   * the workspace exposes a config with `git_auto_commit` true,
+    //   * at least one mutating tool ran (we read the change tracker's
+    //     agent-touched count -- it's still populated until next turn's
+    //     clear_agent_touched, so this captures THIS turn's writes), and
+    //   * the turn didn't end on an error (no point recording a half-finished
+    //     state in git -- the user can /undo or fix manually first).
+    // Failures inside auto_commit_after_turn surface as a single warning + an
+    // activity event; the agent never blocks on git.
+    if (!turn_had_error
+        && change_tracker_
+        && change_tracker_->agent_touched_size() > 0)
+    {
+        if (auto* ws = services_.workspace()) {
+            const auto& cfg = ws->config();
+            if (cfg.git_auto_commit) {
+                std::string assistant_text;
+                for (auto it = history_.messages().rbegin();
+                     it != history_.messages().rend(); ++it) {
+                    if (it->role == MessageRole::assistant && !it->content.empty()) {
+                        assistant_text = it->content;
+                        break;
+                    }
+                }
+                auto r = auto_commit_after_turn(
+                    services_.root(),
+                    cfg.git_commit_prefix,
+                    cfg.git_commit_branch,
+                    assistant_text);
+
+                if (r.success && !r.skipped) {
+                    activity_->emit(ActivityKind::index_event,
+                                    "Auto-commit " + r.short_sha
+                                        + " on " + r.branch,
+                                    cfg.git_commit_prefix
+                                        + make_commit_subject(assistant_text));
+                    std::string sha = r.short_sha;
+                    std::string br  = r.branch;
+                    std::string sub = make_commit_subject(assistant_text);
+                    frontends_.broadcast([&](IFrontend& fe) {
+                        fe.on_auto_commit(sha, br, sub);
+                    });
+                } else if (!r.success) {
+                    spdlog::warn("auto_commit failed: {}", r.error);
+                    activity_->emit(ActivityKind::error,
+                                    "Auto-commit failed",
+                                    r.error);
+                }
+            }
+        }
     }
 
     // S4.T -- refresh the mtime baseline for next turn's diff. Done after the

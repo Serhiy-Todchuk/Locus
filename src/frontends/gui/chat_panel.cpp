@@ -620,6 +620,7 @@ ChatPanel::ChatPanel(wxWindow* parent,
     footer->Add(stop_btn_, 0, wxALIGN_CENTER_VERTICAL);
     footer->AddStretchSpacer();
     footer->Add(plan_chip_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+    footer->Add(commit_chip_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
     footer->Add(locus_chip_, 0, wxALIGN_CENTER_VERTICAL);
     sizer->Add(footer, 0, wxEXPAND | wxALL, 4);
 
@@ -703,6 +704,8 @@ void ChatPanel::create_footer()
     locus_chip_ = new wxStaticText(this, wxID_ANY, "");
     plan_chip_  = new wxStaticText(this, wxID_ANY, "");
     plan_chip_->Hide();  // shown only while a plan is active
+    commit_chip_ = new wxStaticText(this, wxID_ANY, "");
+    commit_chip_->Hide(); // shown only when git auto-commit is on AND fired
 }
 
 // ---------------------------------------------------------------------------
@@ -989,6 +992,27 @@ void ChatPanel::on_error(const wxString& message)
     run_script(wxString::Format(
         "addMsg(%d, 'msg-error', %s);",
         message_id_, "'" + js_escape(message) + "'"));
+}
+
+void ChatPanel::on_auto_commit(const wxString& short_sha,
+                               const wxString& branch,
+                               const wxString& subject)
+{
+    if (!commit_chip_) return;
+    if (short_sha.empty()) return;
+
+    wxString label = "Commit: " + short_sha;
+    if (!branch.empty())
+        label += " (" + branch + ")";
+    commit_chip_->SetLabel(label);
+
+    wxString tip = subject;
+    if (!branch.empty())
+        tip = branch + " " + short_sha + ": " + subject;
+    commit_chip_->SetToolTip(tip);
+
+    commit_chip_->Show();
+    Layout();
 }
 
 void ChatPanel::on_tool_pending(const wxString& call_id,

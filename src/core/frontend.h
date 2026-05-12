@@ -119,6 +119,16 @@ public:
     // ended in `done`, false if any step ended in `failed`.
     virtual void on_plan_completed(const std::string& /*plan_id*/,
                                     bool /*success*/) {}
+
+    // S4.L -- a per-turn auto-commit just landed in the user's git history.
+    // `short_sha` is the abbreviated SHA, `branch` is the branch the commit
+    // landed on, `subject` is the subject line as committed (already prefixed
+    // and truncated). Frontends use this to flash a footer chip / activity
+    // entry. Failure cases surface via the activity log + on_error path; this
+    // callback fires only on success.
+    virtual void on_auto_commit(const std::string& /*short_sha*/,
+                                 const std::string& /*branch*/,
+                                 const std::string& /*subject*/) {}
 };
 
 // -- ILocusCore ---------------------------------------------------------------

@@ -316,7 +316,7 @@ they fire around:
 | `before_tool_dispatch` | top of `ToolDispatcher::dispatch`, after policy resolve | plan mode (blocks tools), LSP (S4.E), parallel dispatch (S4.H) | plan mode rejects any tool except `propose_plan`; LSP augments `write_file` pre-hook |
 | `after_tool_success` | after `tool->execute()` returns success, before `history.add(tool)` | **checkpoint/undo (S4.B)**, ~~auto-verify (S4.C, parked)~~ | checkpoint copies prior file state before next mutation; the auto-verify hook design is preserved in the parked spec for if local LLMs grow into reliably interpreting build/test error tails |
 | `after_tool_failure` | after `tool->execute()` returns failure | telemetry, retry policy | |
-| `after_turn` | just before `on_turn_complete` broadcast | checkpoint GC, memory bank write-back, telemetry | |
+| `after_turn` | just before `on_turn_complete` broadcast | checkpoint GC, memory bank write-back, telemetry, **auto-commit (S4.L)** | auto-commit fires when the workspace is a git repo, `git_auto_commit` is on, and the agent touched at least one file this turn |
 
 S3.A landed these as method seams on `AgentLoop` / `ToolDispatcher` rather than a formal
 observer registry — a subscription API is overkill while there is exactly one `AgentCore` per

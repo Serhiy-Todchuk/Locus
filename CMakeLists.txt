@@ -223,6 +223,7 @@ add_library(locus_core STATIC
     src/index/indexer.cpp
     src/index/index_query.cpp
     src/index/chunker.cpp
+    src/index/gitignore.cpp
     src/index/tree_sitter_registry.cpp
     src/index/symbol_extractor.cpp
     src/index/symbol_extractors/cpp_extractor.cpp
@@ -275,6 +276,7 @@ add_library(locus_core STATIC
     src/agent/session_manager.cpp
     src/agent/checkpoint_store.cpp
     src/agent/file_change_tracker.cpp
+    src/agent/auto_commit.cpp
     src/frontends/cli/cli_frontend.cpp
     src/extractors/extractor_registry.cpp
     src/extractors/markdown_extractor.cpp

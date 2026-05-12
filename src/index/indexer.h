@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../core/file_watcher.h"
+#include "index/gitignore.h"
 #include "index/prepared_statements.h"
 #include "index/symbol_extractor.h"
 #include "index/tree_sitter_registry.h"
@@ -42,6 +43,21 @@ public:
 
     // Process a batch of file-watcher events (incremental update).
     void process_events(const std::vector<FileEvent>& events);
+
+    // S4.L -- (re)load the workspace's `.gitignore` set into the indexer's
+    // exclude rules. Called from `Indexer::Indexer` automatically; called
+    // again whenever the watcher reports a change to any `.gitignore`. After
+    // the new pattern set is in place, every currently-indexed file is
+    // re-checked and removed from the index if it now matches an exclude.
+    // Returns the number of files dropped from the index by the new patterns
+    // (so callers can emit a user-facing "Excluded N paths..." event).
+    int reload_gitignore();
+
+    // S4.L -- walk the `files` table and drop any row whose path matches an
+    // active exclude pattern (config.exclude_patterns OR gitignore_patterns_).
+    // Used to clean up stale rows from previous workspace sessions when the
+    // exclude set has grown between runs. Returns the number of dropped rows.
+    int reconcile_excluded_files();
 
     struct Stats {
         int files_total    = 0;
@@ -103,6 +119,11 @@ private:
     IndexerStatements        stmts_;
     TreeSitterRegistry       ts_registry_;
     SymbolExtractorRegistry  symbol_extractors_;
+
+    // S4.L -- merged .gitignore patterns reloaded by `reload_gitignore()`.
+    // Empty when `WorkspaceConfig::respect_gitignore` is false. Read by
+    // `is_excluded()` alongside `config_.exclude_patterns`.
+    std::vector<GitignorePattern> gitignore_patterns_;
 
     // Serialises process_events callers (WatcherPump background thread vs
     // synchronous test calls). Prepared statements are not safe under

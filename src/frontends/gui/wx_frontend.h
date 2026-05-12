@@ -29,6 +29,8 @@ wxDECLARE_EVENT(EVT_AGENT_MODE_CHANGED,      wxThreadEvent);
 wxDECLARE_EVENT(EVT_AGENT_PLAN_PROPOSED,     wxThreadEvent);
 wxDECLARE_EVENT(EVT_AGENT_PLAN_STEP_ADVANCED, wxThreadEvent);
 wxDECLARE_EVENT(EVT_AGENT_PLAN_COMPLETED,    wxThreadEvent);
+// S4.L auto-commit event.
+wxDECLARE_EVENT(EVT_AGENT_AUTO_COMMIT,       wxThreadEvent);
 
 // Thread bridge: IFrontend callbacks (fired on the agent thread) are
 // marshalled to the wxWidgets main thread via wxQueueEvent + wxThreadEvent.
@@ -63,6 +65,10 @@ public:
                                 PlanStep::Status status,
                                 const std::string& notes) override;
     void on_plan_completed(const std::string& plan_id, bool success) override;
+    // S4.L
+    void on_auto_commit(const std::string& short_sha,
+                         const std::string& branch,
+                         const std::string& subject) override;
 
 private:
     wxEvtHandler* handler_;

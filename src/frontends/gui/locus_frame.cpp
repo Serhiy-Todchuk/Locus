@@ -138,6 +138,8 @@ LocusFrame::LocusFrame(AgentCore& agent, Workspace& workspace, McpManager* mcp)
     Bind(EVT_AGENT_PLAN_PROPOSED,       &LocusFrame::on_agent_plan_proposed,      this);
     Bind(EVT_AGENT_PLAN_STEP_ADVANCED,  &LocusFrame::on_agent_plan_step_advanced, this);
     Bind(EVT_AGENT_PLAN_COMPLETED,      &LocusFrame::on_agent_plan_completed,     this);
+    // S4.L auto-commit footer chip.
+    Bind(EVT_AGENT_AUTO_COMMIT,         &LocusFrame::on_agent_auto_commit,        this);
 
     // Show LOCUS.md token cost if present.
     if (!workspace_.locus_md().empty()) {
@@ -713,6 +715,20 @@ void LocusFrame::on_agent_plan_completed(wxThreadEvent& evt)
         chat_panel_->on_plan_completed(plan_id, success);
     } catch (const std::exception& ex) {
         spdlog::warn("Failed to parse plan_completed payload: {}", ex.what());
+    }
+}
+
+void LocusFrame::on_agent_auto_commit(wxThreadEvent& evt)
+{
+    if (!chat_panel_) return;
+    try {
+        auto j = nlohmann::json::parse(evt.GetString().utf8_string());
+        wxString sha     = wxString::FromUTF8(j.value("short_sha", ""));
+        wxString branch  = wxString::FromUTF8(j.value("branch", ""));
+        wxString subject = wxString::FromUTF8(j.value("subject", ""));
+        chat_panel_->on_auto_commit(sha, branch, subject);
+    } catch (const std::exception& ex) {
+        spdlog::warn("Failed to parse auto_commit payload: {}", ex.what());
     }
 }
 

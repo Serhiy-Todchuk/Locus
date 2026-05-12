@@ -3,6 +3,7 @@
 #include "../core/database.h"
 #include "extractors/extractor_registry.h"
 #include "extractors/text_extractor.h"
+#include "gitignore.h"
 #include "glob_match.h"
 #include "../core/workspace.h"
 
@@ -57,7 +58,18 @@ Indexer::Indexer(Database& main_db, Database* vectors_db,
     , stmts_(main_db, vectors_db)
 {
     register_builtin_symbol_extractors(symbol_extractors_);
-    spdlog::trace("Indexer initialised");
+    if (config_.respect_gitignore) {
+        // Universal skip list: directories that are essentially never
+        // sources of useful .gitignore rules and that bloat the walker if
+        // descended (esp. `build/` for repos that vendor third-party src
+        // via FetchContent -- each pulled grammar/library can ship its own
+        // .gitignore, which we'd otherwise sum into the thousands).
+        gitignore_patterns_ = load_workspace_gitignore(
+            root_,
+            {".git", ".locus", "node_modules", "build", "dist", "out", "target"});
+    }
+    spdlog::trace("Indexer initialised ({} gitignore patterns)",
+                  gitignore_patterns_.size());
 }
 
 Indexer::~Indexer()
@@ -128,7 +140,63 @@ bool Indexer::is_excluded(const fs::path& rel_path) const
     for (auto& pattern : config_.exclude_patterns) {
         if (glob_match(pattern, rel_str)) return true;
     }
+    // S4.L -- treat the rel_str as a file path for gitignore matching. The
+    // indexer never feeds directories through index_file, so directory_only
+    // patterns scoped to a file path naturally don't match -- but the
+    // accompanying `<dir>/**` pattern emitted by parse_gitignore_text catches
+    // every file underneath, which is the behaviour we want.
+    if (!gitignore_patterns_.empty()
+        && gitignore_match(gitignore_patterns_, rel_str, /*is_directory=*/false))
+        return true;
     return false;
+}
+
+int Indexer::reload_gitignore()
+{
+    if (!config_.respect_gitignore) {
+        gitignore_patterns_.clear();
+        return 0;
+    }
+
+    gitignore_patterns_ = load_workspace_gitignore(
+        root_,
+        {".git", ".locus", "node_modules", "build", "dist", "out", "target"});
+
+    int dropped = reconcile_excluded_files();
+    spdlog::info("gitignore: reloaded ({} patterns), dropped {} now-excluded path(s)",
+                 gitignore_patterns_.size(), dropped);
+    return dropped;
+}
+
+int Indexer::reconcile_excluded_files()
+{
+    // Walk the existing index and drop anything the current pattern set
+    // (explicit excludes + gitignore) excludes. Used at workspace open to
+    // clean up rows left over from a prior session whose excludes were
+    // narrower, and called from reload_gitignore() to apply mid-session
+    // .gitignore edits. Cheap (single SELECT) compared to a full re-scan.
+    std::vector<std::string> to_drop;
+    if (auto* s = main_db_.prepare("SELECT path FROM files"); s) {
+        while (sqlite3_step(s) == SQLITE_ROW) {
+            auto* p = reinterpret_cast<const char*>(sqlite3_column_text(s, 0));
+            if (!p) continue;
+            std::string rel = p;
+            if (is_excluded(rel))
+                to_drop.push_back(rel);
+        }
+        sqlite3_finalize(s);
+    }
+
+    if (!to_drop.empty()) {
+        main_db_.exec("BEGIN TRANSACTION");
+        if (vectors_db_) vectors_db_->exec("BEGIN TRANSACTION");
+        for (const auto& rel : to_drop) {
+            remove_file(rel);
+        }
+        main_db_.exec("COMMIT");
+        if (vectors_db_) vectors_db_->exec("COMMIT");
+    }
+    return static_cast<int>(to_drop.size());
 }
 
 // -- FTS5 operations ----------------------------------------------------------
@@ -471,6 +539,16 @@ void Indexer::build_initial()
     main_db_.exec("COMMIT");
     if (vectors_db_) vectors_db_->exec("COMMIT");
 
+    // S4.L -- drop any rows left over from a prior session whose excludes
+    // were narrower (e.g. user added a new `.gitignore` line between runs).
+    // Cheap on-open reconciliation; rows for paths that still pass the
+    // exclude filter survive untouched.
+    int reconciled = reconcile_excluded_files();
+    if (reconciled > 0) {
+        spdlog::info("Dropped {} stale row(s) from index after exclude check",
+                     reconciled);
+    }
+
     // Overwrite the per-session counters with authoritative DB totals — after
     // the fast-path skip landed, symbols/headings/chunks_total only reflect
     // files re-indexed this session, which reads as "0 symbols" on a warm
@@ -521,6 +599,37 @@ void Indexer::process_events(const std::vector<FileEvent>& events)
     if (events.empty()) return;
 
     std::lock_guard<std::mutex> serial(process_mutex_);
+
+    // S4.L -- if any event touches a `.gitignore`, reload the pattern set
+    // BEFORE we filter the rest of the batch. Then re-index files that newly
+    // pass the filter (a removed pattern may unblock a previously-excluded
+    // file that's still in this batch). Reload runs once per batch even if
+    // multiple .gitignore files changed.
+    bool gitignore_changed = false;
+    if (config_.respect_gitignore) {
+        for (auto& ev : events) {
+            if (ev.path.filename() == ".gitignore"
+                || (ev.action == FileAction::Moved
+                    && ev.old_path.filename() == ".gitignore")) {
+                gitignore_changed = true;
+                break;
+            }
+        }
+    }
+    int gitignore_dropped = 0;
+    if (gitignore_changed) {
+        gitignore_dropped = reload_gitignore();
+        if (on_activity && gitignore_dropped > 0) {
+            on_activity("Excluded " + std::to_string(gitignore_dropped) +
+                            " path(s) from index after .gitignore update",
+                        "");
+        } else if (on_activity) {
+            on_activity(".gitignore reloaded ("
+                        + std::to_string(gitignore_patterns_.size())
+                        + " pattern(s))",
+                        "");
+        }
+    }
 
     // Filter out events that won't change the index. The OS file watcher
     // (efsw) fires a separate "modified" event for the parent directory

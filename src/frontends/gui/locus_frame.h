@@ -92,6 +92,8 @@ private:
     void on_agent_plan_proposed(wxThreadEvent& evt);
     void on_agent_plan_step_advanced(wxThreadEvent& evt);
     void on_agent_plan_completed(wxThreadEvent& evt);
+    // S4.L
+    void on_agent_auto_commit(wxThreadEvent& evt);
 
     // Push the current ops_status_ composition into status bar pane 1.
     void refresh_ops_status();

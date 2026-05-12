@@ -81,6 +81,13 @@ public:
                                 const wxString& notes);
     void on_plan_completed(const wxString& plan_id, bool success);
 
+    // S4.L -- a per-turn auto-commit just landed. Updates the footer chip
+    // with the short SHA + tooltip (full subject); the chip stays visible
+    // for ~30 s then fades.
+    void on_auto_commit(const wxString& short_sha,
+                        const wxString& branch,
+                        const wxString& subject);
+
     // Footer updates.
     void set_context_meter(int used, int limit);
     void set_locus_md_tokens(int tokens);
@@ -166,6 +173,9 @@ private:
     wxToggleButton* mode_execute_btn_ = nullptr;
     // S4.D plan-progress chip (next to context meter).
     wxStaticText*   plan_chip_        = nullptr;
+    // S4.L auto-commit chip ("⌘ a1b2c3d") -- shown after each agent turn
+    // when WorkspaceConfig::git_auto_commit is on and a commit landed.
+    wxStaticText*   commit_chip_      = nullptr;
 
     // Attached-context chip row (sits between webview and input).
     wxPanel*      attach_panel_  = nullptr;  // the row container
