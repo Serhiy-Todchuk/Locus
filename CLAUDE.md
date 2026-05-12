@@ -449,6 +449,13 @@ No accumulated debt, no "we'll debug it later."
 - **Minimum verified model: Gemma 4 E4B @ 8k context.** Larger / more capable models are fine. Any model without tool-calling support will fail most cases.
 - See [tests/integration/README.md](tests/integration/README.md) for the full run matrix, env vars, and harness design notes.
 
+**Manual test plans (`tests/manual/`):**
+- Whenever a stage ships a user-facing feature (GUI panel, new workflow, anything a non-developer can click through), write a QA-style manual test plan and drop it in `tests/manual/<feature-name>.md`. Filename is the feature as users see it (`mcp.md`, `plan-mode.md`, `checkpoints.md`), not the stage code (`S4.G`).
+- Audience is QA already familiar with the project. Don't restate well-known project-level facts — how to launch Locus, what a workspace is, that only one Locus instance can attach to a workspace at a time, the standard `LM Studio at 127.0.0.1:1234 with a tool-calling model` setup. Skip Prerequisites entirely if there's nothing test-specific to call out.
+- No build commands, no `src/` paths, no code references. Steps are GUI clicks or text-file edits. Each step has an Expected outcome; the doc includes Setup + Cleanup sections so a tester can run it in isolation.
+- Add a row to [tests/manual/README.md](tests/manual/README.md)'s index table the same commit so the new plan is discoverable.
+- These plans complement scripted suites — they catch what unit + integration tests deliberately don't (third-party-software workflows, drag-and-drop, visual layout regressions, error popups, UI state persistence across restarts).
+
 **After every completed stage/task — mandatory bookkeeping:**
 1. Update `roadmap.md`: mark completed tasks `[x]`, add ✔ to the stage header
 2. Update `CLAUDE.md` "Current Stage" line to reflect the new state
