@@ -25,6 +25,10 @@ void register_builtin_tools(IToolRegistry& registry)
     // only appear in the manifest when the agent is in plan / execute mode.
     registry.register_tool(std::make_unique<ProposePlanTool>());
     registry.register_tool(std::make_unique<MarkStepDoneTool>());
+    // S4.R — memory bank. Both gate themselves off (`available()=false`)
+    // when the workspace has no MemoryStore (memory_enabled=false).
+    registry.register_tool(std::make_unique<AddMemoryTool>());
+    registry.register_tool(std::make_unique<SearchMemoryTool>());
 }
 
 } // namespace locus

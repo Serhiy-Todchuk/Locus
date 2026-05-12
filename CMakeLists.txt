@@ -219,6 +219,7 @@ add_library(locus_core STATIC
     src/core/locus_session.cpp
     src/core/database.cpp
     src/core/file_watcher.cpp
+    src/core/memory_store.cpp
     src/index/indexer.cpp
     src/index/index_query.cpp
     src/index/chunker.cpp
@@ -253,6 +254,7 @@ add_library(locus_core STATIC
     src/tools/process_tools.cpp
     src/tools/interactive_tools.cpp
     src/tools/plan_tools.cpp
+    src/tools/memory_tools.cpp
     src/tools/tools.cpp
     src/tools/process_registry.cpp
     src/mcp/json_rpc.cpp

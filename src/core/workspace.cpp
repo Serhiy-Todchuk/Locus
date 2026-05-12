@@ -1,4 +1,5 @@
 #include "workspace.h"
+#include "core/memory_store.h"
 #include "core/watcher_pump.h"
 #include "core/workspace_lock.h"
 #include "database.h"
@@ -122,6 +123,18 @@ Workspace::Workspace(const fs::path& root)
     // Background-process registry (S4.I). Empty at startup; tools spawn into it.
     processes_ = std::make_unique<ProcessRegistry>(
         root_, static_cast<std::size_t>(config_.process_output_buffer_kb) * 1024);
+
+    // S4.R memory bank. Constructed last so it picks up the embedder/reranker
+    // that enable_semantic_search wired above. Lives in `.locus/memory/`.
+    if (config_.memory_enabled) {
+        memory_ = std::make_unique<MemoryStore>(
+            locus_dir_ / "memory",
+            *main_db_,
+            vectors_db_.get(),
+            embedding_worker_.get(),
+            reranker_.get(),
+            config_);
+    }
 
     spdlog::info("Workspace opened: {}", root_.string());
 }
@@ -376,6 +389,20 @@ static WorkspaceConfig config_from_json(const json& j)
             cfg.notify_external_changes = ag["notify_external_changes"].get<bool>();
     }
 
+    if (j.contains("memory")) {
+        auto& m = j["memory"];
+        if (m.contains("enabled"))
+            cfg.memory_enabled = m["enabled"].get<bool>();
+        if (m.contains("in_context_budget_tokens"))
+            cfg.memory_in_context_budget_tokens = m["in_context_budget_tokens"].get<int>();
+        if (m.contains("max_entries"))
+            cfg.memory_max_entries = m["max_entries"].get<int>();
+        if (m.contains("search_response_max_tokens"))
+            cfg.memory_search_response_max_tokens = m["search_response_max_tokens"].get<int>();
+        if (m.contains("recency_half_life_days"))
+            cfg.memory_recency_half_life_days = m["recency_half_life_days"].get<int>();
+    }
+
     if (j.contains("tool_approvals") && j["tool_approvals"].is_object()) {
         for (auto it = j["tool_approvals"].begin();
              it != j["tool_approvals"].end(); ++it) {
@@ -423,6 +450,13 @@ static json config_to_json(const WorkspaceConfig& cfg)
             {"tool_manifest_warn_tokens", cfg.tool_manifest_warn_tokens},
             {"process_output_buffer_kb",  cfg.process_output_buffer_kb},
             {"notify_external_changes",   cfg.notify_external_changes}
+        }},
+        {"memory", {
+            {"enabled",                    cfg.memory_enabled},
+            {"in_context_budget_tokens",   cfg.memory_in_context_budget_tokens},
+            {"max_entries",                cfg.memory_max_entries},
+            {"search_response_max_tokens", cfg.memory_search_response_max_tokens},
+            {"recency_half_life_days",     cfg.memory_recency_half_life_days}
         }},
         {"tool_approvals", approvals}
     };

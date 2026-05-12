@@ -20,6 +20,7 @@ class ExtractorRegistry;
 class FileWatcher;
 class IndexQuery;
 class Indexer;
+class MemoryStore;
 class ProcessRegistry;
 class Reranker;
 class WatcherPump;
@@ -109,6 +110,33 @@ struct WorkspaceConfig {
     // knows which files changed under it. Default on -- the cost is one cheap
     // SQLite scan per turn and a single line in the prompt.
     bool notify_external_changes = true;
+
+    // S4.R — workspace-scoped memory bank. When enabled, two tools land in the
+    // manifest (`add_memory`, `search_memory`), a slot is reserved in the
+    // system prompt for pinned + recently-used entries, and `/memorize` is
+    // accepted as a slash command. Disable to remove all three surfaces.
+    bool memory_enabled                    = true;
+    // Token cap on the always-in-context memory slot. All `pinned:true`
+    // entries are injected first; the remaining budget is filled with the
+    // most-recently-used unpinned entries. Anything dropped from the slot
+    // remains searchable via `search_memory`.
+    int  memory_in_context_budget_tokens   = 500;
+    // GC ceiling: unpinned entries beyond this count are pruned (oldest by
+    // creation time first) on workspace open and after every `add_memory`.
+    // Pinned entries are never GC'd.
+    int  memory_max_entries                = 200;
+    // Per-call cap on the bytes a single `search_memory` response can return
+    // to the LLM. Caps the total content size, not the count -- a single
+    // very long entry can still appear at the top of the response.
+    int  memory_search_response_max_tokens = 1500;
+    // Recency half-life in days for the soft recency factor applied during
+    // hybrid memory search. `0` disables the recency contribution (rely on
+    // BM25 + semantic + reranker only). The default of 21 days matches the
+    // stage doc: a 21-day-old entry contributes half as much as a fresh one,
+    // smoothly decaying. Justified for the memory corpus (preferences /
+    // conventions genuinely supersede over time) but deliberately not used
+    // for workspace search.
+    int  memory_recency_half_life_days     = 21;
 };
 
 // Owns all workspace-level resources: config, database, file watcher, LOCUS.md.
@@ -130,6 +158,7 @@ public:
     EmbeddingWorker* embedder() override   { return embedding_worker_.get(); }
     Reranker*        reranker() override   { return reranker_.get(); }
     ProcessRegistry* processes() override  { return processes_.get(); }
+    MemoryStore*     memory() override     { return memory_.get(); }
     Workspace*       workspace() override  { return this; }
 
     // -- Workspace-specific ---------------------------------------------------
@@ -197,6 +226,11 @@ private:
     // terminates every still-running child so workspace close never leaks
     // background processes.
     std::unique_ptr<ProcessRegistry> processes_;
+    // S4.R — workspace-scoped memory bank. Optional: null when
+    // `WorkspaceConfig::memory_enabled` is false. Reuses the workspace
+    // embedder and reranker via raw pointers stored at construction time;
+    // hot-toggling those isn't supported (re-open the workspace).
+    std::unique_ptr<MemoryStore> memory_;
 };
 
 } // namespace locus

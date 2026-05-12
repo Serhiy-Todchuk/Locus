@@ -3,6 +3,7 @@
 #include "index/index_query.h"
 #include "llm/token_counter.h"
 #include "../tools/tool_registry.h"
+#include "../core/memory_store.h"
 #include "../core/workspace.h"
 
 #include <spdlog/spdlog.h>
@@ -48,8 +49,21 @@ AgentCore::AgentCore(ILLMClient& llm,
     , llm_config_(llm_config)
     , sessions_(sessions_dir)
 {
+    // S4.R -- pre-render the always-in-context memory slot before the prompt
+    // is assembled. Captured at session start so the resulting prompt stays
+    // byte-stable across the session (preserves the KV-cache invariant
+    // S4.F will later depend on). Entries added mid-session via
+    // /memorize or add_memory are still searchable via search_memory but
+    // don't auto-inject into the current session's prompt.
+    std::string memory_section;
+    if (auto* mem = services.memory()) {
+        try { memory_section = mem->format_for_system_prompt(); }
+        catch (const std::exception& e) {
+            spdlog::warn("MemoryStore: format_for_system_prompt failed: {}", e.what());
+        }
+    }
     base_system_prompt_ = SystemPromptBuilder::build(
-        locus_md, ws_meta, tools, llm_config_.tool_format);
+        locus_md, ws_meta, tools, llm_config_.tool_format, memory_section);
     system_prompt_ = base_system_prompt_;
 
     activity_   = std::make_unique<ActivityLog>(frontends_);
@@ -1163,6 +1177,161 @@ bool AgentCore::try_slash_command(const std::string& content)
             std::string fmt = rest.empty() ? "json" : rest;
             std::string msg = export_metrics(fmt);
             frontends_.broadcast([&](IFrontend& fe) { fe.on_token(msg); });
+            return true;
+        }
+        if (cmd == "forget") {
+            // /forget <id> [--hard]
+            // Soft by default (moves to .deleted/ for 30-day retention); pass
+            // --hard to skip the trash and remove permanently. User-only --
+            // there is no model-side delete tool (the asymmetry is explicit:
+            // the agent grows memory, the user prunes it). Emits a
+            // memory_deleted activity event.
+            auto* mem = services_.memory();
+            if (!mem) {
+                frontends_.broadcast([&](IFrontend& fe) {
+                    fe.on_error("Memory bank is disabled for this workspace.");
+                });
+                return true;
+            }
+            bool hard = false;
+            std::string target_id = rest;
+            // Strip a trailing "--hard" flag if present (any position).
+            auto strip_flag = [&](const std::string& flag) {
+                auto p = target_id.find(flag);
+                if (p == std::string::npos) return;
+                size_t end = p + flag.size();
+                target_id.erase(p, flag.size());
+                // Tidy up adjacent whitespace.
+                while (p < target_id.size()
+                       && (target_id[p] == ' ' || target_id[p] == '\t')) {
+                    target_id.erase(p, 1);
+                }
+                while (p > 0 && (target_id[p - 1] == ' '
+                                 || target_id[p - 1] == '\t')) {
+                    target_id.erase(p - 1, 1);
+                    --p;
+                }
+                (void)end;
+            };
+            if (target_id.find("--hard") != std::string::npos) {
+                hard = true;
+                strip_flag("--hard");
+            }
+            // Trim
+            while (!target_id.empty()
+                   && (target_id.front() == ' ' || target_id.front() == '\t'))
+                target_id.erase(target_id.begin());
+            while (!target_id.empty()
+                   && (target_id.back() == ' ' || target_id.back() == '\t'))
+                target_id.pop_back();
+
+            if (target_id.empty()) {
+                frontends_.broadcast([&](IFrontend& fe) {
+                    fe.on_error("Usage: /forget <id> [--hard]");
+                });
+                return true;
+            }
+
+            bool ok = hard ? mem->hard_delete(target_id)
+                           : mem->soft_delete(target_id);
+            if (!ok) {
+                frontends_.broadcast([&](IFrontend& fe) {
+                    fe.on_error("/forget: no memory entry with id '"
+                                + target_id + "'");
+                });
+                return true;
+            }
+            activity_->emit(ActivityKind::memory_deleted,
+                            std::string("memory:") + target_id
+                                + (hard ? " (hard)" : ""),
+                            hard ? "Permanently removed."
+                                 : "Moved to .deleted/ (30-day retention).");
+            std::ostringstream msg;
+            msg << "Forgot memory:" << target_id
+                << (hard ? " (permanently)\n"
+                         : " (moved to .deleted/; restore with the Settings panel)\n");
+            frontends_.broadcast(
+                [&](IFrontend& fe) { fe.on_token(msg.str()); });
+            return true;
+        }
+        if (cmd == "memorize") {
+            // /memorize [+tag1 +tag2 ...] [--pin] <content>
+            // Tags ('+...') and flags ('--pin') are consumed from the left
+            // until the first non-flag token; everything from there to end
+            // of input is the verbatim content (whitespace preserved).
+            auto* mem = services_.memory();
+            if (!mem) {
+                frontends_.broadcast([&](IFrontend& fe) {
+                    fe.on_error("Memory bank is disabled for this workspace.");
+                });
+                return true;
+            }
+
+            std::vector<std::string> tags;
+            bool pinned = false;
+            std::string content;
+
+            size_t i = 0;
+            while (i < rest.size()) {
+                // Skip whitespace
+                while (i < rest.size() && (rest[i] == ' ' || rest[i] == '\t')) ++i;
+                if (i >= rest.size()) break;
+                if (rest[i] == '+') {
+                    // tag token
+                    size_t end = rest.find_first_of(" \t", i);
+                    if (end == std::string::npos) end = rest.size();
+                    std::string tag = rest.substr(i + 1, end - i - 1);
+                    if (!tag.empty()) tags.push_back(std::move(tag));
+                    i = end;
+                    continue;
+                }
+                if (rest.compare(i, 5, "--pin") == 0
+                    && (i + 5 == rest.size() || rest[i + 5] == ' '
+                                              || rest[i + 5] == '\t')) {
+                    pinned = true;
+                    i += 5;
+                    continue;
+                }
+                // First non-flag token: content is the remainder.
+                content = rest.substr(i);
+                break;
+            }
+            if (content.empty()) {
+                frontends_.broadcast([&](IFrontend& fe) {
+                    fe.on_error("Usage: /memorize [+tag1 +tag2] [--pin] <content>");
+                });
+                return true;
+            }
+
+            try {
+                std::string id = mem->add(content, tags, pinned, "user");
+                std::ostringstream tag_str;
+                for (size_t t = 0; t < tags.size(); ++t) {
+                    if (t) tag_str << ",";
+                    tag_str << tags[t];
+                }
+                std::ostringstream summary;
+                summary << "memory:" << id;
+                if (pinned) summary << " (pinned)";
+                if (!tags.empty()) summary << " [" << tag_str.str() << "]";
+                std::ostringstream detail;
+                detail << "id: " << id << "\npinned: " << (pinned ? "true" : "false")
+                       << "\ntags: [" << tag_str.str() << "]\n\n" << content;
+                activity_->emit(ActivityKind::memory_added,
+                                summary.str(), detail.str());
+
+                std::ostringstream msg;
+                msg << "Saved memory:" << id;
+                if (pinned) msg << " (pinned)";
+                if (!tags.empty()) msg << "  tags=" << tag_str.str();
+                msg << "\n";
+                frontends_.broadcast(
+                    [&](IFrontend& fe) { fe.on_token(msg.str()); });
+            } catch (const std::exception& ex) {
+                frontends_.broadcast([&](IFrontend& fe) {
+                    fe.on_error(std::string("/memorize failed: ") + ex.what());
+                });
+            }
             return true;
         }
     }

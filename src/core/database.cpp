@@ -113,6 +113,21 @@ void Database::create_main_schema()
         )
     )");
 
+    // S4.R memory bank: FTS5 over verbatim memory entries.
+    // `id` is the workspace-unique memory identifier (UNINDEXED so the FTS5
+    // tokenizer doesn't shred it). `content` and `tags` are the searchable
+    // columns. Reads/writes serialise on the MemoryStore mutex; the table
+    // lives in main DB so memory keyword search runs without touching the
+    // vectors DB.
+    exec(R"(
+        CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(
+            id UNINDEXED,
+            content,
+            tags,
+            tokenize='porter unicode61'
+        )
+    )");
+
     // Code symbols extracted by Tree-sitter
     exec(R"(
         CREATE TABLE IF NOT EXISTS symbols (
@@ -169,7 +184,20 @@ void Database::create_vectors_skeleton()
         )
     )");
 
-    spdlog::trace("Vectors DB skeleton initialised (chunk_vectors created lazily)");
+    // S4.R memory bank vector mapping. `memory_vectors` (vec0) keys rows by an
+    // integer rowid because vec0's primary key is dim-baked into the virtual
+    // table -- so we mint an autoincrementing rowid per text memory id and
+    // store the mapping here. Lives in the Vectors DB so it shares the
+    // dim-mismatch wipe path with `chunk_vectors`.
+    exec(R"(
+        CREATE TABLE IF NOT EXISTS memory_keys (
+            rowid INTEGER PRIMARY KEY AUTOINCREMENT,
+            id    TEXT UNIQUE NOT NULL
+        )
+    )");
+
+    spdlog::trace("Vectors DB skeleton initialised "
+                  "(chunk_vectors + memory_vectors created lazily)");
 }
 
 std::string Database::stored_embedding_model()
@@ -255,6 +283,14 @@ bool Database::ensure_vectors_schema(int dim, const std::string& model_id,
         if (err) { sqlite3_free(err); err = nullptr; }
         sqlite3_exec(db_, "DELETE FROM chunks", nullptr, nullptr, &err);
         if (err) { sqlite3_free(err); err = nullptr; }
+        // S4.R: the memory bank's vectors share the workspace embedder, so
+        // a model/dim swap invalidates them too. Drop the vec0 table and
+        // clear the key map; MemoryStore re-embeds verbatim entries from
+        // .locus/memory/ on next open.
+        sqlite3_exec(db_, "DROP TABLE IF EXISTS memory_vectors", nullptr, nullptr, &err);
+        if (err) { sqlite3_free(err); err = nullptr; }
+        sqlite3_exec(db_, "DELETE FROM memory_keys", nullptr, nullptr, &err);
+        if (err) { sqlite3_free(err); err = nullptr; }
     }
 
     // Create chunk_vectors with the requested dim if missing.  vec0 syntax
@@ -263,6 +299,12 @@ bool Database::ensure_vectors_schema(int dim, const std::string& model_id,
         "CREATE VIRTUAL TABLE IF NOT EXISTS chunk_vectors USING vec0("
         "chunk_id INTEGER PRIMARY KEY, embedding float[" + std::to_string(dim) + "])";
     exec(create_sql.c_str());
+
+    // Mirror schema for the memory bank (S4.R). Same dim, same wipe story.
+    std::string memory_create_sql =
+        "CREATE VIRTUAL TABLE IF NOT EXISTS memory_vectors USING vec0("
+        "memory_rowid INTEGER PRIMARY KEY, embedding float[" + std::to_string(dim) + "])";
+    exec(memory_create_sql.c_str());
 
     // Persist (upsert) dim + model_id in meta.
     auto upsert = [&](const char* key, const std::string& value) {

@@ -23,6 +23,7 @@ add_executable(locus_tests
     test_stream_decoders.cpp
     test_plan_mode.cpp
     test_mcp.cpp
+    test_memory_store.cpp
     retrieval_eval/metrics.cpp
     support/shared_embedder.cpp
 )

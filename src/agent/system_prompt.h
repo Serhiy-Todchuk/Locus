@@ -31,10 +31,16 @@ public:
     // optional appendix that tells the model exactly how to emit tool
     // calls when the wire format isn't pure OpenAI JSON -- a hedge for
     // models whose chat template is broken or absent in LM Studio.
-    static std::string build(const std::string& locus_md,
+    //
+    // `memory_section` (S4.R) is the pre-rendered "## Memory Bank" block
+    // produced by `MemoryStore::format_for_system_prompt`. Empty when memory
+    // is disabled or there are no entries to surface; the builder then
+    // suppresses the section entirely so the prompt stays clean on first run.
+    static std::string build(const std::string&       locus_md,
                              const WorkspaceMetadata& meta,
-                             const IToolRegistry& tools,
-                             ToolFormat tool_format = ToolFormat::Auto);
+                             const IToolRegistry&     tools,
+                             ToolFormat               tool_format    = ToolFormat::Auto,
+                             const std::string&       memory_section = "");
 
     // Estimate tokens for a LOCUS.md string. Logs a warning if > 500 tokens.
     static int check_locus_md_budget(const std::string& locus_md);

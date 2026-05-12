@@ -53,7 +53,8 @@ TEST_CASE("ToolRegistry: build_schema_json produces valid OpenAI schema", "[s0.6
     // S4.A: +1 `edit_file` (exact-string edits, single or atomic batch),
     //       -1 `create_file` (merged into `write_file` with optional `overwrite`).
     // S4.D: +2 `propose_plan`, `mark_step_done` (visible only in plan/execute modes).
-    REQUIRE(schema.size() == 15);
+    // S4.R: +2 `add_memory`, `search_memory` (memory bank).
+    REQUIRE(schema.size() == 17);
 
     // One `search` entry, no split search_* tools.
     bool has_search = false;
@@ -96,7 +97,8 @@ TEST_CASE("ToolRegistry: all returns all tools", "[s0.6]")
     locus::register_builtin_tools(registry);
 
     auto all = registry.all();
-    REQUIRE(all.size() == 15);  // S4.D adds propose_plan + mark_step_done
+    REQUIRE(all.size() == 17);  // S4.D adds propose_plan + mark_step_done;
+                                // S4.R adds add_memory + search_memory.
 }
 
 TEST_CASE("ToolRegistry: parse_tool_call handles valid and empty JSON", "[s0.6]")

@@ -48,10 +48,11 @@ const char* tool_format_instructions(ToolFormat f)
 
 } // namespace
 
-std::string SystemPromptBuilder::build(const std::string& locus_md,
+std::string SystemPromptBuilder::build(const std::string&       locus_md,
                                        const WorkspaceMetadata& meta,
-                                       const IToolRegistry& tools,
-                                       ToolFormat tool_format)
+                                       const IToolRegistry&     tools,
+                                       ToolFormat               tool_format,
+                                       const std::string&       memory_section)
 {
     std::ostringstream ss;
 
@@ -98,6 +99,16 @@ std::string SystemPromptBuilder::build(const std::string& locus_md,
         check_locus_md_budget(locus_md);
         ss << "## LOCUS.md (workspace guide provided by the user)\n\n"
            << locus_md << "\n\n";
+    }
+
+    // -- Memory Bank slot (S4.R) ----------------------------------------------
+    // Section is pre-rendered (or empty) by the caller via
+    // MemoryStore::format_for_system_prompt. Empty section = suppress entirely;
+    // no header noise on first-session workspaces.
+    if (!memory_section.empty()) {
+        ss << memory_section;
+        if (memory_section.back() != '\n') ss << "\n";
+        ss << "\n";
     }
 
     // -- Available tools (text description) -----------------------------------
