@@ -10,6 +10,7 @@ namespace locus {
 // Classification of activity events shown in the Details panel.
 enum class ActivityKind {
     system_prompt,   // system prompt assembled / seeded
+    tool_manifest,   // per-round tool catalog sent to the LLM (size + count)
     user_message,    // user turn submitted
     llm_response,    // LLM stream finished, carries usage
     tool_call,       // tool invocation started
@@ -39,6 +40,7 @@ inline const char* to_string(ActivityKind k)
 {
     switch (k) {
     case ActivityKind::system_prompt: return "system_prompt";
+    case ActivityKind::tool_manifest: return "tool_manifest";
     case ActivityKind::user_message:  return "user_message";
     case ActivityKind::llm_response:  return "llm_response";
     case ActivityKind::tool_call:     return "tool_call";

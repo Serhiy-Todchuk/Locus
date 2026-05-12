@@ -56,7 +56,7 @@ std::vector<ToolSchema> AgentLoop::build_tool_schemas(ToolMode mode) const
         schemas.push_back(std::move(ts));
     }
 
-    // Token-cost guardrail: log the manifest footprint every turn, warn when
+    // Token-cost guardrail: log the manifest footprint every round, warn when
     // it exceeds the configured threshold. Serialised JSON length is a close
     // proxy for what the backend actually sends as the tools parameter.
     int manifest_tokens = TokenCounter::estimate(schema_json.dump());
@@ -69,6 +69,24 @@ std::vector<ToolSchema> AgentLoop::build_tool_schemas(ToolMode mode) const
         spdlog::info("Tool manifest: {} tools, ~{} tokens",
                      schemas.size(), manifest_tokens);
     }
+
+    // Surface the same numbers in the Activity panel so a user watching the
+    // GUI can see why prompt_tokens jumped between system_prompt size and
+    // the first llm_response. Per-round event because the visible tool set
+    // can change between rounds (plan/execute mode, MCP server crash, ...).
+    std::string summary = "Tool manifest: " +
+                          std::to_string(schemas.size()) + " tools, ~" +
+                          std::to_string(manifest_tokens) + " tokens";
+    std::string detail;
+    for (std::size_t i = 0; i < schemas.size(); ++i) {
+        if (i > 0) detail += '\n';
+        detail += schemas[i].name;
+    }
+    ActivityKind kind = (manifest_tokens > threshold)
+                            ? ActivityKind::warning
+                            : ActivityKind::tool_manifest;
+    activity_.emit(kind, std::move(summary), std::move(detail),
+                   /*tokens_in=*/manifest_tokens);
 
     return schemas;
 }
