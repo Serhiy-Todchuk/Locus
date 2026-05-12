@@ -314,7 +314,7 @@ they fire around:
 | `before_llm_step` | top of `AgentLoop::run_step` | KV-cache optimizer (S4.F), router (S4.Q) | pick model, slice history, inject system-prompt deltas |
 | `after_llm_step` | after `history.add(assistant)` | telemetry (S4.S) | |
 | `before_tool_dispatch` | top of `ToolDispatcher::dispatch`, after policy resolve | plan mode (blocks tools), LSP (S4.E), parallel dispatch (S4.H) | plan mode rejects any tool except `propose_plan`; LSP augments `write_file` pre-hook |
-| `after_tool_success` | after `tool->execute()` returns success, before `history.add(tool)` | **checkpoint/undo (S4.B)**, **auto-verify (S4.C)** | checkpoint copies prior file state before next mutation; verify runs `verify.cmd` and injects `<verify_failed>` on non-zero exit |
+| `after_tool_success` | after `tool->execute()` returns success, before `history.add(tool)` | **checkpoint/undo (S4.B)**, ~~auto-verify (S4.C, parked)~~ | checkpoint copies prior file state before next mutation; the auto-verify hook design is preserved in the parked spec for if local LLMs grow into reliably interpreting build/test error tails |
 | `after_tool_failure` | after `tool->execute()` returns failure | telemetry, retry policy | |
 | `after_turn` | just before `on_turn_complete` broadcast | checkpoint GC, memory bank write-back, telemetry | |
 
@@ -342,13 +342,20 @@ Plan mode is a `process_message`-level state, not a new phase:
 - `SessionStore` (to be promoted from `SessionManager`) gains `undo_turn(session_id,
   turn_id)` which restores files and emits an activity event.
 
-### 5.3 Auto-verify (S4.C)
+### 5.3 Auto-verify (S4.C, parked)
 
-- `after_tool_success` checks `.locus/config.json` `verify.trigger` against the tool's mutation
-  kind (`on_edit` vs `on_turn_end` vs `manual`).
-- On non-zero exit, injects an extra tool-like message tagged `<verify_failed>` carrying
-  stdout/stderr tail. The LLM sees it in round `N+1` and can react within the same turn.
-- Zero exit logs only — token discipline forbids injecting quiet successes.
+Parked to backlog because the "agent self-corrects from build/test error tail" premise breaks
+down on small local LLMs (C++ template / linker errors in particular). The hook-point design
+is preserved here for a future reactivation:
+
+- `after_tool_success` would check `.locus/config.json` `verify.trigger` against the tool's
+  mutation kind (`on_edit` vs `on_turn_end` vs `manual`).
+- On non-zero exit, would inject an extra tool-like message tagged `<verify_failed>` carrying
+  stdout/stderr tail. The LLM would see it in round `N+1` and react within the same turn.
+- Zero exit logs only -- token discipline forbids injecting quiet successes.
+
+See [roadmap/backlog/S4.C-auto-verify.md](../roadmap/backlog/S4.C-auto-verify.md) for the
+full spec and the reactivation gate.
 
 ### 5.4 Parallel tool dispatch (S4.H)
 
@@ -460,4 +467,4 @@ up without replaying conversation history. Ring buffer cap: `k_activity_buffer_m
 - [overview.md](overview.md) — system-wide component map and context strategy
 - [decisions/](decisions/) — ADR trail for load-bearing architectural decisions
 - [roadmap/M3/S3.A-agent-core-split.md](../roadmap/M3/S3.A-agent-core-split.md) — the extraction of `AgentLoop`, `ToolDispatcher`, `ActivityLog`, `ContextBudget` (done)
-- [roadmap/M4/S4.B-checkpoint-undo.md](../roadmap/M4/S4.B-checkpoint-undo.md), [S4.C-auto-verify.md](../roadmap/M4/S4.C-auto-verify.md), [S4.D-plan-mode.md](../roadmap/M4/S4.D-plan-mode.md) — features that will use the hook points above
+- [roadmap/M4/S4.B-checkpoint-undo.md](../roadmap/M4/S4.B-checkpoint-undo.md), [S4.D-plan-mode.md](../roadmap/M4/S4.D-plan-mode.md) — features that use the hook points above (parked: [S4.C-auto-verify.md](../roadmap/backlog/S4.C-auto-verify.md))
