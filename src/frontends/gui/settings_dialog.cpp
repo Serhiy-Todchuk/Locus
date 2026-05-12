@@ -52,10 +52,10 @@ SettingsDialog::SettingsDialog(wxWindow* parent, WorkspaceConfig& config,
     , mcp_(mcp)
 {
     auto* notebook = new wxNotebook(this, wxID_ANY);
-    notebook->AddPage(build_llm_tab(),       "LLM");
-    notebook->AddPage(build_index_tab(),     "Index");
-    notebook->AddPage(build_approvals_tab(), "Tool Approvals");
-    notebook->AddPage(build_mcp_tab(),       "MCP Servers");
+    notebook->AddPage(build_llm_tab(notebook),       "LLM");
+    notebook->AddPage(build_index_tab(notebook),     "Index");
+    notebook->AddPage(build_approvals_tab(notebook), "Tool Approvals");
+    notebook->AddPage(build_mcp_tab(notebook),       "MCP Servers");
 
     auto* main_sizer = new wxBoxSizer(wxVERTICAL);
     main_sizer->Add(notebook, 1, wxEXPAND | wxALL, 8);
@@ -71,9 +71,9 @@ SettingsDialog::SettingsDialog(wxWindow* parent, WorkspaceConfig& config,
 // LLM tab
 // ---------------------------------------------------------------------------
 
-wxPanel* SettingsDialog::build_llm_tab()
+wxPanel* SettingsDialog::build_llm_tab(wxWindow* parent)
 {
-    auto* panel = new wxPanel(this);
+    auto* panel = new wxPanel(parent);
     auto* outer = new wxBoxSizer(wxVERTICAL);
     auto* grid  = new wxFlexGridSizer(2, wxSize(8, 4));
     grid->AddGrowableCol(1, 1);
@@ -137,9 +137,9 @@ wxPanel* SettingsDialog::build_llm_tab()
 // Index tab
 // ---------------------------------------------------------------------------
 
-wxPanel* SettingsDialog::build_index_tab()
+wxPanel* SettingsDialog::build_index_tab(wxWindow* parent)
 {
-    auto* panel = new wxPanel(this);
+    auto* panel = new wxPanel(parent);
     auto* outer = new wxBoxSizer(wxVERTICAL);
 
     outer->Add(new wxStaticText(panel, wxID_ANY, "Exclude patterns (one per line):"),
@@ -196,9 +196,9 @@ wxPanel* SettingsDialog::build_index_tab()
 // Tool Approvals tab
 // ---------------------------------------------------------------------------
 
-wxPanel* SettingsDialog::build_approvals_tab()
+wxPanel* SettingsDialog::build_approvals_tab(wxWindow* parent)
 {
-    auto* panel = new wxPanel(this);
+    auto* panel = new wxPanel(parent);
     auto* outer = new wxBoxSizer(wxVERTICAL);
 
     auto* scroll = new wxScrolledWindow(panel, wxID_ANY,
@@ -259,9 +259,9 @@ wxPanel* SettingsDialog::build_approvals_tab()
 // MCP Servers tab
 // ---------------------------------------------------------------------------
 
-wxPanel* SettingsDialog::build_mcp_tab()
+wxPanel* SettingsDialog::build_mcp_tab(wxWindow* parent)
 {
-    auto* panel = new wxPanel(this);
+    auto* panel = new wxPanel(parent);
     auto* outer = new wxBoxSizer(wxVERTICAL);
 
     auto hint_font = panel->GetFont();
@@ -281,7 +281,7 @@ wxPanel* SettingsDialog::build_mcp_tab()
     }
 
     auto* hint = new wxStaticText(panel, wxID_ANY,
-        "Servers loaded from .locus/mcp.json and %APPDATA%/Locus/mcp.json. "
+        "Servers loaded from .locus/mcp.json and %APPDATA%/Locus/mcp.json.\n"
         "Edit the file, then click Restart to re-spawn a server in place.");
     hint->SetForegroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_GRAYTEXT));
     hint->SetFont(hint_font);

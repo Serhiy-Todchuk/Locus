@@ -36,10 +36,14 @@ public:
     bool semantic_changed() const { return semantic_changed_; }
 
 private:
-    wxPanel* build_llm_tab();
-    wxPanel* build_index_tab();
-    wxPanel* build_approvals_tab();
-    wxPanel* build_mcp_tab();
+    // Each builder takes the notebook as the parent for the top-level panel
+    // it returns. wxNotebook asserts that every AddPage'd window has the
+    // notebook itself as its wxWindow parent -- passing `this` (the dialog)
+    // trips a Debug assertion at runtime.
+    wxPanel* build_llm_tab(wxWindow* parent);
+    wxPanel* build_index_tab(wxWindow* parent);
+    wxPanel* build_approvals_tab(wxWindow* parent);
+    wxPanel* build_mcp_tab(wxWindow* parent);
 
     void on_ok(wxCommandEvent& evt);
     void refresh_mcp_list();
