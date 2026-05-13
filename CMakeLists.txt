@@ -346,6 +346,7 @@ add_library(locus_core STATIC
     src/llm/stream_decoders/auto_decoder.cpp
     src/llm/llm_router.cpp
     src/llm/token_counter.cpp
+    src/llm/model_presets.cpp
     src/tools/tool_registry.cpp
     src/tools/shared.cpp
     src/tools/command_path_scanner.cpp

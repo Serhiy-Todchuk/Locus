@@ -66,6 +66,15 @@ private:
     wxSpinCtrlDouble*  temperature_ctrl_ = nullptr;
     wxSpinCtrl*        context_ctrl_     = nullptr;
     wxSpinCtrl*        max_tokens_ctrl_  = nullptr;
+    // S4.V Task 6 -- model-card presets row.
+    wxChoice*          preset_ctrl_      = nullptr;
+    wxStaticText*      preset_hint_      = nullptr;
+    // S4.V Task 6 -- expose ToolFormat so the user (and the preset apply)
+    // can see what the wire format hint is. Default: Auto.
+    wxChoice*          tool_format_ctrl_ = nullptr;
+
+    void on_preset_apply(wxCommandEvent& evt);
+    void on_preset_choice(wxCommandEvent& evt);
 
     // Index controls
     wxTextCtrl*        exclude_ctrl_     = nullptr;

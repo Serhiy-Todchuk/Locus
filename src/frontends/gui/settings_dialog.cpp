@@ -1,5 +1,6 @@
 #include "settings_dialog.h"
 
+#include "../../llm/model_presets.h"
 #include "../../mcp/mcp_config.h"
 #include "../../mcp/mcp_manager.h"
 #include "../../tools/tool.h"
@@ -88,6 +89,42 @@ wxPanel* SettingsDialog::build_llm_tab(wxWindow* parent)
 {
     auto* panel = new wxPanel(parent);
     auto* outer = new wxBoxSizer(wxVERTICAL);
+
+    auto hint_font = panel->GetFont();
+    hint_font.SetPointSize(hint_font.GetPointSize() - 1);
+
+    // S4.V Task 6 -- preset row at the top. Picking a preset and clicking
+    // "Load preset" overwrites endpoint / temperature / max_tokens / tool
+    // format. Model name is deliberately NOT touched (every install has
+    // different specific files on disk).
+    {
+        auto* preset_row = new wxBoxSizer(wxHORIZONTAL);
+        preset_row->Add(new wxStaticText(panel, wxID_ANY, "Preset:"),
+                        0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+        preset_ctrl_ = new wxChoice(panel, wxID_ANY);
+        preset_ctrl_->Append("Custom");
+        for (const auto& p : builtin_presets())
+            preset_ctrl_->Append(wxString::FromUTF8(p.name));
+        preset_ctrl_->SetSelection(0);
+        preset_ctrl_->Bind(wxEVT_CHOICE, &SettingsDialog::on_preset_choice, this);
+        preset_row->Add(preset_ctrl_, 1, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+
+        auto* apply_btn = new wxButton(panel, wxID_ANY, "Load preset");
+        apply_btn->Bind(wxEVT_BUTTON, &SettingsDialog::on_preset_apply, this);
+        preset_row->Add(apply_btn, 0, wxALIGN_CENTER_VERTICAL);
+
+        outer->Add(preset_row, 0, wxEXPAND | wxALL, 8);
+
+        preset_hint_ = new wxStaticText(panel, wxID_ANY,
+            "Static known-good defaults per backend + model family. "
+            "Overwrites endpoint, temperature, max tokens, and tool format. "
+            "Type the actual model id below.");
+        preset_hint_->SetForegroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_GRAYTEXT));
+        preset_hint_->SetFont(hint_font);
+        preset_hint_->Wrap(420);
+        outer->Add(preset_hint_, 0, wxLEFT | wxRIGHT | wxBOTTOM, 8);
+    }
+
     auto* grid  = new wxFlexGridSizer(2, wxSize(8, 4));
     grid->AddGrowableCol(1, 1);
 
@@ -126,8 +163,30 @@ wxPanel* SettingsDialog::build_llm_tab(wxWindow* parent)
     max_tokens_ctrl_->SetValue(config_.llm_max_tokens > 0 ? config_.llm_max_tokens : 8192);
     grid->Add(max_tokens_ctrl_, 0);
 
-    auto hint_font = panel->GetFont();
-    hint_font.SetPointSize(hint_font.GetPointSize() - 1);
+    // Tool format -- ToolFormat enum exposed verbatim. Auto is the default and
+    // handles unknown models; Qwen / Claude pin XML extraction; None skips
+    // the tools array entirely for non-tool-trained base models.
+    grid->Add(new wxStaticText(panel, wxID_ANY, "Tool-call format:"),
+              0, wxALIGN_CENTER_VERTICAL);
+    tool_format_ctrl_ = new wxChoice(panel, wxID_ANY);
+    tool_format_ctrl_->Append("Auto");
+    tool_format_ctrl_->Append("OpenAI");
+    tool_format_ctrl_->Append("Qwen");
+    tool_format_ctrl_->Append("Claude");
+    tool_format_ctrl_->Append("None");
+    {
+        ToolFormat tf = tool_format_from_string(config_.llm_tool_format);
+        int sel = 0;
+        switch (tf) {
+            case ToolFormat::Auto:   sel = 0; break;
+            case ToolFormat::OpenAi: sel = 1; break;
+            case ToolFormat::Qwen:   sel = 2; break;
+            case ToolFormat::Claude: sel = 3; break;
+            case ToolFormat::None:   sel = 4; break;
+        }
+        tool_format_ctrl_->SetSelection(sel);
+    }
+    grid->Add(tool_format_ctrl_, 0);
 
     auto* ctx_hint = new wxStaticText(panel, wxID_ANY,
         "(0 = auto-detect context limit from server)");
@@ -144,6 +203,53 @@ wxPanel* SettingsDialog::build_llm_tab(wxWindow* parent)
     outer->Add(mt_hint,  0, wxLEFT | wxRIGHT | wxBOTTOM, 8);
     panel->SetSizer(outer);
     return panel;
+}
+
+// S4.V Task 6 -- preset handlers.
+//
+// `on_preset_choice` updates the hint label so the user sees what the
+// pick means before committing; `on_preset_apply` writes the preset's
+// values into the relevant LLM-tab controls. "Custom" is the first entry
+// and a no-op on apply (it represents whatever the user typed manually).
+
+void SettingsDialog::on_preset_choice(wxCommandEvent&)
+{
+    if (!preset_ctrl_ || !preset_hint_) return;
+    int sel = preset_ctrl_->GetSelection();
+    if (sel <= 0) {
+        preset_hint_->SetLabel("Static known-good defaults per backend + "
+                               "model family. Overwrites endpoint, "
+                               "temperature, max tokens, and tool format. "
+                               "Type the actual model id below.");
+    } else {
+        const auto& p = builtin_presets()[static_cast<size_t>(sel - 1)];
+        preset_hint_->SetLabel(wxString::FromUTF8(p.description));
+    }
+    preset_hint_->Wrap(420);
+    preset_hint_->GetParent()->Layout();
+}
+
+void SettingsDialog::on_preset_apply(wxCommandEvent&)
+{
+    if (!preset_ctrl_) return;
+    int sel = preset_ctrl_->GetSelection();
+    if (sel <= 0) return;  // "Custom"
+
+    const auto& p = builtin_presets()[static_cast<size_t>(sel - 1)];
+
+    endpoint_ctrl_->ChangeValue(wxString::FromUTF8(p.base_url));
+    temperature_ctrl_->SetValue(p.temperature);
+    max_tokens_ctrl_->SetValue(p.max_tokens);
+
+    int tf_sel = 0;
+    switch (p.tool_format) {
+        case ToolFormat::Auto:   tf_sel = 0; break;
+        case ToolFormat::OpenAi: tf_sel = 1; break;
+        case ToolFormat::Qwen:   tf_sel = 2; break;
+        case ToolFormat::Claude: tf_sel = 3; break;
+        case ToolFormat::None:   tf_sel = 4; break;
+    }
+    tool_format_ctrl_->SetSelection(tf_sel);
 }
 
 // ---------------------------------------------------------------------------
@@ -514,6 +620,18 @@ void SettingsDialog::on_ok(wxCommandEvent& evt)
     int         new_context  = context_ctrl_->GetValue();
     int         new_max_tok  = max_tokens_ctrl_->GetValue();
 
+    // S4.V Task 6 -- ToolFormat dropdown.
+    std::string new_tool_format = "auto";
+    if (tool_format_ctrl_) {
+        switch (tool_format_ctrl_->GetSelection()) {
+            case 0: new_tool_format = "auto";   break;
+            case 1: new_tool_format = "openai"; break;
+            case 2: new_tool_format = "qwen";   break;
+            case 3: new_tool_format = "claude"; break;
+            case 4: new_tool_format = "none";   break;
+        }
+    }
+
     std::vector<std::string> new_patterns;
     {
         std::string text = exclude_ctrl_->GetValue().ToStdString();
@@ -531,7 +649,8 @@ void SettingsDialog::on_ok(wxCommandEvent& evt)
         new_model    != config_.llm_model ||
         new_temp     != config_.llm_temperature ||
         new_context  != config_.llm_context_limit ||
-        new_max_tok  != config_.llm_max_tokens) {
+        new_max_tok  != config_.llm_max_tokens ||
+        new_tool_format != config_.llm_tool_format) {
         llm_changed_ = true;
     }
 
@@ -597,6 +716,7 @@ void SettingsDialog::on_ok(wxCommandEvent& evt)
         config_.llm_temperature   = new_temp;
         config_.llm_context_limit = new_context;
         config_.llm_max_tokens    = new_max_tok;
+        config_.llm_tool_format   = new_tool_format;
         config_.exclude_patterns  = new_patterns;
         config_.semantic_search_enabled = new_semantic;
         config_.embedding_model   = new_sem_model;

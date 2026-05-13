@@ -31,6 +31,7 @@ add_executable(locus_tests
     test_grammar_coverage.cpp
     test_mention_parser.cpp
     test_command_path_scanner.cpp
+    test_model_presets.cpp
     retrieval_eval/metrics.cpp
     support/shared_embedder.cpp
 )
