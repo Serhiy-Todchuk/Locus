@@ -100,3 +100,53 @@ TEST_CASE("non-tool-trained preset pins ToolFormat::None",
     }
     REQUIRE(found);
 }
+
+TEST_CASE("sampler defaults: Qwen preset carries Qwen's published values",
+          "[s4.v][presets][samplers]")
+{
+    // Qwen 2.5 / 3 docs recommend top_p 0.8, top_k 20, min_p 0.05. If the
+    // table ever drifts from those, retune deliberately rather than by
+    // accident -- this guard catches the accident.
+    const locus::ModelPreset* p = nullptr;
+    for (const auto& q : builtin_presets()) {
+        if (q.name.find("Qwen") != std::string::npos) { p = &q; break; }
+    }
+    REQUIRE(p != nullptr);
+    REQUIRE(p->top_p == 0.8);
+    REQUIRE(p->top_k == 20);
+    REQUIRE(p->min_p == 0.05);
+    REQUIRE(p->repeat_penalty == 0.0);  // Qwen doesn't recommend one
+}
+
+TEST_CASE("sampler defaults: Llama 3.x preset suggests repeat_penalty 1.1",
+          "[s4.v][presets][samplers]")
+{
+    const locus::ModelPreset* p = nullptr;
+    for (const auto& q : builtin_presets()) {
+        if (q.name.find("Llama 3") != std::string::npos) { p = &q; break; }
+    }
+    REQUIRE(p != nullptr);
+    REQUIRE(p->repeat_penalty == 1.1);
+}
+
+TEST_CASE("sampler defaults: presets without overrides stay at 0",
+          "[s4.v][presets][samplers]")
+{
+    // The Gemma / Ollama-generic / llama-server-generic / non-tool-trained
+    // presets are deliberately silent on samplers so the server's per-model
+    // defaults apply. If a future edit accidentally fills one of them in,
+    // we want to know.
+    for (const auto& p : builtin_presets()) {
+        if (p.name.find("Gemma")     != std::string::npos ||
+            p.name.find("Ollama")    != std::string::npos ||
+            p.name.find("llama-server") != std::string::npos ||
+            p.name.find("base /")    != std::string::npos)
+        {
+            INFO("preset: " << p.name);
+            REQUIRE(p.top_p          == 0.0);
+            REQUIRE(p.top_k          == 0);
+            REQUIRE(p.min_p          == 0.0);
+            REQUIRE(p.repeat_penalty == 0.0);
+        }
+    }
+}

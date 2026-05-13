@@ -105,6 +105,14 @@ struct WorkspaceConfig {
     // "openai" / "qwen" / "claude" / "none" for a known model family.
     std::string llm_tool_format = "auto";
 
+    // S4.V Task 7 -- power-user samplers. Defaults of 0 mean "don't include
+    // in the request"; the server's per-model defaults remain in effect.
+    // Field names match llama.cpp / LM Studio's accepted JSON keys.
+    double      llm_top_p          = 0.0;
+    int         llm_top_k          = 0;
+    double      llm_min_p          = 0.0;
+    double      llm_repeat_penalty = 0.0;
+
     // Per-workspace tool approval overrides: tool_name -> policy.
     // Absent entries fall back to the tool's default (ITool::approval_policy()).
     std::unordered_map<std::string, ToolApprovalPolicy> tool_approval_policies;

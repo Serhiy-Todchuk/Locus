@@ -298,6 +298,17 @@ json LMStudioClient::build_request_body(
     body["temperature"] = config_.temperature;
     body["max_tokens"]  = config_.max_tokens;
 
+    // S4.V Task 7 -- optional samplers. Only sent when the user set them
+    // to a non-zero value; the 0 sentinel keeps the request lean so the
+    // server's per-model defaults still apply for everyone who hasn't
+    // explicitly opted in. OpenAI-compliant servers ignore unknown fields,
+    // so `top_k` / `min_p` / `repeat_penalty` are safe to send blindly to
+    // backends that don't honour them.
+    if (config_.top_p          > 0.0) body["top_p"]          = config_.top_p;
+    if (config_.top_k          > 0)   body["top_k"]          = config_.top_k;
+    if (config_.min_p          > 0.0) body["min_p"]          = config_.min_p;
+    if (config_.repeat_penalty > 0.0) body["repeat_penalty"] = config_.repeat_penalty;
+
     if (!config_.model.empty())
         body["model"] = config_.model;
 

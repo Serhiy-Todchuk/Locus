@@ -94,6 +94,17 @@ struct LLMConfig {
     int         context_limit = 8192;        // total context window size
     int         timeout_ms    = 600000;      // stream stall timeout: abort if no bytes flow for this long. Not a total-request cap -- long reasoning streams are fine. 600s default covers prefill + a buffered <think> block on a 35B-MoE thinking model with multi-K-token context on consumer GPU; configurable per workspace via .locus/config.json llm.timeout_ms.
     ToolFormat  tool_format   = ToolFormat::Auto;
+
+    // S4.V Task 7 -- optional samplers. Sentinel 0 means "don't include in
+    // request, let the server use its own default" (most servers default to
+    // sensible values per model; sending unwanted overrides is worse than
+    // sending nothing). Field names match what llama.cpp / LM Studio /
+    // Ollama recognise (`top_k`, `min_p`, `repeat_penalty` are llama.cpp
+    // extensions; pure-OpenAI servers ignore unknown fields).
+    double      top_p           = 0.0;
+    int         top_k           = 0;
+    double      min_p           = 0.0;
+    double      repeat_penalty  = 0.0;
 };
 
 // ---- Model info (from /v1/models) -------------------------------------------

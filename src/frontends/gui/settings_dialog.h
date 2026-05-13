@@ -72,6 +72,13 @@ private:
     // S4.V Task 6 -- expose ToolFormat so the user (and the preset apply)
     // can see what the wire format hint is. Default: Auto.
     wxChoice*          tool_format_ctrl_ = nullptr;
+    // S4.V Task 7 -- power-user sampler overrides. 0 = "don't send"
+    // (server's per-model defaults apply); positive values are forwarded
+    // to the LLM request body. Field names match llama.cpp / LM Studio.
+    wxSpinCtrlDouble*  top_p_ctrl_           = nullptr;
+    wxSpinCtrl*        top_k_ctrl_           = nullptr;
+    wxSpinCtrlDouble*  min_p_ctrl_           = nullptr;
+    wxSpinCtrlDouble*  repeat_penalty_ctrl_  = nullptr;
 
     void on_preset_apply(wxCommandEvent& evt);
     void on_preset_choice(wxCommandEvent& evt);

@@ -188,6 +188,45 @@ wxPanel* SettingsDialog::build_llm_tab(wxWindow* parent)
     }
     grid->Add(tool_format_ctrl_, 0);
 
+    // S4.V Task 7 -- sampler overrides. 0 in any spinner means "do not send
+    // this field" so the server's per-model default applies. The ranges are
+    // chosen to be generous (the LLM server is the real validator); the
+    // wxSpinCtrlDouble step is 0.05 because sampler dials are usually tuned
+    // in small increments rather than free-form decimals.
+    grid->Add(new wxStaticText(panel, wxID_ANY, "top_p:"),
+              0, wxALIGN_CENTER_VERTICAL);
+    top_p_ctrl_ = new wxSpinCtrlDouble(panel, wxID_ANY);
+    top_p_ctrl_->SetRange(0.0, 1.0);
+    top_p_ctrl_->SetIncrement(0.05);
+    top_p_ctrl_->SetDigits(2);
+    top_p_ctrl_->SetValue(config_.llm_top_p);
+    grid->Add(top_p_ctrl_, 0);
+
+    grid->Add(new wxStaticText(panel, wxID_ANY, "top_k:"),
+              0, wxALIGN_CENTER_VERTICAL);
+    top_k_ctrl_ = new wxSpinCtrl(panel, wxID_ANY);
+    top_k_ctrl_->SetRange(0, 10000);
+    top_k_ctrl_->SetValue(config_.llm_top_k);
+    grid->Add(top_k_ctrl_, 0);
+
+    grid->Add(new wxStaticText(panel, wxID_ANY, "min_p:"),
+              0, wxALIGN_CENTER_VERTICAL);
+    min_p_ctrl_ = new wxSpinCtrlDouble(panel, wxID_ANY);
+    min_p_ctrl_->SetRange(0.0, 1.0);
+    min_p_ctrl_->SetIncrement(0.01);
+    min_p_ctrl_->SetDigits(2);
+    min_p_ctrl_->SetValue(config_.llm_min_p);
+    grid->Add(min_p_ctrl_, 0);
+
+    grid->Add(new wxStaticText(panel, wxID_ANY, "repeat_penalty:"),
+              0, wxALIGN_CENTER_VERTICAL);
+    repeat_penalty_ctrl_ = new wxSpinCtrlDouble(panel, wxID_ANY);
+    repeat_penalty_ctrl_->SetRange(0.0, 2.0);
+    repeat_penalty_ctrl_->SetIncrement(0.05);
+    repeat_penalty_ctrl_->SetDigits(2);
+    repeat_penalty_ctrl_->SetValue(config_.llm_repeat_penalty);
+    grid->Add(repeat_penalty_ctrl_, 0);
+
     auto* ctx_hint = new wxStaticText(panel, wxID_ANY,
         "(0 = auto-detect context limit from server)");
     ctx_hint->SetForegroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_GRAYTEXT));
@@ -198,9 +237,18 @@ wxPanel* SettingsDialog::build_llm_tab(wxWindow* parent)
     mt_hint->SetForegroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_GRAYTEXT));
     mt_hint->SetFont(hint_font);
 
-    outer->Add(grid,     0, wxEXPAND | wxALL, 8);
-    outer->Add(ctx_hint, 0, wxLEFT | wxRIGHT | wxBOTTOM, 8);
-    outer->Add(mt_hint,  0, wxLEFT | wxRIGHT | wxBOTTOM, 8);
+    auto* sampler_hint = new wxStaticText(panel, wxID_ANY,
+        "Sampler overrides: 0 = use server's per-model default. Set positive "
+        "values only if you know what you're doing -- the server's defaults "
+        "are usually right for the loaded model.");
+    sampler_hint->SetForegroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_GRAYTEXT));
+    sampler_hint->SetFont(hint_font);
+    sampler_hint->Wrap(420);
+
+    outer->Add(grid,         0, wxEXPAND | wxALL, 8);
+    outer->Add(ctx_hint,     0, wxLEFT | wxRIGHT | wxBOTTOM, 8);
+    outer->Add(mt_hint,      0, wxLEFT | wxRIGHT | wxBOTTOM, 8);
+    outer->Add(sampler_hint, 0, wxLEFT | wxRIGHT | wxBOTTOM, 8);
     panel->SetSizer(outer);
     return panel;
 }
@@ -250,6 +298,14 @@ void SettingsDialog::on_preset_apply(wxCommandEvent&)
         case ToolFormat::None:   tf_sel = 4; break;
     }
     tool_format_ctrl_->SetSelection(tf_sel);
+
+    // S4.V Task 7 -- write sampler defaults from the preset. Presets that
+    // leave a sampler at 0 will visibly clear the corresponding spinner;
+    // that matches the "load preset = adopt its recommendations" contract.
+    if (top_p_ctrl_)          top_p_ctrl_->SetValue(p.top_p);
+    if (top_k_ctrl_)          top_k_ctrl_->SetValue(p.top_k);
+    if (min_p_ctrl_)          min_p_ctrl_->SetValue(p.min_p);
+    if (repeat_penalty_ctrl_) repeat_penalty_ctrl_->SetValue(p.repeat_penalty);
 }
 
 // ---------------------------------------------------------------------------
@@ -632,6 +688,12 @@ void SettingsDialog::on_ok(wxCommandEvent& evt)
         }
     }
 
+    // S4.V Task 7 -- sampler overrides.
+    double new_top_p          = top_p_ctrl_          ? top_p_ctrl_->GetValue()          : 0.0;
+    int    new_top_k          = top_k_ctrl_          ? top_k_ctrl_->GetValue()          : 0;
+    double new_min_p          = min_p_ctrl_          ? min_p_ctrl_->GetValue()          : 0.0;
+    double new_repeat_penalty = repeat_penalty_ctrl_ ? repeat_penalty_ctrl_->GetValue() : 0.0;
+
     std::vector<std::string> new_patterns;
     {
         std::string text = exclude_ctrl_->GetValue().ToStdString();
@@ -650,7 +712,11 @@ void SettingsDialog::on_ok(wxCommandEvent& evt)
         new_temp     != config_.llm_temperature ||
         new_context  != config_.llm_context_limit ||
         new_max_tok  != config_.llm_max_tokens ||
-        new_tool_format != config_.llm_tool_format) {
+        new_tool_format != config_.llm_tool_format ||
+        new_top_p          != config_.llm_top_p ||
+        new_top_k          != config_.llm_top_k ||
+        new_min_p          != config_.llm_min_p ||
+        new_repeat_penalty != config_.llm_repeat_penalty) {
         llm_changed_ = true;
     }
 
@@ -717,6 +783,10 @@ void SettingsDialog::on_ok(wxCommandEvent& evt)
         config_.llm_context_limit = new_context;
         config_.llm_max_tokens    = new_max_tok;
         config_.llm_tool_format   = new_tool_format;
+        config_.llm_top_p          = new_top_p;
+        config_.llm_top_k          = new_top_k;
+        config_.llm_min_p          = new_min_p;
+        config_.llm_repeat_penalty = new_repeat_penalty;
         config_.exclude_patterns  = new_patterns;
         config_.semantic_search_enabled = new_semantic;
         config_.embedding_model   = new_sem_model;

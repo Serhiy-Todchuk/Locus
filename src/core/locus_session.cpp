@@ -46,6 +46,15 @@ void merge_workspace_defaults(LLMConfig& cfg, const WorkspaceConfig& wc)
     // can unconditionally read from the workspace.
     if (cfg.tool_format == ToolFormat::Auto && !wc.llm_tool_format.empty())
         cfg.tool_format = tool_format_from_string(wc.llm_tool_format);
+
+    // S4.V Task 7 -- optional sampler overrides. Sentinel 0 in WorkspaceConfig
+    // means "don't override"; matching 0 default in LLMConfig means the
+    // request body skips the field entirely. So we only copy through when
+    // the workspace value is positive.
+    if (wc.llm_top_p          > 0.0) cfg.top_p          = wc.llm_top_p;
+    if (wc.llm_top_k          > 0)   cfg.top_k          = wc.llm_top_k;
+    if (wc.llm_min_p          > 0.0) cfg.min_p          = wc.llm_min_p;
+    if (wc.llm_repeat_penalty > 0.0) cfg.repeat_penalty = wc.llm_repeat_penalty;
 }
 
 } // namespace

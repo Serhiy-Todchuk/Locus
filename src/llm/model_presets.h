@@ -39,6 +39,16 @@ struct ModelPreset {
     double      temperature = 0.7;
     int         max_tokens  = 8192;
     ToolFormat  tool_format = ToolFormat::Auto;
+
+    // S4.V Task 7 -- optional sampler defaults. 0 keeps the request body
+    // lean and lets the server's per-model default apply. Presets only
+    // populate these when the family's published recommendations call for
+    // a specific non-default value (e.g. Qwen 2.5's 0.05 min_p, Llama 3's
+    // 1.1 repeat_penalty); otherwise they stay at 0.
+    double      top_p          = 0.0;
+    int         top_k          = 0;
+    double      min_p          = 0.0;
+    double      repeat_penalty = 0.0;
 };
 
 // Returns the built-in preset table. Order is the order the dropdown shows.

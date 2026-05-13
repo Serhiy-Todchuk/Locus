@@ -385,6 +385,15 @@ static WorkspaceConfig config_from_json(const json& j)
             cfg.llm_tool_format = llm["tool_format"].get<std::string>();
         if (llm.contains("timeout_ms"))
             cfg.llm_timeout_ms = llm["timeout_ms"].get<int>();
+        // S4.V Task 7 -- optional sampler overrides.
+        if (llm.contains("top_p"))
+            cfg.llm_top_p = llm["top_p"].get<double>();
+        if (llm.contains("top_k"))
+            cfg.llm_top_k = llm["top_k"].get<int>();
+        if (llm.contains("min_p"))
+            cfg.llm_min_p = llm["min_p"].get<double>();
+        if (llm.contains("repeat_penalty"))
+            cfg.llm_repeat_penalty = llm["repeat_penalty"].get<double>();
     }
 
     if (j.contains("agent")) {
@@ -463,7 +472,14 @@ static json config_to_json(const WorkspaceConfig& cfg)
             {"context_limit", cfg.llm_context_limit},
             {"max_tokens", cfg.llm_max_tokens},
             {"tool_format", cfg.llm_tool_format},
-            {"timeout_ms", cfg.llm_timeout_ms}
+            {"timeout_ms", cfg.llm_timeout_ms},
+            // S4.V Task 7 -- always emit, including the 0 sentinel, so a
+            // file edited by hand round-trips cleanly and the user can see
+            // the dial exists.
+            {"top_p",          cfg.llm_top_p},
+            {"top_k",          cfg.llm_top_k},
+            {"min_p",          cfg.llm_min_p},
+            {"repeat_penalty", cfg.llm_repeat_penalty}
         }},
         {"agent", {
             {"tool_manifest_warn_tokens", cfg.tool_manifest_warn_tokens},
