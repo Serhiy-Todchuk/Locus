@@ -1,0 +1,86 @@
+{
+  "name": "plan_mode",
+  "description": "End-to-end plan flow: switch to Plan, ask the LLM to propose a plan, wait for the plan bubble (Approve & execute / Reject Hyperlinks), click Approve & execute, wait for the agent to run all three steps, verify hello.py landed on disk. Requires LM Studio reachable at http://127.0.0.1:1234 with a tool-calling-capable model. Note: small models occasionally drop into 'malformed tool call' on propose_plan; if this script flakes, look at .locus/locus.log in the temp workspace for the LLM dropped-call warning -- that's the model, not the harness.",
+  "setup": {
+    "workspace": "tmp"
+  },
+  "steps": [
+    { "op": "launch" },
+    {
+      "op": "wait_for_window",
+      "args": { "title_prefix": "Locus", "timeout_ms": 30000 }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.chat.panel", "timeout_ms": 30000 }
+    },
+    { "op": "screenshot", "args": { "name": "01_launched" } },
+
+    { "op": "click", "args": { "automation_id": "locus.chat.mode_plan" } },
+    { "op": "sleep", "args": { "ms": 800 } },
+    { "op": "screenshot", "args": { "name": "02_plan_mode_selected" } },
+
+    {
+      "op": "click",
+      "args": { "parent_aid": "locus.chat.panel", "control_type": "document" }
+    },
+    {
+      "op": "type",
+      "args": {
+        "parent_aid": "locus.chat.panel",
+        "control_type": "document",
+        "text": "Use the propose_plan tool to plan creating a hello world Python file. Three steps: create the file, write the print statement, run it. Keep step descriptions short."
+      }
+    },
+    { "op": "sleep", "args": { "ms": 500 } },
+    {
+      "op": "press_key",
+      "args": {
+        "parent_aid": "locus.chat.panel",
+        "control_type": "document",
+        "key": "ENTER"
+      }
+    },
+
+    { "op": "sleep", "args": { "ms": 2000 } },
+    {
+      "op": "assert_text_contains",
+      "args": {
+        "automation_id": "locus.chat.webview",
+        "substring": "Use the propose_plan tool",
+        "walk_subtree": true,
+        "timeout_ms": 60000
+      }
+    },
+    { "op": "screenshot", "args": { "name": "03_user_message_visible" } },
+
+    {
+      "op": "assert_text_contains",
+      "args": {
+        "automation_id": "locus.chat.webview",
+        "substring": "Approve & execute",
+        "walk_subtree": true,
+        "timeout_ms": 240000
+      }
+    },
+    { "op": "sleep", "args": { "ms": 500 } },
+    { "op": "screenshot", "args": { "name": "04_plan_proposed" } },
+
+    { "op": "click", "args": { "name": "Approve & execute", "timeout_ms": 5000 } },
+    { "op": "sleep", "args": { "ms": 1000 } },
+    { "op": "screenshot", "args": { "name": "05_approved" } },
+
+    {
+      "op": "assert_file_exists",
+      "args": {
+        "any_of": ["hello.py", "hello_world.py", "helloworld.py", "hello-world.py"],
+        "timeout_ms": 600000
+      }
+    },
+    { "op": "sleep", "args": { "ms": 1500 } },
+    { "op": "screenshot", "args": { "name": "06_execution_done" } },
+
+    { "op": "dump_tree", "args": { "name": "final_tree.txt", "depth": 14 } },
+    { "op": "quit", "args": { "wait_ms": 5000 } }
+  ]
+}

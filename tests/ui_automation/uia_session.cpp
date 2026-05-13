@@ -702,16 +702,18 @@ bool UiaSession::press_key_to(const Element& target,
     UIA_HWND native = nullptr;
     target.raw()->get_CurrentNativeWindowHandle(&native);
     HWND hwnd = reinterpret_cast<HWND>(native);
-    if (!hwnd) {
-        set_error("press_key_to: target has no HWND");
-        return false;
-    }
+
+    // No HWND -- the element is a UIA-only abstraction (e.g. a Document
+    // inside WebView2's DOM tree). Fall back to SendInput against whatever
+    // currently has focus. Acceptable because the typical use is "type then
+    // press Enter" where the type step already focused a real HWND.
+    if (!hwnd) return press_key(key_name, modifiers);
 
     // Modifiers are tricky over PostMessage -- WM_KEYDOWN with the modifier
     // doesn't update Win32's modifier state for the receiving thread. For
     // the Enter / Esc / Tab case we don't need modifiers. Punt: if modifiers
     // are requested, fall through to the SendInput path on the focused
-    // window (which assumes the caller already arranged focus).
+    // window.
     if (!modifiers.empty()) return press_key(key_name, modifiers);
 
     PostMessageW(hwnd, WM_KEYDOWN, (WPARAM)it->second, 0);
@@ -788,13 +790,27 @@ std::string UiaSession::read_all_text(const Element& root)
         if (FAILED(arr->GetElement(i, &el_raw)) || !el_raw) continue;
         Element el(el_raw);
         int ct = el.control_type();
+        std::string s;
         if (ct == UIA_TextControlTypeId || ct == UIA_EditControlTypeId ||
             ct == UIA_DocumentControlTypeId) {
-            std::string s = read_text(el);
-            if (!s.empty()) {
-                if (!out.empty()) out += '\n';
-                out += s;
-            }
+            // Real text-bearing controls: read full content via the
+            // Text/Value pattern (handles multi-line, document-scale text).
+            s = read_text(el);
+        } else if (ct == UIA_ButtonControlTypeId ||
+                   ct == UIA_HyperlinkControlTypeId ||
+                   ct == UIA_CheckBoxControlTypeId ||
+                   ct == UIA_ListItemControlTypeId ||
+                   ct == UIA_TabItemControlTypeId ||
+                   ct == UIA_GroupControlTypeId) {
+            // Element types whose label-as-text lives in the Name property
+            // (e.g. WebView2 surfaces HTML <button> / <a> labels here).
+            // Keeps assertions like "Approve & execute" reachable without
+            // needing the script to chase a specific control type.
+            s = el.name();
+        }
+        if (!s.empty()) {
+            if (!out.empty()) out += '\n';
+            out += s;
         }
     }
     arr->Release();

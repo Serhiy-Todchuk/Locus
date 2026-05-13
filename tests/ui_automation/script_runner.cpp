@@ -72,12 +72,14 @@ ScriptResult ScriptRunner::run()
 
     // Resolve workspace path. "tmp" means a fresh dir under temp_workspace_root.
     std::filesystem::path workspace_dir;
+    bool is_tmp = false;
     if (script_.contains("setup") && script_["setup"].is_object()) {
         std::string ws = get_string(script_["setup"], "workspace", "tmp");
         if (ws == "tmp" || ws.empty()) {
             workspace_dir = opts_.temp_workspace_root / (result.name + "_" + short_random_id());
             std::error_code ec;
             std::filesystem::create_directories(workspace_dir, ec);
+            is_tmp = true;
         } else {
             workspace_dir = ws;
         }
@@ -85,8 +87,41 @@ ScriptResult ScriptRunner::run()
         workspace_dir = opts_.temp_workspace_root / (result.name + "_" + short_random_id());
         std::error_code ec;
         std::filesystem::create_directories(workspace_dir, ec);
+        is_tmp = true;
     }
     workspace_path_used_ = workspace_dir.string();
+
+    // For tmp workspaces, pre-seed .locus/config.json with auto-approve for
+    // the mutating tools so unattended scripts don't hang on the approval
+    // panel. Real workspaces are left untouched -- scripts targeting an
+    // existing workspace inherit its policies. The semantic_search=false
+    // hint mirrors what --no-first-time-prompts writes; with this file
+    // already on disk, LocusApp's first-open guard becomes a no-op.
+    if (is_tmp) {
+        try {
+            auto cfg_path = workspace_dir / ".locus" / "config.json";
+            std::error_code ec;
+            std::filesystem::create_directories(cfg_path.parent_path(), ec);
+            // Schema mirrors src/core/workspace.cpp::load_config -- root-level
+            // `tool_approvals` keyed by tool name, values "auto"/"ask"/"deny".
+            // Per-tool policy strings parsed by policy_from_string in tool.h.
+            Json cfg;
+            cfg["index"]["semantic_search"]["enabled"] = false;
+            cfg["tool_approvals"] = {
+                {"write_file",     "auto"},
+                {"edit_file",      "auto"},
+                {"delete_file",    "auto"},
+                {"run_command",    "auto"},
+                {"run_command_bg", "auto"}
+            };
+            std::ofstream f(cfg_path);
+            f << cfg.dump(2) << '\n';
+        } catch (const std::exception& ex) {
+            // Best-effort -- a missing config just means the script hangs
+            // on the approval panel, which is loud enough.
+            (void)ex;
+        }
+    }
 
     // Set up output directory.
     output_dir_ = opts_.output_root / result.name;
@@ -198,6 +233,7 @@ StepResult ScriptRunner::run_step(const Json& step)
     if (op == "sleep")                   return op_sleep(args);
     if (op == "quit")                    return op_quit(args);
     if (op == "dump_tree")               return op_dump_tree(args);
+    if (op == "assert_file_exists")      return op_assert_file_exists(args);
 
     return StepResult{ false, "unknown op '" + op + "'", {} };
 }
@@ -261,6 +297,21 @@ Element ScriptRunner::resolve_target(const Json& args, int timeout_ms)
         q.name        = name;          // optional
         if (ct) q.control_type = ct;
         q.timeout_ms  = timeout_ms;
+        // Default to direct-children scope for parent_aid searches. This
+        // is the intent in 99% of cases ("find the input directly under
+        // this panel") and avoids cross-cutting hits like the WebView2's
+        // own DOM Documents bubbling up through Subtree scope. Callers
+        // who really need a deep walk can pass "deep": true.
+        bool deep = args.is_object() && args.contains("deep")
+                    && args["deep"].is_boolean()
+                    && args["deep"].get<bool>();
+        q.deep = deep;
+        Element first = uia_.find(q, &parent);
+        if (first.valid() || deep) return first;
+        // Fallback: caller didn't ask for deep, but no direct child matched.
+        // Retry under subtree -- still useful for cases where the target is
+        // nested (e.g. tab pages inside a notebook).
+        q.deep = true;
         return uia_.find(q, &parent);
     }
 
@@ -526,6 +577,48 @@ StepResult ScriptRunner::op_dump_tree(const Json& args)
     if (!out) return { false, "dump_tree: cannot write " + path.string(), {} };
     out << dump;
     return { true, {}, "wrote " + path.string() };
+}
+
+StepResult ScriptRunner::op_assert_file_exists(const Json& args)
+{
+    std::string rel = get_string(args, "path");
+    int timeout    = get_int(args, "timeout_ms", 5000);
+    bool any_match = args.contains("any_of") && args["any_of"].is_array();
+
+    if (rel.empty() && !any_match)
+        return { false, "assert_file_exists: requires 'path' or 'any_of'", {} };
+
+    // Build candidate list. Each path is treated as a workspace-relative
+    // glob fragment -- we currently support literal paths only; if scripts
+    // need glob matching, swap in std::regex later.
+    std::vector<std::string> candidates;
+    if (!rel.empty()) candidates.push_back(rel);
+    if (any_match) {
+        for (auto& v : args["any_of"])
+            if (v.is_string()) candidates.push_back(v.get<std::string>());
+    }
+
+    std::filesystem::path root = workspace_path_used_;
+    bool ok = uia_.wait_for([&] {
+        for (const auto& c : candidates) {
+            std::error_code ec;
+            if (std::filesystem::exists(root / c, ec)) return true;
+        }
+        return false;
+    }, timeout);
+
+    if (!ok) {
+        std::string list;
+        for (auto& c : candidates) {
+            if (!list.empty()) list += ", ";
+            list += c;
+        }
+        return { false,
+                 "assert_file_exists: none of [" + list + "] exist in "
+                 + root.string() + " after " + std::to_string(timeout) + " ms",
+                 {} };
+    }
+    return { true, {}, "file appeared" };
 }
 
 // ---------------------------------------------------------------------------
