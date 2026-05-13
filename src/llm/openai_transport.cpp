@@ -36,9 +36,18 @@ void OpenAiTransport::do_post(const std::string& body, const Callbacks& cbs, boo
         return true;
     });
 
-    // Use cpr WriteCallback to feed the parser incrementally.
+    // Use cpr WriteCallback to feed the parser incrementally. Polling the
+    // cancel predicate here (rather than only between SSE events) means a
+    // Stop click is honoured within one HTTP read -- typically a few hundred
+    // bytes or less of further output, not the rest of the response.
     cpr::WriteCallback write_cb{[&](std::string_view data,
                                     intptr_t /*userdata*/) -> bool {
+        if (cbs.should_cancel && cbs.should_cancel()) {
+            // Returning false makes libcurl abort the transfer with
+            // CURLE_WRITE_ERROR; OpenAiTransport::do_post detects that
+            // below via cbs.should_cancel() and treats it as clean exit.
+            return false;
+        }
         parser.feed(std::string(data));
         return true;
     }};
@@ -64,6 +73,16 @@ void OpenAiTransport::do_post(const std::string& body, const Callbacks& cbs, boo
 
     // Flush any remaining data in the SSE buffer.
     parser.finish();
+
+    // User-requested cancellation -- treat any transport error (libcurl
+    // surfaces it as a write error when the WriteCallback returns false) as
+    // a clean exit. Skips the stall-retry path and suppresses on_error so
+    // the chat doesn't show "Turn cancelled" twice (once here, once from
+    // AgentCore).
+    if (cbs.should_cancel && cbs.should_cancel()) {
+        spdlog::info("LLM stream aborted by user cancellation");
+        return;
+    }
 
     // Transport-level errors.
     if (response.error.code != cpr::ErrorCode::OK) {

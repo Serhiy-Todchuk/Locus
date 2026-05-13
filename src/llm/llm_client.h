@@ -138,6 +138,13 @@ struct StreamCallbacks {
     OnComplete  on_complete;
     OnError     on_error;
     OnUsage     on_usage;
+
+    // Polled inside the streaming hot path. Return true to request an
+    // immediate abort of the HTTP transfer -- the transport returns without
+    // an error callback, the partial accumulated text is preserved, and
+    // post-stream warnings (max_tokens / content_filter) are suppressed.
+    // Used by the GUI Stop button.
+    std::function<bool()> on_should_cancel;
 };
 
 // ---- Tool schema (for function calling) ------------------------------------

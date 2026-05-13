@@ -428,11 +428,22 @@ void LMStudioClient::stream_completion(
         if (callbacks.on_error)
             callbacks.on_error(err);
     };
+    tcbs.should_cancel = callbacks.on_should_cancel;
 
     transport_.post_chat(body.dump(), tcbs);
 
     if (errored)
         return;
+
+    // User pressed Stop mid-stream. Don't run the post-stream validations
+    // (empty body, max_tokens warning, tool-call argument parse) -- they'd
+    // fire false positives on a partial response. The caller already knows
+    // about the cancellation and gets the partial accumulated text via the
+    // tokens that already streamed through.
+    if (callbacks.on_should_cancel && callbacks.on_should_cancel()) {
+        spdlog::info("LMStudioClient: stream cancelled, skipping post-stream checks");
+        return;
+    }
 
     // Flush any state the decoder is still holding back (XML decoders
     // may have buffered a few bytes waiting on a partial-tag suffix).

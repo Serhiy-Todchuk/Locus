@@ -6,6 +6,7 @@
 #include "llm/llm_client.h"
 #include "../tools/tool.h"
 
+#include <atomic>
 #include <string>
 #include <vector>
 
@@ -35,6 +36,7 @@ public:
               ActivityLog& activity,
               ContextBudget& budget,
               FrontendRegistry& frontends,
+              std::atomic<bool>& cancel_flag,
               MetricsAggregator* metrics = nullptr);
 
     // Run one LLM step. `tool_mode` controls which subset of the catalog is
@@ -57,6 +59,7 @@ private:
     ActivityLog&        activity_;
     ContextBudget&      budget_;
     FrontendRegistry&   frontends_;
+    std::atomic<bool>&  cancel_flag_;
     MetricsAggregator*  metrics_ = nullptr;  // optional: nullptr disables recording
 };
 

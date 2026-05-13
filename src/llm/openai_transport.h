@@ -22,6 +22,11 @@ public:
         std::function<bool(const std::string& sse_data)> on_data;
         // Transport / HTTP / connect / stall error.
         std::function<void(const std::string& err)> on_error;
+        // Polled by the cpr write callback before each chunk is parsed. If
+        // it returns true the HTTP transfer aborts immediately and post_chat
+        // returns *without* firing on_error -- the caller is expected to
+        // know about the cancellation.
+        std::function<bool()> should_cancel;
     };
 
     explicit OpenAiTransport(const LLMConfig& config);

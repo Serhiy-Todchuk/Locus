@@ -74,6 +74,7 @@ AgentCore::AgentCore(ILLMClient& llm,
     metrics_    = std::make_unique<MetricsAggregator>();
     loop_       = std::make_unique<AgentLoop>(llm_, tools_, services_,
                                                *activity_, *budget_, frontends_,
+                                               cancel_requested_,
                                                metrics_.get());
     dispatcher_ = std::make_unique<ToolDispatcher>(tools_, services_, *activity_,
                                                    frontends_, cancel_requested_,
@@ -674,6 +675,19 @@ void AgentCore::process_message(const std::string& content)
 
         if (step.had_error) {
             turn_had_error = true;
+            break;
+        }
+
+        // Mid-stream Stop. Keep whatever partial text streamed before the
+        // abort in history (matches the visible chat state) and surface a
+        // one-line note so the user knows the turn ended on cancel rather
+        // than on a natural stop.
+        if (cancel_requested_.load()) {
+            history_.add(std::move(step.assistant_msg));
+            spdlog::info("AgentCore: turn cancelled mid-stream");
+            frontends_.broadcast([](IFrontend& fe) {
+                fe.on_error("Turn cancelled.");
+            });
             break;
         }
 

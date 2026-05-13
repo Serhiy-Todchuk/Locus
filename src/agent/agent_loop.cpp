@@ -20,6 +20,7 @@ AgentLoop::AgentLoop(ILLMClient& llm,
                      ActivityLog& activity,
                      ContextBudget& budget,
                      FrontendRegistry& frontends,
+                     std::atomic<bool>& cancel_flag,
                      MetricsAggregator* metrics)
     : llm_(llm)
     , tools_(tools)
@@ -27,6 +28,7 @@ AgentLoop::AgentLoop(ILLMClient& llm,
     , activity_(activity)
     , budget_(budget)
     , frontends_(frontends)
+    , cancel_flag_(cancel_flag)
     , metrics_(metrics)
 {}
 
@@ -153,49 +155,53 @@ AgentStepResult AgentLoop::run_step(const ConversationHistory& history,
             metrics_->record_first_token(ttft_ms);
     };
 
-    llm_.stream_completion(history.messages(), tool_schemas, {
-        /* on_token */
-        [&](const std::string& token) {
-            mark_first_token();
-            accumulated_text += token;
-            frontends_.broadcast([&](IFrontend& fe) { fe.on_token(token); });
-            maybe_fire_progress(false);
-        },
-        /* on_reasoning_token */
-        [&](const std::string& token) {
-            mark_first_token();
-            accumulated_reasoning += token;
-            frontends_.broadcast([&](IFrontend& fe) { fe.on_reasoning_token(token); });
-            maybe_fire_progress(false);
-        },
-        /* on_tool_calls */
-        [&](const std::vector<ToolCallRequest>& calls) {
-            tool_call_requests = calls;
-        },
-        /* on_complete */
-        [&]() {
-            spdlog::trace("AgentLoop: LLM step complete, text={} chars, "
-                          "reasoning={} chars, tool_calls={}",
-                          accumulated_text.size(), accumulated_reasoning.size(),
-                          tool_call_requests.size());
-        },
-        /* on_error */
-        [&](const std::string& err) {
-            out.had_error = true;
-            frontends_.broadcast([&](IFrontend& fe) { fe.on_error(err); });
-            activity_.emit(ActivityKind::error, "LLM error", err);
-        },
-        /* on_usage */
-        [&](const CompletionUsage& u) {
-            budget_.set_server_total(u.total_tokens);
-            reasoning_tokens_reported = u.reasoning_tokens;
-            usage_reported = u;
-            spdlog::trace("AgentLoop: server reports {} total tokens "
-                          "(prompt={}, completion={}, reasoning={})",
-                          u.total_tokens, u.prompt_tokens, u.completion_tokens,
-                          u.reasoning_tokens);
-        }
-    });
+    StreamCallbacks cbs;
+    cbs.on_token = [&](const std::string& token) {
+        mark_first_token();
+        accumulated_text += token;
+        // Don't render tokens after the user clicked Stop. The HTTP abort
+        // happens at the next chunk boundary in the transport layer;
+        // suppressing here avoids painting up to that boundary's worth of
+        // extra text into the chat panel.
+        if (cancel_flag_.load(std::memory_order_relaxed)) return;
+        frontends_.broadcast([&](IFrontend& fe) { fe.on_token(token); });
+        maybe_fire_progress(false);
+    };
+    cbs.on_reasoning_token = [&](const std::string& token) {
+        mark_first_token();
+        accumulated_reasoning += token;
+        if (cancel_flag_.load(std::memory_order_relaxed)) return;
+        frontends_.broadcast([&](IFrontend& fe) { fe.on_reasoning_token(token); });
+        maybe_fire_progress(false);
+    };
+    cbs.on_tool_calls = [&](const std::vector<ToolCallRequest>& calls) {
+        tool_call_requests = calls;
+    };
+    cbs.on_complete = [&]() {
+        spdlog::trace("AgentLoop: LLM step complete, text={} chars, "
+                      "reasoning={} chars, tool_calls={}",
+                      accumulated_text.size(), accumulated_reasoning.size(),
+                      tool_call_requests.size());
+    };
+    cbs.on_error = [&](const std::string& err) {
+        out.had_error = true;
+        frontends_.broadcast([&](IFrontend& fe) { fe.on_error(err); });
+        activity_.emit(ActivityKind::error, "LLM error", err);
+    };
+    cbs.on_usage = [&](const CompletionUsage& u) {
+        budget_.set_server_total(u.total_tokens);
+        reasoning_tokens_reported = u.reasoning_tokens;
+        usage_reported = u;
+        spdlog::trace("AgentLoop: server reports {} total tokens "
+                      "(prompt={}, completion={}, reasoning={})",
+                      u.total_tokens, u.prompt_tokens, u.completion_tokens,
+                      u.reasoning_tokens);
+    };
+    cbs.on_should_cancel = [&]() {
+        return cancel_flag_.load(std::memory_order_relaxed);
+    };
+
+    llm_.stream_completion(history.messages(), tool_schemas, cbs);
 
     auto stream_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                          std::chrono::steady_clock::now() - stream_t0).count();
