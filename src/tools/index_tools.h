@@ -8,13 +8,19 @@ class ListDirectoryTool : public ITool {
 public:
     std::string name()        const override { return "list_directory"; }
     std::string description() const override {
-        return "List files and directories at a path using the workspace index. "
-               "Returns names, sizes, and types.";
+        return "List files and directories at a path. Enumerates the real filesystem "
+               "and annotates each entry: [<language>] for indexed text, [binary] for "
+               "binary files (by extension or detected content), [oversized] for files "
+               "above the indexer's size cap, [unindexed] for entries the index didn't "
+               "track (try read_file if you suspect they are text). Workspace excludes "
+               "(.git, node_modules, build, .locus, ...) are still hidden. Capped at "
+               "max_entries (default 200) -- refine the path or use search for large dirs.";
     }
     std::vector<ToolParam> params() const override {
         return {
-            {"path",  "string",  "Relative path from workspace root (empty or '.' for root)", false},
-            {"depth", "integer", "Depth of listing: 0 = immediate children (default), 1+ = recurse", false},
+            {"path",        "string",  "Relative path from workspace root (empty or '.' for root)", false},
+            {"depth",       "integer", "Depth of listing: 0 = immediate children (default), 1+ = recurse", false},
+            {"max_entries", "integer", "Cap on entries returned (default 200; remainder reported as truncated)", false},
         };
     }
     ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::auto_approve; }

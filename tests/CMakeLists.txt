@@ -26,6 +26,7 @@ add_executable(locus_tests
     test_memory_store.cpp
     test_gitignore.cpp
     test_auto_commit.cpp
+    test_list_directory_tool.cpp
     retrieval_eval/metrics.cpp
     support/shared_embedder.cpp
 )
