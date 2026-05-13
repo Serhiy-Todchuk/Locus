@@ -143,13 +143,6 @@ LocusFrame::LocusFrame(AgentCore& agent, Workspace& workspace, McpManager* mcp)
     // S4.F live generation-progress chip.
     Bind(EVT_AGENT_GEN_PROGRESS,        &LocusFrame::on_agent_gen_progress,       this);
 
-    // Show LOCUS.md token cost if present.
-    if (!workspace_.locus_md().empty()) {
-        // Rough estimate: ~4 chars per token.
-        int locus_tokens = static_cast<int>(workspace_.locus_md().size()) / 4;
-        chat_panel_->set_locus_md_tokens(locus_tokens);
-    }
-
     // Wire embedding worker progress to the WxFrontend thread bridge.
     if (workspace_.embedding_worker()) {
         workspace_.embedding_worker()->on_progress = [this](int done, int total) {

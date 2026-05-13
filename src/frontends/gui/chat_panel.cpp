@@ -626,8 +626,7 @@ ChatPanel::ChatPanel(wxWindow* parent,
     footer->AddStretchSpacer();
     footer->Add(plan_chip_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
     footer->Add(commit_chip_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
-    footer->Add(gen_chip_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
-    footer->Add(locus_chip_, 0, wxALIGN_CENTER_VERTICAL);
+    footer->Add(gen_chip_, 0, wxALIGN_CENTER_VERTICAL);
     sizer->Add(footer, 0, wxEXPAND | wxALL, 4);
 
     SetSizer(sizer);
@@ -716,7 +715,6 @@ void ChatPanel::create_footer()
     undo_btn_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
         if (on_undo_) on_undo_();
     });
-    locus_chip_ = new wxStaticText(this, wxID_ANY, "");
     plan_chip_  = new wxStaticText(this, wxID_ANY, "");
     plan_chip_->Hide();  // shown only while a plan is active
     commit_chip_ = new wxStaticText(this, wxID_ANY, "");
@@ -1113,14 +1111,6 @@ void ChatPanel::set_context_meter(int used, int limit)
         ctx_gauge_->SetForegroundColour(wxColour(255, 193, 7));
     else
         ctx_gauge_->SetForegroundColour(wxColour(244, 67, 54));
-}
-
-void ChatPanel::set_locus_md_tokens(int tokens)
-{
-    if (tokens > 0)
-        locus_chip_->SetLabel(wxString::Format("[LOCUS.md: %d tk]", tokens));
-    else
-        locus_chip_->SetLabel("");
 }
 
 void ChatPanel::set_generation_progress(int /*chars*/, int est_tokens)

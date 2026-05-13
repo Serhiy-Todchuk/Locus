@@ -91,7 +91,6 @@ public:
 
     // Footer updates.
     void set_context_meter(int used, int limit);
-    void set_locus_md_tokens(int tokens);
 
     // S4.F live generation-token counter (footer, next to context meter).
     // Updated ~150 ms throttled by AgentLoop while a stream is in flight.
@@ -198,7 +197,6 @@ private:
     wxButton*     compact_btn_   = nullptr;
     wxButton*     stop_btn_      = nullptr;
     wxButton*     undo_btn_      = nullptr;
-    wxStaticText* locus_chip_    = nullptr;
     // S4.D mode switcher (above the input). Mutually exclusive toggles.
     wxToggleButton* mode_chat_btn_    = nullptr;
     wxToggleButton* mode_plan_btn_    = nullptr;
