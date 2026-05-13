@@ -1,5 +1,7 @@
 #include "settings_dialog.h"
 
+#include "locus_accessible.h"
+#include "ui_names.h"
 #include "../../llm/model_presets.h"
 #include "../../mcp/mcp_config.h"
 #include "../../mcp/mcp_manager.h"
@@ -65,11 +67,31 @@ SettingsDialog::SettingsDialog(wxWindow* parent, WorkspaceConfig& config,
     , tools_(tools)
     , mcp_(mcp)
 {
+    SetName(ui_names::kSettingsDialog);
+    gui::apply_locus_accessible_name(this);
+
     auto* notebook = new wxNotebook(this, wxID_ANY);
-    notebook->AddPage(build_llm_tab(notebook),       "LLM");
-    notebook->AddPage(build_index_tab(notebook),     "Index");
-    notebook->AddPage(build_approvals_tab(notebook), "Tool Approvals");
-    notebook->AddPage(build_mcp_tab(notebook),       "MCP Servers");
+    notebook->SetName(ui_names::kSettingsNotebook);
+    gui::apply_locus_accessible_name(notebook);
+
+    auto* tab_llm       = build_llm_tab(notebook);
+    auto* tab_index     = build_index_tab(notebook);
+    auto* tab_approvals = build_approvals_tab(notebook);
+    auto* tab_mcp       = build_mcp_tab(notebook);
+
+    tab_llm->SetName(ui_names::kSettingsTabLlm);
+    tab_index->SetName(ui_names::kSettingsTabIndex);
+    tab_approvals->SetName(ui_names::kSettingsTabApprovals);
+    tab_mcp->SetName(ui_names::kSettingsTabMcp);
+    gui::apply_locus_accessible_name(tab_llm);
+    gui::apply_locus_accessible_name(tab_index);
+    gui::apply_locus_accessible_name(tab_approvals);
+    gui::apply_locus_accessible_name(tab_mcp);
+
+    notebook->AddPage(tab_llm,       "LLM");
+    notebook->AddPage(tab_index,     "Index");
+    notebook->AddPage(tab_approvals, "Tool Approvals");
+    notebook->AddPage(tab_mcp,       "MCP Servers");
 
     auto* main_sizer = new wxBoxSizer(wxVERTICAL);
     main_sizer->Add(notebook, 1, wxEXPAND | wxALL, 8);

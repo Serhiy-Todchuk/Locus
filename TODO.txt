@@ -5,7 +5,9 @@
 - use monospace font for chat
 - merge statistics/activity log with chat window
 - append prompt during running turn - queue next prompt
-- search in chat
 - FastDebug
 - tokens per second counter per each turn?
 - Does Locus know how to work with MD files? Or this comes from LLM as given?
+- [Message truncated - exceeded 50,000 character limit]
+- GraphRAG
+- Can we remember window layout?

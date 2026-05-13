@@ -72,3 +72,6 @@ add_subdirectory(integration)
 
 # Manual-only retrieval evaluation harness (locus_retrieval_eval).
 add_subdirectory(retrieval_eval)
+
+# Manual-only UI Automation test driver (locus_ui_tests, S5.L).
+add_subdirectory(ui_automation)

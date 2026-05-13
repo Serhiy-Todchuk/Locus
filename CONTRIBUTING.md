@@ -61,7 +61,7 @@ The custom triplet at `cmake/triplets/x64-windows-static.cmake` adds
 
 ## Build
 
-The repo has five buildable targets:
+The repo has six buildable targets:
 
 | Target | What it is | Output (Release) |
 |---|---|---|
@@ -70,6 +70,7 @@ The repo has five buildable targets:
 | `locus_tests`              | Catch2 unit-test suite                              | `build/release/tests/Release/locus_tests.exe` |
 | `locus_integration_tests`  | Live-LLM end-to-end harness (manual only)           | `build/release/tests/integration/Release/locus_integration_tests.exe` |
 | `locus_retrieval_eval`     | Recall@K / MRR / nDCG benchmark (manual only)       | `build/release/tests/retrieval_eval/Release/locus_retrieval_eval.exe` |
+| `locus_ui_tests`           | Scripted Windows UIA driver for `locus_gui.exe` (manual only) | `build/release/tests/ui_automation/Release/locus_ui_tests.exe` |
 
 `pdfium.dll` is auto-copied next to `locus.exe` and `locus_gui.exe` by a
 `POST_BUILD` step on each app target.
@@ -81,7 +82,7 @@ cmake --build build/release --config Release
 cmake --build build/debug   --config Debug
 ```
 
-The default `ALL_BUILD` target builds `locus`, `locus_gui`, and `locus_tests`. The two
+The default `ALL_BUILD` target builds `locus`, `locus_gui`, and `locus_tests`. The three
 manual harnesses are excluded from default and have to be asked for by name.
 
 ### Build a single target
@@ -92,6 +93,7 @@ cmake --build build/release --config Release --target locus_gui
 cmake --build build/release --config Release --target locus_tests
 cmake --build build/release --config Release --target locus_integration_tests
 cmake --build build/release --config Release --target locus_retrieval_eval
+cmake --build build/release --config Release --target locus_ui_tests
 ```
 
 For Debug, swap `build/release` -> `build/debug` and `--config Release` -> `--config Debug`.
@@ -213,6 +215,26 @@ build\release\tests\retrieval_eval\Release\locus_retrieval_eval.exe ^
 
 See [tests/retrieval_eval/README.md](tests/retrieval_eval/README.md) for baseline
 management and the regression-check protocol.
+
+### UI automation tests (manual, Windows only -- S5.L)
+
+Scripted UI Automation harness that drives `locus_gui.exe` -- launches the
+GUI, finds a control by name, clicks / types / screenshots / asserts state,
+quits cleanly. Same manual-run, opt-in posture as the integration tests.
+
+```
+# All bundled scripts (smoke + settings_tour + chat_round_trip)
+build\release\tests\ui_automation\Release\locus_ui_tests.exe --all
+
+# One script
+build\release\tests\ui_automation\Release\locus_ui_tests.exe ^
+    --script tests\ui_automation\scripts\smoke.json
+```
+
+The harness pops real windows on the active desktop session -- run it in a
+secondary Windows session if you don't want your mouse hijacked. See
+[tests/ui_automation/README.md](tests/ui_automation/README.md) for step ops,
+naming conventions, and the focus-stealing caveat.
 
 ## Adding tests
 

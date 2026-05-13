@@ -1,6 +1,8 @@
 #include "chat_panel.h"
+#include "locus_accessible.h"
 #include "markdown.h"
 #include "theme.h"
+#include "ui_names.h"
 
 #include "../../agent/mention_parser.h"
 
@@ -545,6 +547,11 @@ ChatPanel::ChatPanel(wxWindow* parent,
     , on_plan_decision_(std::move(on_plan_decision))
     , flush_timer_(this)
 {
+    // S5.L -- name the panel for UI Automation. Children get named in their
+    // respective create_*() helpers below.
+    SetName(ui_names::kChatPanel);
+    gui::apply_locus_accessible_name(this);
+
     create_webview();
     create_input();
     create_footer();
@@ -577,11 +584,17 @@ ChatPanel::ChatPanel(wxWindow* parent,
 
     mode_chat_btn_ = mk_toggle("Chat", AgentMode::chat,
         "Default: full tool catalog, no plan workflow.");
+    mode_chat_btn_->SetName(ui_names::kChatModeChat);
+    gui::apply_locus_accessible_name(mode_chat_btn_);
     mode_plan_btn_ = mk_toggle("Plan", AgentMode::plan,
         "Plan mode: model proposes a structured plan; you Approve to execute.");
+    mode_plan_btn_->SetName(ui_names::kChatModePlan);
+    gui::apply_locus_accessible_name(mode_plan_btn_);
     mode_execute_btn_ = mk_toggle("Execute", AgentMode::execute,
         "Execute mode: full tool catalog plus mark_step_done. "
         "Usually entered automatically after Approve.");
+    mode_execute_btn_->SetName(ui_names::kChatModeExec);
+    gui::apply_locus_accessible_name(mode_execute_btn_);
     mode_chat_btn_->SetValue(true);  // default selection
 
     // Attached-context chip row (between chat history and input).
@@ -642,6 +655,8 @@ ChatPanel::ChatPanel(wxWindow* parent,
 void ChatPanel::create_webview()
 {
     webview_ = wxWebView::New(this, wxID_ANY);
+    webview_->SetName(ui_names::kChatWebView);
+    gui::apply_locus_accessible_name(webview_);
     webview_->SetPage(wxString::FromUTF8(build_chat_html()), "about:blank");
 
     // Block navigation to external URLs.
@@ -673,6 +688,8 @@ void ChatPanel::create_input()
     input_ = new wxTextCtrl(this, wxID_ANY, wxEmptyString,
                             wxDefaultPosition, wxSize(-1, 60),
                             wxTE_MULTILINE | wxTE_PROCESS_ENTER | wxTE_RICH2);
+    input_->SetName(ui_names::kChatInput);
+    gui::apply_locus_accessible_name(input_);
     // No SetHint() — wx's multiline+RICH2 hint seeds real text content on
     // Windows rather than painting an overlay, so the "placeholder" becomes
     // editable and has to be manually deleted. Use a tooltip instead for
@@ -700,14 +717,20 @@ void ChatPanel::create_footer()
                              wxDefaultPosition, wxSize(120, 16));
     ctx_label_ = new wxStaticText(this, wxID_ANY, "ctx: 0/0",
                                      wxDefaultPosition, wxSize(150, -1));
+    ctx_label_->SetName(ui_names::kChatCtxLabel);
+    gui::apply_locus_accessible_name(ctx_label_);
     compact_btn_ = new wxButton(this, wxID_ANY, "Compact",
                                 wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+    compact_btn_->SetName(ui_names::kChatCompactBtn);
+    gui::apply_locus_accessible_name(compact_btn_);
     compact_btn_->SetToolTip("Open context compaction dialog");
     compact_btn_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
         if (on_compact_) on_compact_();
     });
     stop_btn_ = new wxButton(this, wxID_ANY, "Stop",
                              wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+    stop_btn_->SetName(ui_names::kChatStopBtn);
+    gui::apply_locus_accessible_name(stop_btn_);
     stop_btn_->SetToolTip("Stop the current generation");
     stop_btn_->Disable();
     stop_btn_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
@@ -715,6 +738,8 @@ void ChatPanel::create_footer()
     });
     undo_btn_ = new wxButton(this, wxID_ANY, "Undo",
                              wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+    undo_btn_->SetName(ui_names::kChatUndoBtn);
+    gui::apply_locus_accessible_name(undo_btn_);
     undo_btn_->SetToolTip("Revert files mutated by the most recent turn");
     undo_btn_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
         if (on_undo_) on_undo_();

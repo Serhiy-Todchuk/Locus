@@ -38,7 +38,9 @@ data into context, and keeps the user in full transparent control of every step.
 
 ## Current Stage
 
-**M4 — Agent Quality fully complete.** All shipped stages: S4.A / S4.P / S4.J / S4.B / S4.K / S4.I / S4.S / S4.M / S4.T / S4.N / S4.U / S4.D / S4.G / S4.L / S4.F / S4.W / S4.X / S4.Y / S4.V. **Next: M5 (Polish, UX & Performance)** -- with the M4 engine in place, sand down the user-visible edges before the M6 Connected milestone. See [roadmap/M5/](roadmap/M5/). **S4.R Phase 1 (engine + tools + slash) done** -- Settings UI tab + chat right-click "Save as memory" deferred to a Phase 2 that lands alongside the rest of the M5 UX polish. **S4.C parked to backlog** -- the auto-verify-loop premise breaks down on small local LLMs (build-error retry thrash); reactivation gate captured in [roadmap/backlog/S4.C-auto-verify.md](roadmap/backlog/S4.C-auto-verify.md). **M3 refactoring fully complete** -- all 12 stages: S3.A (`AgentCore` split into `AgentLoop` / `ToolDispatcher` / `ActivityLog` / `ContextBudget`; agent sources moved to `src/agent/`), S3.B (`ILLMClient` split into `OpenAiTransport` + `IStreamDecoder` + `OpenAiDecoder` + `TokenCounter`, plus S4.N decoder stubs and S4.Q `LlmRouter` skeleton; sources moved to `src/llm/`), S3.C (`IWorkspaceServices`), S3.D (`Indexer` split into `TreeSitterRegistry` + `ISymbolExtractor` registry + `IndexerStatements` RAII; index sources moved to `src/index/`), S3.E (`tools.cpp` split into `src/tools/` by family -- shared / file / search / index / process / interactive), S3.F (`WatcherPump` + `LocusFrame` split), S3.G (`LocusSession` bundle), **S3.H (`src/` layering: every file now sits under `src/{core,agent,llm,index,tools,frontends/cli,frontends/gui,extractors}/`; `main.cpp` is the only thing left at the `src/` root)**, S3.I (`architecture/threading-model.md` + `ConversationHistory::assert_owner_thread()` fence, `ConversationOwnerScope` RAII), S3.J (`SlashCommandParser` + `SlashCommandDispatcher` extracted), S3.K (`architecture/agent-loop.md`, `architecture/decisions/` ADR trail), S3.L (tool-catalog hygiene: unified `search(mode=…)`, `ITool::available()` / `visible_in_mode()` gating, per-turn manifest-token warning).
+**M5 -- Polish, UX & Performance underway.** Started 2026-05-13 with **S5.L (UI Automation Test Driver) done.** New manual-only [`locus_ui_tests`](tests/ui_automation/main.cpp) target ships a UIA-driven harness: `UiaSession` ([tests/ui_automation/uia_session.h/cpp](tests/ui_automation/uia_session.h)) wraps the Windows UIA COM client (find / click / type / press_key / press_key_to / screenshot / wait_for / dump_tree), and `ScriptRunner` ([tests/ui_automation/script_runner.h/cpp](tests/ui_automation/script_runner.h)) drives JSON scripts with steps `launch / wait_for_window / find / click / type / press_key / select_tab / get_text / assert_text_contains / assert_visible / screenshot / sleep / quit / dump_tree`. Three demo scripts ([smoke.json](tests/ui_automation/scripts/smoke.json) / [settings_tour.json](tests/ui_automation/scripts/settings_tour.json) / [chat_round_trip.json](tests/ui_automation/scripts/chat_round_trip.json)) all pass against the real `locus_gui.exe`. *Widget naming:* new [src/frontends/gui/ui_names.h](src/frontends/gui/ui_names.h) is the single source of truth for `automation_id` strings; matching `SetName()` calls land in `LocusFrame` / `ChatPanel` / `ActivityPanel` / `FileTreePanel` / `SettingsDialog`. wxWidgets' default `SetName()` doesn't propagate to UIA -- new [src/frontends/gui/locus_accessible.h](src/frontends/gui/locus_accessible.h) defines a one-method `LocusAccessible : wxAccessible` whose `GetName` returns `m_window->GetName()`; call `gui::apply_locus_accessible_name(win)` right after `SetName()` to install it. Caveat: native Win32 controls (RichEdit, wxNotebook tab strip) override wxAccessibility -- the chat input is found by `control_type=document` scoped to `locus.chat.panel`, and wxNotebook tabs are addressed by `parent_aid + index` (Windows' SysTabControl32 doesn't propagate tab labels to UIA). *Unattended launches:* new `--no-first-time-prompts` flag on `locus_gui` skips the semantic-search modal that pops on every new workspace (writes `config.json` with semantic search off); the UIA harness always passes it on launch. *Build & run:* the target is opt-in (not in `ALL_BUILD`); `cmake --build build/release --config Release --target locus_ui_tests` builds it, `locus_ui_tests.exe --all` runs the three scripts (~10 s total), exit code 0/1/2/77 mirrors the integration suite convention. Per-script artifacts (run.log + screenshots + JUnit XML) land in `tests/ui_automation/output/`. **Manual-only, Windows-only, opt-in -- never on by default.** See [roadmap/M5/S5.L-ui-automation-driver.md](roadmap/M5/S5.L-ui-automation-driver.md) and [tests/ui_automation/README.md](tests/ui_automation/README.md).
+
+**M4 -- Agent Quality fully complete.** All shipped stages: S4.A / S4.P / S4.J / S4.B / S4.K / S4.I / S4.S / S4.M / S4.T / S4.N / S4.U / S4.D / S4.G / S4.L / S4.F / S4.W / S4.X / S4.Y / S4.V. **Next: M5 (Polish, UX & Performance)** -- with the M4 engine in place, sand down the user-visible edges before the M6 Connected milestone. See [roadmap/M5/](roadmap/M5/). **S4.R Phase 1 (engine + tools + slash) done** -- Settings UI tab + chat right-click "Save as memory" deferred to a Phase 2 that lands alongside the rest of the M5 UX polish. **S4.C parked to backlog** -- the auto-verify-loop premise breaks down on small local LLMs (build-error retry thrash); reactivation gate captured in [roadmap/backlog/S4.C-auto-verify.md](roadmap/backlog/S4.C-auto-verify.md). **M3 refactoring fully complete** -- all 12 stages: S3.A (`AgentCore` split into `AgentLoop` / `ToolDispatcher` / `ActivityLog` / `ContextBudget`; agent sources moved to `src/agent/`), S3.B (`ILLMClient` split into `OpenAiTransport` + `IStreamDecoder` + `OpenAiDecoder` + `TokenCounter`, plus S4.N decoder stubs and S4.Q `LlmRouter` skeleton; sources moved to `src/llm/`), S3.C (`IWorkspaceServices`), S3.D (`Indexer` split into `TreeSitterRegistry` + `ISymbolExtractor` registry + `IndexerStatements` RAII; index sources moved to `src/index/`), S3.E (`tools.cpp` split into `src/tools/` by family -- shared / file / search / index / process / interactive), S3.F (`WatcherPump` + `LocusFrame` split), S3.G (`LocusSession` bundle), **S3.H (`src/` layering: every file now sits under `src/{core,agent,llm,index,tools,frontends/cli,frontends/gui,extractors}/`; `main.cpp` is the only thing left at the `src/` root)**, S3.I (`architecture/threading-model.md` + `ConversationHistory::assert_owner_thread()` fence, `ConversationOwnerScope` RAII), S3.J (`SlashCommandParser` + `SlashCommandDispatcher` extracted), S3.K (`architecture/agent-loop.md`, `architecture/decisions/` ADR trail), S3.L (tool-catalog hygiene: unified `search(mode=…)`, `ITool::available()` / `visible_in_mode()` gating, per-turn manifest-token warning).
 
 **S4.A (Diff-Based Editing) done.** One `edit_file` tool in [src/tools/file_tools.cpp](src/tools/file_tools.cpp): takes `{path, edits: [{old_string, new_string, replace_all?}, ...]}`. A single edit is an array of one; multiple edits apply atomically (all succeed or none are written) with later edits seeing earlier results. Uniqueness is enforced per edit. Writes go through temp-file + rename for atomicity. Process-wide `ReadTracker` in [src/tools/shared.h](src/tools/shared.h) forces a prior `read_file` on the same path before edits are accepted — mirrors Claude Code's hallucinated-edit mitigation. `create_file` folded into `write_file` with an `overwrite` flag (default `false`); refusing to replace an existing file is now the default, set `overwrite=true` explicitly to opt in. System prompt updated to prefer `edit_file` over `write_file`. Approval panel renders `edit_file` as a red/green unified-diff inside the existing Scintilla pane; `Modify` flips to raw JSON and back. Kept tool set slim (9 built-ins, not 11) to keep the manifest small for local LLMs.
 
@@ -202,6 +204,7 @@ cmake --build build/release --config Release --target locus_gui
 cmake --build build/release --config Release --target locus_tests
 cmake --build build/release --config Release --target locus_integration_tests
 cmake --build build/release --config Release --target locus_retrieval_eval
+cmake --build build/release --config Release --target locus_ui_tests
 ```
 
 | Target | Output (Release) |
@@ -211,6 +214,7 @@ cmake --build build/release --config Release --target locus_retrieval_eval
 | `locus_tests`         | `build/release/tests/Release/locus_tests.exe` |
 | `locus_integration_tests` | `build/release/tests/integration/Release/locus_integration_tests.exe` |
 | `locus_retrieval_eval`    | `build/release/tests/retrieval_eval/Release/locus_retrieval_eval.exe` |
+| `locus_ui_tests`          | `build/release/tests/ui_automation/Release/locus_ui_tests.exe` |
 
 `pdfium.dll` is auto-copied next to `locus.exe` and `locus_gui.exe` by a `POST_BUILD`
 step on each app target.
@@ -276,6 +280,26 @@ build/release/tests/retrieval_eval/Release/locus_retrieval_eval.exe \
     --queries tests/retrieval_eval/queries.json \
     --out tests/retrieval_eval/results.md
 ```
+
+### UI automation tests (manual, Windows-only, S5.L)
+
+Scripted UIA harness drives `locus_gui.exe` from a subprocess. Pops real
+windows on the desktop session -- run in a secondary session if you don't
+want focus stolen. **Manual only -- do NOT run by default.**
+
+```
+# All bundled scripts (smoke + settings_tour + chat_round_trip)
+build/release/tests/ui_automation/Release/locus_ui_tests.exe --all
+
+# One script
+build/release/tests/ui_automation/Release/locus_ui_tests.exe \
+    --script tests/ui_automation/scripts/smoke.json
+```
+
+Exit codes: 0 pass / 1 fail / 2 usage error / 77 all skipped. Per-script
+artifacts (screenshots, run.log, JUnit XML) land in `tests/ui_automation/output/`.
+See [tests/ui_automation/README.md](tests/ui_automation/README.md) for step
+ops, naming conventions, and the focus-stealing caveat.
 
 See [tests/retrieval_eval/README.md](tests/retrieval_eval/README.md) for baseline
 management and the regression-check protocol.
@@ -404,6 +428,7 @@ Core is a static lib (`locus_core`). Both `locus` (exe) and `locus_tests` link i
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Code style, build/run/test instructions for humans |
 | [tests/integration/README.md](tests/integration/README.md) | Manual LLM-driven integration test suite — tags, harness design, update rules |
 | [tests/retrieval_eval/README.md](tests/retrieval_eval/README.md) | Retrieval eval harness — gold queries, recall/MRR/nDCG, baseline + regression check |
+| [tests/ui_automation/README.md](tests/ui_automation/README.md) | S5.L UI Automation driver — JSON scripts, step ops, naming conventions, focus-stealing caveat |
 | [roadmap.md](roadmap.md) | Roadmap index — milestones M0–M6 with one-table summaries. Real detail lives in `roadmap/`. |
 | [roadmap/M0.md](roadmap/M0.md), [M1.md](roadmap/M1.md), [M2.md](roadmap/M2.md) | Completed milestones — full task lists, one file per milestone |
 | [roadmap/M3/](roadmap/M3/) | M3 Refactoring ✔ — one file per stage (S3.A–S3.L) |

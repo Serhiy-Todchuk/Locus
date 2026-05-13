@@ -10,6 +10,9 @@ These complement, but don't replace, the automated suites:
 - **Unit tests** (`tests/test_*.cpp`) -- fast, hermetic, run on every build.
 - **Integration tests** (`tests/integration/test_int_*.cpp`) -- live LLM, manual to
   run, but still scripted assertions.
+- **UI automation tests** (`tests/ui_automation/`, S5.L) -- scripted Windows UIA
+  driver. Covers the smoke + settings-tour baselines from a subprocess; new
+  manual plans here can focus on what UIA can't structurally reach.
 - **Manual tests** (this folder) -- click-by-click, eye-on-screen verification
   of UI behavior, error paths, and end-to-end workflows that scripted tests
   can't reasonably cover (real third-party MCP servers, drag-and-drop flows,

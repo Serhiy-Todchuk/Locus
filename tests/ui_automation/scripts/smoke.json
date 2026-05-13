@@ -1,0 +1,28 @@
+{
+  "name": "smoke",
+  "description": "Launch locus_gui on a fresh temp workspace, wait for the main window, screenshot it, then close cleanly.",
+  "setup": {
+    "workspace": "tmp"
+  },
+  "steps": [
+    { "op": "launch" },
+    {
+      "op": "wait_for_window",
+      "args": { "title_prefix": "Locus", "timeout_ms": 20000 }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.chat.panel", "timeout_ms": 15000 }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.activity.panel", "timeout_ms": 5000 }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.filetree.panel", "timeout_ms": 5000 }
+    },
+    { "op": "screenshot", "args": { "name": "main_window" } },
+    { "op": "quit", "args": { "wait_ms": 5000 } }
+  ]
+}

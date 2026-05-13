@@ -46,21 +46,28 @@ wxIMPLEMENT_APP(LocusApp);
 // to enable semantic search. Write a minimal config.json capturing the choice
 // so Workspace picks it up during construction. No-op when config.json already
 // exists (not a first-time open).
-static void prompt_semantic_search_if_first_open(const fs::path& locus_dir)
+//
+// `suppress_prompt=true` skips the modal and writes config.json with semantic
+// search disabled by default. Used by the S5.L UI Automation harness (and any
+// other unattended/scripted launch) via the `--no-first-time-prompts` flag.
+static void prompt_semantic_search_if_first_open(const fs::path& locus_dir,
+                                                 bool suppress_prompt)
 {
     auto cfg_path = locus_dir / "config.json";
     if (fs::exists(cfg_path))
         return;
 
-    int reply = wxMessageBox(
-        "Enable semantic search for this workspace?\n\n"
-        "Semantic search uses a local embedding model to find files by meaning, "
-        "not just keywords. It takes extra CPU and disk during indexing.\n\n"
-        "You can change this later in Settings.",
-        "Locus \u2014 New Workspace",
-        wxYES_NO | wxICON_QUESTION);
-
-    bool enabled = (reply == wxYES);
+    bool enabled = false;
+    if (!suppress_prompt) {
+        int reply = wxMessageBox(
+            "Enable semantic search for this workspace?\n\n"
+            "Semantic search uses a local embedding model to find files by meaning, "
+            "not just keywords. It takes extra CPU and disk during indexing.\n\n"
+            "You can change this later in Settings.",
+            "Locus \u2014 New Workspace",
+            wxYES_NO | wxICON_QUESTION);
+        enabled = (reply == wxYES);
+    }
 
     try {
         nlohmann::json j;
@@ -71,6 +78,10 @@ static void prompt_semantic_search_if_first_open(const fs::path& locus_dir)
         spdlog::warn("Failed to pre-seed config.json: {}", ex.what());
     }
 }
+
+// Module-local: set by OnInit when --no-first-time-prompts is on argv, read
+// later by open_workspace() so a script-driven workspace switch stays quiet.
+static bool s_suppress_first_time_prompts = false;
 
 void LocusApp::OnInitCmdLine(wxCmdLineParser& parser)
 {
@@ -86,6 +97,13 @@ void LocusApp::OnInitCmdLine(wxCmdLineParser& parser)
         wxCMD_LINE_VAL_STRING, wxCMD_LINE_PARAM_OPTIONAL);
     parser.AddOption("context",  wxEmptyString, "LLM context limit (tokens)",
         wxCMD_LINE_VAL_NUMBER, wxCMD_LINE_PARAM_OPTIONAL);
+    // S5.L -- suppress the first-time semantic-search modal for unattended
+    // (scripted / UIA-driven) launches. Defaults to semantic search OFF.
+    // AddSwitch takes short-name first, long-name second; we want
+    // `--no-first-time-prompts`, not `-no-first-time-prompts`.
+    parser.AddSwitch(wxEmptyString, "no-first-time-prompts",
+        "Skip first-time-open modal dialogs",
+        wxCMD_LINE_PARAM_OPTIONAL);
     parser.SetSwitchChars("-");
 }
 
@@ -164,6 +182,8 @@ bool LocusApp::OnInit()
             try { context = std::stoi(argv[++i].ToStdString()); }
             catch (...) { context = 0; }
         }
+        else if (a == "--no-first-time-prompts")
+            s_suppress_first_time_prompts = true;
     }
 
     // If no workspace path given, prompt user.
@@ -206,7 +226,7 @@ bool LocusApp::OnInit()
     spdlog::info("Locus GUI starting");
     spdlog::info("Workspace: {}", ws_path.string());
 
-    prompt_semantic_search_if_first_open(locus_dir);
+    prompt_semantic_search_if_first_open(locus_dir, s_suppress_first_time_prompts);
 
     // Seed LLM config from the user's startup args. Empty/zero fields are
     // filled in by LocusSession from .locus/config.json + the live model
@@ -288,7 +308,7 @@ void LocusApp::open_workspace(const std::string& path)
     }
     init_logging(locus_dir);
 
-    prompt_semantic_search_if_first_open(locus_dir);
+    prompt_semantic_search_if_first_open(locus_dir, s_suppress_first_time_prompts);
 
     // Switching workspaces from the menu doesn't carry CLI overrides; the
     // new session pulls everything from .locus/config.json + the live

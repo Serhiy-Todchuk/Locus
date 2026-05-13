@@ -1,0 +1,55 @@
+{
+  "name": "chat_round_trip",
+  "description": "Type a message into the chat input and press Enter. Asserts the user-side text appears in the chat WebView. Does not require an LLM response -- the user bubble renders before any server round-trip. The chat input is a wxTextCtrl(wxTE_RICH2) which Windows surfaces as a Document named 'RichEdit Control'; we find it by control type scoped to the chat panel.",
+  "setup": {
+    "workspace": "tmp"
+  },
+  "steps": [
+    { "op": "launch" },
+    {
+      "op": "wait_for_window",
+      "args": { "title_prefix": "Locus", "timeout_ms": 20000 }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.chat.panel", "timeout_ms": 15000 }
+    },
+    {
+      "op": "click",
+      "args": {
+        "parent_aid": "locus.chat.panel",
+        "control_type": "document",
+        "timeout_ms": 10000
+      }
+    },
+    {
+      "op": "type",
+      "args": {
+        "parent_aid": "locus.chat.panel",
+        "control_type": "document",
+        "text": "hello from ui automation",
+        "timeout_ms": 10000
+      }
+    },
+    { "op": "sleep", "args": { "ms": 200 } },
+    {
+      "op": "press_key",
+      "args": {
+        "parent_aid": "locus.chat.panel",
+        "control_type": "document",
+        "key": "ENTER"
+      }
+    },
+    {
+      "op": "assert_text_contains",
+      "args": {
+        "automation_id": "locus.chat.webview",
+        "substring": "hello from ui automation",
+        "walk_subtree": true,
+        "timeout_ms": 10000
+      }
+    },
+    { "op": "screenshot", "args": { "name": "after_send" } },
+    { "op": "quit", "args": { "wait_ms": 5000 } }
+  ]
+}

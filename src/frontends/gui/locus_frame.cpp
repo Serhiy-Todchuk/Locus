@@ -1,5 +1,7 @@
 #include "locus_frame.h"
+#include "locus_accessible.h"
 #include "locus_app.h"
+#include "ui_names.h"
 
 #include "../../core/watcher_pump.h"
 #include "../../index/embedding_worker.h"
@@ -28,6 +30,9 @@ LocusFrame::LocusFrame(AgentCore& agent, Workspace& workspace, McpManager* mcp)
     , workspace_(workspace)
     , mcp_(mcp)
 {
+    SetName(ui_names::kMainFrame);
+    gui::apply_locus_accessible_name(this);
+
     // AUI manager
     aui_.SetManagedWindow(this);
 

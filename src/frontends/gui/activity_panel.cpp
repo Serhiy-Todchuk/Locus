@@ -1,6 +1,8 @@
 #include "activity_panel.h"
 
+#include "locus_accessible.h"
 #include "metrics_view.h"
+#include "ui_names.h"
 #include "../../agent/agent_core.h"
 
 #include <wx/listctrl.h>
@@ -51,7 +53,11 @@ ActivityPanel::ActivityPanel(wxWindow* parent, ILocusCore& core)
     : wxPanel(parent, wxID_ANY)
     , core_(core)
 {
+    SetName(ui_names::kActivityPanel);
+    gui::apply_locus_accessible_name(this);
     notebook_ = new wxNotebook(this, wxID_ANY);
+    notebook_->SetName(ui_names::kActivityNotebook);
+    gui::apply_locus_accessible_name(notebook_);
 
     // -- Tab 1: Log -----------------------------------------------------------
     auto* log_pane = new wxPanel(notebook_, wxID_ANY);

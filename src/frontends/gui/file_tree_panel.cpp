@@ -1,4 +1,6 @@
 #include "file_tree_panel.h"
+#include "locus_accessible.h"
+#include "ui_names.h"
 
 #include <spdlog/spdlog.h>
 
@@ -43,6 +45,8 @@ FileTreePanel::FileTreePanel(wxWindow* parent, IndexQuery& query,
     , on_select_(std::move(on_select))
     , on_attach_(std::move(on_attach))
 {
+    SetName(ui_names::kFileTreePanel);
+    gui::apply_locus_accessible_name(this);
     auto* sizer = new wxBoxSizer(wxVERTICAL);
 
     // Index status bar at top.
@@ -64,6 +68,8 @@ FileTreePanel::FileTreePanel(wxWindow* parent, IndexQuery& query,
     tree_ = new wxTreeCtrl(this, wxID_ANY,
         wxDefaultPosition, wxDefaultSize,
         wxTR_DEFAULT_STYLE | wxTR_HIDE_ROOT | wxTR_LINES_AT_ROOT);
+    tree_->SetName(ui_names::kFileTreeCtrl);
+    gui::apply_locus_accessible_name(tree_);
 
     create_image_list();
     sizer->Add(tree_, 1, wxEXPAND);

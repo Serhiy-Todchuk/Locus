@@ -1,0 +1,60 @@
+{
+  "name": "settings_tour",
+  "description": "Open the Settings dialog via Ctrl+, click through each of the four tabs by index, screenshot each, then close. Tabs are addressed by index because wxNotebook on Windows wraps SysTabControl32, which doesn't propagate labels to UIA Name (see tests/ui_automation/README.md).",
+  "setup": {
+    "workspace": "tmp"
+  },
+  "steps": [
+    { "op": "launch" },
+    {
+      "op": "wait_for_window",
+      "args": { "title_prefix": "Locus", "timeout_ms": 20000 }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.chat.panel", "timeout_ms": 15000 }
+    },
+    { "op": "sleep", "args": { "ms": 500 } },
+    {
+      "op": "press_key",
+      "args": { "key": "COMMA", "modifiers": "CTRL" }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.settings.notebook", "timeout_ms": 5000 }
+    },
+    { "op": "screenshot", "args": { "name": "settings_open" } },
+
+    {
+      "op": "select_tab",
+      "args": { "parent_aid": "locus.settings.notebook", "index": 0 }
+    },
+    { "op": "sleep", "args": { "ms": 300 } },
+    { "op": "screenshot", "args": { "name": "tab_llm" } },
+
+    {
+      "op": "select_tab",
+      "args": { "parent_aid": "locus.settings.notebook", "index": 1 }
+    },
+    { "op": "sleep", "args": { "ms": 300 } },
+    { "op": "screenshot", "args": { "name": "tab_index" } },
+
+    {
+      "op": "select_tab",
+      "args": { "parent_aid": "locus.settings.notebook", "index": 2 }
+    },
+    { "op": "sleep", "args": { "ms": 300 } },
+    { "op": "screenshot", "args": { "name": "tab_approvals" } },
+
+    {
+      "op": "select_tab",
+      "args": { "parent_aid": "locus.settings.notebook", "index": 3 }
+    },
+    { "op": "sleep", "args": { "ms": 300 } },
+    { "op": "screenshot", "args": { "name": "tab_mcp" } },
+
+    { "op": "press_key", "args": { "key": "ESC" } },
+    { "op": "sleep", "args": { "ms": 300 } },
+    { "op": "quit", "args": { "wait_ms": 5000 } }
+  ]
+}

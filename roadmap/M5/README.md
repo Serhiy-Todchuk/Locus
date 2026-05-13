@@ -10,7 +10,7 @@
 
 | Stage | Title | Theme |
 |---|---|---|
-| [S5.L](S5.L-ui-automation-driver.md) | UI Automation Test Driver | Testing / Infra |
+| [S5.L](S5.L-ui-automation-driver.md) ✔ | UI Automation Test Driver | Testing / Infra |
 | [S5.B](S5.B-terminal-panel.md) | Live Terminal Panel | UX |
 | [S5.A](S5.A-capability-toggles.md) | Workspace Capability Toggles | UX / Tokens |
 | [S5.C](S5.C-inline-diffs-in-chat.md) | Inline Code Diffs in Chat | UX |

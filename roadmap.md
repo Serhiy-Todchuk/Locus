@@ -62,6 +62,8 @@ Complete. Closed the gap against leading agents on the tech fundamentals -- diff
 
 With the M4 engine in place, sand down the user-visible edges. UX refinements, performance optimization, robustness work, and quality-of-life touches that make the existing capability set feel fast, predictable, and discoverable. Lands before M6 so each new frontend in the Connected milestone inherits a well-shaped foundation.
 
+Progress: **S5.L (UI Automation Test Driver) ✔** -- ships a manual-only `locus_ui_tests` target driving `locus_gui.exe` via Windows UIA from JSON scripts; three demo scripts (smoke / settings_tour / chat_round_trip) all pass. See [roadmap/M5/S5.L-ui-automation-driver.md](roadmap/M5/S5.L-ui-automation-driver.md).
+
 Stage list: [roadmap/M5/README.md](roadmap/M5/README.md).
 
 ## M6 -- Connected
