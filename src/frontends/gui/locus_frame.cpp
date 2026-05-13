@@ -342,6 +342,15 @@ void LocusFrame::setup_aui_layout()
         [this](const std::string& call_id, ToolDecision decision,
                const nlohmann::json& modified_args) {
             agent_.tool_decision(call_id, decision, modified_args);
+            // Panel's own dismiss() only hides the widget. AUI tracks pane
+            // visibility separately -- without this, the pane caption +
+            // frame keep drawing around the hidden content until the next
+            // turn-complete event fires the auto-cleanup path.
+            auto& pane = aui_.GetPane("approval");
+            if (pane.IsOk() && pane.IsShown()) {
+                pane.Hide();
+                aui_.Update();
+            }
         });
 
     // Right detail panel — Activity log (S2.2).
