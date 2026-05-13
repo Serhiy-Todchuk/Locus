@@ -120,6 +120,65 @@ FetchContent_Declare(tree-sitter-c-sharp
     SOURCE_SUBDIR  ${TS_NO_CMAKE}
 )
 
+# S4.Y -- Tier 1 + Tier 2 grammars.  Same FetchContent pattern as the
+# existing nine.  Sub-grammar repos (php, markdown) keep their parser.c in
+# a named subdirectory; that path leaks into TS_GRAMMAR_SOURCES below.
+FetchContent_Declare(tree-sitter-ruby
+    GIT_REPOSITORY https://github.com/tree-sitter/tree-sitter-ruby.git
+    GIT_TAG        v0.23.1
+    GIT_SHALLOW    ON
+    SOURCE_SUBDIR  ${TS_NO_CMAKE}
+)
+FetchContent_Declare(tree-sitter-php
+    GIT_REPOSITORY https://github.com/tree-sitter/tree-sitter-php.git
+    GIT_TAG        v0.23.11
+    GIT_SHALLOW    ON
+    SOURCE_SUBDIR  ${TS_NO_CMAKE}
+)
+FetchContent_Declare(tree-sitter-bash
+    GIT_REPOSITORY https://github.com/tree-sitter/tree-sitter-bash.git
+    GIT_TAG        v0.23.3
+    GIT_SHALLOW    ON
+    SOURCE_SUBDIR  ${TS_NO_CMAKE}
+)
+FetchContent_Declare(tree-sitter-json
+    GIT_REPOSITORY https://github.com/tree-sitter/tree-sitter-json.git
+    GIT_TAG        v0.24.8
+    GIT_SHALLOW    ON
+    SOURCE_SUBDIR  ${TS_NO_CMAKE}
+)
+FetchContent_Declare(tree-sitter-yaml
+    GIT_REPOSITORY https://github.com/tree-sitter-grammars/tree-sitter-yaml.git
+    GIT_TAG        v0.7.0
+    GIT_SHALLOW    ON
+    SOURCE_SUBDIR  ${TS_NO_CMAKE}
+)
+# NOTE: SQL deferred -- the canonical SQL grammar (DerekStride/tree-sitter-sql)
+# gitignores parser.c in source form and expects `tree-sitter generate` at
+# build time, which would add a Rust-based CLI dep we don't want here. Other
+# SQL grammars either ship a C++ scanner (m-novikov) or only target one dialect
+# (sqlite). Land SQL in a follow-up stage that introduces the CLI dep cleanly.
+FetchContent_Declare(tree-sitter-markdown
+    GIT_REPOSITORY https://github.com/tree-sitter-grammars/tree-sitter-markdown.git
+    GIT_TAG        v0.4.1
+    GIT_SHALLOW    ON
+    SOURCE_SUBDIR  ${TS_NO_CMAKE}
+)
+FetchContent_Declare(tree-sitter-swift
+    GIT_REPOSITORY https://github.com/alex-pinkus/tree-sitter-swift.git
+    # Plain "0.7.x" tags omit the generated parser.c (gitignored on main); use
+    # the "-with-generated-files" tag variant that vendors parser.c + scanner.c.
+    GIT_TAG        0.7.2-with-generated-files
+    GIT_SHALLOW    ON
+    SOURCE_SUBDIR  ${TS_NO_CMAKE}
+)
+FetchContent_Declare(tree-sitter-kotlin
+    GIT_REPOSITORY https://github.com/fwcd/tree-sitter-kotlin.git
+    GIT_TAG        0.3.8
+    GIT_SHALLOW    ON
+    SOURCE_SUBDIR  ${TS_NO_CMAKE}
+)
+
 # PDFium prebuilt binaries (BSD-3-Clause).  Not in vcpkg mainline; pulled
 # from bblanchon/pdfium-binaries as a pinned release.  Ships as a DLL +
 # import lib + headers.  The DLL is copied next to locus.exe at build time.
@@ -149,9 +208,20 @@ FetchContent_MakeAvailable(
     tree-sitter-rust
     tree-sitter-java
     tree-sitter-c-sharp
+    tree-sitter-ruby
+    tree-sitter-php
+    tree-sitter-bash
+    tree-sitter-json
+    tree-sitter-yaml
+    tree-sitter-markdown
+    tree-sitter-swift
+    tree-sitter-kotlin
 )
 
-# Collect parser.c and optional scanner.c from each grammar
+# Collect parser.c and optional scanner.c from each grammar.
+# Sub-grammar repos:
+#   tree-sitter-php       -> php/src/parser.c (the embedded `php` grammar)
+#   tree-sitter-markdown  -> tree-sitter-markdown/src/parser.c (block parser)
 set(TS_GRAMMAR_SOURCES
     ${tree-sitter-c_SOURCE_DIR}/src/parser.c
     ${tree-sitter-cpp_SOURCE_DIR}/src/parser.c
@@ -162,6 +232,14 @@ set(TS_GRAMMAR_SOURCES
     ${tree-sitter-rust_SOURCE_DIR}/src/parser.c
     ${tree-sitter-java_SOURCE_DIR}/src/parser.c
     ${tree-sitter-c-sharp_SOURCE_DIR}/src/parser.c
+    ${tree-sitter-ruby_SOURCE_DIR}/src/parser.c
+    ${tree-sitter-php_SOURCE_DIR}/php/src/parser.c
+    ${tree-sitter-bash_SOURCE_DIR}/src/parser.c
+    ${tree-sitter-json_SOURCE_DIR}/src/parser.c
+    ${tree-sitter-yaml_SOURCE_DIR}/src/parser.c
+    ${tree-sitter-markdown_SOURCE_DIR}/tree-sitter-markdown/src/parser.c
+    ${tree-sitter-swift_SOURCE_DIR}/src/parser.c
+    ${tree-sitter-kotlin_SOURCE_DIR}/src/parser.c
 )
 
 # Add scanner files where they exist
@@ -174,6 +252,13 @@ foreach(SCANNER_PATH
     "${tree-sitter-rust_SOURCE_DIR}/src/scanner.c"
     "${tree-sitter-java_SOURCE_DIR}/src/scanner.c"
     "${tree-sitter-c-sharp_SOURCE_DIR}/src/scanner.c"
+    "${tree-sitter-ruby_SOURCE_DIR}/src/scanner.c"
+    "${tree-sitter-php_SOURCE_DIR}/php/src/scanner.c"
+    "${tree-sitter-bash_SOURCE_DIR}/src/scanner.c"
+    "${tree-sitter-yaml_SOURCE_DIR}/src/scanner.c"
+    "${tree-sitter-markdown_SOURCE_DIR}/tree-sitter-markdown/src/scanner.c"
+    "${tree-sitter-swift_SOURCE_DIR}/src/scanner.c"
+    "${tree-sitter-kotlin_SOURCE_DIR}/src/scanner.c"
 )
     if(EXISTS "${SCANNER_PATH}")
         list(APPEND TS_GRAMMAR_SOURCES "${SCANNER_PATH}")
@@ -191,6 +276,14 @@ target_include_directories(ts_grammars PRIVATE
     ${tree-sitter-rust_SOURCE_DIR}/src
     ${tree-sitter-java_SOURCE_DIR}/src
     ${tree-sitter-c-sharp_SOURCE_DIR}/src
+    ${tree-sitter-ruby_SOURCE_DIR}/src
+    ${tree-sitter-php_SOURCE_DIR}/php/src
+    ${tree-sitter-bash_SOURCE_DIR}/src
+    ${tree-sitter-json_SOURCE_DIR}/src
+    ${tree-sitter-yaml_SOURCE_DIR}/src
+    ${tree-sitter-markdown_SOURCE_DIR}/tree-sitter-markdown/src
+    ${tree-sitter-swift_SOURCE_DIR}/src
+    ${tree-sitter-kotlin_SOURCE_DIR}/src
 )
 target_link_libraries(ts_grammars PRIVATE unofficial::tree-sitter::tree-sitter)
 set_target_properties(ts_grammars PROPERTIES
@@ -233,6 +326,11 @@ add_library(locus_core STATIC
     src/index/symbol_extractors/rust_extractor.cpp
     src/index/symbol_extractors/java_extractor.cpp
     src/index/symbol_extractors/csharp_extractor.cpp
+    src/index/symbol_extractors/ruby_extractor.cpp
+    src/index/symbol_extractors/php_extractor.cpp
+    src/index/symbol_extractors/bash_extractor.cpp
+    src/index/symbol_extractors/swift_extractor.cpp
+    src/index/symbol_extractors/kotlin_extractor.cpp
     src/index/prepared_statements.cpp
     src/index/embedder.cpp
     src/index/embedding_worker.cpp
@@ -286,6 +384,8 @@ add_library(locus_core STATIC
     src/extractors/docx_extractor.cpp
     src/extractors/xlsx_extractor.cpp
     src/extractors/zip_reader.cpp
+    src/extractors/json_extractor.cpp
+    src/extractors/yaml_extractor.cpp
 )
 
 target_include_directories(locus_core PUBLIC src third_party/sqlite-vec)

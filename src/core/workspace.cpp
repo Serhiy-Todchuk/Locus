@@ -8,9 +8,11 @@
 #include "extractors/docx_extractor.h"
 #include "extractors/extractor_registry.h"
 #include "extractors/html_extractor.h"
+#include "extractors/json_extractor.h"
 #include "extractors/markdown_extractor.h"
 #include "extractors/pdf_extractor.h"
 #include "extractors/xlsx_extractor.h"
+#include "extractors/yaml_extractor.h"
 #include "file_watcher.h"
 #include "index/index_query.h"
 #include "index/indexer.h"
@@ -88,6 +90,10 @@ Workspace::Workspace(const fs::path& root)
     extractors_->register_extractor(".pdf",  std::make_unique<PdfiumExtractor>());
     extractors_->register_extractor(".docx", std::make_unique<DocxExtractor>());
     extractors_->register_extractor(".xlsx", std::make_unique<XlsxExtractor>());
+    extractors_->register_extractor(".json",  std::make_unique<JsonExtractor>());
+    extractors_->register_extractor(".jsonc", std::make_unique<JsonExtractor>());
+    extractors_->register_extractor(".yaml",  std::make_unique<YamlExtractor>());
+    extractors_->register_extractor(".yml",   std::make_unique<YamlExtractor>());
 
     // Initialise semantic search if enabled (opens vectors.db on success)
     if (config_.semantic_search_enabled) {

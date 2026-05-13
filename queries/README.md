@@ -17,6 +17,14 @@ example, and can compose its own queries the same way.
 | TypeScript  | `typescript/find-import.scm`, `typescript/find-call.scm`    |
 | Rust        | `rust/find-call.scm`                                        |
 | Go          | `go/find-call.scm`                                          |
+| Ruby        | `ruby/find-call.scm`, `ruby/find-class.scm`                 |
+| PHP         | `php/find-call.scm`, `php/find-class.scm`                   |
+| Bash        | `bash/find-function.scm`                                    |
+| JSON        | `json/find-key.scm`                                         |
+| YAML        | `yaml/find-key.scm`                                         |
+| Markdown    | `markdown/find-heading.scm`                                 |
+| Swift       | `swift/find-decl.scm`                                       |
+| Kotlin      | `kotlin/find-decl.scm`                                      |
 
 ## Tree-sitter query primer
 

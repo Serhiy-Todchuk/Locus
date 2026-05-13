@@ -28,7 +28,7 @@
 | [S4.F](S4.F-kv-cache.md) | KV / Prompt Cache Preservation ✔ | Performance |
 | [S4.W](S4.W-list-directory-completeness.md) | list_directory: Surface Unindexed Files ✔ | Tools |
 | [S4.X](S4.X-prompt-templates.md) | Prompt Templates ✔ | Workflow |
-| [S4.Y](S4.Y-grammar-coverage.md) | Tree-sitter Grammar Coverage Expansion | Tools |
+| [S4.Y](S4.Y-grammar-coverage.md) | Tree-sitter Grammar Coverage Expansion ✔ | Tools |
 | [S4.V](S4.V-misc-gaps.md) | Miscellaneous Smaller Gaps | Mixed |
 
 ## Prerequisites from M3

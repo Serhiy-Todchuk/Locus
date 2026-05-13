@@ -13,6 +13,15 @@ extern "C" {
     const TSLanguage* tree_sitter_rust();
     const TSLanguage* tree_sitter_java();
     const TSLanguage* tree_sitter_c_sharp();
+    // S4.Y -- Tier 1 + Tier 2 additions (SQL deferred).
+    const TSLanguage* tree_sitter_ruby();
+    const TSLanguage* tree_sitter_php();
+    const TSLanguage* tree_sitter_bash();
+    const TSLanguage* tree_sitter_json();
+    const TSLanguage* tree_sitter_yaml();
+    const TSLanguage* tree_sitter_markdown();
+    const TSLanguage* tree_sitter_swift();
+    const TSLanguage* tree_sitter_kotlin();
 }
 
 namespace locus {
@@ -29,6 +38,14 @@ TreeSitterRegistry::TreeSitterRegistry()
     langs_["rust"]       = tree_sitter_rust();
     langs_["java"]       = tree_sitter_java();
     langs_["csharp"]     = tree_sitter_c_sharp();
+    langs_["ruby"]       = tree_sitter_ruby();
+    langs_["php"]        = tree_sitter_php();
+    langs_["bash"]       = tree_sitter_bash();
+    langs_["json"]       = tree_sitter_json();
+    langs_["yaml"]       = tree_sitter_yaml();
+    langs_["markdown"]   = tree_sitter_markdown();
+    langs_["swift"]      = tree_sitter_swift();
+    langs_["kotlin"]     = tree_sitter_kotlin();
 
     spdlog::trace("TreeSitterRegistry initialised with {} grammars", langs_.size());
 }

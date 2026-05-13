@@ -40,7 +40,8 @@ public:
                                           "(function, class, struct, method).", false},
             {"language",       "string",  "symbols mode: filter by language. "
                                           "ast mode: required -- one of c, cpp, python, "
-                                          "javascript, typescript, go, rust, java, csharp.", false},
+                                          "javascript, typescript, go, rust, java, csharp, "
+                                          "ruby, php, bash, json, yaml, markdown, swift, kotlin.", false},
             {"capture",        "string",  "ast mode only: report only this @capture name "
                                           "from the query (default: report every capture).", false},
         };
@@ -148,7 +149,9 @@ public:
     std::vector<ToolParam> params() const override {
         return {
             {"language",    "string",  "One of c, cpp, python, javascript, "
-                                       "typescript, go, rust, java, csharp.", true},
+                                       "typescript, go, rust, java, csharp, "
+                                       "ruby, php, bash, json, yaml, markdown, "
+                                       "swift, kotlin.", true},
             {"query",       "string",  "Tree-sitter S-expression query. Example: "
                                        "`(call_expression function: (identifier) @fn "
                                        "(#eq? @fn \"malloc\"))`.", true},

@@ -574,7 +574,8 @@ ToolResult SearchAstTool::execute(const ToolCall& call, IWorkspaceServices& ws)
     if (!ts_lang)
         return error_result("Error: unsupported language '" + language +
             "'. Supported: c, cpp, python, javascript, typescript, "
-            "go, rust, java, csharp.");
+            "go, rust, java, csharp, ruby, php, bash, json, yaml, "
+            "markdown, swift, kotlin.");
 
     uint32_t      err_offset = 0;
     TSQueryError  err_type   = TSQueryErrorNone;

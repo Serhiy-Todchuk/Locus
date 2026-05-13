@@ -53,9 +53,11 @@ private:
     std::unordered_map<std::string, std::unique_ptr<ISymbolExtractor>> map_;
 };
 
-// Concrete extractor that walks the tree two levels deep and records any node
-// whose type matches one of the supplied rules. All seven built-in languages
-// fit this shape — only the rule table differs.
+// Concrete extractor that recursively walks the tree (bounded depth) and
+// records any node whose type matches one of the supplied rules. Container
+// kinds (class / struct / module / namespace / interface / trait / object)
+// propagate their name as `parent_name` for descendants. All built-in
+// languages fit this shape -- only the rule table differs.
 std::unique_ptr<ISymbolExtractor> make_rule_based_symbol_extractor(
     std::vector<SymbolRule> rules);
 
@@ -69,6 +71,11 @@ std::unique_ptr<ISymbolExtractor> make_go_symbol_extractor();
 std::unique_ptr<ISymbolExtractor> make_rust_symbol_extractor();
 std::unique_ptr<ISymbolExtractor> make_java_symbol_extractor();
 std::unique_ptr<ISymbolExtractor> make_csharp_symbol_extractor();
+std::unique_ptr<ISymbolExtractor> make_ruby_symbol_extractor();
+std::unique_ptr<ISymbolExtractor> make_php_symbol_extractor();
+std::unique_ptr<ISymbolExtractor> make_bash_symbol_extractor();
+std::unique_ptr<ISymbolExtractor> make_swift_symbol_extractor();
+std::unique_ptr<ISymbolExtractor> make_kotlin_symbol_extractor();
 
 // Wires every built-in language extractor into the supplied registry.
 void register_builtin_symbol_extractors(SymbolExtractorRegistry& reg);

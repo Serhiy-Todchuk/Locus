@@ -31,6 +31,14 @@ std::string first_line(const std::string& text)
 // Walk declarator chains (function_declarator -> declarator -> identifier) to
 // find the readable name of a declaration node. Tree-sitter exposes this via
 // the "name"/"declarator" field hierarchy.
+bool is_identifier_type(const char* t)
+{
+    return std::strcmp(t, "identifier")        == 0
+        || std::strcmp(t, "type_identifier")   == 0
+        || std::strcmp(t, "field_identifier")  == 0
+        || std::strcmp(t, "simple_identifier") == 0;
+}
+
 std::string extract_name_from_node(TSNode node, std::string_view source)
 {
     TSNode name_node = ts_node_child_by_field_name(node, "name", 4);
@@ -43,17 +51,38 @@ std::string extract_name_from_node(TSNode node, std::string_view source)
         return extract_name_from_node(decl, source);
     }
 
-    const char* type = ts_node_type(node);
-    if (std::strcmp(type, "identifier") == 0 ||
-        std::strcmp(type, "type_identifier") == 0 ||
-        std::strcmp(type, "field_identifier") == 0) {
+    if (is_identifier_type(ts_node_type(node))) {
         return node_text(node, source);
+    }
+
+    // Fallback for grammars (e.g. Kotlin) whose class/function/object
+    // declarations do not expose a "name" field -- the identifier is just
+    // the first identifier-shaped named child. Bounded to direct children.
+    uint32_t n = ts_node_named_child_count(node);
+    for (uint32_t i = 0; i < n; ++i) {
+        TSNode child = ts_node_named_child(node, i);
+        if (is_identifier_type(ts_node_type(child))) {
+            return node_text(child, source);
+        }
     }
 
     return {};
 }
 
 // -- Rule-based extractor -----------------------------------------------------
+
+// Kinds that name an enclosing container; when a node matches one of these
+// kinds, its descendants inherit its name as their `parent_name`.
+bool is_container_kind(std::string_view kind)
+{
+    return kind == "class"
+        || kind == "struct"
+        || kind == "module"
+        || kind == "namespace"
+        || kind == "interface"
+        || kind == "trait"
+        || kind == "object";
+}
 
 class RuleBasedSymbolExtractor : public ISymbolExtractor {
 public:
@@ -68,52 +97,56 @@ public:
         std::vector<ExtractedSymbol> out;
         if (rules_.empty()) return out;
 
-        auto try_extract = [&](TSNode node, const std::string& parent_name) {
-            const char* type = ts_node_type(node);
-            auto it = type_to_kind_.find(type);
-            if (it == type_to_kind_.end()) return;
+        // Bounded depth covers the worst real-world nesting (Ruby
+        // `module > body_statement > class > body_statement > method`,
+        // PHP namespace + class + method, Swift extension + class + method)
+        // without descending into expression bodies indefinitely.
+        constexpr int k_max_depth = 8;
 
-            std::string name = extract_name_from_node(node, source);
-            if (name.empty()) return;
-
-            TSPoint start = ts_node_start_point(node);
-            TSPoint end   = ts_node_end_point(node);
-
-            std::string sig = first_line(node_text(node, source));
-            if (sig.size() > 200) sig = sig.substr(0, 200) + "...";
-
-            ExtractedSymbol sym;
-            sym.line_start  = static_cast<int>(start.row) + 1;
-            sym.line_end    = static_cast<int>(end.row) + 1;
-            sym.kind        = it->second;
-            sym.name        = std::move(name);
-            sym.signature   = std::move(sig);
-            sym.parent_name = parent_name;
-            out.push_back(std::move(sym));
-        };
-
-        uint32_t child_count = ts_node_child_count(root);
-        for (uint32_t i = 0; i < child_count; ++i) {
-            TSNode child = ts_node_child(root, i);
-            try_extract(child, "");
-
-            std::string parent_name = extract_name_from_node(child, source);
-            uint32_t grandchild_count = ts_node_child_count(child);
-            for (uint32_t j = 0; j < grandchild_count; ++j) {
-                TSNode grandchild = ts_node_child(child, j);
-                try_extract(grandchild, parent_name);
-
-                uint32_t ggc = ts_node_child_count(grandchild);
-                for (uint32_t k = 0; k < ggc; ++k) {
-                    try_extract(ts_node_child(grandchild, k), parent_name);
-                }
-            }
-        }
-
+        walk(root, /*parent=*/{}, k_max_depth, source, out);
         return out;
     }
 
 private:
+    void walk(TSNode node, const std::string& parent_name,
+              int depth_remaining, std::string_view source,
+              std::vector<ExtractedSymbol>& out) const
+    {
+        std::string child_parent = parent_name;
+
+        const char* type = ts_node_type(node);
+        if (auto it = type_to_kind_.find(type); it != type_to_kind_.end()) {
+            std::string name = extract_name_from_node(node, source);
+            if (!name.empty()) {
+                TSPoint start = ts_node_start_point(node);
+                TSPoint end   = ts_node_end_point(node);
+
+                std::string sig = first_line(node_text(node, source));
+                if (sig.size() > 200) sig = sig.substr(0, 200) + "...";
+
+                ExtractedSymbol sym;
+                sym.line_start  = static_cast<int>(start.row) + 1;
+                sym.line_end    = static_cast<int>(end.row) + 1;
+                sym.kind        = it->second;
+                sym.signature   = std::move(sig);
+                sym.parent_name = parent_name;
+
+                if (is_container_kind(it->second)) child_parent = name;
+                sym.name = std::move(name);
+
+                out.push_back(std::move(sym));
+            }
+        }
+
+        if (depth_remaining <= 0) return;
+
+        uint32_t n = ts_node_child_count(node);
+        for (uint32_t i = 0; i < n; ++i) {
+            walk(ts_node_child(node, i), child_parent,
+                 depth_remaining - 1, source, out);
+        }
+    }
+
     std::vector<SymbolRule> rules_;
     std::unordered_map<std::string, const char*> type_to_kind_;
 };
@@ -155,6 +188,12 @@ void register_builtin_symbol_extractors(SymbolExtractorRegistry& reg)
     reg.register_extractor("rust",       make_rust_symbol_extractor());
     reg.register_extractor("java",       make_java_symbol_extractor());
     reg.register_extractor("csharp",     make_csharp_symbol_extractor());
+    // S4.Y additions
+    reg.register_extractor("ruby",       make_ruby_symbol_extractor());
+    reg.register_extractor("php",        make_php_symbol_extractor());
+    reg.register_extractor("bash",       make_bash_symbol_extractor());
+    reg.register_extractor("swift",      make_swift_symbol_extractor());
+    reg.register_extractor("kotlin",     make_kotlin_symbol_extractor());
 }
 
 } // namespace locus

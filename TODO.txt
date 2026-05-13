@@ -8,3 +8,4 @@
 - search in chat
 - FastDebug
 - tokens per second counter per each turn?
+- Does Locus know how to work with MD files? Or this comes from LLM as given?
