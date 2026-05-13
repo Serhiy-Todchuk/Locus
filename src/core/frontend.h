@@ -55,9 +55,18 @@ public:
     // approval UI and eventually call `ILocusCore::tool_decision()`. When
     // false the tool will execute immediately after this returns and
     // `on_tool_result` fires; frontends should NOT show approval UI.
+    //
+    // `safety_warnings` (S4.V Task 5) carries human-readable warnings the
+    // dispatcher computed about this call -- currently the list of tokens
+    // in `run_command` / `run_command_bg` arguments that reference paths
+    // outside the workspace root. Frontends render these prominently in
+    // the approval UI (yellow/red banner). When non-empty, the dispatcher
+    // has already forced `needs_approval=true` even if the workspace
+    // policy is auto_approve, so the user gets the chance to review.
     virtual void on_tool_call_pending(const ToolCall& call,
                                       const std::string& preview,
-                                      bool needs_approval = true) = 0;
+                                      bool needs_approval = true,
+                                      const std::vector<std::string>& safety_warnings = {}) = 0;
 
     // Tool execution finished. display is the user-facing result text.
     virtual void on_tool_result(const std::string& call_id,

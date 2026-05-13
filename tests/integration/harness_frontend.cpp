@@ -107,7 +107,8 @@ void HarnessFrontend::on_reasoning_token(std::string_view /*token*/) {}
 
 void HarnessFrontend::on_tool_call_pending(const ToolCall& call,
                                            const std::string& preview,
-                                           bool needs_approval)
+                                           bool needs_approval,
+                                           const std::vector<std::string>& /*safety_warnings*/)
 {
     // Record the observation first.
     {

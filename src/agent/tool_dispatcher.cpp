@@ -4,6 +4,7 @@
 #include "checkpoint_store.h"
 #include "file_change_tracker.h"
 #include "metrics.h"
+#include "tools/command_path_scanner.h"
 #include "tools/shared.h"
 #include "../core/workspace.h"
 
@@ -126,6 +127,27 @@ void ToolDispatcher::dispatch(const ToolCall& call, const AppendFn& append_resul
             call.tool_name, policy, ws->config().tool_approval_policies);
     }
 
+    // S4.V Task 5 -- outside-workspace path guard for shell tools. If the
+    // command string references absolute paths, parent-traversal segments,
+    // or env-var expansions, surface them as safety warnings and force the
+    // approval gate open even when the workspace policy is auto_approve.
+    // The check covers `run_command` and `run_command_bg` only; file tools
+    // already refuse outside-workspace paths at the `resolve_path` layer.
+    std::vector<std::string> safety_warnings;
+    if (call.tool_name == "run_command" || call.tool_name == "run_command_bg") {
+        std::string cmd = call.args.value("command", "");
+        safety_warnings = tools::scan_outside_workspace_paths(
+            cmd, services_.root());
+        if (!safety_warnings.empty()
+            && policy == ToolApprovalPolicy::auto_approve)
+        {
+            spdlog::warn("ToolDispatcher: '{}' references {} outside-workspace "
+                         "path token(s); upgrading auto_approve -> ask",
+                         call.tool_name, safety_warnings.size());
+            policy = ToolApprovalPolicy::ask;
+        }
+    }
+
     if (policy == ToolApprovalPolicy::deny) {
         spdlog::info("ToolDispatcher: tool '{}' denied by workspace policy",
                      call.tool_name);
@@ -151,7 +173,8 @@ void ToolDispatcher::dispatch(const ToolCall& call, const AppendFn& append_resul
         std::string preview = tool->preview(call);
         bool needs_approval = (policy != ToolApprovalPolicy::auto_approve);
         frontends_.broadcast([&](IFrontend& fe) {
-            fe.on_tool_call_pending(call, preview, needs_approval);
+            fe.on_tool_call_pending(call, preview, needs_approval,
+                                    safety_warnings);
         });
     }
 

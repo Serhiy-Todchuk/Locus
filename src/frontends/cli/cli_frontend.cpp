@@ -19,7 +19,8 @@ void CliFrontend::on_token(std::string_view token)
 
 void CliFrontend::on_tool_call_pending(const ToolCall& call,
                                        const std::string& preview,
-                                       bool needs_approval)
+                                       bool needs_approval,
+                                       const std::vector<std::string>& safety_warnings)
 {
     // Auto-approved calls: just announce the call (no prompt, no decision).
     if (!needs_approval) {
@@ -27,6 +28,16 @@ void CliFrontend::on_tool_call_pending(const ToolCall& call,
                   << " ---\n";
         if (!preview.empty()) std::cout << "Preview: " << preview << "\n";
         return;
+    }
+
+    // S4.V Task 5 -- print outside-workspace warnings prominently above the
+    // approval prompt so a y/n decision isn't made on partial information.
+    if (!safety_warnings.empty()) {
+        std::cout << "\n!!! This command references paths outside the "
+                     "workspace:\n";
+        for (const auto& w : safety_warnings)
+            std::cout << "    " << w << "\n";
+        std::cout << "    Approve only if you intended these paths.\n";
     }
 
     // Special handling for ask_user: show the question and prompt for a response.

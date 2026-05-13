@@ -25,8 +25,9 @@ ToolApprovalPanel::ToolApprovalPanel(wxWindow* parent,
 
     main_sizer_ = new wxBoxSizer(wxVERTICAL);
 
-    // Tool name + preview (always visible when shown).
+    // Tool name + (optional) safety warning banner + preview.
     main_sizer_->Add(name_label_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 8);
+    main_sizer_->Add(warning_label_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 8);
     main_sizer_->Add(preview_label_, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
 
     // JSON args display.
@@ -59,6 +60,21 @@ void ToolApprovalPanel::create_controls()
     font.SetWeight(wxFONTWEIGHT_BOLD);
     font.SetPointSize(font.GetPointSize() + 1);
     name_label_->SetFont(font);
+
+    // S4.V outside-workspace warning banner. Hidden by default; populated
+    // and shown by show_tool_call when safety_warnings is non-empty.
+    warning_label_ = new wxStaticText(this, wxID_ANY, "");
+    {
+        auto wfont = warning_label_->GetFont();
+        wfont.SetWeight(wxFONTWEIGHT_BOLD);
+        warning_label_->SetFont(wfont);
+        // Dark amber on a subtly tinted background so it reads as warn,
+        // not error. The bg colour change requires SetBackgroundStyle
+        // before the panel is shown for theme-aware repaint.
+        warning_label_->SetForegroundColour(wxColour(120, 60, 0));
+        warning_label_->SetBackgroundColour(wxColour(255, 244, 200));
+    }
+    warning_label_->Hide();
 
     // Preview text.
     preview_label_ = new wxStaticText(this, wxID_ANY, "");
@@ -136,7 +152,8 @@ void ToolApprovalPanel::create_controls()
 void ToolApprovalPanel::show_tool_call(const std::string& call_id,
                                        const std::string& tool_name,
                                        const nlohmann::json& args,
-                                       const std::string& preview)
+                                       const std::string& preview,
+                                       const std::vector<std::string>& safety_warnings)
 {
     call_id_       = call_id;
     tool_name_     = tool_name;
@@ -155,7 +172,23 @@ void ToolApprovalPanel::show_tool_call(const std::string& call_id,
     else
         preview_label_->SetLabel("");
 
+    // S4.V Task 5 -- banner with the flagged outside-workspace tokens.
+    if (!safety_warnings.empty()) {
+        wxString msg = "WARNING: command references paths outside the workspace:";
+        for (const auto& w : safety_warnings) {
+            msg += "\n    ";
+            msg += wxString::FromUTF8(w);
+        }
+        warning_label_->SetLabel(msg);
+        warning_label_->Wrap(GetClientSize().GetWidth() - 32);
+        warning_label_->Show();
+    } else {
+        warning_label_->SetLabel("");
+        warning_label_->Hide();
+    }
+
     Show();
+    Layout();
     GetParent()->Layout();
 
     // Focus the right control.

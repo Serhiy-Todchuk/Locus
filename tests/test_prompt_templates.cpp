@@ -350,7 +350,8 @@ public:
 
     void on_turn_start() override {}
     void on_token(std::string_view t) override { tokens.append(t); }
-    void on_tool_call_pending(const locus::ToolCall&, const std::string&, bool) override {}
+    void on_tool_call_pending(const locus::ToolCall&, const std::string&, bool,
+                              const std::vector<std::string>&) override {}
     void on_tool_result(const std::string&, const std::string&) override {}
     void on_turn_complete() override {}
     void on_context_meter(int, int) override {}

@@ -25,6 +25,19 @@ constexpr int k_mcp_list_id     = wxID_HIGHEST + 1001;
 constexpr int k_mcp_restart_id  = wxID_HIGHEST + 1002;
 constexpr int k_mcp_open_id     = wxID_HIGHEST + 1003;
 
+// S4.V Task 4 -- tools whose Auto-Approve toggle requires a friction confirm.
+// Membership is intentionally narrow: read-only tools and search are fine to
+// auto-approve silently; only persistent side effects warrant the speed bump.
+// MCP tools follow their own per-server "trust" toggle in the MCP tab.
+bool is_mutating_tool(const std::string& name)
+{
+    return name == "edit_file"
+        || name == "write_file"
+        || name == "delete_file"
+        || name == "run_command"
+        || name == "run_command_bg";
+}
+
 wxString mcp_status_label(McpClient::Status s)
 {
     switch (s) {
@@ -196,6 +209,24 @@ wxPanel* SettingsDialog::build_index_tab(wxWindow* parent)
 // Tool Approvals tab
 // ---------------------------------------------------------------------------
 
+bool SettingsDialog::confirm_auto_approve_mutating(const std::string& tool_name)
+{
+    if (!is_mutating_tool(tool_name)) return true;
+
+    wxString msg = wxString::Format(
+        "Auto-approve every '%s' call in this workspace?\n\n"
+        "Future calls will execute without prompting. Locus will still\n"
+        "record each call in the activity log and snapshot affected files\n"
+        "so /undo can roll back the most recent turn.\n\n"
+        "Revoke any time in Settings -> Tool Approvals.",
+        wxString::FromUTF8(tool_name));
+
+    wxMessageDialog dlg(this, msg, "Auto-approve mutating tool?",
+                        wxYES_NO | wxNO_DEFAULT | wxICON_WARNING);
+    dlg.SetYesNoLabels("Auto-approve", "Keep asking");
+    return dlg.ShowModal() == wxID_YES;
+}
+
 wxPanel* SettingsDialog::build_approvals_tab(wxWindow* parent)
 {
     auto* panel = new wxPanel(parent);
@@ -220,6 +251,7 @@ wxPanel* SettingsDialog::build_approvals_tab(wxWindow* parent)
 
     tool_names_.reserve(sorted_tools.size());
     approval_choices_.reserve(sorted_tools.size());
+    approval_prev_sel_.reserve(sorted_tools.size());
 
     for (auto* tool : sorted_tools) {
         const std::string& tname = tool->name();
@@ -245,6 +277,24 @@ wxPanel* SettingsDialog::build_approvals_tab(wxWindow* parent)
 
         tool_names_.push_back(tname);
         approval_choices_.push_back(choice);
+        approval_prev_sel_.push_back(sel);
+
+        // S4.V Task 4 -- intercept Auto-Approve picks on mutating tools and
+        // show a one-time friction confirm. The lambda captures the index
+        // into approval_choices_/tool_names_/approval_prev_sel_ so we can
+        // snap back when the user declines.
+        const size_t idx = approval_choices_.size() - 1;
+        choice->Bind(wxEVT_CHOICE, [this, idx](wxCommandEvent&) {
+            int new_sel = approval_choices_[idx]->GetSelection();
+            if (new_sel == 1 /*Auto-Approve*/ &&
+                approval_prev_sel_[idx] != 1 &&
+                !confirm_auto_approve_mutating(tool_names_[idx]))
+            {
+                approval_choices_[idx]->SetSelection(approval_prev_sel_[idx]);
+                return;
+            }
+            approval_prev_sel_[idx] = new_sel;
+        });
     }
 
     scroll->SetSizer(scroll_sizer);

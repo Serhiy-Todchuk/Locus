@@ -29,10 +29,14 @@ public:
     ToolApprovalPanel(wxWindow* parent, ToolDecisionCallback on_decision);
 
     // Show the panel for a new tool call pending approval.
+    // `safety_warnings` (S4.V Task 5) contains flagged outside-workspace
+    // path tokens parsed out of run_command-family args; when non-empty,
+    // the panel renders a yellow banner above the preview.
     void show_tool_call(const std::string& call_id,
                         const std::string& tool_name,
                         const nlohmann::json& args,
-                        const std::string& preview);
+                        const std::string& preview,
+                        const std::vector<std::string>& safety_warnings = {});
 
     // Hide the panel after decision is made.
     void dismiss();
@@ -66,6 +70,7 @@ private:
 
     // Controls — created once, shown/hidden per mode.
     wxStaticText*     name_label_    = nullptr;
+    wxStaticText*     warning_label_ = nullptr;  // S4.V outside-workspace banner
     wxStaticText*     preview_label_ = nullptr;
     wxStyledTextCtrl* args_stc_      = nullptr;
     wxTextCtrl*       ask_input_     = nullptr;  // for ask_user mode

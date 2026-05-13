@@ -80,6 +80,16 @@ private:
     // Tool approval controls — one choice per tool, same order as tool_names_.
     std::vector<std::string> tool_names_;
     std::vector<wxChoice*>   approval_choices_;
+    // Snapshot of the choice index before the user's last change. Used by the
+    // S4.V friction confirm to snap back when the user declines the prompt
+    // after picking Auto-Approve on a mutating tool.
+    std::vector<int>         approval_prev_sel_;
+
+    // S4.V Task 4 -- friction confirm for mutating tools. Fired from the
+    // wxEVT_CHOICE handler when the user picks "Auto-Approve" on a tool whose
+    // name is in `is_mutating_tool()`. Returns true if the user confirmed and
+    // the new selection should stick; false if the choice should snap back.
+    bool confirm_auto_approve_mutating(const std::string& tool_name);
 
     // MCP tab controls (null when mcp_ == nullptr).
     wxListCtrl*        mcp_list_       = nullptr;   // server list

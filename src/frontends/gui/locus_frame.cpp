@@ -551,6 +551,12 @@ void LocusFrame::on_agent_tool_pending(wxThreadEvent& evt)
         std::string call_id = payload.value("id", "");
         std::string preview = payload.value("preview", "");
         nlohmann::json args = payload.value("args", nlohmann::json::object());
+        std::vector<std::string> safety_warnings;
+        if (payload.contains("safety_warnings") && payload["safety_warnings"].is_array()) {
+            for (const auto& w : payload["safety_warnings"]) {
+                if (w.is_string()) safety_warnings.push_back(w.get<std::string>());
+            }
+        }
         // S4-followup: dispatcher fires on_tool_call_pending for every tool
         // call (including auto-approved). The flag tells us whether to also
         // pop the approval UI; chat rendering happens unconditionally so the
@@ -583,7 +589,8 @@ void LocusFrame::on_agent_tool_pending(wxThreadEvent& evt)
             }
         } else {
             // Show approval panel and update AUI.
-            approval_panel_->show_tool_call(call_id, tool, args, preview);
+            approval_panel_->show_tool_call(call_id, tool, args, preview,
+                                            safety_warnings);
             aui_.GetPane("approval").Show();
             aui_.Update();
         }

@@ -47,7 +47,8 @@ public:
     void on_reasoning_token(std::string_view token) override;
     void on_tool_call_pending(const ToolCall& call,
                               const std::string& preview,
-                              bool needs_approval) override;
+                              bool needs_approval,
+                              const std::vector<std::string>& safety_warnings) override;
     void on_tool_result(const std::string& call_id,
                         const std::string& display) override;
     void on_turn_complete() override;

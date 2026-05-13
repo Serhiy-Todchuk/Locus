@@ -348,6 +348,7 @@ add_library(locus_core STATIC
     src/llm/token_counter.cpp
     src/tools/tool_registry.cpp
     src/tools/shared.cpp
+    src/tools/command_path_scanner.cpp
     src/tools/file_tools.cpp
     src/tools/search_tools.cpp
     src/tools/index_tools.cpp
