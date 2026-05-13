@@ -39,7 +39,7 @@ int AgentLoop::manifest_warn_tokens() const
     return 4000;  // default if no Workspace (tests, embedded use)
 }
 
-std::vector<ToolSchema> AgentLoop::build_tool_schemas(ToolMode mode) const
+std::vector<ToolSchema> AgentLoop::build_tool_schemas(ToolMode mode)
 {
     // S3.L: filter the manifest to tools that are available in this workspace
     // and visible in the current mode. S4.D introduced plan/execute modes.
@@ -61,9 +61,11 @@ std::vector<ToolSchema> AgentLoop::build_tool_schemas(ToolMode mode) const
     // Token-cost guardrail: log the manifest footprint every round, warn when
     // it exceeds the configured threshold. Serialised JSON length is a close
     // proxy for what the backend actually sends as the tools parameter.
-    int manifest_tokens = TokenCounter::estimate(schema_json.dump());
-    int threshold = manifest_warn_tokens();
-    if (manifest_tokens > threshold) {
+    std::string schema_dump   = schema_json.dump();
+    int         manifest_tokens = TokenCounter::estimate(schema_dump);
+    int         threshold       = manifest_warn_tokens();
+    bool        over_budget     = (manifest_tokens > threshold);
+    if (over_budget) {
         spdlog::warn("Tool manifest: {} tools, ~{} tokens (threshold {}). "
                      "Consider trimming or splitting by mode.",
                      schemas.size(), manifest_tokens, threshold);
@@ -72,23 +74,32 @@ std::vector<ToolSchema> AgentLoop::build_tool_schemas(ToolMode mode) const
                      schemas.size(), manifest_tokens);
     }
 
-    // Surface the same numbers in the Activity panel so a user watching the
-    // GUI can see why prompt_tokens jumped between system_prompt size and
-    // the first llm_response. Per-round event because the visible tool set
-    // can change between rounds (plan/execute mode, MCP server crash, ...).
-    std::string summary = "Tool manifest: " +
-                          std::to_string(schemas.size()) + " tools, ~" +
-                          std::to_string(manifest_tokens) + " tokens";
-    std::string detail;
-    for (std::size_t i = 0; i < schemas.size(); ++i) {
-        if (i > 0) detail += '\n';
-        detail += schemas[i].name;
+    // M5 polish -- dedupe activity emits on a hash of the manifest content.
+    // The manifest is sent to the LLM on every round (OpenAI API contract),
+    // but a row in the Activity log for each one buried tool_call /
+    // tool_result pairs between identical entries. Emit only when the
+    // content changes (mode switch, MCP server crash, MCP restart, ...).
+    // Over-budget warnings still fire every round so a runaway manifest
+    // can't sneak past the noise filter.
+    std::size_t manifest_hash = std::hash<std::string>{}(schema_dump);
+    bool        first_emit    = (last_manifest_hash_ == 0);
+    bool        changed       = (manifest_hash != last_manifest_hash_);
+    if (over_budget || first_emit || changed) {
+        std::string summary = "Tool manifest: " +
+                              std::to_string(schemas.size()) + " tools, ~" +
+                              std::to_string(manifest_tokens) + " tokens";
+        if (changed && !first_emit) summary += " (changed)";
+        std::string detail;
+        for (std::size_t i = 0; i < schemas.size(); ++i) {
+            if (i > 0) detail += '\n';
+            detail += schemas[i].name;
+        }
+        ActivityKind kind = over_budget ? ActivityKind::warning
+                                        : ActivityKind::tool_manifest;
+        activity_.emit(kind, std::move(summary), std::move(detail),
+                       /*tokens_in=*/manifest_tokens);
+        last_manifest_hash_ = manifest_hash;
     }
-    ActivityKind kind = (manifest_tokens > threshold)
-                            ? ActivityKind::warning
-                            : ActivityKind::tool_manifest;
-    activity_.emit(kind, std::move(summary), std::move(detail),
-                   /*tokens_in=*/manifest_tokens);
 
     return schemas;
 }

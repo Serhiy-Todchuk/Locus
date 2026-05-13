@@ -48,7 +48,16 @@ public:
 private:
     // Builds the filtered per-turn tool manifest (S3.L) and logs its token
     // footprint. Returns the ToolSchema vector the LLM client consumes.
-    std::vector<ToolSchema> build_tool_schemas(ToolMode mode) const;
+    //
+    // The tool_manifest activity event is only emitted when the manifest
+    // *content* changes vs. the last round (mode switch, MCP crash, MCP
+    // restart, etc.). Per-round emission produced an entry between every
+    // tool_call/tool_result pair even though the manifest was usually
+    // identical; readers couldn't tell apart "manifest changed" from
+    // "another round happened". The hash check kills the noise without
+    // hiding actual changes -- a warning-level emit still fires on every
+    // round when the manifest is over the budget threshold.
+    std::vector<ToolSchema> build_tool_schemas(ToolMode mode);
 
     // Per-workspace threshold above which we warn about manifest bloat.
     int manifest_warn_tokens() const;
@@ -61,6 +70,10 @@ private:
     FrontendRegistry&   frontends_;
     std::atomic<bool>&  cancel_flag_;
     MetricsAggregator*  metrics_ = nullptr;  // optional: nullptr disables recording
+
+    // Hash of the most recently emitted tool_manifest activity content.
+    // 0 = nothing emitted yet (forces emit on first round of the session).
+    std::size_t         last_manifest_hash_ = 0;
 };
 
 } // namespace locus
