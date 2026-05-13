@@ -9,6 +9,7 @@
 #include "ops_status_view.h"
 #include "settings_dialog.h"
 #include "ask_user_dialog.h"
+#include "terminal_panel.h"
 #include "tool_approval_panel.h"
 #include "wx_frontend.h"
 #include "../../agent/agent_core.h"
@@ -117,6 +118,7 @@ private:
     ChatPanel*         chat_panel_     = nullptr;   // chat UI (S1.3)
     ToolApprovalPanel* approval_panel_ = nullptr;   // tool approval (S1.4)
     ActivityPanel*     activity_panel_ = nullptr;   // activity log (S2.2)
+    TerminalPanel*     terminal_panel_ = nullptr;   // live terminal (S5.B)
 
     // Set true once detach_from_session() has run. Guards both the destructor
     // (to avoid touching freed agent_ / workspace_ refs after a workspace

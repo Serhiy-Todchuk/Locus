@@ -33,6 +33,10 @@ inline constexpr const char* kChatCtxLabel   = "locus.chat.ctx_label";
 inline constexpr const char* kActivityPanel    = "locus.activity.panel";
 inline constexpr const char* kActivityNotebook = "locus.activity.notebook";
 
+// --- Terminal panel (S5.B) ------------------------------------------------
+inline constexpr const char* kTerminalPanel    = "locus.terminal.panel";
+inline constexpr const char* kTerminalNotebook = "locus.terminal.notebook";
+
 // --- File tree panel ------------------------------------------------------
 inline constexpr const char* kFileTreePanel = "locus.filetree.panel";
 inline constexpr const char* kFileTreeCtrl  = "locus.filetree.tree";

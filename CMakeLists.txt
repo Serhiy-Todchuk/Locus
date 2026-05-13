@@ -381,6 +381,7 @@ add_library(locus_core STATIC
     src/agent/auto_commit.cpp
     src/agent/mention_parser.cpp
     src/frontends/cli/cli_frontend.cpp
+    src/frontends/gui/ansi_parser.cpp
     src/extractors/extractor_registry.cpp
     src/extractors/markdown_extractor.cpp
     src/extractors/html_extractor.cpp
@@ -450,6 +451,7 @@ add_executable(locus_gui WIN32
     src/frontends/gui/settings_dialog.cpp
     src/frontends/gui/markdown.cpp
     src/frontends/gui/autostart.cpp
+    src/frontends/gui/terminal_panel.cpp
 )
 
 target_link_libraries(locus_gui PRIVATE

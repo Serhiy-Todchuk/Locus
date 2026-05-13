@@ -98,6 +98,7 @@ LocusFrame::LocusFrame(AgentCore& agent, Workspace& workspace, McpManager* mcp)
     };
     hooks.on_toggle_files_pane    = [this](bool show) { toggle_pane("sidebar",  show); };
     hooks.on_toggle_activity_pane = [this](bool show) { toggle_pane("activity", show); };
+    hooks.on_toggle_terminal_pane = [this](bool show) { toggle_pane("terminal", show); };
     hooks.on_about = [this] {
         wxAboutDialogInfo info;
         info.SetName("Locus");
@@ -193,6 +194,10 @@ void LocusFrame::detach_from_session()
     if (workspace_.embedding_worker())
         workspace_.embedding_worker()->on_progress = nullptr;
     workspace_.indexer().on_progress = nullptr;
+
+    // S5.B -- detach the terminal sink so process_registry / run_command
+    // can't reach a panel that's about to be destroyed.
+    if (terminal_panel_) terminal_panel_->detach();
 
     agent_.unregister_frontend(wx_frontend_.get());
 }
@@ -371,6 +376,11 @@ void LocusFrame::setup_aui_layout()
     // Right detail panel — Activity log (S2.2).
     activity_panel_ = new ActivityPanel(this, agent_);
 
+    // Terminal panel (S5.B). Hidden by default; View menu toggles it.
+    terminal_panel_ = new TerminalPanel(this,
+        workspace_.process_sink(),
+        workspace_.processes());
+
     // Add panes.
     aui_.AddPane(file_tree_panel_, wxAuiPaneInfo()
         .Name("sidebar").Caption("Files")
@@ -391,6 +401,12 @@ void LocusFrame::setup_aui_layout()
         .Name("activity").Caption("Activity")
         .Right().MinSize(280, -1).BestSize(420, -1)
         .CloseButton(true).PinButton(true));
+
+    aui_.AddPane(terminal_panel_, wxAuiPaneInfo()
+        .Name("terminal").Caption("Terminal")
+        .Bottom().MinSize(-1, 160).BestSize(-1, 240)
+        .CloseButton(true).PinButton(true)
+        .Hide());  // S5.B -- hidden by default, View menu toggles
 }
 
 // ---------------------------------------------------------------------------
@@ -510,6 +526,8 @@ void LocusFrame::on_aui_pane_close(wxAuiManagerEvent& evt)
             menu_->set_files_pane_visible(false);
         else if (pane->name == "activity")
             menu_->set_activity_pane_visible(false);
+        else if (pane->name == "terminal")
+            menu_->set_terminal_pane_visible(false);
     }
     evt.Skip();
 }

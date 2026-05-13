@@ -21,6 +21,7 @@ namespace {
         ID_MENU_SETTINGS,
         ID_MENU_VIEW_FILES,
         ID_MENU_VIEW_ACTIVITY,
+        ID_MENU_VIEW_TERMINAL,
         ID_MENU_CLEAR_SESSIONS,
         ID_MENU_RECENT_BASE         = wxID_HIGHEST + 300,  // 300..309
         ID_MENU_SESSION_OPEN_BASE   = wxID_HIGHEST + 400,  // 400..449
@@ -69,8 +70,10 @@ void MenuController::install()
     auto* view_menu = new wxMenu;
     view_files_item_    = view_menu->AppendCheckItem(ID_MENU_VIEW_FILES,    "Files Panel");
     view_activity_item_ = view_menu->AppendCheckItem(ID_MENU_VIEW_ACTIVITY, "Activity Panel");
+    view_terminal_item_ = view_menu->AppendCheckItem(ID_MENU_VIEW_TERMINAL, "Terminal\tCtrl+`");
     view_files_item_->Check(true);
     view_activity_item_->Check(true);
+    view_terminal_item_->Check(false);  // S5.B -- hidden by default
 
     auto* help_menu = new wxMenu;
     help_menu->Append(ID_MENU_ABOUT, "About...");
@@ -118,6 +121,10 @@ void MenuController::install()
     frame_->Bind(wxEVT_MENU, [this](wxCommandEvent& e) {
         if (hooks_.on_toggle_activity_pane) hooks_.on_toggle_activity_pane(e.IsChecked());
     }, ID_MENU_VIEW_ACTIVITY);
+
+    frame_->Bind(wxEVT_MENU, [this](wxCommandEvent& e) {
+        if (hooks_.on_toggle_terminal_pane) hooks_.on_toggle_terminal_pane(e.IsChecked());
+    }, ID_MENU_VIEW_TERMINAL);
 
     // Saved Sessions submenu: bind the whole ID range once.
     frame_->Bind(wxEVT_MENU, &MenuController::on_session_open,   this,
@@ -205,6 +212,11 @@ void MenuController::set_files_pane_visible(bool visible)
 void MenuController::set_activity_pane_visible(bool visible)
 {
     if (view_activity_item_) view_activity_item_->Check(visible);
+}
+
+void MenuController::set_terminal_pane_visible(bool visible)
+{
+    if (view_terminal_item_) view_terminal_item_->Check(visible);
 }
 
 void MenuController::on_session_open(wxCommandEvent& evt)

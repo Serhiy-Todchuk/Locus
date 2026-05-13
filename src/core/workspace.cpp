@@ -167,6 +167,11 @@ Workspace::~Workspace()
     spdlog::info("Workspace closed: {}", root_.string());
 }
 
+ProcessSinkBroker* Workspace::process_sink()
+{
+    return processes_ ? processes_->sink_broker() : nullptr;
+}
+
 // -- Semantic search hot-toggle -----------------------------------------------
 
 bool Workspace::enable_semantic_search()

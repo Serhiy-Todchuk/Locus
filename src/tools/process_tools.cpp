@@ -1,4 +1,5 @@
 #include "tools/process_tools.h"
+#include "tools/process_sink.h"
 #include "tools/shared.h"
 
 #include "core/workspace_services.h"
@@ -7,8 +8,11 @@
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 
+#include <atomic>
+#include <mutex>
 #include <sstream>
 #include <string>
+#include <thread>
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -41,6 +45,12 @@ ToolResult RunCommandTool::execute(const ToolCall& call, IWorkspaceServices& ws)
         return error_result("Error: 'command' parameter is required");
 
     spdlog::trace("run_command: '{}'", command);
+
+    // S5.B -- if the terminal panel is attached, stream stdout/stderr chunks
+    // into it concurrently with the wait. The sink is null on CLI / headless
+    // runs; in that case the pre-S5.B "drain after wait" path is retained.
+    ProcessSinkBroker* sink = ws.process_sink();
+    if (sink) sink->emit_sync_started(command);
 
     SECURITY_ATTRIBUTES sa{};
     sa.nLength = sizeof(sa);
@@ -115,9 +125,23 @@ ToolResult RunCommandTool::execute(const ToolCall& call, IWorkspaceServices& ws)
 
     ResumeThread(pi.hThread);
 
-    // Wait for the child with timeout. On timeout, terminating the *job* kills
-    // every process spawned under it (including grandchildren), so the pipe's
-    // write end finally closes and the ReadFile loop below can return.
+    // Drain the pipe on a background thread so the terminal panel (if any)
+    // sees chunks live rather than as one wall of text after exit. We still
+    // capture the full output for the agent's tool result. WaitForSingleObject
+    // returns when the process exits; the job-kill on timeout closes the
+    // write end so the reader thread observes EOF and joins.
+    std::string  output;
+    std::mutex   output_mu;
+    std::thread reader([&]{
+        char buf[4096];
+        DWORD bytes_read = 0;
+        while (ReadFile(read_pipe, buf, sizeof(buf), &bytes_read, nullptr) && bytes_read > 0) {
+            if (sink) sink->emit_sync_chunk(buf, bytes_read);
+            std::lock_guard l(output_mu);
+            output.append(buf, bytes_read);
+        }
+    });
+
     DWORD wait_result = WaitForSingleObject(pi.hProcess, static_cast<DWORD>(timeout_ms));
 
     DWORD exit_code = 0;
@@ -134,12 +158,11 @@ ToolResult RunCommandTool::execute(const ToolCall& call, IWorkspaceServices& ws)
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
 
-    std::string output;
-    char buf[4096];
-    DWORD bytes_read;
-    while (ReadFile(read_pipe, buf, sizeof(buf), &bytes_read, nullptr) && bytes_read > 0) {
-        output.append(buf, bytes_read);
-    }
+    // Close the job *after* the reader's ReadFile loop has observed EOF.
+    // TerminateJobObject above on timeout already closed the write handle
+    // indirectly; on normal exit, write handle was closed earlier so the
+    // reader is already winding down.
+    reader.join();
     CloseHandle(read_pipe);
     CloseHandle(job);
 
@@ -159,6 +182,8 @@ ToolResult RunCommandTool::execute(const ToolCall& call, IWorkspaceServices& ws)
 
     spdlog::trace("run_command: exit={} output={} bytes{}", exit_code,
                   output.size(), timed_out ? " (timed out)" : "");
+
+    if (sink) sink->emit_sync_exited(static_cast<int>(exit_code), timed_out);
 
     return {exit_code == 0 && !timed_out, result, result};
 }

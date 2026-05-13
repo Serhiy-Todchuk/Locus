@@ -8,6 +8,7 @@ class EmbeddingWorker;
 class IndexQuery;
 class MemoryStore;
 class ProcessRegistry;
+class ProcessSinkBroker;
 class Reranker;
 class Workspace;
 
@@ -25,11 +26,12 @@ public:
     virtual IndexQuery*                  index()      = 0;
 
     // Optional subsystems.
-    virtual EmbeddingWorker* embedder()  { return nullptr; }
-    virtual Reranker*        reranker()  { return nullptr; }
-    virtual ProcessRegistry* processes() { return nullptr; }
-    virtual MemoryStore*     memory()    { return nullptr; }
-    virtual Workspace*       workspace() { return nullptr; }
+    virtual EmbeddingWorker*    embedder()      { return nullptr; }
+    virtual Reranker*           reranker()      { return nullptr; }
+    virtual ProcessRegistry*    processes()     { return nullptr; }
+    virtual ProcessSinkBroker*  process_sink()  { return nullptr; }
+    virtual MemoryStore*        memory()        { return nullptr; }
+    virtual Workspace*          workspace()     { return nullptr; }
 };
 
 } // namespace locus

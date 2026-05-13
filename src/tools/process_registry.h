@@ -21,6 +21,8 @@ using LocusOsHandle = void*;
 
 namespace locus {
 
+class ProcessSinkBroker;
+
 namespace fs = std::filesystem;
 
 // One long-running shell command spawned by the agent. Owns the Win32 process
@@ -68,7 +70,8 @@ public:
 private:
     friend class ProcessRegistry;
 
-    BackgroundProcess(int id, std::string command, std::size_t buffer_cap);
+    BackgroundProcess(int id, std::string command, std::size_t buffer_cap,
+                      ProcessSinkBroker* sink_broker);
 
 #ifdef _WIN32
     // Spawn under the given working directory. Throws std::runtime_error on
@@ -78,6 +81,9 @@ private:
 
     void reader_loop();
     void append_locked(const char* data, std::size_t n); // mu_ held
+
+    // Non-owning. May be null when the workspace has no GUI attached.
+    ProcessSinkBroker* sink_broker_ = nullptr;
 
     const int          id_;
     const std::string  command_;
@@ -142,9 +148,15 @@ public:
 
     std::size_t buffer_cap() const { return buffer_cap_; }
 
+    // S5.B -- attach (or detach) the terminal-panel sink. The broker is also
+    // exposed to RunCommandTool via `IWorkspaceServices::process_sink()` so
+    // synchronous shell calls land in the same panel.
+    ProcessSinkBroker* sink_broker() { return sink_broker_.get(); }
+
 private:
-    fs::path     root_;
-    std::size_t  buffer_cap_;
+    fs::path                            root_;
+    std::size_t                         buffer_cap_;
+    std::unique_ptr<ProcessSinkBroker>  sink_broker_;
 
     std::mutex   mu_;
     int          next_id_ = 1;

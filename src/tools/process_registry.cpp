@@ -1,4 +1,5 @@
 #include "process_registry.h"
+#include "process_sink.h"
 
 #include <spdlog/spdlog.h>
 
@@ -36,11 +37,13 @@ const char* to_string(BackgroundProcess::Status s)
 
 // -- BackgroundProcess ------------------------------------------------------
 
-BackgroundProcess::BackgroundProcess(int id, std::string command, std::size_t buffer_cap)
+BackgroundProcess::BackgroundProcess(int id, std::string command, std::size_t buffer_cap,
+                                     ProcessSinkBroker* sink_broker)
     : id_(id),
       command_(std::move(command)),
       started_at_unix_(now_unix()),
-      buffer_cap_(buffer_cap)
+      buffer_cap_(buffer_cap),
+      sink_broker_(sink_broker)
 {
     // Reserve up front so the ring buffer never reallocates after the cap is
     // hit — keeps the reader thread out of the allocator on hot output.
@@ -93,6 +96,11 @@ std::size_t BackgroundProcess::total_bytes() const
 
 void BackgroundProcess::append_locked(const char* data, std::size_t n)
 {
+    // S5.B -- fan out to the terminal panel *before* the ring buffer cap is
+    // applied so the panel sees every byte even when the LLM-facing buffer
+    // drops old output. The sink is non-owning + thread-safe.
+    if (sink_broker_) sink_broker_->emit_bg_chunk(id_, data, n);
+
     total_bytes_received_ += n;
     if (buffer_cap_ == 0) {
         buffer_.append(data, n);
@@ -256,6 +264,8 @@ void BackgroundProcess::reader_loop()
     // Pipe closed — child + descendants have all exited (or the job was
     // terminated). Capture the exit code if we weren't explicitly killed.
     HANDLE proc = static_cast<HANDLE>(process_);
+    int    final_code = 0;
+    bool   was_killed = false;
     if (proc) {
         WaitForSingleObject(proc, 2000);
         DWORD code = 0;
@@ -264,8 +274,14 @@ void BackgroundProcess::reader_loop()
         exit_code_ = static_cast<int>(code);
         if (status_ == Status::running)
             status_ = Status::exited;
+        final_code = exit_code_;
+        was_killed = (status_ == Status::killed);
     }
     reader_running_ = false;
+
+    // Fan out the lifecycle event AFTER releasing the per-process mutex so
+    // the sink can take its own locks without inversion risk.
+    if (sink_broker_) sink_broker_->emit_bg_exited(id_, final_code, was_killed);
 }
 
 #else // !_WIN32
@@ -278,7 +294,8 @@ void BackgroundProcess::reader_loop() {}
 
 ProcessRegistry::ProcessRegistry(fs::path workspace_root, std::size_t buffer_cap_bytes)
     : root_(std::move(workspace_root)),
-      buffer_cap_(buffer_cap_bytes)
+      buffer_cap_(buffer_cap_bytes),
+      sink_broker_(std::make_unique<ProcessSinkBroker>())
 {}
 
 ProcessRegistry::~ProcessRegistry()
@@ -304,7 +321,7 @@ int ProcessRegistry::spawn(const std::string& command)
     {
         std::lock_guard l(mu_);
         id = next_id_++;
-        proc.reset(new BackgroundProcess(id, command, buffer_cap_));
+        proc.reset(new BackgroundProcess(id, command, buffer_cap_, sink_broker_.get()));
     }
 
     // spawn_win32 throws on failure; do not insert a half-constructed entry.
@@ -316,6 +333,10 @@ int ProcessRegistry::spawn(const std::string& command)
         last_delivered_[id] = 0;
     }
     spdlog::info("Background process spawned: id={} cmd='{}'", id, command);
+    // S5.B -- announce the new process to the terminal panel after the
+    // entry is in the registry, so a tab-creation handler that immediately
+    // queries `list()` sees the row.
+    if (sink_broker_) sink_broker_->emit_bg_started(id, command);
     return id;
 #else
     (void)command;

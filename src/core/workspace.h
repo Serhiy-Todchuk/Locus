@@ -180,13 +180,14 @@ public:
     Workspace& operator=(const Workspace&) = delete;
 
     // -- IWorkspaceServices ---------------------------------------------------
-    const fs::path&  root() const override { return root_; }
-    IndexQuery*      index() override      { return query_.get(); }
-    EmbeddingWorker* embedder() override   { return embedding_worker_.get(); }
-    Reranker*        reranker() override   { return reranker_.get(); }
-    ProcessRegistry* processes() override  { return processes_.get(); }
-    MemoryStore*     memory() override     { return memory_.get(); }
-    Workspace*       workspace() override  { return this; }
+    const fs::path&    root() const override     { return root_; }
+    IndexQuery*        index() override          { return query_.get(); }
+    EmbeddingWorker*   embedder() override       { return embedding_worker_.get(); }
+    Reranker*          reranker() override       { return reranker_.get(); }
+    ProcessRegistry*   processes() override      { return processes_.get(); }
+    ProcessSinkBroker* process_sink() override;
+    MemoryStore*       memory() override         { return memory_.get(); }
+    Workspace*         workspace() override      { return this; }
 
     // -- Workspace-specific ---------------------------------------------------
     const fs::path& locus_dir() const { return locus_dir_; }
