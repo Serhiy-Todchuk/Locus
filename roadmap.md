@@ -30,7 +30,7 @@ This file is the milestone index. Stage detail lives in each milestone's own doc
 | **[M1 -- Desktop App](roadmap/M1.md)** ✔ | Usable standalone tool with wxWidgets UI | WS1 |
 | **[M2 -- Full Workspace Support](roadmap/M2.md)** ✔ | All 3 test workspaces functional | WS1, WS2 (Wikipedia), WS3 (Docs) |
 | **[M3 -- Refactoring](roadmap/M3/README.md)** ✔ | Pay down architectural debt before the next big feature push (split god-classes, regularize layering, document threading model) | WS1 |
-| **[M4 -- Agent Quality](roadmap/M4/README.md)** | Close the gap vs RooCode/Aider/Cline/OpenCode/Claude Code on the tech fundamentals of a coding agent (editing, verification, undo, planning, extensibility, retrieval quality) | WS1 |
+| **[M4 -- Agent Quality](roadmap/M4/README.md)** ✔ | Close the gap vs RooCode/Aider/Cline/OpenCode/Claude Code on the tech fundamentals of a coding agent (editing, verification, undo, planning, extensibility, retrieval quality) | WS1 |
 | **[M5 -- Polish, UX & Performance](roadmap/M5/README.md)** | Sand down the user-visible edges before multiplying frontends -- UX refinements, performance optimization, robustness, quality-of-life touches | WS1, WS2, WS3 |
 | **[M6 -- Connected](roadmap/M6/README.md)** | Remote access, VS Code shim, web frontend | All, from any device |
 
@@ -54,11 +54,9 @@ Complete. Stage list and full task history in [roadmap/M2.md](roadmap/M2.md).
 
 Complete. All 12 stages landed -- god-classes split, `src/` layered consistently, threading model documented, ADR trail in place, tool catalog consolidated. Stage list and full task history: [roadmap/M3/README.md](roadmap/M3/README.md).
 
-## M4 -- Agent Quality
+## M4 -- Agent Quality ✔
 
-Close the gap against leading agents (RooCode, Cline, Aider, OpenCode, Claude Code) on the tech fundamentals that make a coding agent actually usable day-to-day: precise edits, verification loops, undo, planning, extensibility, and retrieval quality. Not UX polish -- the engine underneath.
-
-Stage list, execution order, and M3 prerequisites: [roadmap/M4/README.md](roadmap/M4/README.md).
+Complete. Closed the gap against leading agents on the tech fundamentals -- diff-based editing, checkpoint/undo, retrieval (better embeddings + reranker + eval harness), background commands, telemetry, AST search, file-change awareness between turns, tool-call robustness across model families, stream decode completeness + max_tokens discipline, plan mode, MCP client, memory bank (Phase 1), git integration (gitignore + auto-commit), KV/prompt cache preservation, list_directory completeness, prompt templates, grammar coverage expansion, plus the S4.V miscellaneous-gaps cleanup (C symbol extractor + curated AST queries, `@`-mention file references, workspace tool-trust + outside-workspace path warnings, model-card presets, sampler controls, prompt/generation split in the context meter). Stage list and full task history: [roadmap/M4/README.md](roadmap/M4/README.md).
 
 ## M5 -- Polish, UX & Performance
 

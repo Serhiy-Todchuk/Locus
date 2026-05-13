@@ -1,4 +1,4 @@
-# M4 — Agent Quality
+# M4 — Agent Quality ✔
 
 **Goal**: Close the gap against leading agents (RooCode, Cline, Aider, OpenCode, Claude Code) on the tech fundamentals that make a coding agent actually usable day-to-day: precise edits, verification loops, undo, planning, extensibility, and retrieval quality. Not UX polish — the engine underneath.
 
