@@ -616,17 +616,22 @@ ChatPanel::ChatPanel(wxWindow* parent,
     sizer->Add(mode_row, 0, wxEXPAND | wxTOP | wxLEFT | wxRIGHT, 2);
     sizer->Add(input_,   0, wxEXPAND | wxTOP, 2);
 
-    // Footer bar.
+    // Footer bar. Layout (left to right):
+    //   [gauge] [ctx label] [chips...]  ......stretch......  [buttons]
+    // ctx_label_ gets growth priority (proportion 1) so the p:/g: split
+    // stays visible as the window narrows; the buttons live on the right
+    // edge where they're easy to click without competing for the label's
+    // horizontal real estate.
     auto* footer = new wxBoxSizer(wxHORIZONTAL);
     footer->Add(ctx_gauge_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
-    footer->Add(ctx_label_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
+    footer->Add(ctx_label_, 1, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+    footer->Add(plan_chip_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+    footer->Add(commit_chip_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+    footer->Add(gen_chip_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+    footer->AddStretchSpacer();
     footer->Add(compact_btn_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
     footer->Add(undo_btn_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
     footer->Add(stop_btn_, 0, wxALIGN_CENTER_VERTICAL);
-    footer->AddStretchSpacer();
-    footer->Add(plan_chip_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
-    footer->Add(commit_chip_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
-    footer->Add(gen_chip_, 0, wxALIGN_CENTER_VERTICAL);
     sizer->Add(footer, 0, wxEXPAND | wxALL, 4);
 
     SetSizer(sizer);
@@ -1107,10 +1112,15 @@ void ChatPanel::set_context_meter(int used, int limit,
     // S4.V Task 8 -- append the prompt / completion split when the server
     // has reported one. On a 30B local model generation tokens are 5-10x
     // slower per-token than prompt tokens, so the split tells the user why
-    // a turn was slow without opening the metrics tab.
-    wxString label = wxString::Format("ctx: %d/%d (%d%%)", used, limit, pct);
+    // a turn was slow without opening the metrics tab. Format mirrors the
+    // metrics tab's "Tokens in / out" wording so the two reads agree.
+    wxString label;
     if (prompt_tokens > 0 || completion_tokens > 0) {
-        label += wxString::Format("  [p:%d g:%d]", prompt_tokens, completion_tokens);
+        label = wxString::Format("ctx: %d/%d (%d%%, in:%d out:%d)",
+                                 used, limit, pct,
+                                 prompt_tokens, completion_tokens);
+    } else {
+        label = wxString::Format("ctx: %d/%d (%d%%)", used, limit, pct);
     }
     ctx_label_->SetLabel(label);
 

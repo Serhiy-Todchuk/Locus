@@ -67,23 +67,25 @@ MetricsView::MetricsView(wxWindow* parent, MetricsAggregator& metrics,
     , core_(core)
     , timer_(this)
 {
-    SetBackgroundStyle(wxBG_STYLE_PAINT);
-
+    // Container panel only -- wxBG_STYLE_PAINT belongs on the child spark
+    // panels (which DO own their painting). Setting it here suppresses wx's
+    // default erase-background but we never paint a background ourselves,
+    // so previous frames bleed through on resize.
     auto* sizer = new wxBoxSizer(wxVERTICAL);
 
     totals_text_ = new wxStaticText(this, wxID_ANY, "");
     sizer->Add(totals_text_, 0, wxALL | wxEXPAND, 6);
 
-    auto* dur_label = new wxStaticText(this, wxID_ANY, "Turn duration (ms)");
-    sizer->Add(dur_label, 0, wxLEFT | wxRIGHT | wxTOP, 6);
+    dur_label_ = new wxStaticText(this, wxID_ANY, "Turn duration (ms)");
+    sizer->Add(dur_label_, 0, wxLEFT | wxRIGHT | wxTOP, 6);
     spark_dur_ = new wxPanel(this, wxID_ANY, wxDefaultPosition,
                              wxSize(-1, k_spark_height));
     spark_dur_->SetBackgroundStyle(wxBG_STYLE_PAINT);
     spark_dur_->Bind(wxEVT_PAINT, &MetricsView::on_paint_durations, this);
     sizer->Add(spark_dur_, 0, wxLEFT | wxRIGHT | wxBOTTOM | wxEXPAND, 6);
 
-    auto* tok_label = new wxStaticText(this, wxID_ANY, "Total tokens per turn");
-    sizer->Add(tok_label, 0, wxLEFT | wxRIGHT | wxTOP, 6);
+    tok_label_ = new wxStaticText(this, wxID_ANY, "Total tokens per turn");
+    sizer->Add(tok_label_, 0, wxLEFT | wxRIGHT | wxTOP, 6);
     spark_tok_ = new wxPanel(this, wxID_ANY, wxDefaultPosition,
                              wxSize(-1, k_spark_height));
     spark_tok_->SetBackgroundStyle(wxBG_STYLE_PAINT);
@@ -94,8 +96,11 @@ MetricsView::MetricsView(wxWindow* parent, MetricsAggregator& metrics,
     sizer->Add(tools_text_, 1, wxALL | wxEXPAND, 6);
 
     auto* btn_row = new wxBoxSizer(wxHORIZONTAL);
-    auto* btn_json = new wxButton(this, wxID_ANY, "Export JSON…");
-    auto* btn_csv  = new wxButton(this, wxID_ANY, "Export CSV…");
+    // wxString::FromUTF8 -- the source contains the U+2026 ellipsis as raw
+    // UTF-8 bytes; the wxString(const char*) constructor would otherwise
+    // re-decode them through the C locale (CP-1252 on Windows -> mojibake).
+    auto* btn_json = new wxButton(this, wxID_ANY, wxString::FromUTF8("Export JSON…"));
+    auto* btn_csv  = new wxButton(this, wxID_ANY, wxString::FromUTF8("Export CSV…"));
     btn_json->Bind(wxEVT_BUTTON, &MetricsView::on_export_json, this);
     btn_csv->Bind (wxEVT_BUTTON, &MetricsView::on_export_csv,  this);
     btn_row->Add(btn_json, 0, wxRIGHT, 4);
@@ -174,6 +179,32 @@ void MetricsView::rebuild_text()
             }
         }
         if (tools_text_) tools_text_->SetLabel(wxString::FromUTF8(o.str()));
+    }
+
+    // S5 polish -- bake the current series max into the graph titles so a
+    // single tall bar isn't ambiguous (you can't read the y axis off a
+    // sparkbar). N=0 collapses the suffix.
+    if (dur_label_) {
+        long long max_dur = 0;
+        for (auto v : agg.turn_durations_ms) max_dur = std::max(max_dur, v);
+        if (max_dur > 0) {
+            dur_label_->SetLabel(wxString::Format(
+                "Turn duration (ms) -- last %d, max %lld",
+                static_cast<int>(agg.turn_durations_ms.size()), max_dur));
+        } else {
+            dur_label_->SetLabel("Turn duration (ms)");
+        }
+    }
+    if (tok_label_) {
+        int max_tok = 0;
+        for (int v : agg.turn_total_tokens) max_tok = std::max(max_tok, v);
+        if (max_tok > 0) {
+            tok_label_->SetLabel(wxString::Format(
+                "Total tokens per turn -- last %d, max %d",
+                static_cast<int>(agg.turn_total_tokens.size()), max_tok));
+        } else {
+            tok_label_->SetLabel("Total tokens per turn");
+        }
     }
 
     Layout();

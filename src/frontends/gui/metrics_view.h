@@ -38,6 +38,8 @@ private:
 
     wxStaticText* totals_text_   = nullptr;
     wxStaticText* tools_text_    = nullptr;
+    wxStaticText* dur_label_     = nullptr;
+    wxStaticText* tok_label_     = nullptr;
     wxPanel*      spark_dur_     = nullptr;
     wxPanel*      spark_tok_     = nullptr;
     wxStaticText* status_        = nullptr;
