@@ -29,6 +29,7 @@ add_executable(locus_tests
     test_list_directory_tool.cpp
     test_prompt_templates.cpp
     test_grammar_coverage.cpp
+    test_mention_parser.cpp
     retrieval_eval/metrics.cpp
     support/shared_embedder.cpp
 )

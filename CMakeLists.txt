@@ -377,6 +377,7 @@ add_library(locus_core STATIC
     src/agent/checkpoint_store.cpp
     src/agent/file_change_tracker.cpp
     src/agent/auto_commit.cpp
+    src/agent/mention_parser.cpp
     src/frontends/cli/cli_frontend.cpp
     src/extractors/extractor_registry.cpp
     src/extractors/markdown_extractor.cpp
@@ -439,6 +440,7 @@ add_executable(locus_gui WIN32
     src/frontends/gui/metrics_view.cpp
     src/frontends/gui/chat_panel.cpp
     src/frontends/gui/slash_popup.cpp
+    src/frontends/gui/mention_popup.cpp
     src/frontends/gui/tool_approval_panel.cpp
     src/frontends/gui/ask_user_dialog.cpp
     src/frontends/gui/compaction_dialog.cpp

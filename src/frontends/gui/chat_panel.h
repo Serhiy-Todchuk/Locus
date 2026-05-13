@@ -2,6 +2,7 @@
 
 #include "../../agent/agent_mode.h"
 #include "../../core/frontend.h"
+#include "mention_popup.h"
 #include "slash_popup.h"
 
 #include <wx/wx.h>
@@ -107,6 +108,16 @@ public:
     // Items are typically CLI commands (reset, compact, ...) plus tool names.
     void set_slash_commands(std::vector<SlashItem> items);
 
+    // S4.V `@`-mention support. `set_mention_paths` seeds the autocomplete
+    // candidate list (workspace-relative paths captured once per session).
+    // `set_on_mention_attach` registers the submit-time callback fired when
+    // the user sends a message containing one or more `@<path>` tokens that
+    // resolve to indexed files -- LocusFrame wires this to
+    // `AgentCore::set_attached_context`. The path tokens stay in the user
+    // message so the LLM sees them verbatim.
+    void set_mention_paths(std::vector<std::string> paths);
+    void set_on_mention_attach(std::function<void(const std::string&)> cb);
+
     // Dispatch callback for GUI slash commands. Invoked when the user sends
     // a message that starts with '/' and the command name matches a known
     // GUI command. Returns true if handled (input is cleared, message is
@@ -152,6 +163,21 @@ private:
     void     hide_slash_popup();
     void     accept_slash_suggestion(const std::string& cmd_name);
     bool     slash_popup_visible() const;
+
+    // S4.V `@`-mention popup management. Mirrors the slash flow but the
+    // trigger token is the `@<prefix>` immediately before the cursor (rather
+    // than the line-start `/<cmd>`). Returns the (start, prefix) pair that
+    // identifies the mention currently being typed; start == npos means no
+    // active mention.
+    struct ActiveMention {
+        size_t   start = std::string::npos;  // byte offset of '@' in input text
+        wxString prefix;                      // chars typed after '@' so far
+    };
+    ActiveMention active_mention_at_cursor() const;
+    void          update_mention_popup();
+    void          hide_mention_popup();
+    void          accept_mention_suggestion(const std::string& path);
+    bool          mention_popup_visible() const;
 
     // Send the message to the agent (or dispatch as a GUI slash command).
     // Called from Enter-key handling. Returns true if handled.
@@ -235,6 +261,12 @@ private:
     std::vector<SlashItem>       slash_commands_;
     std::unique_ptr<SlashPopup>  slash_popup_;
     bool                         slash_popup_shown_ = false;
+
+    // S4.V `@`-mention autocomplete.
+    std::vector<std::string>      mention_paths_;
+    std::unique_ptr<MentionPopup> mention_popup_;
+    bool                          mention_popup_shown_ = false;
+    std::function<void(const std::string&)> on_mention_attach_;
 };
 
 } // namespace locus

@@ -2,9 +2,14 @@
 #include "markdown.h"
 #include "theme.h"
 
+#include "../../agent/mention_parser.h"
+
 #include <spdlog/spdlog.h>
 
 #include <wx/webview.h>
+
+#include <algorithm>
+#include <unordered_set>
 
 namespace locus {
 
@@ -1251,6 +1256,41 @@ void ChatPanel::on_input_key(wxKeyEvent& evt)
         }
     }
 
+    // S4.V -- same nav surface for the @-mention popup.
+    if (mention_popup_visible()) {
+        switch (key) {
+        case WXK_ESCAPE:
+            hide_mention_popup();
+            return;
+        case WXK_UP:
+            mention_popup_->move_up();
+            return;
+        case WXK_DOWN:
+            mention_popup_->move_down();
+            return;
+        case WXK_TAB: {
+            auto sel = mention_popup_->selected_path();
+            if (!sel.empty()) {
+                accept_mention_suggestion(sel);
+                return;
+            }
+            break;
+        }
+        case WXK_RETURN:
+        case WXK_NUMPAD_ENTER:
+            if (!evt.ShiftDown()) {
+                auto sel = mention_popup_->selected_path();
+                if (!sel.empty()) {
+                    accept_mention_suggestion(sel);
+                    return;
+                }
+            }
+            break;
+        default:
+            break;
+        }
+    }
+
     if ((key == WXK_RETURN || key == WXK_NUMPAD_ENTER) && !evt.ShiftDown()) {
         submit_current_input();
     } else {
@@ -1261,6 +1301,7 @@ void ChatPanel::on_input_key(wxKeyEvent& evt)
 void ChatPanel::on_input_text(wxCommandEvent& evt)
 {
     update_slash_popup();
+    update_mention_popup();
     evt.Skip();
 }
 
@@ -1294,6 +1335,25 @@ bool ChatPanel::submit_current_input()
 
     input_->Clear();
     hide_slash_popup();
+    hide_mention_popup();
+
+    // S4.V -- pull the first valid `@<path>` mention out of the message and
+    // auto-attach it. The token stays in the message verbatim so the user
+    // can see what they pinned and the LLM has the reference inline.
+    // Multi-mention attach lands when the agent core grows a list slot;
+    // last-wins matches the existing single-slot model.
+    if (on_mention_attach_ && !mention_paths_.empty()) {
+        auto std_text = text.ToStdString(wxConvUTF8);
+        auto mentions = parse_mentions(std_text);
+        std::unordered_set<std::string> known(
+            mention_paths_.begin(), mention_paths_.end());
+        for (const auto& m : mentions) {
+            if (known.find(m.path) != known.end()) {
+                on_mention_attach_(m.path);
+                break;
+            }
+        }
+    }
 
     // Add user message bubble.
     ++message_id_;
@@ -1419,6 +1479,150 @@ void ChatPanel::accept_slash_suggestion(const std::string& cmd_name)
     input_->ChangeValue(new_text);  // ChangeValue does not fire wxEVT_TEXT
     input_->SetInsertionPointEnd();
     hide_slash_popup();
+    input_->SetFocus();
+}
+
+// -- @-mention popup (S4.V) -------------------------------------------------
+
+void ChatPanel::set_mention_paths(std::vector<std::string> paths)
+{
+    mention_paths_ = std::move(paths);
+    if (mention_popup_) {
+        if (mention_popup_shown_) mention_popup_->Dismiss();
+        mention_popup_.reset();
+        mention_popup_shown_ = false;
+    }
+}
+
+void ChatPanel::set_on_mention_attach(std::function<void(const std::string&)> cb)
+{
+    on_mention_attach_ = std::move(cb);
+}
+
+ChatPanel::ActiveMention ChatPanel::active_mention_at_cursor() const
+{
+    ActiveMention out;
+    if (!input_) return out;
+
+    long ins = input_->GetInsertionPoint();
+    wxString v = input_->GetValue();
+    if (ins <= 0 || static_cast<size_t>(ins) > v.size()) return out;
+
+    // Walk back from the cursor to the nearest '@'. Reject the run if a
+    // disallowed (path-terminating) char appears before we hit one, or if
+    // the char immediately preceding the '@' is alphanumeric / dot / etc.
+    // (the same heuristic as parse_mentions, so the popup doesn't fire
+    // mid-email).
+    auto is_path_char = [](wxUniChar c) {
+        if ((c >= '0' && c <= '9') ||
+            (c >= 'a' && c <= 'z') ||
+            (c >= 'A' && c <= 'Z')) return true;
+        switch (static_cast<wchar_t>(c)) {
+            case '/': case '\\':
+            case '.': case '_': case '-':
+            case '+': case '~': case '#':
+                return true;
+            default: return false;
+        }
+    };
+    auto allowed_before_at = [](wxUniChar c) {
+        if ((c >= '0' && c <= '9') ||
+            (c >= 'a' && c <= 'z') ||
+            (c >= 'A' && c <= 'Z')) return false;
+        switch (static_cast<wchar_t>(c)) {
+            case '.': case '_': case '-': return false;
+            default: return true;
+        }
+    };
+
+    long i = ins - 1;
+    while (i >= 0) {
+        wxUniChar c = v[static_cast<size_t>(i)];
+        if (c == '@') {
+            if (i == 0 || allowed_before_at(v[static_cast<size_t>(i - 1)])) {
+                out.start  = static_cast<size_t>(i);
+                out.prefix = v.SubString(i + 1, ins - 1);
+                return out;
+            }
+            return out;  // '@' but bad neighbour -- treat as no-mention.
+        }
+        if (!is_path_char(c)) return out;
+        --i;
+    }
+    return out;
+}
+
+bool ChatPanel::mention_popup_visible() const
+{
+    return mention_popup_ && mention_popup_shown_;
+}
+
+void ChatPanel::hide_mention_popup()
+{
+    if (mention_popup_ && mention_popup_shown_) {
+        mention_popup_shown_ = false;
+        mention_popup_->Dismiss();
+    }
+}
+
+void ChatPanel::update_mention_popup()
+{
+    if (mention_paths_.empty()) return;
+
+    ActiveMention m = active_mention_at_cursor();
+    if (m.start == std::string::npos) {
+        hide_mention_popup();
+        return;
+    }
+
+    if (!mention_popup_) {
+        mention_popup_ = std::make_unique<MentionPopup>(this, mention_paths_);
+        mention_popup_->on_accept = [this](const std::string& path) {
+            accept_mention_suggestion(path);
+        };
+        mention_popup_->on_dismiss = [this]() {
+            mention_popup_shown_ = false;
+        };
+    }
+
+    bool any = mention_popup_->apply_filter(m.prefix);
+    if (!any) {
+        hide_mention_popup();
+        return;
+    }
+
+    wxPoint anchor = input_->GetScreenPosition();
+    int w = input_->GetSize().GetWidth();
+    if (!mention_popup_shown_) {
+        mention_popup_->show_anchored(anchor, w);
+        mention_popup_shown_ = true;
+        input_->SetFocus();
+    } else {
+        mention_popup_->show_anchored(anchor, w);
+    }
+}
+
+void ChatPanel::accept_mention_suggestion(const std::string& path)
+{
+    if (path.empty() || !input_) return;
+    ActiveMention m = active_mention_at_cursor();
+    if (m.start == std::string::npos) {
+        hide_mention_popup();
+        return;
+    }
+
+    wxString v = input_->GetValue();
+    long ins = input_->GetInsertionPoint();
+    // Replace [start .. ins) with "@<path> ".
+    wxString before = v.SubString(0, static_cast<long>(m.start) - 1);
+    wxString after  = v.SubString(ins, v.size() - 1);
+    wxString inserted = "@" + wxString::FromUTF8(path) + " ";
+    wxString new_text = before + inserted + after;
+
+    input_->ChangeValue(new_text);  // does not fire wxEVT_TEXT
+    long new_caret = static_cast<long>(before.size() + inserted.size());
+    input_->SetInsertionPoint(new_caret);
+    hide_mention_popup();
     input_->SetFocus();
 }
 

@@ -276,6 +276,23 @@ void LocusFrame::setup_aui_layout()
         agent_.clear_attached_context();
     });
 
+    // S4.V -- seed the @-mention autocomplete from the indexed file list.
+    // Captured once at workspace open; new files added mid-session won't
+    // appear in the popup until the next workspace open. The index is
+    // already up-to-date for typed-out paths, so missing-from-popup paths
+    // still attach correctly at submit time if the user types the path
+    // verbatim.
+    {
+        std::vector<std::string> paths;
+        for (const auto& f : workspace_.query().list_directory("", 100)) {
+            if (!f.is_directory) paths.push_back(f.path);
+        }
+        chat_panel_->set_mention_paths(std::move(paths));
+    }
+    chat_panel_->set_on_mention_attach([this](const std::string& path) {
+        agent_.set_attached_context({path, /*preview*/{}});
+    });
+
     // Slash-command suggestions: CLI-style commands + all registered tools.
     {
         std::vector<SlashItem> items = {
