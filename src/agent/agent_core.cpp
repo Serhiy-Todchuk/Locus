@@ -7,6 +7,7 @@
 #include "../core/memory_store.h"
 #include "../core/workspace.h"
 
+#include <spdlog/fmt/fmt.h>
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
@@ -870,6 +871,15 @@ void AgentCore::compact_context(CompactionStrategy strategy, int n)
     spdlog::info("AgentCore: compaction queued (strategy={}, n={})",
                  strategy == CompactionStrategy::drop_tool_results
                      ? "drop_tool_results" : "drop_oldest", n);
+    // Surface the request in the activity log immediately so the user knows
+    // their click was registered -- the agent thread may not pick it up
+    // until the in-flight LLM stream returns (compaction can't mutate
+    // history_ while an LLM round is reading it).
+    activity_->emit(ActivityKind::compaction,
+                    std::string("Compaction queued (") +
+                        (strategy == CompactionStrategy::drop_tool_results
+                            ? "drop_tool_results" : "drop_oldest") + ")",
+                    "Will apply between LLM rounds or at end of turn.");
 }
 
 void AgentCore::observe_plan_tool_result(const ToolCall& call,
@@ -1026,6 +1036,23 @@ void AgentCore::apply_pending_compaction()
     int after = history_.estimate_tokens();
     spdlog::info("AgentCore: compaction freed ~{} tokens ({} -> {})",
                  before - after, before, after);
+
+    // Invalidate the cached server total -- it reflects the pre-compaction
+    // count and `current_token_count()` would otherwise keep showing the
+    // stale value until the next LLM round reports fresh usage. Clearing
+    // forces the meter to fall back to the (now trimmed) history estimate,
+    // so the UI immediately reflects the compaction.
+    budget_->set_server_total(0);
+    budget_->set_server_split(0, 0);
+
+    activity_->emit(ActivityKind::compaction,
+                    fmt::format("Compaction applied: freed ~{} tokens ({} -> {})",
+                                before - after, before, after),
+                    fmt::format(
+                        "Strategy: {}\nN: {}\nBefore (history estimate): {} tokens\nAfter:  {} tokens",
+                        strategy == CompactionStrategy::drop_tool_results
+                            ? "drop_tool_results" : "drop_oldest",
+                        n, before, after));
 
     frontends_.broadcast([&](IFrontend& fe) {
         fe.on_context_meter(current_token_count(), llm_config_.context_limit,

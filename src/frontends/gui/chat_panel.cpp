@@ -627,7 +627,6 @@ ChatPanel::ChatPanel(wxWindow* parent,
     footer->Add(ctx_label_, 1, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
     footer->Add(plan_chip_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
     footer->Add(commit_chip_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
-    footer->Add(gen_chip_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
     footer->AddStretchSpacer();
     footer->Add(compact_btn_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
     footer->Add(undo_btn_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
@@ -724,12 +723,8 @@ void ChatPanel::create_footer()
     plan_chip_->Hide();  // shown only while a plan is active
     commit_chip_ = new wxStaticText(this, wxID_ANY, "");
     commit_chip_->Hide(); // shown only when git auto-commit is on AND fired
-    // S4.F live generation chip.
-    gen_chip_ = new wxStaticText(this, wxID_ANY, "");
-    gen_chip_->SetToolTip(
-        "Live token estimate of the current generation. Resets between turns."
-        "\nExact completion_tokens land in the context meter on turn complete.");
-    gen_chip_->Hide();
+    // S4.F live generation chip rolled into the ctx label (M5 polish) --
+    // see refresh_ctx_label / set_generation_progress.
 }
 
 // ---------------------------------------------------------------------------
@@ -839,18 +834,13 @@ void ChatPanel::on_turn_complete()
     streaming_ = false;
     stop_btn_->Disable();
     if (undo_btn_) undo_btn_->Enable();
-    // Use SetEditable (not Enable) to preserve the custom dark background —
-    // Disable() forces Windows' light "disabled control" colour.
-    input_->SetEditable(true);
     input_->SetFocus();
-    // S4.F -- hide the live gen chip; the post-turn context meter carries the
-    // exact completion_tokens via on_context_meter so the user has the
-    // authoritative number anyway.
-    if (gen_chip_) {
-        gen_chip_->SetLabel("");
-        gen_chip_->Hide();
-        Layout();
-    }
+    // M5 polish -- the live estimate retired in favour of the ctx label's
+    // own "out:~N" mid-stream / "out:N" post-stream rendering. Clear it so
+    // the next set_context_meter that fires post-turn (with exact
+    // completion_tokens) wins the render.
+    live_completion_estimate_ = 0;
+    refresh_ctx_label();
 }
 
 void ChatPanel::on_session_reset()
@@ -1106,54 +1096,67 @@ void ChatPanel::on_tool_result(const wxString& call_id, const wxString& display)
 void ChatPanel::set_context_meter(int used, int limit,
                                    int prompt_tokens, int completion_tokens)
 {
-    int pct = (limit > 0) ? (used * 100 / limit) : 0;
-    ctx_gauge_->SetValue(std::min(pct, 100));
+    last_ctx_used_       = used;
+    last_ctx_limit_      = limit;
+    last_ctx_prompt_     = prompt_tokens;
+    last_ctx_completion_ = completion_tokens;
+    // The post-round broadcast carries the exact completion_tokens; the
+    // live estimate is no longer meaningful so reset it.
+    if (completion_tokens > 0) live_completion_estimate_ = 0;
+    refresh_ctx_label();
+}
 
-    // S4.V Task 8 -- append the prompt / completion split when the server
-    // has reported one. On a 30B local model generation tokens are 5-10x
-    // slower per-token than prompt tokens, so the split tells the user why
-    // a turn was slow without opening the metrics tab. Format mirrors the
-    // metrics tab's "Tokens in / out" wording so the two reads agree.
+void ChatPanel::refresh_ctx_label()
+{
+    int used  = last_ctx_used_;
+    int limit = last_ctx_limit_;
+    int pct = (limit > 0) ? (used * 100 / limit) : 0;
+    if (ctx_gauge_) ctx_gauge_->SetValue(std::min(pct, 100));
+
+    // S4.V Task 8 + M5 polish -- compose "ctx: U/L (P%, in:P out:Out)".
+    // `out:` uses the exact server-reported value when we have it, falls
+    // back to the live estimate (prefixed `~`) while a stream is in
+    // flight, and is omitted entirely when neither is known (e.g. fresh
+    // session before the first LLM round).
+    wxString out_part;
+    if (last_ctx_completion_ > 0) {
+        out_part = wxString::Format(" out:%d", last_ctx_completion_);
+    } else if (live_completion_estimate_ > 0) {
+        out_part = wxString::Format(" out:~%d", live_completion_estimate_);
+    }
+    wxString in_part;
+    if (last_ctx_prompt_ > 0) {
+        in_part = wxString::Format(" in:%d", last_ctx_prompt_);
+    }
+
     wxString label;
-    if (prompt_tokens > 0 || completion_tokens > 0) {
-        label = wxString::Format("ctx: %d/%d (%d%%, in:%d out:%d)",
+    if (!in_part.IsEmpty() || !out_part.IsEmpty()) {
+        label = wxString::Format("ctx: %d/%d (%d%%,%s%s)",
                                  used, limit, pct,
-                                 prompt_tokens, completion_tokens);
+                                 in_part.c_str(), out_part.c_str());
     } else {
         label = wxString::Format("ctx: %d/%d (%d%%)", used, limit, pct);
     }
-    ctx_label_->SetLabel(label);
+    if (ctx_label_) ctx_label_->SetLabel(label);
 
     // Color: green < 60%, yellow 60-80%, red > 80%.
-    if (pct < 60)
-        ctx_gauge_->SetForegroundColour(wxColour(76, 175, 80));
-    else if (pct < 80)
-        ctx_gauge_->SetForegroundColour(wxColour(255, 193, 7));
-    else
-        ctx_gauge_->SetForegroundColour(wxColour(244, 67, 54));
+    if (ctx_gauge_) {
+        if (pct < 60)
+            ctx_gauge_->SetForegroundColour(wxColour(76, 175, 80));
+        else if (pct < 80)
+            ctx_gauge_->SetForegroundColour(wxColour(255, 193, 7));
+        else
+            ctx_gauge_->SetForegroundColour(wxColour(244, 67, 54));
+    }
 }
 
 void ChatPanel::set_generation_progress(int /*chars*/, int est_tokens)
 {
-    if (!gen_chip_) return;
-    if (est_tokens <= 0) {
-        if (gen_chip_->IsShown()) { gen_chip_->Hide(); Layout(); }
-        return;
-    }
-    // Format with thousands separator for readability on long generations.
-    auto thousands = [](int n) {
-        std::string s = std::to_string(n);
-        for (int i = static_cast<int>(s.size()) - 3; i > 0; i -= 3)
-            s.insert(static_cast<size_t>(i), ",");
-        return s;
-    };
-    wxString label = wxString::Format("GEN ~%s tok",
-                                       thousands(est_tokens).c_str());
-    gen_chip_->SetLabel(label);
-    if (!gen_chip_->IsShown()) {
-        gen_chip_->Show();
-        Layout();
-    }
+    // M5 polish -- live estimate now rides in the ctx label as "out:~N"
+    // alongside the in: split, so the user has one place to read the
+    // turn's token state instead of two competing widgets.
+    live_completion_estimate_ = std::max(0, est_tokens);
+    refresh_ctx_label();
 }
 
 void ChatPanel::set_attached_chip(const wxString& file_path)
@@ -1393,9 +1396,11 @@ bool ChatPanel::submit_current_input()
         "addMsg(%d, 'msg-user', %s);",
         message_id_, "'" + js_escape(text) + "'"));
 
-    // Block typing while agent is working, but keep the dark styling.
-    // (Enable/Disable on Windows resets colours to the light system defaults.)
-    input_->SetEditable(false);
+    // Input stays editable while the agent is working -- AgentCore::send_message
+    // is non-blocking and queues onto the agent thread, so the user can compose
+    // the next message and hit Enter; it'll be picked up after the current turn
+    // completes. (The previous SetEditable(false) was unnecessary -- there was
+    // never a race the input lock prevented.)
 
     if (on_send_)
         on_send_(text.ToStdString(wxConvUTF8));

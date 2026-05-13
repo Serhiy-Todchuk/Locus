@@ -187,6 +187,13 @@ private:
     // Called from Enter-key handling. Returns true if handled.
     bool submit_current_input();
 
+    // Re-render the ctx label from the cached usage values. Called from
+    // both set_context_meter (post-round / post-tool) and
+    // set_generation_progress (mid-stream live estimate). During streaming
+    // the rendered "out:" prefix is "~N" (estimate); once the server's
+    // usage callback fires it's the exact "N".
+    void refresh_ctx_label();
+
     std::function<void(const std::string&)> on_send_;
     std::function<void()> on_compact_;
     std::function<void()> on_stop_;
@@ -211,9 +218,16 @@ private:
     // S4.L auto-commit chip ("⌘ a1b2c3d") -- shown after each agent turn
     // when WorkspaceConfig::git_auto_commit is on and a commit landed.
     wxStaticText*   commit_chip_      = nullptr;
-    // S4.F live generation chip ("GEN ~2,305 tok") -- visible while streaming,
-    // hidden between turns.
-    wxStaticText*   gen_chip_         = nullptr;
+
+    // Cached context-meter values (M5 polish). set_context_meter stores
+    // the post-round / post-tool values; set_generation_progress stores the
+    // mid-stream live estimate. refresh_ctx_label() composes the final
+    // label string -- "out:N" if exact, "out:~N" if live, omitted if 0.
+    int last_ctx_used_              = 0;
+    int last_ctx_limit_             = 0;
+    int last_ctx_prompt_            = 0;
+    int last_ctx_completion_        = 0;
+    int live_completion_estimate_   = 0;
 
     // Attached-context chip row (sits between webview and input).
     wxPanel*      attach_panel_  = nullptr;  // the row container

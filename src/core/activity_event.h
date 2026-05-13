@@ -19,6 +19,7 @@ enum class ActivityKind {
     memory_added,    // S4.R memory bank: new entry committed
     memory_searched, // S4.R memory bank: search_memory invoked
     memory_deleted,  // S4.R memory bank: entry removed
+    compaction,      // M5 polish: context compaction queued / applied
     warning,         // non-fatal warning
     error            // non-fatal error surfaced to user
 };
@@ -52,6 +53,7 @@ inline const char* to_string(ActivityKind k)
     case ActivityKind::memory_added:    return "memory_added";
     case ActivityKind::memory_searched: return "memory_searched";
     case ActivityKind::memory_deleted:  return "memory_deleted";
+    case ActivityKind::compaction:      return "compaction";
     case ActivityKind::warning:         return "warning";
     case ActivityKind::error:           return "error";
     }
