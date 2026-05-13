@@ -1098,11 +1098,21 @@ void ChatPanel::on_tool_result(const wxString& call_id, const wxString& display)
         target_id, "'" + js_escape(truncated) + "'"));
 }
 
-void ChatPanel::set_context_meter(int used, int limit)
+void ChatPanel::set_context_meter(int used, int limit,
+                                   int prompt_tokens, int completion_tokens)
 {
     int pct = (limit > 0) ? (used * 100 / limit) : 0;
     ctx_gauge_->SetValue(std::min(pct, 100));
-    ctx_label_->SetLabel(wxString::Format("ctx: %d/%d (%d%%)", used, limit, pct));
+
+    // S4.V Task 8 -- append the prompt / completion split when the server
+    // has reported one. On a 30B local model generation tokens are 5-10x
+    // slower per-token than prompt tokens, so the split tells the user why
+    // a turn was slow without opening the metrics tab.
+    wxString label = wxString::Format("ctx: %d/%d (%d%%)", used, limit, pct);
+    if (prompt_tokens > 0 || completion_tokens > 0) {
+        label += wxString::Format("  [p:%d g:%d]", prompt_tokens, completion_tokens);
+    }
+    ctx_label_->SetLabel(label);
 
     // Color: green < 60%, yellow 60-80%, red > 80%.
     if (pct < 60)

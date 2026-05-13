@@ -628,7 +628,9 @@ void AgentCore::process_message(const std::string& content)
                     user_input);
 
     frontends_.broadcast([&](IFrontend& fe) {
-        fe.on_context_meter(current_token_count(), llm_config_.context_limit);
+        fe.on_context_meter(current_token_count(), llm_config_.context_limit,
+                            budget_->last_prompt_tokens(),
+                            budget_->last_completion_tokens());
     });
 
     int round = 0;
@@ -670,7 +672,9 @@ void AgentCore::process_message(const std::string& content)
         auto step = loop_->run_step(history_, tool_mode);
 
         frontends_.broadcast([&](IFrontend& fe) {
-            fe.on_context_meter(current_token_count(), llm_config_.context_limit);
+            fe.on_context_meter(current_token_count(), llm_config_.context_limit,
+                            budget_->last_prompt_tokens(),
+                            budget_->last_completion_tokens());
         });
 
         if (step.had_error) {
@@ -1024,7 +1028,9 @@ void AgentCore::apply_pending_compaction()
                  before - after, before, after);
 
     frontends_.broadcast([&](IFrontend& fe) {
-        fe.on_context_meter(current_token_count(), llm_config_.context_limit);
+        fe.on_context_meter(current_token_count(), llm_config_.context_limit,
+                            budget_->last_prompt_tokens(),
+                            budget_->last_completion_tokens());
     });
 }
 
@@ -1084,7 +1090,9 @@ void AgentCore::reset_conversation()
     spdlog::info("AgentCore: conversation reset");
 
     frontends_.broadcast([&](IFrontend& fe) {
-        fe.on_context_meter(current_token_count(), llm_config_.context_limit);
+        fe.on_context_meter(current_token_count(), llm_config_.context_limit,
+                            budget_->last_prompt_tokens(),
+                            budget_->last_completion_tokens());
     });
     frontends_.broadcast([](IFrontend& fe) { fe.on_session_reset(); });
 }
@@ -1200,7 +1208,9 @@ void AgentCore::load_session(const std::string& session_id)
                  session_id, history_.size());
 
     frontends_.broadcast([&](IFrontend& fe) {
-        fe.on_context_meter(current_token_count(), llm_config_.context_limit);
+        fe.on_context_meter(current_token_count(), llm_config_.context_limit,
+                            budget_->last_prompt_tokens(),
+                            budget_->last_completion_tokens());
     });
     frontends_.broadcast([](IFrontend& fe) { fe.on_session_reset(); });
 }

@@ -23,6 +23,15 @@ public:
     void set_server_total(int total);
     int  server_total() const { return server_total_; }
 
+    // S4.V Task 8 -- prompt / completion split from the same usage payload.
+    // Stored alongside `server_total_` so frontends can render "ctx: T/L
+    // [p:P g:G]" without re-deriving the split. 0 means "not yet reported"
+    // (e.g. the first context-meter broadcast happens at session open
+    // before any LLM round).
+    void set_server_split(int prompt, int completion);
+    int  last_prompt_tokens()     const { return last_prompt_tokens_; }
+    int  last_completion_tokens() const { return last_completion_tokens_; }
+
     // Remember the running total after the last completed LLM step; used to
     // compute `delta` in the next activity event.
     void mark_turn_total(int total);
@@ -41,6 +50,8 @@ private:
     FrontendRegistry& frontends_;
     int               server_total_ = 0;
     int               prev_turn_total_ = 0;
+    int               last_prompt_tokens_     = 0;
+    int               last_completion_tokens_ = 0;
 };
 
 } // namespace locus

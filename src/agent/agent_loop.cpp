@@ -190,6 +190,7 @@ AgentStepResult AgentLoop::run_step(const ConversationHistory& history,
     };
     cbs.on_usage = [&](const CompletionUsage& u) {
         budget_.set_server_total(u.total_tokens);
+        budget_.set_server_split(u.prompt_tokens, u.completion_tokens);
         reasoning_tokens_reported = u.reasoning_tokens;
         usage_reported = u;
         spdlog::trace("AgentLoop: server reports {} total tokens "

@@ -99,7 +99,8 @@ public:
                               const std::vector<std::string>& safety_warnings) override;
     void on_tool_result(const std::string& call_id, const std::string& display) override;
     void on_turn_complete() override;
-    void on_context_meter(int used_tokens, int limit) override;
+    void on_context_meter(int used_tokens, int limit,
+                          int prompt_tokens, int completion_tokens) override;
     void on_compaction_needed(int used_tokens, int limit) override;
     void on_session_reset() override;
     void on_error(const std::string& message) override;

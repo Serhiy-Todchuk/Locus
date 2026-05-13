@@ -90,7 +90,12 @@ public:
                         const wxString& subject);
 
     // Footer updates.
-    void set_context_meter(int used, int limit);
+    // S4.V Task 8 -- `prompt_tokens` / `completion_tokens` carry the last
+    // server-reported split. 0 means "not yet reported" (e.g. the broadcast
+    // fires at session open before any LLM call); in that case the label
+    // collapses to the legacy "ctx: U/L (P%)" form.
+    void set_context_meter(int used, int limit,
+                           int prompt_tokens = 0, int completion_tokens = 0);
 
     // S4.F live generation-token counter (footer, next to context meter).
     // Updated ~150 ms throttled by AgentLoop while a stream is in flight.

@@ -91,11 +91,19 @@ void WxFrontend::on_turn_complete()
     wxQueueEvent(handler_, evt);
 }
 
-void WxFrontend::on_context_meter(int used_tokens, int limit)
+void WxFrontend::on_context_meter(int used_tokens, int limit,
+                                   int prompt_tokens, int completion_tokens)
 {
+    // S4.V Task 8 -- prompt / completion split is packed into the event
+    // string payload (wxThreadEvent only exposes Int + ExtraLong for
+    // primitives, both already in use for used / limit).
     auto* evt = new wxThreadEvent(EVT_AGENT_CONTEXT_METER);
     evt->SetInt(used_tokens);
     evt->SetExtraLong(limit);
+    nlohmann::json payload;
+    payload["prompt"]     = prompt_tokens;
+    payload["completion"] = completion_tokens;
+    evt->SetString(wxString::FromUTF8(payload.dump()));
     wxQueueEvent(handler_, evt);
 }
 

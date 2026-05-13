@@ -117,7 +117,9 @@ void CliFrontend::on_session_reset()
     // Handled by main.cpp which prints its own message.
 }
 
-void CliFrontend::on_context_meter(int used_tokens, int limit)
+void CliFrontend::on_context_meter(int used_tokens, int limit,
+                                    int /*prompt_tokens*/,
+                                    int /*completion_tokens*/)
 {
     last_used_ = used_tokens;
     last_limit_ = limit;

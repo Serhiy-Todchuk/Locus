@@ -632,7 +632,16 @@ void LocusFrame::on_agent_context_meter(wxThreadEvent& evt)
 {
     int used  = evt.GetInt();
     int limit = static_cast<int>(evt.GetExtraLong());
-    chat_panel_->set_context_meter(used, limit);
+    int prompt = 0, completion = 0;
+    auto payload_str = evt.GetString().ToUTF8();
+    if (payload_str.length() > 0) {
+        try {
+            auto j = nlohmann::json::parse(std::string(payload_str.data(), payload_str.length()));
+            prompt     = j.value("prompt", 0);
+            completion = j.value("completion", 0);
+        } catch (...) { /* legacy event without payload -- ignore */ }
+    }
+    chat_panel_->set_context_meter(used, limit, prompt, completion);
 }
 
 void LocusFrame::on_agent_compaction(wxThreadEvent& /*evt*/)
