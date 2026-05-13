@@ -648,10 +648,19 @@ void ChatPanel::create_webview()
     webview_->Bind(wxEVT_WEBVIEW_LOADED, [this](wxWebViewEvent&) {
         if (page_ready_) return;  // only handle the first load
         page_ready_ = true;
-        size_t n = pending_scripts_.size();
-        for (auto& js : pending_scripts_)
-            webview_->RunScript(js);
-        pending_scripts_.clear();
+        // Same reentrancy concern as run_script: each RunScript below yields
+        // and can deliver wxThreadEvents that call run_script again. Set the
+        // guard so those nested calls land in pending_scripts_, then drain
+        // FIFO until empty.
+        in_run_script_ = true;
+        size_t n = 0;
+        while (!pending_scripts_.empty()) {
+            wxString next = pending_scripts_.front();
+            pending_scripts_.erase(pending_scripts_.begin());
+            webview_->RunScript(next);
+            ++n;
+        }
+        in_run_script_ = false;
         spdlog::info("WebView page loaded, flushed {} queued scripts", n);
     });
 }
@@ -1166,6 +1175,19 @@ void ChatPanel::set_on_detach(std::function<void()> cb)
 
 void ChatPanel::on_flush_timer(wxTimerEvent& /*evt*/)
 {
+    // Reentrancy guard. wxWebViewEdge::RunScript calls wxYield internally;
+    // a slow flush body that yields longer than the 33 ms timer interval
+    // would otherwise let the next timer tick re-enter this handler and
+    // recurse until the stack overflows (observed Win11 + dark-mode menu
+    // message dispatch amplifies the per-level frame cost). Buffers are
+    // not cleared on the bail-out, so the next safe tick picks them up.
+    if (in_flush_timer_) return;
+    struct Guard {
+        bool& flag;
+        Guard(bool& f) : flag(f) { flag = true; }
+        ~Guard() { flag = false; }
+    } guard(in_flush_timer_);
+
     // While we're still waiting for the first token, tick the elapsed-seconds
     // counter inside the placeholder once per second. Returns early so the
     // token-flush path below is skipped (buffers are empty anyway).
@@ -1634,11 +1656,31 @@ void ChatPanel::run_script(const wxString& js)
 {
     if (!webview_) return;
 
-    if (page_ready_) {
-        webview_->RunScript(js);
-    } else {
+    // Queue when the page hasn't finished loading OR when we're already
+    // inside a RunScript on this thread. The reentrancy case is the
+    // important one: wxWebViewEdge::RunScript pumps the event loop via
+    // wxYield, which delivers queued wxThreadEvents from the agent thread
+    // (token / tool / plan callbacks). Those handlers also call
+    // run_script -- without queueing, each nested call would invoke
+    // another RunScript with its own yield, recursing until the stack
+    // overflows. The outermost run_script drains pending_scripts_ FIFO
+    // once its own RunScript returns, so call order is preserved.
+    if (!page_ready_ || in_run_script_) {
         pending_scripts_.push_back(js);
+        return;
     }
+
+    in_run_script_ = true;
+    webview_->RunScript(js);
+    // Drain anything that arrived during the yield. Each drained call
+    // can itself yield and queue more, so loop until empty. Re-check
+    // page_ready_ each iteration in case a navigation invalidated it.
+    while (page_ready_ && !pending_scripts_.empty()) {
+        wxString next = pending_scripts_.front();
+        pending_scripts_.erase(pending_scripts_.begin());
+        webview_->RunScript(next);
+    }
+    in_run_script_ = false;
 }
 
 wxString ChatPanel::js_escape(const wxString& s)

@@ -245,6 +245,15 @@ private:
     int           reasoning_id_ = 0;   // id of the <details> thought block for this turn
     bool          streaming_  = false;  // true between turn_start and turn_complete
 
+    // Reentrancy guard for on_flush_timer. wxWebViewEdge::RunScript yields
+    // the event loop internally; when a single flush body's RunScripts take
+    // longer than the 33 ms timer interval, the timer fires again *during*
+    // the yield and we'd recurse into on_flush_timer until the stack
+    // explodes. The guard makes the second tick a no-op until the first
+    // returns. (The work isn't lost -- buffers stay populated, the next
+    // tick after the outer call returns picks them up.)
+    bool          in_flush_timer_ = false;
+
     // "Thinking..." placeholder state. Local LLMs can prefill for 60+s with
     // zero bytes on the wire, so the empty bubble + cursor alone looked dead.
     // Holds until the first text or reasoning token clears it; the existing
@@ -256,6 +265,18 @@ private:
     // WebView readiness: SetPage() is async in WebView2.
     bool                         page_ready_ = false;
     std::vector<wxString>        pending_scripts_;
+
+    // Reentrancy guard for `run_script` itself. wxWebViewEdge::RunScript
+    // calls wxYield internally, which pumps Win32 messages AND queued
+    // wxThreadEvents from the agent thread. Any of the agent-callback
+    // handlers (on_token / on_tool_pending / on_plan_proposed / ...) can
+    // call run_script themselves -- without this guard, that nested call
+    // would invoke another RunScript which itself yields, creating an
+    // unbounded recursion (observed on Win11 + dark-mode menu dispatch
+    // with the wxTimer driving the chain). When set, run_script queues
+    // the script onto `pending_scripts_` instead of calling RunScript;
+    // the outermost RunScript drains the queue once it returns.
+    bool                         in_run_script_ = false;
 
     // Slash-command suggestions.
     std::vector<SlashItem>       slash_commands_;
