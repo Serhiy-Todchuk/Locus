@@ -64,6 +64,7 @@ std::unique_ptr<ISymbolExtractor> make_rule_based_symbol_extractor(
 // Per-language factories — implementation lives in
 // `symbol_extractors/<lang>_extractor.cpp`. They only assemble a rule table
 // and forward to `make_rule_based_symbol_extractor`.
+std::unique_ptr<ISymbolExtractor> make_c_symbol_extractor();
 std::unique_ptr<ISymbolExtractor> make_cpp_symbol_extractor();
 std::unique_ptr<ISymbolExtractor> make_python_symbol_extractor();
 std::unique_ptr<ISymbolExtractor> make_js_ts_symbol_extractor();

@@ -319,6 +319,7 @@ add_library(locus_core STATIC
     src/index/gitignore.cpp
     src/index/tree_sitter_registry.cpp
     src/index/symbol_extractor.cpp
+    src/index/symbol_extractors/c_extractor.cpp
     src/index/symbol_extractors/cpp_extractor.cpp
     src/index/symbol_extractors/python_extractor.cpp
     src/index/symbol_extractors/js_ts_extractor.cpp

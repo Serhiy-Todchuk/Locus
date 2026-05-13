@@ -101,6 +101,27 @@ locus::ToolCall ast_call(const nlohmann::json& args)
 
 } // namespace
 
+// -- C ----------------------------------------------------------------------
+
+TEST_CASE("C symbol extractor finds function / struct / union / enum / typedef",
+          "[s4.v][symbols][c]")
+{
+    auto syms = extract_symbols("c",
+        "#include <stdio.h>\n"
+        "typedef struct { int x; int y; } Point;\n"
+        "typedef unsigned long u64;\n"
+        "enum Color { RED, GREEN, BLUE };\n"
+        "union Value { int i; float f; };\n"
+        "struct Node { int data; struct Node* next; };\n"
+        "int add(int a, int b) { return a + b; }\n");
+    REQUIRE(contains_pair(syms, "function", "add"));
+    REQUIRE(contains_pair(syms, "struct",   "Node"));
+    REQUIRE(contains_pair(syms, "union",    "Value"));
+    REQUIRE(contains_pair(syms, "enum",     "Color"));
+    REQUIRE(contains_pair(syms, "typedef",  "Point"));
+    REQUIRE(contains_pair(syms, "typedef",  "u64"));
+}
+
 // -- Ruby -------------------------------------------------------------------
 
 TEST_CASE("Ruby symbol extractor finds method / class / module", "[s4.y][symbols][ruby]")

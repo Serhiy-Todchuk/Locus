@@ -177,9 +177,10 @@ const ISymbolExtractor* SymbolExtractorRegistry::find(const std::string& languag
 
 void register_builtin_symbol_extractors(SymbolExtractorRegistry& reg)
 {
-    // C and C++ share rules; JS and TS share rules. Each registration owns a
-    // separate extractor instance because the registry takes unique_ptr.
-    reg.register_extractor("c",          make_cpp_symbol_extractor());
+    // C has its own rule set (no classes/namespaces, has typedefs + unions);
+    // JS and TS share rules. Each registration owns a separate extractor
+    // instance because the registry takes unique_ptr.
+    reg.register_extractor("c",          make_c_symbol_extractor());
     reg.register_extractor("cpp",        make_cpp_symbol_extractor());
     reg.register_extractor("python",     make_python_symbol_extractor());
     reg.register_extractor("javascript", make_js_ts_symbol_extractor());
