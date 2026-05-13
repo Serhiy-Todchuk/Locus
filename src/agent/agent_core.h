@@ -12,6 +12,7 @@
 #include "../core/frontend.h"
 #include "../core/frontend_registry.h"
 #include "llm/llm_client.h"
+#include "prompt_templates.h"
 #include "session_manager.h"
 #include "slash_commands.h"
 #include "system_prompt.h"
@@ -55,7 +56,9 @@ public:
               const WorkspaceMetadata& ws_meta,
               const LLMConfig& llm_config,
               const std::filesystem::path& sessions_dir,
-              const std::filesystem::path& checkpoints_dir = {});
+              const std::filesystem::path& checkpoints_dir = {},
+              const std::filesystem::path& project_prompts_dir = {},
+              const std::filesystem::path& global_prompts_dir  = {});
 
     ~AgentCore() override;
 
@@ -140,14 +143,28 @@ private:
     void agent_thread_func();
     void process_message(const std::string& content);
 
-    // Try to handle a /slash command (direct tool invocation). Returns true
-    // if the input was a slash command. Delegates to slash_.
-    bool try_slash_command(const std::string& content);
+    // S4.X -- the three outcomes for `try_slash_command`. Built-ins +
+    // tool-slashes + unknown-command + help all collapse to `handled`; a
+    // prompt-template hit emits `expanded` with `expanded_text` carrying
+    // the substituted body so `process_message` can run it as a user
+    // message; everything else (non-slash text) is `not_a_slash`.
+    enum class SlashKind { not_a_slash, handled, expanded };
+    struct SlashOutcome {
+        SlashKind   kind = SlashKind::not_a_slash;
+        std::string expanded_text;
+    };
+
+    SlashOutcome try_slash_command(const std::string& content);
 
 public:
     // Exposed so frontends can build autocomplete lists from the same
     // registry + parser the agent uses at dispatch time.
     SlashCommandDispatcher& slash_dispatcher() { return *slash_; }
+
+    // Exposed so the GUI can populate the autocomplete list with templates
+    // and trigger reloads from a settings panel. Null when no prompts dirs
+    // were configured (tests / very minimal sessions).
+    PromptTemplateRegistry* prompt_templates() { return prompt_templates_.get(); }
 
 private:
 
@@ -203,6 +220,7 @@ private:
     std::unique_ptr<AgentLoop>             loop_;
     std::unique_ptr<ToolDispatcher>        dispatcher_;
     std::unique_ptr<SlashCommandDispatcher> slash_;
+    std::unique_ptr<PromptTemplateRegistry> prompt_templates_;
     std::unique_ptr<CheckpointStore>       checkpoints_;
     // S4.T -- snapshots indexed file mtimes between turns. Always allocated;
     // notification is gated by WorkspaceConfig::notify_external_changes at

@@ -1,5 +1,7 @@
 #include "slash_commands.h"
 
+#include "prompt_templates.h"
+
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
@@ -168,12 +170,14 @@ std::optional<ParsedSlashCall> SlashCommandParser::parse(std::string_view input,
     auto tokens = tokenize(rest);
 
     std::vector<std::string> positional;
+    std::unordered_map<std::string, std::string> kwargs;
     for (auto& tok : tokens) {
         auto eq = tok.find('=');
         if (eq != std::string::npos && eq > 0) {
             std::string key = tok.substr(0, eq);
             std::string val = tok.substr(eq + 1);
             assign_typed(call.args, key, val, params);
+            kwargs[key] = std::move(val);
         } else {
             positional.push_back(std::move(tok));
         }
@@ -187,6 +191,8 @@ std::optional<ParsedSlashCall> SlashCommandParser::parse(std::string_view input,
         ++pos_idx;
     }
 
+    call.positional = std::move(positional);
+    call.kwargs     = std::move(kwargs);
     return call;
 }
 
@@ -249,6 +255,7 @@ std::vector<SlashCompletion> SlashCommandDispatcher::complete(std::string_view p
         c.name        = t->name();
         c.description = t->description();
         c.signature   = build_signature(t->params());
+        c.kind        = "tool";
 
         if (prefix.empty()) {
             prefix_hits.push_back(std::move(c));
@@ -258,6 +265,40 @@ std::vector<SlashCompletion> SlashCommandDispatcher::complete(std::string_view p
             substr_hits.push_back(std::move(c));
         }
     }
+
+    if (templates_) {
+        for (auto& tpl : templates_->list()) {
+            // Skip names already covered by a real tool: built-ins win, per
+            // the S4.X spec ("a malicious template named `compact` can't
+            // shadow `/compact`").
+            if (tools_.find(tpl.name)) continue;
+
+            SlashCompletion c;
+            c.name        = tpl.name;
+            c.description = tpl.description.empty()
+                ? std::string("(prompt template)")
+                : tpl.description;
+            // Synthesise a signature from declared args, if any.
+            if (!tpl.args.empty()) {
+                std::string sig;
+                for (size_t i = 0; i < tpl.args.size(); ++i) {
+                    if (i) sig += " ";
+                    sig += "<" + tpl.args[i] + ">";
+                }
+                c.signature = std::move(sig);
+            }
+            c.kind = "template";
+
+            if (prefix.empty()) {
+                prefix_hits.push_back(std::move(c));
+            } else if (ieq_prefix(c.name, prefix)) {
+                prefix_hits.push_back(std::move(c));
+            } else if (icontains(c.name, prefix)) {
+                substr_hits.push_back(std::move(c));
+            }
+        }
+    }
+
     prefix_hits.insert(prefix_hits.end(),
                        std::make_move_iterator(substr_hits.begin()),
                        std::make_move_iterator(substr_hits.end()));
@@ -274,6 +315,38 @@ std::string SlashCommandDispatcher::render_help() const
         help += "\n    " + t->description() + "\n\n";
     }
     help += "  /help\n    Show this help\n";
+    help += "  /reload\n    Re-scan prompt templates from disk\n";
+
+    // S4.X -- prompt templates grouped by scope, built-ins first (above).
+    if (templates_) {
+        auto entries = templates_->list();
+        if (!entries.empty()) {
+            // Split into project / global, drop entries shadowed by a tool.
+            std::vector<const PromptTemplate*> project, global;
+            for (auto& e : entries) {
+                if (tools_.find(e.name)) continue;
+                (e.is_project ? project : global).push_back(&e);
+            }
+            auto render_group = [&](const char* heading,
+                                    const std::vector<const PromptTemplate*>& group) {
+                if (group.empty()) return;
+                help += "\n";
+                help += heading;
+                help += "\n\n";
+                for (auto* tpl : group) {
+                    help += "  /" + tpl->name;
+                    if (!tpl->args.empty()) {
+                        for (auto& a : tpl->args) help += " <" + a + ">";
+                    }
+                    help += "\n";
+                    if (!tpl->description.empty())
+                        help += "    " + tpl->description + "\n";
+                }
+            };
+            render_group("Templates (project):", project);
+            render_group("Templates (global):",  global);
+        }
+    }
     return help;
 }
 

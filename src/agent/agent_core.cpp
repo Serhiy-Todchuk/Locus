@@ -43,7 +43,9 @@ AgentCore::AgentCore(ILLMClient& llm,
                      const WorkspaceMetadata& ws_meta,
                      const LLMConfig& llm_config,
                      const std::filesystem::path& sessions_dir,
-                     const std::filesystem::path& checkpoints_dir)
+                     const std::filesystem::path& checkpoints_dir,
+                     const std::filesystem::path& project_prompts_dir,
+                     const std::filesystem::path& global_prompts_dir)
     : llm_(llm)
     , tools_(tools)
     , services_(services)
@@ -77,6 +79,16 @@ AgentCore::AgentCore(ILLMClient& llm,
                                                    frontends_, cancel_requested_,
                                                    metrics_.get());
     slash_      = std::make_unique<SlashCommandDispatcher>(tools_, services_);
+
+    // S4.X -- prompt templates. The registry runs even when both dirs are
+    // empty -- a workspace can pick templates up later via /reload without
+    // re-opening. When neither dir was supplied we leave it null so the
+    // dispatcher's help / completion paths don't render an empty section.
+    if (!project_prompts_dir.empty() || !global_prompts_dir.empty()) {
+        prompt_templates_ = std::make_unique<PromptTemplateRegistry>(
+            project_prompts_dir, global_prompts_dir);
+        slash_->set_template_registry(prompt_templates_.get());
+    }
 
     // S4.T -- file-change tracker. Always allocated; the per-turn injection is
     // gated by WorkspaceConfig::notify_external_changes. Take an initial
@@ -532,10 +544,22 @@ void AgentCore::process_message(const std::string& content)
 
     frontends_.broadcast([](IFrontend& fe) { fe.on_turn_start(); });
 
-    if (try_slash_command(content)) {
-        frontends_.broadcast([](IFrontend& fe) { fe.on_turn_complete(); });
-        busy_.store(false);
-        return;
+    // The "user-facing input" the rest of process_message works against may
+    // be the original text, or (S4.X) the body of a prompt template that
+    // the user invoked via `/<name>`.
+    std::string user_input = content;
+    {
+        auto outcome = try_slash_command(content);
+        if (outcome.kind == SlashKind::handled) {
+            frontends_.broadcast([](IFrontend& fe) { fe.on_turn_complete(); });
+            busy_.store(false);
+            return;
+        }
+        if (outcome.kind == SlashKind::expanded) {
+            user_input = std::move(outcome.expanded_text);
+            spdlog::info("AgentCore: prompt template expanded -> {} chars",
+                         user_input.size());
+        }
     }
 
     // Bump the turn counter and arm the dispatcher to snapshot any mutating
@@ -555,7 +579,7 @@ void AgentCore::process_message(const std::string& content)
     // used to live in the system prompt but that killed the prefix cache on
     // every attach/detach. Both prepends produce volatile-tail content that
     // the cache already expects to invalidate.
-    std::string effective_content = content;
+    std::string effective_content = user_input;
     {
         std::string attached_block = compose_attached_context_block();
         if (!attached_block.empty())
@@ -599,8 +623,8 @@ void AgentCore::process_message(const std::string& content)
     history_.add({MessageRole::user, effective_content});
 
     activity_->emit(ActivityKind::user_message,
-                    "User message (" + std::to_string(content.size()) + " chars)",
-                    content);
+                    "User message (" + std::to_string(user_input.size()) + " chars)",
+                    user_input);
 
     frontends_.broadcast([&](IFrontend& fe) {
         fe.on_context_meter(current_token_count(), llm_config_.context_limit);
@@ -1178,8 +1202,15 @@ int AgentCore::current_token_count() const
 // Parsing + execution live in SlashCommandDispatcher (S3.J). AgentCore only
 // routes the output to frontends.
 
-bool AgentCore::try_slash_command(const std::string& content)
+AgentCore::SlashOutcome AgentCore::try_slash_command(const std::string& content)
 {
+    auto handled = [] {
+        SlashOutcome o; o.kind = SlashKind::handled; return o;
+    };
+    auto not_slash = [] {
+        SlashOutcome o; o.kind = SlashKind::not_a_slash; return o;
+    };
+
     // Built-in non-tool slash commands handled directly by AgentCore.
     // /undo  → revert the last checkpointed turn (or a specific id).
     auto trim_left = [](std::string_view s) {
@@ -1201,12 +1232,12 @@ bool AgentCore::try_slash_command(const std::string& content)
                     frontends_.broadcast([&](IFrontend& fe) {
                         fe.on_error("Usage: /undo [turn_id]");
                     });
-                    return true;
+                    return handled();
                 }
             }
             std::string msg = undo_turn(target);
             frontends_.broadcast([&](IFrontend& fe) { fe.on_token(msg); });
-            return true;
+            return handled();
         }
         if (cmd == "metrics") {
             auto agg = metrics_->aggregates();
@@ -1244,13 +1275,37 @@ bool AgentCore::try_slash_command(const std::string& content)
             }
             std::string msg = o.str();
             frontends_.broadcast([&](IFrontend& fe) { fe.on_token(msg); });
-            return true;
+            return handled();
         }
         if (cmd == "export_metrics") {
             std::string fmt = rest.empty() ? "json" : rest;
             std::string msg = export_metrics(fmt);
             frontends_.broadcast([&](IFrontend& fe) { fe.on_token(msg); });
-            return true;
+            return handled();
+        }
+        if (cmd == "reload") {
+            // S4.X -- re-scan project + global prompt template dirs. Hot-
+            // reload after editing a template; also a no-op safety net for
+            // tests that mutate the dirs after AgentCore was constructed.
+            if (!prompt_templates_) {
+                frontends_.broadcast([&](IFrontend& fe) {
+                    fe.on_error("Prompt templates are not configured for this workspace.");
+                });
+                return handled();
+            }
+            int n = 0;
+            try { n = prompt_templates_->reload(); }
+            catch (const std::exception& ex) {
+                frontends_.broadcast([&](IFrontend& fe) {
+                    fe.on_error(std::string("/reload failed: ") + ex.what());
+                });
+                return handled();
+            }
+            std::ostringstream m;
+            m << "Reloaded prompt templates: " << n << " available.\n";
+            frontends_.broadcast(
+                [&](IFrontend& fe) { fe.on_token(m.str()); });
+            return handled();
         }
         if (cmd == "forget") {
             // /forget <id> [--hard]
@@ -1264,7 +1319,7 @@ bool AgentCore::try_slash_command(const std::string& content)
                 frontends_.broadcast([&](IFrontend& fe) {
                     fe.on_error("Memory bank is disabled for this workspace.");
                 });
-                return true;
+                return handled();
             }
             bool hard = false;
             std::string target_id = rest;
@@ -1302,7 +1357,7 @@ bool AgentCore::try_slash_command(const std::string& content)
                 frontends_.broadcast([&](IFrontend& fe) {
                     fe.on_error("Usage: /forget <id> [--hard]");
                 });
-                return true;
+                return handled();
             }
 
             bool ok = hard ? mem->hard_delete(target_id)
@@ -1312,7 +1367,7 @@ bool AgentCore::try_slash_command(const std::string& content)
                     fe.on_error("/forget: no memory entry with id '"
                                 + target_id + "'");
                 });
-                return true;
+                return handled();
             }
             activity_->emit(ActivityKind::memory_deleted,
                             std::string("memory:") + target_id
@@ -1325,7 +1380,7 @@ bool AgentCore::try_slash_command(const std::string& content)
                          : " (moved to .deleted/; restore with the Settings panel)\n");
             frontends_.broadcast(
                 [&](IFrontend& fe) { fe.on_token(msg.str()); });
-            return true;
+            return handled();
         }
         if (cmd == "memorize") {
             // /memorize [+tag1 +tag2 ...] [--pin] <content>
@@ -1337,7 +1392,7 @@ bool AgentCore::try_slash_command(const std::string& content)
                 frontends_.broadcast([&](IFrontend& fe) {
                     fe.on_error("Memory bank is disabled for this workspace.");
                 });
-                return true;
+                return handled();
             }
 
             std::vector<std::string> tags;
@@ -1373,7 +1428,7 @@ bool AgentCore::try_slash_command(const std::string& content)
                 frontends_.broadcast([&](IFrontend& fe) {
                     fe.on_error("Usage: /memorize [+tag1 +tag2] [--pin] <content>");
                 });
-                return true;
+                return handled();
             }
 
             try {
@@ -1405,11 +1460,73 @@ bool AgentCore::try_slash_command(const std::string& content)
                     fe.on_error(std::string("/memorize failed: ") + ex.what());
                 });
             }
-            return true;
+            return handled();
+        }
+
+        // S4.X -- prompt-template lookup BEFORE handing off to the dispatcher.
+        // The dispatcher would otherwise surface "Unknown command" for a name
+        // that's only a template. Built-ins above + tools (resolved by the
+        // dispatcher) take precedence over templates by virtue of running
+        // first, so a template named `compact` can't shadow `/compact`.
+        if (prompt_templates_ && !tools_.find(cmd)
+            && prompt_templates_->has(cmd)) {
+            // Re-parse the input through SlashCommandParser to get
+            // positional + kwargs the way `expand()` expects them.
+            std::vector<std::string>                     positional;
+            std::unordered_map<std::string, std::string> kwargs;
+            try {
+                auto parsed = SlashCommandParser::parse(content, tools_);
+                if (parsed) {
+                    positional = std::move(parsed->positional);
+                    kwargs     = std::move(parsed->kwargs);
+                }
+            } catch (const SlashParseError& ex) {
+                frontends_.broadcast([&](IFrontend& fe) {
+                    fe.on_error(std::string("Slash command error: ") + ex.what());
+                });
+                return handled();
+            }
+
+            std::string expanded;
+            try {
+                expanded = prompt_templates_->expand(cmd, positional, kwargs);
+            } catch (const std::exception& ex) {
+                frontends_.broadcast([&](IFrontend& fe) {
+                    fe.on_error(std::string("Template expansion failed: ") + ex.what());
+                });
+                return handled();
+            }
+
+            // Token-budget guard: warn when the expanded template alone
+            // already eats more than half the context window. Cheap
+            // heuristic; the existing ContextBudget handles the hard limit.
+            if (llm_config_.context_limit > 0) {
+                int est = TokenCounter::estimate(expanded);
+                int half = llm_config_.context_limit / 2;
+                if (est > half) {
+                    std::ostringstream w;
+                    w << "warning: prompt template '/" << cmd << "' expanded to ~"
+                      << est << " tokens (>" << half
+                      << ", half of context " << llm_config_.context_limit << ").";
+                    std::string ws = w.str();
+                    frontends_.broadcast(
+                        [&](IFrontend& fe) { fe.on_error(ws); });
+                }
+            }
+
+            activity_->emit(ActivityKind::user_message,
+                            "Prompt template /" + cmd + " expanded ("
+                                + std::to_string(expanded.size()) + " chars)",
+                            expanded);
+
+            SlashOutcome o;
+            o.kind = SlashKind::expanded;
+            o.expanded_text = std::move(expanded);
+            return o;
         }
     }
 
-    return slash_->try_dispatch(
+    bool dispatched = slash_->try_dispatch(
         content,
         [this](std::string s) {
             frontends_.broadcast([&](IFrontend& fe) { fe.on_token(s); });
@@ -1417,6 +1534,7 @@ bool AgentCore::try_slash_command(const std::string& content)
         [this](std::string s) {
             frontends_.broadcast([&](IFrontend& fe) { fe.on_error(s); });
         });
+    return dispatched ? handled() : not_slash();
 }
 
 } // namespace locus

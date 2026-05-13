@@ -28,3 +28,4 @@ numbered steps, expected results per step.
 | [plan-mode.md](plan-mode.md) | Plan mode | Chat / Plan / Execute switcher, plan bubble Approve/Reject, multi-tool execute stress test. |
 | [gitignore.md](gitignore.md) | `.gitignore` respect | Root + nested patterns excluded from index, mid-session `.gitignore` edit reload, `respect_gitignore=false` off-switch. |
 | [auto-commit.md](auto-commit.md) | Per-turn auto-commit | Happy path on current branch, dedicated agent branch (auto-create), no-git fallback (silent no-op), commit failure surfacing. |
+| [prompt-templates.md](prompt-templates.md) | Prompt templates | Project + global `.locus/prompts/` and `%APPDATA%\Locus\prompts\` round-trip, `/reload`, frontmatter rendering in `/help`, missing-reference literal render, built-in / tool precedence, half-context warning, unknown-slash error. |

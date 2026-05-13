@@ -225,13 +225,17 @@ IntegrationHarness::IntegrationHarness()
 
     fs::path sessions_dir    = tmp_dir_ / "sessions";
     fs::path checkpoints_dir = tmp_dir_ / "checkpoints";
+    fs::path prompts_dir     = tmp_dir_ / "prompts";   // S4.X -- project templates
     fs::create_directories(sessions_dir);
     fs::create_directories(checkpoints_dir);
+    fs::create_directories(prompts_dir);
 
+    // No global prompts dir in tests -- pollutes the user's APPDATA otherwise.
     agent_ = std::make_unique<AgentCore>(
         *llm_, *tools_, *workspace_,
         workspace_->locus_md(), ws_meta, llm_config_,
-        sessions_dir, checkpoints_dir);
+        sessions_dir, checkpoints_dir,
+        prompts_dir, /*global_prompts_dir=*/fs::path{});
 
     frontend_ = std::make_unique<HarnessFrontend>();
     frontend_->attach_core(agent_.get());

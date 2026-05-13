@@ -272,6 +272,7 @@ add_library(locus_core STATIC
     src/agent/tool_dispatcher.cpp
     src/agent/agent_loop.cpp
     src/agent/slash_commands.cpp
+    src/agent/prompt_templates.cpp
     src/agent/agent_core.cpp
     src/agent/session_manager.cpp
     src/agent/checkpoint_store.cpp

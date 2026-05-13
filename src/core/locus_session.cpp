@@ -1,5 +1,6 @@
 #include "core/locus_session.h"
 
+#include "agent/prompt_templates.h"
 #include "agent/system_prompt.h"
 #include "index/index_query.h"
 #include "index/indexer.h"
@@ -118,12 +119,15 @@ LocusSession::LocusSession(const std::filesystem::path& ws_path,
     ws_meta.symbol_count  = static_cast<int>(st.symbols_total);
     ws_meta.heading_count = static_cast<int>(st.headings_total);
 
-    auto sessions_dir    = workspace_->locus_dir() / "sessions";
-    auto checkpoints_dir = workspace_->locus_dir() / "checkpoints";
+    auto sessions_dir         = workspace_->locus_dir() / "sessions";
+    auto checkpoints_dir      = workspace_->locus_dir() / "checkpoints";
+    auto project_prompts_dir  = workspace_->locus_dir() / "prompts";
+    auto global_prompts_dir   = PromptTemplateRegistry::default_global_dir();
     agent_ = std::make_unique<AgentCore>(
         *llm_, *tools_, *workspace_,
         workspace_->locus_md(), ws_meta, llm_config_,
-        sessions_dir, checkpoints_dir);
+        sessions_dir, checkpoints_dir,
+        project_prompts_dir, global_prompts_dir);
 
     // Route indexer activity (file watcher batches, embedding progress) into
     // the agent's event bus so frontends see it on the same channel as

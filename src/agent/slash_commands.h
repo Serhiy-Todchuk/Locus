@@ -10,9 +10,12 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 namespace locus {
+
+class PromptTemplateRegistry;
 
 // Raised by SlashCommandParser on malformed input: unterminated quote,
 // unparseable integer/boolean argument, etc. Caller (Dispatcher) turns this
@@ -30,6 +33,13 @@ struct ParsedSlashCall {
     std::string    tool_name;
     nlohmann::json args = nlohmann::json::object();
     bool           is_help = false;
+
+    // S4.X -- always-populated raw token lists. Tools consume `args` (typed
+    // against their param schema); prompt templates consume these directly
+    // because the registry's substitution model is positional / named, not
+    // typed.
+    std::vector<std::string>                     positional;
+    std::unordered_map<std::string, std::string> kwargs;
 };
 
 // Completion suggestion used by GUI autocomplete and `/help`.
@@ -37,6 +47,10 @@ struct SlashCompletion {
     std::string name;         // tool name (no leading '/')
     std::string description;  // short hint shown after the name
     std::string signature;    // e.g. "<path> [offset=integer] [limit=integer]"
+
+    // S4.X -- "tool" | "template" | "builtin". Frontends render templates in
+    // a separate group from tools. Default "tool" so existing callers compile.
+    std::string kind = "tool";
 };
 
 // Pure tokenizer + arg-mapper. Shell-style quoted tokens, key=value pairs,
@@ -50,7 +64,9 @@ public:
                                                 const IToolRegistry& tools);
 };
 
-// Owns execution + output formatting. Stateless aside from its two refs.
+// Owns execution + output formatting. Stateless aside from its two refs
+// (plus the optional prompt-template registry attached by AgentCore for
+// S4.X).
 class SlashCommandDispatcher {
 public:
     SlashCommandDispatcher(IToolRegistry& tools, IWorkspaceServices& services);
@@ -64,8 +80,18 @@ public:
 
     // Returns tool completions whose name starts with `prefix` (prefix matches
     // first), then tools whose name contains `prefix` (case-insensitive).
-    // Empty prefix returns every tool in registry order.
+    // Empty prefix returns every tool in registry order. When a template
+    // registry is attached (S4.X), template names are folded into the same
+    // result list with `kind == "template"`.
     std::vector<SlashCompletion> complete(std::string_view prefix) const;
+
+    // S4.X -- attach the workspace's prompt-template registry. The dispatcher
+    // uses it only to expose template names through `complete()` and the
+    // `/help` listing; the actual expansion path lives in AgentCore, which
+    // intercepts before the dispatcher.
+    void set_template_registry(PromptTemplateRegistry* registry) {
+        templates_ = registry;
+    }
 
 private:
     std::string render_help() const;
@@ -73,8 +99,9 @@ private:
                               const ToolResult& result,
                               long long ms) const;
 
-    IToolRegistry&      tools_;
-    IWorkspaceServices& services_;
+    IToolRegistry&          tools_;
+    IWorkspaceServices&     services_;
+    PromptTemplateRegistry* templates_ = nullptr;
 };
 
 } // namespace locus
