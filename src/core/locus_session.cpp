@@ -55,6 +55,11 @@ void merge_workspace_defaults(LLMConfig& cfg, const WorkspaceConfig& wc)
     if (wc.llm_top_k          > 0)   cfg.top_k          = wc.llm_top_k;
     if (wc.llm_min_p          > 0.0) cfg.min_p          = wc.llm_min_p;
     if (wc.llm_repeat_penalty > 0.0) cfg.repeat_penalty = wc.llm_repeat_penalty;
+    // OpenAI penalties: forwarded whenever non-zero (negative values are
+    // legitimate -- they bias the model toward repetition, useful for pinned
+    // styles or consistent output).
+    if (wc.llm_frequency_penalty != 0.0) cfg.frequency_penalty = wc.llm_frequency_penalty;
+    if (wc.llm_presence_penalty  != 0.0) cfg.presence_penalty  = wc.llm_presence_penalty;
 }
 
 } // namespace

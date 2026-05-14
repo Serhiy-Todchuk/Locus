@@ -105,6 +105,15 @@ struct LLMConfig {
     int         top_k           = 0;
     double      min_p           = 0.0;
     double      repeat_penalty  = 0.0;
+
+    // OpenAI-protocol penalties (separate from llama.cpp's `repeat_penalty`).
+    // Range -2.0 to 2.0 per the OpenAI / NVIDIA spec; 0.0 sentinel means
+    // "don't include in the request". LM Studio + Ollama + llama-server all
+    // accept them. Note: these are *additive* penalties (the OpenAI spec uses
+    // logits subtraction), whereas `repeat_penalty` is multiplicative -- the
+    // three knobs compose rather than overlap.
+    double      frequency_penalty = 0.0;
+    double      presence_penalty  = 0.0;
 };
 
 // ---- Model info (from /v1/models) -------------------------------------------

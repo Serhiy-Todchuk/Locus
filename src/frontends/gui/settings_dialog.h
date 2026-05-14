@@ -93,6 +93,9 @@ private:
     wxSpinCtrl*        top_k_ctrl_           = nullptr;
     wxSpinCtrlDouble*  min_p_ctrl_           = nullptr;
     wxSpinCtrlDouble*  repeat_penalty_ctrl_  = nullptr;
+    // OpenAI-protocol penalties (range -2..2). 0 = "don't send".
+    wxSpinCtrlDouble*  frequency_penalty_ctrl_ = nullptr;
+    wxSpinCtrlDouble*  presence_penalty_ctrl_  = nullptr;
 
     void on_preset_apply(wxCommandEvent& evt);
     void on_preset_choice(wxCommandEvent& evt);

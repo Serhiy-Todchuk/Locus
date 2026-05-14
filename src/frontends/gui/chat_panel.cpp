@@ -690,6 +690,13 @@ void ChatPanel::create_input()
                             wxTE_MULTILINE | wxTE_PROCESS_ENTER | wxTE_RICH2);
     input_->SetName(ui_names::kChatInput);
     gui::apply_locus_accessible_name(input_);
+    // Default Windows RichEdit cap is ~64K UTF-16 chars (and ~32K on plain
+    // multiline edits); paste a chunky stack trace or a long file body and
+    // the trailing bytes silently vanish. 0 = "no limit" by wx's convention,
+    // which on Win32 calls EM_EXLIMITTEXT with -1 -- ample for any single
+    // turn, and the agent's context-budget machinery handles the downstream
+    // limits properly.
+    input_->SetMaxLength(0);
     // No SetHint() — wx's multiline+RICH2 hint seeds real text content on
     // Windows rather than painting an overlay, so the "placeholder" becomes
     // editable and has to be manually deleted. Use a tooltip instead for

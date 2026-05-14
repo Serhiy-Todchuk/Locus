@@ -308,6 +308,10 @@ json LMStudioClient::build_request_body(
     if (config_.top_k          > 0)   body["top_k"]          = config_.top_k;
     if (config_.min_p          > 0.0) body["min_p"]          = config_.min_p;
     if (config_.repeat_penalty > 0.0) body["repeat_penalty"] = config_.repeat_penalty;
+    // OpenAI penalties: 0.0 is the OpenAI default, so any non-zero value is
+    // "user explicitly opted in" and gets forwarded. Range [-2, 2].
+    if (config_.frequency_penalty != 0.0) body["frequency_penalty"] = config_.frequency_penalty;
+    if (config_.presence_penalty  != 0.0) body["presence_penalty"]  = config_.presence_penalty;
 
     if (!config_.model.empty())
         body["model"] = config_.model;

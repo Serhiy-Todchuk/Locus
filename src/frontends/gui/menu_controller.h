@@ -19,6 +19,10 @@ public:
         std::function<void()>                       on_quit;
         std::function<void()>                       on_open_workspace_dialog;
         std::function<void(std::string)>            on_open_recent;
+        // S5.M follow-up -- open the current workspace root in the OS file
+        // manager. LocusFrame supplies the path; MenuController never holds
+        // workspace state itself.
+        std::function<void()>                       on_open_workspace_folder;
         std::function<void()>                       on_settings;
         std::function<void()>                       on_reset_conversation;
         std::function<void()>                       on_compact;

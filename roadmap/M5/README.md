@@ -13,16 +13,16 @@
 | [S5.L](S5.L-ui-automation-driver.md) ✔ | UI Automation Test Driver | Testing / Infra |
 | [S5.B](S5.B-terminal-panel.md) ✔ | Live Terminal Panel | UX |
 | [S5.A](S5.A-capability-toggles.md) ✔ | Workspace Capability Toggles | UX / Tokens |
+| [S5.M](S5.M-global-settings.md) ✔ | Global Settings Template + ~/.locus migration | UX / Config |
 | [S5.C](S5.C-inline-diffs-in-chat.md) | Inline Code Diffs in Chat | UX |
 | [S5.J](S5.J-llm-context-refactor.md) | LLMContext Class Refactor | Refactor |
 | [S5.D](S5.D-reserve-and-token-xray.md) | Reserve Enforcement + Token-Cost X-Ray | Context |
 | [S5.E](S5.E-pin-and-tag.md) | Per-Message Pin / Tag System | Context |
 | [S5.F](S5.F-compaction-v2.md) | Compaction v2 (Toolkit + Auto + History Archive) | Context |
 | [S5.G](S5.G-chat-activity-restructure.md) | Chat / Activity Restructure | UX |
-| [S5.H](S5.H-edit-delete-branch.md) | Per-Message Edit / Delete + Branch & Rewind | Context |
 | [S5.I](S5.I-tabs-and-sessions.md) | Multi-Tab Conversations + Session Menu Redesign | UX |
+| [S5.H](S5.H-edit-delete-branch.md) | Per-Message Edit / Delete + Branch & Rewind | Context |
 | [S5.K](S5.K-memory-bank-ui.md) | Memory Bank UI Viewer / Editor | UX |
-| [S5.M](S5.M-global-settings.md) ✔ | Global Settings Template + ~/.locus migration | UX / Config |
 | [S5.Z](S5.Z-misc-gaps.md) | Miscellaneous Smaller Gaps | Mixed |
 
 More stages will be added here as polish/UX/perf candidates surface. Letters are identity, not order -- listed top-down in execution order. S5.Z is the misc bucket at the end (mirrors [S4.V](../M4/S4.V-misc-gaps.md)) and is expected to grow.

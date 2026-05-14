@@ -112,6 +112,11 @@ struct WorkspaceConfig {
     int         llm_top_k          = 0;
     double      llm_min_p          = 0.0;
     double      llm_repeat_penalty = 0.0;
+    // OpenAI-protocol penalties. Range [-2, 2]; 0.0 sentinel = "don't send".
+    // Distinct from `llm_repeat_penalty` (llama.cpp's multiplicative dial);
+    // the three compose rather than overlap.
+    double      llm_frequency_penalty = 0.0;
+    double      llm_presence_penalty  = 0.0;
 
     // Per-workspace tool approval overrides: tool_name -> policy.
     // Absent entries fall back to the tool's default (ITool::approval_policy()).

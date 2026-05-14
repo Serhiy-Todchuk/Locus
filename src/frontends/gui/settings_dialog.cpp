@@ -172,46 +172,121 @@ wxPanel* SettingsDialog::build_llm_tab(wxWindow* parent)
     auto* grid  = new wxFlexGridSizer(2, wxSize(8, 4));
     grid->AddGrowableCol(1, 1);
 
-    grid->Add(new wxStaticText(panel, wxID_ANY, "Endpoint URL:"),
-              0, wxALIGN_CENTER_VERTICAL);
+    // Tooltip strings (hover help). User-facing descriptions; ASCII only.
+    // Keep these short enough to fit a tooltip balloon but long enough that
+    // the user understands the trade-off without leaving the dialog.
+    static constexpr const char* kTipEndpoint =
+        "Base URL of the local OpenAI-compatible LLM server "
+        "(default LM Studio at http://127.0.0.1:1234). The "
+        "/v1/chat/completions path is appended automatically.";
+    static constexpr const char* kTipModel =
+        "Optional model id to request. Leave empty to use the model the "
+        "server has loaded. Set this when the server hosts multiple models "
+        "or supports model switching.";
+    static constexpr const char* kTipTemperature =
+        "Sampling temperature (0 - 2). Higher values produce less "
+        "deterministic, more creative output; lower values produce more "
+        "focused, repeatable output. It is not recommended to modify both "
+        "temperature and top_p in the same call.";
+    static constexpr const char* kTipContextLimit =
+        "Total context window the agent fills before triggering compaction. "
+        "0 = auto-detect from the server (the model's trained ceiling). Set "
+        "lower than the model max if you want compaction to kick in earlier "
+        "and keep prefill snappy.";
+    static constexpr const char* kTipMaxTokens =
+        "Maximum number of tokens to generate in any given call. The model "
+        "is not aware of this value; generation simply stops when the cap "
+        "is hit. Bump this if multi-file edits get cut off mid-response.";
+    static constexpr const char* kTipToolFormat =
+        "Wire format the model emits tool calls in. Auto runs the OpenAI "
+        "JSON + Qwen XML + Claude XML decoders in parallel and is the right "
+        "default for unknown models. Pin to a specific format only when you "
+        "know the model. None skips the tools array entirely (for "
+        "non-tool-trained base models).";
+    static constexpr const char* kTipTopP =
+        "Nucleus sampling (0.01 - 1). Samples from the smallest set of "
+        "tokens whose cumulative probability is >= top_p. For example, "
+        "top_p = 0.2 keeps only the most likely tokens summing to 20% mass. "
+        "0 = don't send (server default). Avoid modifying both temperature "
+        "and top_p in the same call.";
+    static constexpr const char* kTipTopK =
+        "llama.cpp / LM Studio extension. Limits sampling to the K most "
+        "likely tokens at each step. Lower values are more deterministic; "
+        "typical range 20 - 100. 0 = don't send (server default). Pure-"
+        "OpenAI servers ignore this field.";
+    static constexpr const char* kTipMinP =
+        "llama.cpp extension. Drops tokens whose probability is less than "
+        "min_p multiplied by the top token's probability. Acts as a noise "
+        "floor; typical range 0.05 - 0.1. 0 = don't send (server default). "
+        "Pure-OpenAI servers ignore this field.";
+    static constexpr const char* kTipRepeatPenalty =
+        "llama.cpp extension. Multiplicative penalty on tokens that have "
+        "appeared in the recent context. >1.0 discourages repetition, "
+        "<1.0 encourages it, 1.0 = neutral. 0 = don't send (server "
+        "default). Distinct from the OpenAI frequency / presence penalties "
+        "below -- the three knobs compose.";
+    static constexpr const char* kTipFrequencyPenalty =
+        "OpenAI penalty (-2 to 2). How much to penalize new tokens based "
+        "on their existing frequency in the text so far, decreasing the "
+        "model's likelihood to repeat the same line verbatim. 0 = don't "
+        "send (server default, also OpenAI's neutral value).";
+    static constexpr const char* kTipPresencePenalty =
+        "OpenAI penalty (-2 to 2). Positive values penalize tokens based "
+        "on whether they appear in the text at all, increasing the "
+        "model's likelihood to talk about new topics. 0 = don't send "
+        "(server default).";
+
+    auto* lbl_endpoint = new wxStaticText(panel, wxID_ANY, "Endpoint URL:");
+    lbl_endpoint->SetToolTip(kTipEndpoint);
+    grid->Add(lbl_endpoint, 0, wxALIGN_CENTER_VERTICAL);
     endpoint_ctrl_ = new wxTextCtrl(panel, wxID_ANY,
         wxString::FromUTF8(config_.llm_endpoint));
+    endpoint_ctrl_->SetToolTip(kTipEndpoint);
     grid->Add(endpoint_ctrl_, 1, wxEXPAND);
 
-    grid->Add(new wxStaticText(panel, wxID_ANY, "Model:"),
-              0, wxALIGN_CENTER_VERTICAL);
+    auto* lbl_model = new wxStaticText(panel, wxID_ANY, "Model:");
+    lbl_model->SetToolTip(kTipModel);
+    grid->Add(lbl_model, 0, wxALIGN_CENTER_VERTICAL);
     model_ctrl_ = new wxTextCtrl(panel, wxID_ANY,
         wxString::FromUTF8(config_.llm_model));
+    model_ctrl_->SetToolTip(kTipModel);
     grid->Add(model_ctrl_, 1, wxEXPAND);
 
-    grid->Add(new wxStaticText(panel, wxID_ANY, "Temperature:"),
-              0, wxALIGN_CENTER_VERTICAL);
+    auto* lbl_temp = new wxStaticText(panel, wxID_ANY, "Temperature:");
+    lbl_temp->SetToolTip(kTipTemperature);
+    grid->Add(lbl_temp, 0, wxALIGN_CENTER_VERTICAL);
     temperature_ctrl_ = new wxSpinCtrlDouble(panel, wxID_ANY);
     temperature_ctrl_->SetRange(0.0, 2.0);
     temperature_ctrl_->SetIncrement(0.1);
     temperature_ctrl_->SetDigits(2);
     temperature_ctrl_->SetValue(config_.llm_temperature);
+    temperature_ctrl_->SetToolTip(kTipTemperature);
     grid->Add(temperature_ctrl_, 0);
 
-    grid->Add(new wxStaticText(panel, wxID_ANY, "Context limit:"),
-              0, wxALIGN_CENTER_VERTICAL);
+    auto* lbl_ctx = new wxStaticText(panel, wxID_ANY, "Context limit:");
+    lbl_ctx->SetToolTip(kTipContextLimit);
+    grid->Add(lbl_ctx, 0, wxALIGN_CENTER_VERTICAL);
     context_ctrl_ = new wxSpinCtrl(panel, wxID_ANY);
     context_ctrl_->SetRange(0, 1048576);
     context_ctrl_->SetValue(config_.llm_context_limit);
+    context_ctrl_->SetToolTip(kTipContextLimit);
     grid->Add(context_ctrl_, 0);
 
-    grid->Add(new wxStaticText(panel, wxID_ANY, "Max tokens (per response):"),
-              0, wxALIGN_CENTER_VERTICAL);
+    auto* lbl_max = new wxStaticText(panel, wxID_ANY, "Max tokens (per response):");
+    lbl_max->SetToolTip(kTipMaxTokens);
+    grid->Add(lbl_max, 0, wxALIGN_CENTER_VERTICAL);
     max_tokens_ctrl_ = new wxSpinCtrl(panel, wxID_ANY);
     max_tokens_ctrl_->SetRange(256, 1048576);
     max_tokens_ctrl_->SetValue(config_.llm_max_tokens > 0 ? config_.llm_max_tokens : 8192);
+    max_tokens_ctrl_->SetToolTip(kTipMaxTokens);
     grid->Add(max_tokens_ctrl_, 0);
 
     // Tool format -- ToolFormat enum exposed verbatim. Auto is the default and
     // handles unknown models; Qwen / Claude pin XML extraction; None skips
     // the tools array entirely for non-tool-trained base models.
-    grid->Add(new wxStaticText(panel, wxID_ANY, "Tool-call format:"),
-              0, wxALIGN_CENTER_VERTICAL);
+    auto* lbl_tf = new wxStaticText(panel, wxID_ANY, "Tool-call format:");
+    lbl_tf->SetToolTip(kTipToolFormat);
+    grid->Add(lbl_tf, 0, wxALIGN_CENTER_VERTICAL);
     tool_format_ctrl_ = new wxChoice(panel, wxID_ANY);
     tool_format_ctrl_->Append("Auto");
     tool_format_ctrl_->Append("OpenAI");
@@ -230,6 +305,7 @@ wxPanel* SettingsDialog::build_llm_tab(wxWindow* parent)
         }
         tool_format_ctrl_->SetSelection(sel);
     }
+    tool_format_ctrl_->SetToolTip(kTipToolFormat);
     grid->Add(tool_format_ctrl_, 0);
 
     // S4.V Task 7 -- sampler overrides. 0 in any spinner means "do not send
@@ -237,39 +313,70 @@ wxPanel* SettingsDialog::build_llm_tab(wxWindow* parent)
     // chosen to be generous (the LLM server is the real validator); the
     // wxSpinCtrlDouble step is 0.05 because sampler dials are usually tuned
     // in small increments rather than free-form decimals.
-    grid->Add(new wxStaticText(panel, wxID_ANY, "top_p:"),
-              0, wxALIGN_CENTER_VERTICAL);
+    auto* lbl_top_p = new wxStaticText(panel, wxID_ANY, "top_p:");
+    lbl_top_p->SetToolTip(kTipTopP);
+    grid->Add(lbl_top_p, 0, wxALIGN_CENTER_VERTICAL);
     top_p_ctrl_ = new wxSpinCtrlDouble(panel, wxID_ANY);
     top_p_ctrl_->SetRange(0.0, 1.0);
     top_p_ctrl_->SetIncrement(0.05);
     top_p_ctrl_->SetDigits(2);
     top_p_ctrl_->SetValue(config_.llm_top_p);
+    top_p_ctrl_->SetToolTip(kTipTopP);
     grid->Add(top_p_ctrl_, 0);
 
-    grid->Add(new wxStaticText(panel, wxID_ANY, "top_k:"),
-              0, wxALIGN_CENTER_VERTICAL);
+    auto* lbl_top_k = new wxStaticText(panel, wxID_ANY, "top_k:");
+    lbl_top_k->SetToolTip(kTipTopK);
+    grid->Add(lbl_top_k, 0, wxALIGN_CENTER_VERTICAL);
     top_k_ctrl_ = new wxSpinCtrl(panel, wxID_ANY);
     top_k_ctrl_->SetRange(0, 10000);
     top_k_ctrl_->SetValue(config_.llm_top_k);
+    top_k_ctrl_->SetToolTip(kTipTopK);
     grid->Add(top_k_ctrl_, 0);
 
-    grid->Add(new wxStaticText(panel, wxID_ANY, "min_p:"),
-              0, wxALIGN_CENTER_VERTICAL);
+    auto* lbl_min_p = new wxStaticText(panel, wxID_ANY, "min_p:");
+    lbl_min_p->SetToolTip(kTipMinP);
+    grid->Add(lbl_min_p, 0, wxALIGN_CENTER_VERTICAL);
     min_p_ctrl_ = new wxSpinCtrlDouble(panel, wxID_ANY);
     min_p_ctrl_->SetRange(0.0, 1.0);
     min_p_ctrl_->SetIncrement(0.01);
     min_p_ctrl_->SetDigits(2);
     min_p_ctrl_->SetValue(config_.llm_min_p);
+    min_p_ctrl_->SetToolTip(kTipMinP);
     grid->Add(min_p_ctrl_, 0);
 
-    grid->Add(new wxStaticText(panel, wxID_ANY, "repeat_penalty:"),
-              0, wxALIGN_CENTER_VERTICAL);
+    auto* lbl_rp = new wxStaticText(panel, wxID_ANY, "repeat_penalty:");
+    lbl_rp->SetToolTip(kTipRepeatPenalty);
+    grid->Add(lbl_rp, 0, wxALIGN_CENTER_VERTICAL);
     repeat_penalty_ctrl_ = new wxSpinCtrlDouble(panel, wxID_ANY);
     repeat_penalty_ctrl_->SetRange(0.0, 2.0);
     repeat_penalty_ctrl_->SetIncrement(0.05);
     repeat_penalty_ctrl_->SetDigits(2);
     repeat_penalty_ctrl_->SetValue(config_.llm_repeat_penalty);
+    repeat_penalty_ctrl_->SetToolTip(kTipRepeatPenalty);
     grid->Add(repeat_penalty_ctrl_, 0);
+
+    // OpenAI-protocol penalties. Range [-2, 2]; 0 = don't send.
+    auto* lbl_fp = new wxStaticText(panel, wxID_ANY, "frequency_penalty:");
+    lbl_fp->SetToolTip(kTipFrequencyPenalty);
+    grid->Add(lbl_fp, 0, wxALIGN_CENTER_VERTICAL);
+    frequency_penalty_ctrl_ = new wxSpinCtrlDouble(panel, wxID_ANY);
+    frequency_penalty_ctrl_->SetRange(-2.0, 2.0);
+    frequency_penalty_ctrl_->SetIncrement(0.05);
+    frequency_penalty_ctrl_->SetDigits(2);
+    frequency_penalty_ctrl_->SetValue(config_.llm_frequency_penalty);
+    frequency_penalty_ctrl_->SetToolTip(kTipFrequencyPenalty);
+    grid->Add(frequency_penalty_ctrl_, 0);
+
+    auto* lbl_pp = new wxStaticText(panel, wxID_ANY, "presence_penalty:");
+    lbl_pp->SetToolTip(kTipPresencePenalty);
+    grid->Add(lbl_pp, 0, wxALIGN_CENTER_VERTICAL);
+    presence_penalty_ctrl_ = new wxSpinCtrlDouble(panel, wxID_ANY);
+    presence_penalty_ctrl_->SetRange(-2.0, 2.0);
+    presence_penalty_ctrl_->SetIncrement(0.05);
+    presence_penalty_ctrl_->SetDigits(2);
+    presence_penalty_ctrl_->SetValue(config_.llm_presence_penalty);
+    presence_penalty_ctrl_->SetToolTip(kTipPresencePenalty);
+    grid->Add(presence_penalty_ctrl_, 0);
 
     auto* ctx_hint = new wxStaticText(panel, wxID_ANY,
         "(0 = auto-detect context limit from server)");
@@ -737,6 +844,8 @@ void SettingsDialog::on_ok(wxCommandEvent& evt)
     int    new_top_k          = top_k_ctrl_          ? top_k_ctrl_->GetValue()          : 0;
     double new_min_p          = min_p_ctrl_          ? min_p_ctrl_->GetValue()          : 0.0;
     double new_repeat_penalty = repeat_penalty_ctrl_ ? repeat_penalty_ctrl_->GetValue() : 0.0;
+    double new_frequency_penalty = frequency_penalty_ctrl_ ? frequency_penalty_ctrl_->GetValue() : 0.0;
+    double new_presence_penalty  = presence_penalty_ctrl_  ? presence_penalty_ctrl_->GetValue()  : 0.0;
 
     std::vector<std::string> new_patterns;
     {
@@ -760,7 +869,9 @@ void SettingsDialog::on_ok(wxCommandEvent& evt)
         new_top_p          != config_.llm_top_p ||
         new_top_k          != config_.llm_top_k ||
         new_min_p          != config_.llm_min_p ||
-        new_repeat_penalty != config_.llm_repeat_penalty) {
+        new_repeat_penalty != config_.llm_repeat_penalty ||
+        new_frequency_penalty != config_.llm_frequency_penalty ||
+        new_presence_penalty  != config_.llm_presence_penalty) {
         llm_changed_ = true;
     }
 
@@ -861,6 +972,8 @@ void SettingsDialog::on_ok(wxCommandEvent& evt)
         config_.llm_top_k          = new_top_k;
         config_.llm_min_p          = new_min_p;
         config_.llm_repeat_penalty = new_repeat_penalty;
+        config_.llm_frequency_penalty = new_frequency_penalty;
+        config_.llm_presence_penalty  = new_presence_penalty;
         config_.exclude_patterns  = new_patterns;
         config_.semantic_search_enabled = new_semantic;
         config_.embedding_model   = new_sem_model;
@@ -910,6 +1023,8 @@ WorkspaceConfig SettingsDialog::snapshot_dialog_state() const
     if (top_k_ctrl_)          out.llm_top_k          = top_k_ctrl_->GetValue();
     if (min_p_ctrl_)          out.llm_min_p          = min_p_ctrl_->GetValue();
     if (repeat_penalty_ctrl_) out.llm_repeat_penalty = repeat_penalty_ctrl_->GetValue();
+    if (frequency_penalty_ctrl_) out.llm_frequency_penalty = frequency_penalty_ctrl_->GetValue();
+    if (presence_penalty_ctrl_)  out.llm_presence_penalty  = presence_penalty_ctrl_->GetValue();
 
     // exclude_patterns -- parse from multi-line text control.
     {

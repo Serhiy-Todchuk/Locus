@@ -65,6 +65,10 @@ WorkspaceConfig workspace_config_from_json(const json& j)
             cfg.llm_min_p = llm["min_p"].get<double>();
         if (llm.contains("repeat_penalty"))
             cfg.llm_repeat_penalty = llm["repeat_penalty"].get<double>();
+        if (llm.contains("frequency_penalty"))
+            cfg.llm_frequency_penalty = llm["frequency_penalty"].get<double>();
+        if (llm.contains("presence_penalty"))
+            cfg.llm_presence_penalty = llm["presence_penalty"].get<double>();
     }
 
     if (j.contains("agent")) {
@@ -171,7 +175,9 @@ json workspace_config_to_json(const WorkspaceConfig& cfg)
             {"top_p",          cfg.llm_top_p},
             {"top_k",          cfg.llm_top_k},
             {"min_p",          cfg.llm_min_p},
-            {"repeat_penalty", cfg.llm_repeat_penalty}
+            {"repeat_penalty", cfg.llm_repeat_penalty},
+            {"frequency_penalty", cfg.llm_frequency_penalty},
+            {"presence_penalty",  cfg.llm_presence_penalty}
         }},
         {"agent", {
             {"tool_manifest_warn_tokens", cfg.tool_manifest_warn_tokens},

@@ -52,6 +52,14 @@ LocusFrame::LocusFrame(AgentCore& agent, Workspace& workspace, McpManager* mcp)
     hooks.on_open_recent = [this](std::string path) {
         CallAfter([path] { wxGetApp().open_workspace(path); });
     };
+    hooks.on_open_workspace_folder = [this] {
+        wxString url = wxString::FromUTF8(workspace_.root().string());
+        if (!wxLaunchDefaultApplication(url)) {
+            wxMessageBox(wxString::Format(
+                "Could not open %s. Open it manually.", url),
+                "Locus", wxOK | wxICON_WARNING, this);
+        }
+    };
     hooks.on_settings           = [this] { show_settings_dialog(); };
     hooks.on_reset_conversation = [this] { agent_.reset_conversation(); };
     hooks.on_compact            = [this] { show_compaction_dialog(); };

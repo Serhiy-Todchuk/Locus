@@ -26,8 +26,10 @@ namespace {
         ID_MENU_COMPACT,
         ID_MENU_SAVE_SESSION,
         ID_MENU_OPEN_WORKSPACE,
+        ID_MENU_OPEN_WORKSPACE_FOLDER,
         ID_MENU_SETTINGS,
         ID_MENU_OPEN_GLOBAL_CONFIG,
+        ID_MENU_OPEN_GLOBAL_FOLDER,
         ID_MENU_VIEW_FILES,
         ID_MENU_VIEW_ACTIVITY,
         ID_MENU_VIEW_TERMINAL,
@@ -53,6 +55,10 @@ void MenuController::install()
     rebuild_recent_menu();
     file_menu->AppendSubMenu(recent_menu_, "Recent Workspaces");
 
+    file_menu->AppendSeparator();
+    file_menu->Append(ID_MENU_OPEN_WORKSPACE_FOLDER, "Open Workspace Folder");
+    file_menu->Append(ID_MENU_OPEN_GLOBAL_FOLDER,    "Open Global Locus Folder");
+    file_menu->AppendSeparator();
     file_menu->Append(ID_MENU_SETTINGS,       "Settings...\tCtrl+,");
     file_menu->Append(ID_MENU_OPEN_GLOBAL_CONFIG, "Open Global Config...");
     file_menu->AppendSeparator();
@@ -123,6 +129,32 @@ void MenuController::install()
     frame_->Bind(wxEVT_MENU, [this](wxCommandEvent&) {
         if (hooks_.on_settings) hooks_.on_settings();
     }, ID_MENU_SETTINGS);
+
+    // Open Workspace Folder -- shows the current workspace root in the OS
+    // file manager. LocusFrame is the only thing that knows which workspace
+    // is open, so the actual launch is delegated through the Hooks callback.
+    frame_->Bind(wxEVT_MENU, [this](wxCommandEvent&) {
+        if (hooks_.on_open_workspace_folder) hooks_.on_open_workspace_folder();
+    }, ID_MENU_OPEN_WORKSPACE_FOLDER);
+
+    // Open Global Locus Folder -- shows ~/.locus/ in the OS file manager.
+    // Self-contained (no app state needed); shares the global_paths::global_dir()
+    // path resolution with the rest of S5.M.
+    frame_->Bind(wxEVT_MENU, [this](wxCommandEvent&) {
+        auto dir = global_paths::global_dir();
+        if (dir.empty()) {
+            wxMessageBox("Could not resolve the global Locus folder "
+                         "(no HOME / USERPROFILE).",
+                         "Locus", wxOK | wxICON_ERROR, frame_);
+            return;
+        }
+        wxString url = wxString::FromUTF8(dir.string());
+        if (!wxLaunchDefaultApplication(url)) {
+            wxMessageBox(wxString::Format(
+                "Could not open %s. Open it manually.", url),
+                "Locus", wxOK | wxICON_WARNING, frame_);
+        }
+    }, ID_MENU_OPEN_GLOBAL_FOLDER);
 
     // S5.M -- File > Open Global Config. Creates ~/.locus/config.json with
     // compiled defaults if missing, then shells out to the OS's default
