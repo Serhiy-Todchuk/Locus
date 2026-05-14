@@ -1,4 +1,5 @@
 #include "locus_app.h"
+#include "capabilities_dialog.h"
 #include "locus_frame.h"
 #include "recent_workspaces.h"
 
@@ -42,36 +43,45 @@ static bool         s_startup_checkpoint_taken = false;
 // wxWidgets macro: defines WinMain and creates the LocusApp instance.
 wxIMPLEMENT_APP(LocusApp);
 
-// If opening a folder that has no .locus/config.json yet, ask the user whether
-// to enable semantic search. Write a minimal config.json capturing the choice
-// so Workspace picks it up during construction. No-op when config.json already
-// exists (not a first-time open).
+// S5.A -- if the folder has no .locus/config.json yet, pop the Workspace
+// Capabilities modal so the user can pick which buckets to enable before the
+// frame opens. The choice is pre-seeded into config.json so Workspace picks
+// it up during construction without a second config-rewrite path.
 //
-// `suppress_prompt=true` skips the modal and writes config.json with semantic
-// search disabled by default. Used by the S5.L UI Automation harness (and any
-// other unattended/scripted launch) via the `--no-first-time-prompts` flag.
-static void prompt_semantic_search_if_first_open(const fs::path& locus_dir,
-                                                 bool suppress_prompt)
+// `suppress_prompt=true` skips the modal entirely and seeds the file with
+// defaults (background processes off, semantic + code-aware + memory on,
+// web retrieval off). Used by the S5.L UI Automation harness and any other
+// unattended launch via the `--no-first-time-prompts` flag.
+static void prompt_capabilities_if_first_open(const fs::path& locus_dir,
+                                              bool suppress_prompt)
 {
     auto cfg_path = locus_dir / "config.json";
     if (fs::exists(cfg_path))
         return;
 
-    bool enabled = false;
+    WorkspaceConfig::Capabilities caps;  // defaults from the struct
     if (!suppress_prompt) {
-        int reply = wxMessageBox(
-            "Enable semantic search for this workspace?\n\n"
-            "Semantic search uses a local embedding model to find files by meaning, "
-            "not just keywords. It takes extra CPU and disk during indexing.\n\n"
-            "You can change this later in Settings.",
-            "Locus \u2014 New Workspace",
-            wxYES_NO | wxICON_QUESTION);
-        enabled = (reply == wxYES);
+        CapabilitiesDialog dlg(nullptr, caps);
+        // The dialog mutates `caps` on OK; on Cancel `caps` keeps the
+        // defaults and the user gets the default workspace shape (which is
+        // already a reasonable starting point).
+        dlg.ShowModal();
     }
 
     try {
         nlohmann::json j;
-        j["index"]["semantic_search"]["enabled"] = enabled;
+        j["capabilities"] = {
+            {"background_processes", caps.background_processes},
+            {"semantic_search",      caps.semantic_search},
+            {"code_aware_search",    caps.code_aware_search},
+            {"memory_bank",          caps.memory_bank},
+            {"web_retrieval",        caps.web_retrieval}
+        };
+        // Mirror the two legacy fields so subsystems that read them directly
+        // (Workspace ctor, MemoryStore construction) get the right value
+        // even before the capabilities-block load path runs.
+        j["index"]["semantic_search"]["enabled"] = caps.semantic_search;
+        j["memory"]["enabled"]                   = caps.memory_bank;
         std::ofstream f(cfg_path);
         f << j.dump(2) << '\n';
     } catch (const std::exception& ex) {
@@ -226,7 +236,7 @@ bool LocusApp::OnInit()
     spdlog::info("Locus GUI starting");
     spdlog::info("Workspace: {}", ws_path.string());
 
-    prompt_semantic_search_if_first_open(locus_dir, s_suppress_first_time_prompts);
+    prompt_capabilities_if_first_open(locus_dir, s_suppress_first_time_prompts);
 
     // Seed LLM config from the user's startup args. Empty/zero fields are
     // filled in by LocusSession from .locus/config.json + the live model
@@ -308,7 +318,7 @@ void LocusApp::open_workspace(const std::string& path)
     }
     init_logging(locus_dir);
 
-    prompt_semantic_search_if_first_open(locus_dir, s_suppress_first_time_prompts);
+    prompt_capabilities_if_first_open(locus_dir, s_suppress_first_time_prompts);
 
     // Switching workspaces from the menu doesn't carry CLI overrides; the
     // new session pulls everything from .locus/config.json + the live

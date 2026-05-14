@@ -1,6 +1,6 @@
 {
   "name": "settings_tour",
-  "description": "Open the Settings dialog via Ctrl+, click through each of the four tabs by index, screenshot each, then close. Tabs are addressed by index because wxNotebook on Windows wraps SysTabControl32, which doesn't propagate labels to UIA Name (see tests/ui_automation/README.md).",
+  "description": "Open the Settings dialog via Ctrl+, click through each of the five tabs by index, screenshot each, then close. Tabs are addressed by index because wxNotebook on Windows wraps SysTabControl32, which doesn't propagate labels to UIA Name (see tests/ui_automation/README.md). Tab order: LLM, Index, Capabilities (S5.A), Tool Approvals, MCP Servers.",
   "setup": {
     "workspace": "tmp"
   },
@@ -44,11 +44,18 @@
       "args": { "parent_aid": "locus.settings.notebook", "index": 2 }
     },
     { "op": "sleep", "args": { "ms": 300 } },
-    { "op": "screenshot", "args": { "name": "tab_approvals" } },
+    { "op": "screenshot", "args": { "name": "tab_capabilities" } },
 
     {
       "op": "select_tab",
       "args": { "parent_aid": "locus.settings.notebook", "index": 3 }
+    },
+    { "op": "sleep", "args": { "ms": 300 } },
+    { "op": "screenshot", "args": { "name": "tab_approvals" } },
+
+    {
+      "op": "select_tab",
+      "args": { "parent_aid": "locus.settings.notebook", "index": 4 }
     },
     { "op": "sleep", "args": { "ms": 300 } },
     { "op": "screenshot", "args": { "name": "tab_mcp" } },

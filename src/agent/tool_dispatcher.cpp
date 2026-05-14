@@ -109,6 +109,48 @@ void ToolDispatcher::dispatch(const ToolCall& call, const AppendFn& append_resul
         return;
     }
 
+    // S5.A -- the tool exists but its capability bucket is currently off.
+    // The manifest didn't advertise it this turn, but the LLM may have
+    // stale assumptions from a saved session or a prior turn. Surface a
+    // one-line activity event that names the capability rather than the
+    // generic "unknown tool" / lower-level execute error.
+    if (!tool->available(services_)) {
+        spdlog::warn("ToolDispatcher: tool '{}' disabled by capability gate",
+                     call.tool_name);
+        ChatMessage err;
+        err.role = MessageRole::tool;
+        err.tool_call_id = call.id;
+        // The user-visible hint string lives in the activity event; the
+        // LLM-visible payload stays short so it doesn't burn context.
+        err.content = "Error: tool '" + call.tool_name +
+                      "' is disabled in this workspace. Enable the "
+                      "corresponding capability in Settings -> Capabilities.";
+        append_result(std::move(err));
+
+        // Which bucket the tool belongs to (for the activity event copy).
+        std::string bucket = "the corresponding capability";
+        if (call.tool_name == "run_command_bg"
+            || call.tool_name == "read_process_output"
+            || call.tool_name == "stop_process"
+            || call.tool_name == "list_processes")
+            bucket = "Background processes";
+        else if (call.tool_name == "get_file_outline")
+            bucket = "Code-aware search";
+        else if (call.tool_name == "add_memory"
+                 || call.tool_name == "search_memory")
+            bucket = "Memory bank";
+
+        activity_.emit(ActivityKind::warning,
+                       "Tool '" + call.tool_name +
+                           "' is disabled in this workspace",
+                       bucket + " is off. Enable it in Settings -> "
+                       "Capabilities to make the tool available.");
+        frontends_.broadcast([&](IFrontend& fe) {
+            fe.on_tool_result(call.id, "[disabled: " + bucket + "]");
+        });
+        return;
+    }
+
     spdlog::info("ToolDispatcher: tool call '{}' id={}", call.tool_name, call.id);
     spdlog::trace("ToolDispatcher: tool args: {}", call.args.dump());
 

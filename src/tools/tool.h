@@ -86,6 +86,18 @@ public:
     virtual std::string              description() const = 0;
     virtual std::vector<ToolParam>   params()      const = 0;
 
+    // S5.A -- context-aware description used by the filtered schema builder
+    // (the one that already takes `IWorkspaceServices`). Default: return the
+    // static description. `SearchTool` overrides to prune the mode list to
+    // match the current capability bucket layout (semantic / code-aware off
+    // -> drop the corresponding modes from the description text). The
+    // schema's `mode` parameter type is unchanged across calls so this does
+    // NOT torch the KV cache -- see S4.F.
+    virtual std::string description_for(IWorkspaceServices& /*ws*/) const
+    {
+        return description();
+    }
+
     // Optional hook -- tools that want to ship a richer JSON Schema (nested
     // objects, enums, arrays-of-objects) than the flat `ToolParam` list can
     // express can override this. Default: empty object, in which case the

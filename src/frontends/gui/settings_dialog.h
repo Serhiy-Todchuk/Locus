@@ -44,6 +44,7 @@ private:
     wxPanel* build_index_tab(wxWindow* parent);
     wxPanel* build_approvals_tab(wxWindow* parent);
     wxPanel* build_mcp_tab(wxWindow* parent);
+    wxPanel* build_capabilities_tab(wxWindow* parent);
 
     void on_ok(wxCommandEvent& evt);
     void refresh_mcp_list();
@@ -58,7 +59,12 @@ private:
     bool changed_        = false;
     bool llm_changed_    = false;
     bool index_changed_  = false;
-    bool semantic_changed_ = false;
+    bool semantic_changed_     = false;
+    bool capabilities_changed_ = false;
+
+public:
+    bool capabilities_changed() const { return capabilities_changed_; }
+private:
 
     // LLM controls
     wxTextCtrl*        endpoint_ctrl_    = nullptr;
@@ -106,6 +112,13 @@ private:
     // name is in `is_mutating_tool()`. Returns true if the user confirmed and
     // the new selection should stick; false if the choice should snap back.
     bool confirm_auto_approve_mutating(const std::string& tool_name);
+
+    // S5.A Capabilities tab.
+    wxCheckBox*        cap_bg_      = nullptr;
+    wxCheckBox*        cap_semantic_ = nullptr;
+    wxCheckBox*        cap_code_    = nullptr;
+    wxCheckBox*        cap_memory_  = nullptr;
+    wxCheckBox*        cap_web_     = nullptr;
 
     // MCP tab controls (null when mcp_ == nullptr).
     wxListCtrl*        mcp_list_       = nullptr;   // server list

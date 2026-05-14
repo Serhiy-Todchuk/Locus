@@ -65,13 +65,36 @@ std::vector<ToolSchema> AgentLoop::build_tool_schemas(ToolMode mode)
     int         manifest_tokens = TokenCounter::estimate(schema_dump);
     int         threshold       = manifest_warn_tokens();
     bool        over_budget     = (manifest_tokens > threshold);
+
+    // S5.A -- summarise the active capability bucket combination so the log
+    // line answers "why is this manifest this size?". Hyphen marks an off
+    // bucket so the line is easy to grep.
+    std::string buckets;
+    if (auto* ws = services_.workspace()) {
+        const auto& c = ws->config().capabilities;
+        auto bit = [&](bool on, const char* short_name) {
+            buckets += (on ? "+" : "-");
+            buckets += short_name;
+            buckets += " ";
+        };
+        bit(c.background_processes, "bg");
+        bit(c.semantic_search,      "sem");
+        bit(c.code_aware_search,    "code");
+        bit(c.memory_bank,          "mem");
+        bit(c.web_retrieval,        "web");
+        if (!buckets.empty() && buckets.back() == ' ') buckets.pop_back();
+    }
     if (over_budget) {
-        spdlog::warn("Tool manifest: {} tools, ~{} tokens (threshold {}). "
+        spdlog::warn("Tool manifest: {} tools, ~{} tokens, {} bytes "
+                     "(threshold {}; capabilities: {}). "
                      "Consider trimming or splitting by mode.",
-                     schemas.size(), manifest_tokens, threshold);
+                     schemas.size(), manifest_tokens,
+                     schema_dump.size(), threshold, buckets);
     } else {
-        spdlog::info("Tool manifest: {} tools, ~{} tokens",
-                     schemas.size(), manifest_tokens);
+        spdlog::info("Tool manifest: {} tools, ~{} tokens, {} bytes "
+                     "(capabilities: {})",
+                     schemas.size(), manifest_tokens,
+                     schema_dump.size(), buckets);
     }
 
     // M5 polish -- dedupe activity emits on a hash of the manifest content.

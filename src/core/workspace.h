@@ -164,7 +164,42 @@ struct WorkspaceConfig {
     // conventions genuinely supersede over time) but deliberately not used
     // for workspace search.
     int  memory_recency_half_life_days     = 21;
+
+    // S5.A -- workspace capability buckets. Each bucket gates a family of
+    // tools (and sometimes a system-prompt slot) so the per-turn manifest
+    // only carries what the user asked for. `semantic_search` and
+    // `memory_bank` are the canonical source of truth and propagate to the
+    // older `semantic_search_enabled` / `memory_enabled` flags on load; the
+    // legacy flags remain in the JSON for backward compat.
+    //
+    // Token estimates (used to label the UI checkboxes -- recomputed every
+    // few milestones, not live-measured):
+    //   background_processes  ~700 tokens (4 bg tools)
+    //   semantic_search         ~80 tokens (search mode list pruning)
+    //   code_aware_search      ~250 tokens (search mode list + outline tool)
+    //   memory_bank            ~300 tokens + memory.in_context_budget_tokens
+    //   web_retrieval          ~300 tokens (M6 -- placeholder)
+    struct Capabilities {
+        bool background_processes = false;
+        bool semantic_search      = true;
+        bool code_aware_search    = true;
+        bool memory_bank          = true;
+        bool web_retrieval        = false;
+    };
+    Capabilities capabilities;
 };
+
+// S5.A token-cost estimates, used to label the capability checkboxes in
+// both the first-open modal and the Settings -> Capabilities tab. Hand-
+// measured against the M4 manifest (Dec 2026 baseline). Re-measure once a
+// milestone if tool descriptions drift materially.
+namespace capability_token_estimates {
+    inline constexpr int k_background_processes = 700;
+    inline constexpr int k_semantic_search      = 80;
+    inline constexpr int k_code_aware_search    = 250;
+    inline constexpr int k_memory_bank          = 300;
+    inline constexpr int k_web_retrieval        = 300;
+}
 
 // Owns all workspace-level resources: config, database, file watcher, LOCUS.md.
 // One Workspace instance per open folder. Implements `IWorkspaceServices` so it

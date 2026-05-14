@@ -31,6 +31,27 @@ using tools::error_result;
 // Dispatches on `mode` to one of the four implementations below. Keeps the
 // exposed tool catalog small (S3.L) without duplicating search logic.
 
+std::string SearchTool::description_for(IWorkspaceServices& ws) const
+{
+    auto* w = ws.workspace();
+    bool semantic = w ? w->config().capabilities.semantic_search   : true;
+    bool code     = w ? w->config().capabilities.code_aware_search : true;
+
+    // The base list always carries text + regex. `symbols`/`ast` follow
+    // code-aware-search; `semantic`/`hybrid` follow semantic-search.
+    std::string desc = "Unified workspace search. `mode` selects the backend: "
+                       "text (FTS5 keyword, default), regex (raw-content "
+                       "ECMAScript regex, preserves punctuation/case)";
+    if (code)     desc += ", symbols (code definitions), ast (Tree-sitter "
+                          "structural query, e.g. all `malloc` call sites)";
+    if (semantic) desc += ", semantic (vector similarity), hybrid (BM25 + "
+                          "vector)";
+    desc += ".";
+    if (semantic) desc += " Semantic and hybrid require semantic search to be "
+                          "enabled.";
+    return desc;
+}
+
 ToolResult SearchTool::execute(const ToolCall& call, IWorkspaceServices& ws)
 {
     std::string mode = call.args.value("mode", "text");

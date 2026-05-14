@@ -283,6 +283,12 @@ ToolResult ListDirectoryTool::execute(const ToolCall& call, IWorkspaceServices& 
 
 // -- GetFileOutlineTool -----------------------------------------------------
 
+bool GetFileOutlineTool::available(IWorkspaceServices& ws) const
+{
+    auto* w = ws.workspace();
+    return w ? w->config().capabilities.code_aware_search : true;
+}
+
 ToolResult GetFileOutlineTool::execute(const ToolCall& call, IWorkspaceServices& ws)
 {
     std::string path = call.args.value("path", "");

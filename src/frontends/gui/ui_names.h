@@ -48,5 +48,6 @@ inline constexpr const char* kSettingsTabLlm          = "locus.settings.tab.llm"
 inline constexpr const char* kSettingsTabIndex        = "locus.settings.tab.index";
 inline constexpr const char* kSettingsTabApprovals    = "locus.settings.tab.approvals";
 inline constexpr const char* kSettingsTabMcp          = "locus.settings.tab.mcp";
+inline constexpr const char* kSettingsTabCapabilities = "locus.settings.tab.capabilities";
 
 } // namespace locus::ui_names

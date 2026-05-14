@@ -18,6 +18,13 @@ public:
                "semantic (vector similarity), hybrid (BM25 + vector). "
                "Semantic and hybrid require semantic search to be enabled.";
     }
+    // S5.A -- prune the mode list (and the `symbols`/`ast` hint) based on
+    // the workspace's capability buckets. The `mode` parameter schema is
+    // unchanged so the LLM CAN still send a hidden mode -- it just won't
+    // be advertised and the runtime returns the existing "not enabled"
+    // error if it tries. Parameter type stability keeps KV cache intact
+    // (see S4.F).
+    std::string description_for(IWorkspaceServices& ws) const override;
     std::vector<ToolParam> params() const override {
         return {
             {"query",          "string",  "Search query. Keywords for text/hybrid, "

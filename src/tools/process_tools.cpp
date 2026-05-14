@@ -2,6 +2,7 @@
 #include "tools/process_sink.h"
 #include "tools/shared.h"
 
+#include "core/workspace.h"
 #include "core/workspace_services.h"
 #include "process_registry.h"
 
@@ -211,9 +212,20 @@ const char* status_str(BackgroundProcess::Status s) { return to_string(s); }
 
 } // namespace
 
+namespace {
+// S5.A -- the four bg-process tools are gated together. Hide them from the
+// per-turn manifest when the workspace has no registry (CLI / headless) OR
+// when the capability bucket is off.
+bool bg_capability_enabled(IWorkspaceServices& ws)
+{
+    auto* w = ws.workspace();
+    return w ? w->config().capabilities.background_processes : true;
+}
+} // namespace
+
 bool RunCommandBgTool::available(IWorkspaceServices& ws) const
 {
-    return ws.processes() != nullptr;
+    return ws.processes() != nullptr && bg_capability_enabled(ws);
 }
 
 std::string RunCommandBgTool::preview(const ToolCall& call) const
@@ -249,7 +261,7 @@ ToolResult RunCommandBgTool::execute(const ToolCall& call, IWorkspaceServices& w
 
 bool ReadProcessOutputTool::available(IWorkspaceServices& ws) const
 {
-    return ws.processes() != nullptr;
+    return ws.processes() != nullptr && bg_capability_enabled(ws);
 }
 
 std::string ReadProcessOutputTool::preview(const ToolCall& call) const
@@ -301,7 +313,7 @@ ToolResult ReadProcessOutputTool::execute(const ToolCall& call, IWorkspaceServic
 
 bool StopProcessTool::available(IWorkspaceServices& ws) const
 {
-    return ws.processes() != nullptr;
+    return ws.processes() != nullptr && bg_capability_enabled(ws);
 }
 
 std::string StopProcessTool::preview(const ToolCall& call) const
@@ -328,7 +340,7 @@ ToolResult StopProcessTool::execute(const ToolCall& call, IWorkspaceServices& ws
 
 bool ListProcessesTool::available(IWorkspaceServices& ws) const
 {
-    return ws.processes() != nullptr;
+    return ws.processes() != nullptr && bg_capability_enabled(ws);
 }
 
 ToolResult ListProcessesTool::execute(const ToolCall& /*call*/, IWorkspaceServices& ws)

@@ -2,6 +2,7 @@
 #include "tools/shared.h"
 
 #include "core/memory_store.h"
+#include "core/workspace.h"
 #include "core/workspace_services.h"
 #include "llm/token_counter.h"
 
@@ -70,7 +71,12 @@ std::string render_hit(const MemoryStore::SearchHit& h, int rank)
 
 bool AddMemoryTool::available(IWorkspaceServices& ws) const
 {
-    return ws.memory() != nullptr;
+    if (ws.memory() == nullptr) return false;
+    // S5.A -- gate on capability bit so toggling memory_bank off in Settings
+    // hides the tool on the next turn even if the MemoryStore was already
+    // constructed when the workspace opened.
+    auto* w = ws.workspace();
+    return w ? w->config().capabilities.memory_bank : true;
 }
 
 ToolResult AddMemoryTool::execute(const ToolCall& call, IWorkspaceServices& ws)
@@ -130,7 +136,9 @@ ToolResult AddMemoryTool::execute(const ToolCall& call, IWorkspaceServices& ws)
 
 bool SearchMemoryTool::available(IWorkspaceServices& ws) const
 {
-    return ws.memory() != nullptr;
+    if (ws.memory() == nullptr) return false;
+    auto* w = ws.workspace();
+    return w ? w->config().capabilities.memory_bank : true;
 }
 
 ToolResult SearchMemoryTool::execute(const ToolCall& call, IWorkspaceServices& ws)

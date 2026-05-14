@@ -435,6 +435,33 @@ static WorkspaceConfig config_from_json(const json& j)
             cfg.git_commit_prefix = g["commit_prefix"].get<std::string>();
     }
 
+    // S5.A -- capability buckets. Read the new block when present; fall back
+    // to migration from legacy fields (semantic_search_enabled / memory_enabled)
+    // so existing workspaces keep their accepted settings without re-prompting.
+    if (j.contains("capabilities") && j["capabilities"].is_object()) {
+        auto& c = j["capabilities"];
+        if (c.contains("background_processes"))
+            cfg.capabilities.background_processes = c["background_processes"].get<bool>();
+        if (c.contains("semantic_search"))
+            cfg.capabilities.semantic_search      = c["semantic_search"].get<bool>();
+        if (c.contains("code_aware_search"))
+            cfg.capabilities.code_aware_search    = c["code_aware_search"].get<bool>();
+        if (c.contains("memory_bank"))
+            cfg.capabilities.memory_bank          = c["memory_bank"].get<bool>();
+        if (c.contains("web_retrieval"))
+            cfg.capabilities.web_retrieval        = c["web_retrieval"].get<bool>();
+        // Capabilities are canonical when present -- propagate to the legacy
+        // flags so the older subsystems (Workspace ctor, MemoryStore
+        // construction) see the user's chosen value without a parallel UI.
+        cfg.semantic_search_enabled = cfg.capabilities.semantic_search;
+        cfg.memory_enabled          = cfg.capabilities.memory_bank;
+    } else {
+        // Migration path: derive the two mappable buckets from the existing
+        // flags. The other three buckets keep their defaults (off / on / off).
+        cfg.capabilities.semantic_search = cfg.semantic_search_enabled;
+        cfg.capabilities.memory_bank     = cfg.memory_enabled;
+    }
+
     if (j.contains("tool_approvals") && j["tool_approvals"].is_object()) {
         for (auto it = j["tool_approvals"].begin();
              it != j["tool_approvals"].end(); ++it) {
@@ -502,6 +529,13 @@ static json config_to_json(const WorkspaceConfig& cfg)
             {"auto_commit",   cfg.git_auto_commit},
             {"commit_branch", cfg.git_commit_branch},
             {"commit_prefix", cfg.git_commit_prefix}
+        }},
+        {"capabilities", {
+            {"background_processes", cfg.capabilities.background_processes},
+            {"semantic_search",      cfg.capabilities.semantic_search},
+            {"code_aware_search",    cfg.capabilities.code_aware_search},
+            {"memory_bank",          cfg.capabilities.memory_bank},
+            {"web_retrieval",        cfg.capabilities.web_retrieval}
         }},
         {"tool_approvals", approvals}
     };

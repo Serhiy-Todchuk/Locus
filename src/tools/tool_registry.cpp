@@ -54,7 +54,9 @@ namespace {
 
 // Build one OpenAI function-calling entry for a tool:
 //   { "type": "function", "function": { "name", "description", "parameters" } }
-nlohmann::json build_entry(const ITool& t)
+// When `ws` is non-null, the tool's `description_for(ws)` is used so
+// context-aware descriptions (S5.A SearchTool mode-list pruning) take effect.
+nlohmann::json build_entry(const ITool& t, IWorkspaceServices* ws = nullptr)
 {
     nlohmann::json parameters = t.parameters_schema();
     if (parameters.is_object() && !parameters.empty()) {
@@ -86,7 +88,7 @@ nlohmann::json build_entry(const ITool& t)
 
     nlohmann::json func;
     func["name"] = t.name();
-    func["description"] = t.description();
+    func["description"] = ws ? t.description_for(*ws) : t.description();
     func["parameters"] = parameters;
 
     nlohmann::json entry;
@@ -114,7 +116,7 @@ nlohmann::json ToolRegistry::build_schema_json(IWorkspaceServices& ws,
     for (auto& t : tools_) {
         if (!t->visible_in_mode(mode)) continue;
         if (!t->available(ws))         continue;
-        arr.push_back(build_entry(*t));
+        arr.push_back(build_entry(*t, &ws));
     }
     return arr;
 }

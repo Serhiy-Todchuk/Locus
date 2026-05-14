@@ -452,6 +452,7 @@ add_executable(locus_gui WIN32
     src/frontends/gui/markdown.cpp
     src/frontends/gui/autostart.cpp
     src/frontends/gui/terminal_panel.cpp
+    src/frontends/gui/capabilities_dialog.cpp
 )
 
 target_link_libraries(locus_gui PRIVATE

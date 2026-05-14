@@ -74,24 +74,28 @@ SettingsDialog::SettingsDialog(wxWindow* parent, WorkspaceConfig& config,
     notebook->SetName(ui_names::kSettingsNotebook);
     gui::apply_locus_accessible_name(notebook);
 
-    auto* tab_llm       = build_llm_tab(notebook);
-    auto* tab_index     = build_index_tab(notebook);
-    auto* tab_approvals = build_approvals_tab(notebook);
-    auto* tab_mcp       = build_mcp_tab(notebook);
+    auto* tab_llm          = build_llm_tab(notebook);
+    auto* tab_index        = build_index_tab(notebook);
+    auto* tab_capabilities = build_capabilities_tab(notebook);
+    auto* tab_approvals    = build_approvals_tab(notebook);
+    auto* tab_mcp          = build_mcp_tab(notebook);
 
     tab_llm->SetName(ui_names::kSettingsTabLlm);
     tab_index->SetName(ui_names::kSettingsTabIndex);
+    tab_capabilities->SetName(ui_names::kSettingsTabCapabilities);
     tab_approvals->SetName(ui_names::kSettingsTabApprovals);
     tab_mcp->SetName(ui_names::kSettingsTabMcp);
     gui::apply_locus_accessible_name(tab_llm);
     gui::apply_locus_accessible_name(tab_index);
+    gui::apply_locus_accessible_name(tab_capabilities);
     gui::apply_locus_accessible_name(tab_approvals);
     gui::apply_locus_accessible_name(tab_mcp);
 
-    notebook->AddPage(tab_llm,       "LLM");
-    notebook->AddPage(tab_index,     "Index");
-    notebook->AddPage(tab_approvals, "Tool Approvals");
-    notebook->AddPage(tab_mcp,       "MCP Servers");
+    notebook->AddPage(tab_llm,          "LLM");
+    notebook->AddPage(tab_index,        "Index");
+    notebook->AddPage(tab_capabilities, "Capabilities");
+    notebook->AddPage(tab_approvals,    "Tool Approvals");
+    notebook->AddPage(tab_mcp,          "MCP Servers");
 
     auto* main_sizer = new wxBoxSizer(wxVERTICAL);
     main_sizer->Add(notebook, 1, wxEXPAND | wxALL, 8);
@@ -796,7 +800,37 @@ void SettingsDialog::on_ok(wxCommandEvent& evt)
 
     bool approvals_changed = (new_approvals != config_.tool_approval_policies);
 
-    changed_ = llm_changed_ || index_changed_ || semantic_changed_ || approvals_changed;
+    // S5.A Capabilities tab. Reads off the five checkboxes built in
+    // build_capabilities_tab. The semantic + memory checkboxes are the
+    // canonical source for their legacy mirror flags -- assigning here
+    // overwrites whatever the Index/Memory subsystems thought.
+    WorkspaceConfig::Capabilities new_caps = config_.capabilities;
+    if (cap_bg_)       new_caps.background_processes = cap_bg_->IsChecked();
+    if (cap_semantic_) new_caps.semantic_search      = cap_semantic_->IsChecked();
+    if (cap_code_)     new_caps.code_aware_search    = cap_code_->IsChecked();
+    if (cap_memory_)   new_caps.memory_bank          = cap_memory_->IsChecked();
+    if (cap_web_)      new_caps.web_retrieval        = cap_web_->IsChecked();
+
+    if (new_caps.background_processes != config_.capabilities.background_processes ||
+        new_caps.semantic_search      != config_.capabilities.semantic_search      ||
+        new_caps.code_aware_search    != config_.capabilities.code_aware_search    ||
+        new_caps.memory_bank          != config_.capabilities.memory_bank          ||
+        new_caps.web_retrieval        != config_.capabilities.web_retrieval)
+    {
+        capabilities_changed_ = true;
+    }
+
+    // The capabilities semantic/memory bools are canonical -- propagate to
+    // the Index-tab semantic checkbox + Workspace::memory_enabled mirror so
+    // the next workspace open sees a consistent view.
+    if (new_caps.semantic_search != new_semantic) {
+        // Capabilities tab wins over the legacy Index tab when they disagree.
+        new_semantic     = new_caps.semantic_search;
+        semantic_changed_ = true;
+    }
+
+    changed_ = llm_changed_ || index_changed_ || semantic_changed_
+            || approvals_changed || capabilities_changed_;
 
     if (changed_) {
         config_.llm_endpoint      = new_endpoint;
@@ -816,12 +850,89 @@ void SettingsDialog::on_ok(wxCommandEvent& evt)
         config_.reranker_model    = new_reranker_md;
         config_.reranker_top_k    = new_reranker_top_k;
         config_.tool_approval_policies = std::move(new_approvals);
+        config_.capabilities      = new_caps;
+        config_.memory_enabled    = new_caps.memory_bank;
 
-        spdlog::info("Settings changed (llm={}, index={}, semantic={}, approvals={})",
-                     llm_changed_, index_changed_, semantic_changed_, approvals_changed);
+        spdlog::info("Settings changed (llm={}, index={}, semantic={}, "
+                     "approvals={}, capabilities={})",
+                     llm_changed_, index_changed_, semantic_changed_,
+                     approvals_changed, capabilities_changed_);
     }
 
     evt.Skip();
+}
+
+// ---------------------------------------------------------------------------
+// Capabilities tab (S5.A)
+// ---------------------------------------------------------------------------
+
+wxPanel* SettingsDialog::build_capabilities_tab(wxWindow* parent)
+{
+    auto* panel = new wxPanel(parent);
+    auto* outer = new wxBoxSizer(wxVERTICAL);
+
+    auto hint_font = panel->GetFont();
+    hint_font.SetPointSize(hint_font.GetPointSize() - 1);
+
+    auto* intro = new wxStaticText(panel, wxID_ANY,
+        "Each bucket gates a family of tools that the LLM sees in its "
+        "per-turn manifest. Disabling buckets you don't need keeps the "
+        "manifest small -- valuable on short-context local models. "
+        "Changes apply to the next agent turn.");
+    intro->Wrap(560);
+    outer->Add(intro, 0, wxALL, 8);
+
+    auto add_row = [&](wxCheckBox*& cb, const wxString& label,
+                       int token_estimate, const wxString& tooltip,
+                       bool initial)
+    {
+        wxString full = wxString::Format("%s  (~%d prompt tokens)",
+                                         label, token_estimate);
+        cb = new wxCheckBox(panel, wxID_ANY, full);
+        cb->SetValue(initial);
+        cb->SetToolTip(tooltip);
+        outer->Add(cb, 0, wxLEFT | wxRIGHT | wxTOP, 8);
+
+        auto* hint = new wxStaticText(panel, wxID_ANY, tooltip);
+        hint->SetFont(hint_font);
+        hint->SetForegroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_GRAYTEXT));
+        hint->Wrap(540);
+        outer->Add(hint, 0, wxLEFT | wxRIGHT | wxBOTTOM, 26);
+    };
+
+    add_row(cap_bg_, "Background processes",
+            capability_token_estimates::k_background_processes,
+            "Adds run_command_bg, read_process_output, stop_process, "
+            "list_processes. Useful for dev servers and long-running jobs.",
+            config_.capabilities.background_processes);
+
+    add_row(cap_semantic_, "Semantic search",
+            capability_token_estimates::k_semantic_search,
+            "Adds `semantic` and `hybrid` modes to the search tool, and "
+            "loads the embedding model. Disabling here also disables the "
+            "Index-tab semantic toggle.",
+            config_.capabilities.semantic_search);
+
+    add_row(cap_code_, "Code-aware search",
+            capability_token_estimates::k_code_aware_search,
+            "Adds `symbols` and `ast` modes to the search tool, plus the "
+            "get_file_outline tool. Skip for text-only workspaces.",
+            config_.capabilities.code_aware_search);
+
+    add_row(cap_memory_, "Memory bank",
+            capability_token_estimates::k_memory_bank,
+            "Adds add_memory + search_memory tools, /memorize and /forget "
+            "slash commands, and the system-prompt memory slot.",
+            config_.capabilities.memory_bank);
+
+    add_row(cap_web_, "Web retrieval",
+            capability_token_estimates::k_web_retrieval,
+            "Adds web fetch + search tools when M6 web RAG ships. Currently "
+            "a placeholder -- no tools register against this bucket yet.",
+            config_.capabilities.web_retrieval);
+
+    panel->SetSizer(outer);
+    return panel;
 }
 
 } // namespace locus
