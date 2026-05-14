@@ -87,7 +87,8 @@ void CliFrontend::on_tool_call_pending(const ToolCall& call,
 }
 
 void CliFrontend::on_tool_result(const std::string& /*call_id*/,
-                                 const std::string& display)
+                                 const std::string& display,
+                                 bool /*success*/)
 {
     if (!display.empty()) {
         // Truncate very long results for terminal display.

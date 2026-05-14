@@ -170,6 +170,15 @@ struct WorkspaceConfig {
     // for workspace search.
     int  memory_recency_half_life_days     = 21;
 
+    // S5.C -- inline diff rendering in chat. When `chat_show_diffs` is true,
+    // successful `edit_file` / `write_file` / `delete_file` calls render a
+    // red/green unified diff in the chat history below the tool bubble.
+    // `chat_diff_max_lines` caps the number of diff lines rendered per call
+    // before a "(N more lines collapsed)" marker is emitted -- guards against
+    // a single huge file write blowing up the chat HTML.
+    bool chat_show_diffs    = true;
+    int  chat_diff_max_lines = 200;
+
     // S5.A -- workspace capability buckets. Each bucket gates a family of
     // tools (and sometimes a system-prompt slot) so the per-turn manifest
     // only carries what the user asked for. `semantic_search` and

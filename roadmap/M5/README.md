@@ -14,7 +14,7 @@
 | [S5.B](S5.B-terminal-panel.md) ✔ | Live Terminal Panel | UX |
 | [S5.A](S5.A-capability-toggles.md) ✔ | Workspace Capability Toggles | UX / Tokens |
 | [S5.M](S5.M-global-settings.md) ✔ | Global Settings Template + ~/.locus migration | UX / Config |
-| [S5.C](S5.C-inline-diffs-in-chat.md) | Inline Code Diffs in Chat | UX |
+| [S5.C](S5.C-inline-diffs-in-chat.md) ✔ | Inline Code Diffs in Chat | UX |
 | [S5.J](S5.J-llm-context-refactor.md) | LLMContext Class Refactor | Refactor |
 | [S5.D](S5.D-reserve-and-token-xray.md) | Reserve Enforcement + Token-Cost X-Ray | Context |
 | [S5.E](S5.E-pin-and-tag.md) | Per-Message Pin / Tag System | Context |

@@ -75,12 +75,14 @@ void WxFrontend::on_tool_call_pending(const ToolCall& call,
 }
 
 void WxFrontend::on_tool_result(const std::string& call_id,
-                                const std::string& display)
+                                const std::string& display,
+                                bool success)
 {
     auto* evt = new wxThreadEvent(EVT_AGENT_TOOL_RESULT);
     nlohmann::json payload;
     payload["call_id"] = call_id;
     payload["display"] = display;
+    payload["success"] = success;
     evt->SetString(wxString::FromUTF8(payload.dump()));
     wxQueueEvent(handler_, evt);
 }

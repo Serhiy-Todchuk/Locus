@@ -9,10 +9,13 @@
 #include <wx/tglbtn.h>
 #include <wx/webview.h>
 
+#include <nlohmann/json.hpp>
+
 #include <chrono>
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -63,10 +66,36 @@ public:
     // the result to the *correct* tool-call DOM node, even if other
     // messages (errors, reasoning blocks) intervened between call and
     // result.
+    //
+    // S5.C -- `args` is the raw tool-call args JSON. Cached against the
+    // call_id so on_tool_result can render an inline diff for successful
+    // edit_file / write_file / delete_file calls without re-plumbing the
+    // args through the second event. Pass an empty json (`{}`) when not
+    // relevant.
     void on_tool_pending(const wxString& call_id,
                          const wxString& tool_name,
-                         const wxString& preview);
-    void on_tool_result(const wxString& call_id, const wxString& display);
+                         const wxString& preview,
+                         const nlohmann::json& args);
+    void on_tool_result(const wxString& call_id,
+                        const wxString& display,
+                        bool success);
+
+    // S5.C -- supplied by LocusFrame at construction or via this setter.
+    // Returns the pre-mutation snapshot for `rel_path` (workspace-relative,
+    // forward slashes) from the current turn's checkpoint, or nullopt when
+    // none exists. ChatPanel uses it to render write_file / delete_file
+    // diffs against the pre-mutation state.
+    using FetchPreMutationFn =
+        std::function<std::optional<std::string>(const std::string& rel_path)>;
+    void set_pre_mutation_fetcher(FetchPreMutationFn fn) {
+        pre_mutation_fetcher_ = std::move(fn);
+    }
+
+    // S5.C -- runtime toggles surfaced by WorkspaceConfig.
+    void set_diff_options(bool show_diffs, int max_lines) {
+        diff_show_         = show_diffs;
+        diff_max_lines_    = max_lines > 0 ? max_lines : 200;
+    }
 
     // S4.D plan-mode display.
     // on_mode_changed: flip the mode-switcher toggle to match `mode`.
@@ -241,6 +270,20 @@ private:
     // matching tool-pending message rather than whatever the latest
     // addMsg incremented to (which might be an error or reasoning bubble).
     std::unordered_map<std::string, int> tool_call_msg_ids_;
+
+    // S5.C -- cached per call_id at on_tool_pending time so on_tool_result
+    // can render an inline diff without the args being threaded through a
+    // second event. Cleared after the result fires (or whenever the entry
+    // would otherwise leak).
+    struct PendingToolInfo {
+        std::string    tool_name;
+        nlohmann::json args;
+    };
+    std::unordered_map<std::string, PendingToolInfo> pending_tool_info_;
+
+    FetchPreMutationFn pre_mutation_fetcher_;
+    bool               diff_show_         = true;
+    int                diff_max_lines_    = 200;
 
     // S4.D plan-id -> message_id so on_plan_step_advanced finds the right
     // bubble. Cleared on session reset.

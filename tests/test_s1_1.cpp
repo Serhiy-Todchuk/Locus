@@ -24,7 +24,7 @@ struct StubFrontend : IFrontend {
                               const std::vector<std::string>&) override {
         events.push_back("tool_pending");
     }
-    void on_tool_result(const std::string& id, const std::string&) override {
+    void on_tool_result(const std::string& id, const std::string&, bool) override {
         events.push_back("tool_result:" + id);
     }
     void on_turn_complete() override { events.push_back("turn_complete"); }
@@ -46,7 +46,7 @@ struct ThrowingFrontend : IFrontend {
                               const std::vector<std::string>&) override {
         throw std::runtime_error("boom");
     }
-    void on_tool_result(const std::string&, const std::string&) override {
+    void on_tool_result(const std::string&, const std::string&, bool) override {
         throw std::runtime_error("boom");
     }
     void on_turn_complete() override { throw std::runtime_error("boom"); }

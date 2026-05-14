@@ -146,7 +146,7 @@ void ToolDispatcher::dispatch(const ToolCall& call, const AppendFn& append_resul
                        bucket + " is off. Enable it in Settings -> "
                        "Capabilities to make the tool available.");
         frontends_.broadcast([&](IFrontend& fe) {
-            fe.on_tool_result(call.id, "[disabled: " + bucket + "]");
+            fe.on_tool_result(call.id, "[disabled: " + bucket + "]", /*success=*/false);
         });
         return;
     }
@@ -199,7 +199,7 @@ void ToolDispatcher::dispatch(const ToolCall& call, const AppendFn& append_resul
         denied.content = "Tool call denied by workspace approval policy.";
         append_result(std::move(denied));
         frontends_.broadcast([&](IFrontend& fe) {
-            fe.on_tool_result(call.id, "[denied by policy]");
+            fe.on_tool_result(call.id, "[denied by policy]", /*success=*/false);
         });
         return;
     }
@@ -241,7 +241,7 @@ void ToolDispatcher::dispatch(const ToolCall& call, const AppendFn& append_resul
             cancelled.content = "Tool call cancelled.";
             append_result(std::move(cancelled));
             frontends_.broadcast([&](IFrontend& fe) {
-                fe.on_tool_result(call.id, "[cancelled]");
+                fe.on_tool_result(call.id, "[cancelled]", /*success=*/false);
             });
             return;
         }
@@ -261,7 +261,7 @@ void ToolDispatcher::dispatch(const ToolCall& call, const AppendFn& append_resul
             rejected.content = "Tool call rejected by user.";
             append_result(std::move(rejected));
             frontends_.broadcast([&](IFrontend& fe) {
-                fe.on_tool_result(call.id, "[rejected]");
+                fe.on_tool_result(call.id, "[rejected]", /*success=*/false);
             });
             return;
         }
@@ -321,7 +321,7 @@ void ToolDispatcher::dispatch(const ToolCall& call, const AppendFn& append_resul
     append_result(std::move(tool_msg));
 
     frontends_.broadcast([&](IFrontend& fe) {
-        fe.on_tool_result(call.id, result.display);
+        fe.on_tool_result(call.id, result.display, result.success);
     });
 }
 

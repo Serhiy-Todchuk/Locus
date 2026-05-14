@@ -19,6 +19,7 @@
         "md4c",
         "llama-cpp",
         "miniz",
-        "pugixml"
+        "pugixml",
+        "dtl"
     ]
 }

@@ -69,8 +69,12 @@ public:
                                       const std::vector<std::string>& safety_warnings = {}) = 0;
 
     // Tool execution finished. display is the user-facing result text.
+    // `success` is false for errors, denials, cancellations, and disabled
+    // capabilities -- frontends use it to decide whether to render extras
+    // like the S5.C inline diff (skipped on failure).
     virtual void on_tool_result(const std::string& call_id,
-                                const std::string& display) = 0;
+                                const std::string& display,
+                                bool success = true) = 0;
 
     // Agent turn complete (no more tokens or tool calls). Fired once per
     // send_message, after all LLM round-trips finish. Pair with on_turn_start.

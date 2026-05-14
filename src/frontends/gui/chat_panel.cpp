@@ -1,4 +1,5 @@
 #include "chat_panel.h"
+#include "diff_renderer.h"
 #include "locus_accessible.h"
 #include "markdown.h"
 #include "theme.h"
@@ -11,6 +12,9 @@
 #include <wx/webview.h>
 
 #include <algorithm>
+#include <filesystem>
+#include <fstream>
+#include <sstream>
 #include <unordered_set>
 
 namespace locus {
@@ -129,6 +133,80 @@ body {
     font-size: 12px;
     max-height: 200px;
     overflow-y: auto;
+}
+/* S5.C -- inline tool-result diffs. Bypass md4c entirely (the chat panel
+   injects the diff HTML via innerHTML on .tool-diff-wrap, the <div> spans
+   below are emitted by render_*_diff_html). */
+.tool-diff-wrap {
+    margin-top: 6px;
+}
+.tool-diff {
+    border: 1px solid #d8dce0;
+    border-radius: 4px;
+    overflow: hidden;
+    font-family: "Cascadia Code", "Consolas", monospace;
+    font-size: 12px;
+    background: #ffffff;
+}
+.tool-diff .diff-file-header {
+    background: #eef2f6;
+    color: #444;
+    padding: 4px 8px;
+    border-bottom: 1px solid #d8dce0;
+}
+.tool-diff .diff-file-header code {
+    background: transparent;
+    color: #1a2733;
+}
+.tool-diff .diff-hunk-header {
+    background: #f5f7fa;
+    color: #6b7785;
+    padding: 2px 8px;
+    border-top: 1px solid #e6eaef;
+    border-bottom: 1px solid #e6eaef;
+}
+.tool-diff .diff-line {
+    white-space: pre-wrap;
+    padding: 0 8px;
+    margin: 0;
+    line-height: 1.4;
+}
+.tool-diff .diff-line.add {
+    background: #e6ffec;
+    color: #1a7f37;
+}
+.tool-diff .diff-line.add::before {
+    content: "+ ";
+    color: #1a7f37;
+}
+.tool-diff .diff-line.del {
+    background: #ffebe9;
+    color: #b91c1c;
+}
+.tool-diff .diff-line.del::before {
+    content: "- ";
+    color: #b91c1c;
+}
+.tool-diff .diff-line.ctx {
+    color: #6b7785;
+}
+.tool-diff .diff-line.ctx::before {
+    content: "  ";
+}
+.tool-diff .diff-truncated {
+    padding: 4px 8px;
+    color: #6b7785;
+    font-style: italic;
+    border-top: 1px solid #e6eaef;
+    background: #f5f7fa;
+}
+.tool-diff.diff-deleted .diff-file-header {
+    background: #ffebe9;
+    color: #b91c1c;
+}
+.tool-diff .diff-meta {
+    color: #6b7785;
+    font-weight: normal;
 }
 .msg-error {
     align-self: center;
@@ -332,6 +410,34 @@ body {
     .msg-tool .tool-result-details summary { color: #999; }
     .msg-tool .tool-result-details pre {
         background: #1e1e1e; border-color: #444; color: #ccc;
+    }
+    /* S5.C dark-mode diff palette. Tints derived from GitHub Dark + a few
+       point tweaks for readability against the chat panel's bg (#252830). */
+    .tool-diff {
+        background: #1e2230;
+        border-color: #3a3f4b;
+    }
+    .tool-diff .diff-file-header {
+        background: #2a3142; color: #d4d4d4;
+        border-bottom-color: #3a3f4b;
+    }
+    .tool-diff .diff-file-header code { color: #ffffff; }
+    .tool-diff .diff-hunk-header {
+        background: #232938; color: #9ca3af;
+        border-top-color: #3a3f4b;
+        border-bottom-color: #3a3f4b;
+    }
+    .tool-diff .diff-line.add { background: #133723; color: #6fdc8c; }
+    .tool-diff .diff-line.add::before { color: #6fdc8c; }
+    .tool-diff .diff-line.del { background: #3b1c1c; color: #f48771; }
+    .tool-diff .diff-line.del::before { color: #f48771; }
+    .tool-diff .diff-line.ctx { color: #888; }
+    .tool-diff .diff-truncated {
+        background: #232938; color: #9ca3af;
+        border-top-color: #3a3f4b;
+    }
+    .tool-diff.diff-deleted .diff-file-header {
+        background: #3b1c1c; color: #f48771;
     }
     .msg-error {
         background: #3b1c1c; color: #f48771;
@@ -1098,8 +1204,18 @@ void ChatPanel::on_auto_commit(const wxString& short_sha,
 
 void ChatPanel::on_tool_pending(const wxString& call_id,
                                 const wxString& tool_name,
-                                const wxString& preview)
+                                const wxString& preview,
+                                const nlohmann::json& args)
 {
+    // S5.C -- cache args + tool name so on_tool_result can branch into
+    // diff rendering without the args being re-threaded.
+    {
+        PendingToolInfo info;
+        info.tool_name = std::string(tool_name.utf8_string());
+        info.args      = args;
+        pending_tool_info_[std::string(call_id.utf8_string())] = std::move(info);
+    }
+
     // S5.Z #1 -- seal-and-restart. A tool call ends the current assistant
     // streaming run; finalize the open assistant bubble (and reasoning block)
     // here so post-tool tokens open a NEW bubble below the tool, preserving
@@ -1167,19 +1283,95 @@ void ChatPanel::on_tool_pending(const wxString& call_id,
         message_id_, "'" + js_escape(content) + "'"));
 }
 
-void ChatPanel::on_tool_result(const wxString& call_id, const wxString& display)
+void ChatPanel::on_tool_result(const wxString& call_id,
+                               const wxString& display,
+                               bool success)
 {
-    if (display.empty()) return;
+    const std::string call_id_str(call_id.utf8_string());
+
+    // Pop the cached pending info for this call regardless of which branch
+    // we take below -- the entry must not outlive the call/result pair.
+    std::optional<PendingToolInfo> pending;
+    if (auto it = pending_tool_info_.find(call_id_str);
+        it != pending_tool_info_.end()) {
+        pending = std::move(it->second);
+        pending_tool_info_.erase(it);
+    }
+
+    if (display.empty() && !success) return;
+    if (display.empty() && !pending.has_value()) return;
 
     // Resolve the matching tool-pending message id. If we never saw the
     // matching pending (shouldn't happen, but defend against it), fall back
     // to "latest message" so the result still surfaces somewhere visible.
     int target_id = message_id_;
-    auto it = tool_call_msg_ids_.find(std::string(call_id.utf8_string()));
+    auto it = tool_call_msg_ids_.find(call_id_str);
     if (it != tool_call_msg_ids_.end()) {
         target_id = it->second;
         tool_call_msg_ids_.erase(it);
     }
+
+    // S5.C -- inline diff render for successful edit_file / write_file /
+    // delete_file. Bypass md4c entirely; the diff HTML is constructed from
+    // pre-escaped fragments and injected via innerHTML so the line spans
+    // survive intact.
+    if (success && diff_show_ && pending.has_value()) {
+        const std::string& tool_name = pending->tool_name;
+        const auto&        args      = pending->args;
+
+        std::string diff_html;
+        DiffRenderOptions opts;
+        opts.max_lines = diff_max_lines_;
+
+        if (tool_name == "edit_file") {
+            diff_html = render_edit_file_diff_html(args, opts);
+        } else if (tool_name == "write_file") {
+            const std::string path = args.value("path", std::string{});
+            std::string new_content = args.value("content", std::string{});
+            std::optional<std::string> old_content;
+            if (pre_mutation_fetcher_ && !path.empty()) {
+                old_content = pre_mutation_fetcher_(path);
+            }
+            diff_html = render_write_file_diff_html(path, old_content,
+                                                    new_content, opts);
+        } else if (tool_name == "delete_file") {
+            const std::string path = args.value("path", std::string{});
+            int line_count = 0;
+            if (pre_mutation_fetcher_ && !path.empty()) {
+                auto old_content = pre_mutation_fetcher_(path);
+                if (old_content.has_value()) {
+                    // Count \n + 1 for trailing-line-without-newline case.
+                    line_count = 0;
+                    for (char c : *old_content) if (c == '\n') ++line_count;
+                    if (!old_content->empty() && old_content->back() != '\n')
+                        ++line_count;
+                }
+            }
+            diff_html = render_delete_file_summary_html(path, line_count);
+        }
+
+        if (!diff_html.empty()) {
+            run_script(wxString::Format(
+                "var d=document.getElementById('msg-%d');"
+                "if(d){var w=document.createElement('div');"
+                "w.className='tool-diff-wrap';"
+                "w.innerHTML=%s;"
+                "d.appendChild(w);"
+                "window.scrollTo(0,document.body.scrollHeight);}",
+                target_id, "'" + js_escape(wxString::FromUTF8(diff_html)) + "'"));
+            // For mutating tools the diff IS the result; suppress the
+            // verbose collapsible result block (its text usually just
+            // says "wrote N bytes" anyway). Failures still need the
+            // result text so the user sees the error.
+            if (tool_name == "edit_file"  ||
+                tool_name == "write_file" ||
+                tool_name == "delete_file") {
+                return;
+            }
+        }
+    }
+
+    if (display.empty()) return;
 
     // Truncate long results for display.
     wxString truncated = display;
@@ -1191,16 +1383,19 @@ void ChatPanel::on_tool_result(const wxString& call_id, const wxString& display)
     run_script(wxString::Format(
         "var d=document.getElementById('msg-%d');"
         "if(d){var det=document.createElement('details');"
-        "det.className='tool-result-details';"
+        "det.className='tool-result-details%s';"
         "var sum=document.createElement('summary');"
-        "sum.textContent='Result';"
+        "sum.textContent=%s;"
         "det.appendChild(sum);"
         "var pre=document.createElement('pre');"
         "pre.className='tool-result';pre.textContent=%s;"
         "det.appendChild(pre);"
         "d.appendChild(det);"
         "window.scrollTo(0,document.body.scrollHeight);}",
-        target_id, "'" + js_escape(truncated) + "'"));
+        target_id,
+        success ? "" : " tool-result-error",
+        success ? "'Result'" : "'Error'",
+        "'" + js_escape(truncated) + "'"));
 }
 
 void ChatPanel::set_context_meter(int used, int limit,

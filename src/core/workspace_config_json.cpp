@@ -105,6 +105,14 @@ WorkspaceConfig workspace_config_from_json(const json& j)
             cfg.git_commit_prefix = g["commit_prefix"].get<std::string>();
     }
 
+    if (j.contains("chat")) {
+        auto& c = j["chat"];
+        if (c.contains("show_diffs"))
+            cfg.chat_show_diffs = c["show_diffs"].get<bool>();
+        if (c.contains("diff_max_lines"))
+            cfg.chat_diff_max_lines = c["diff_max_lines"].get<int>();
+    }
+
     if (j.contains("capabilities") && j["capabilities"].is_object()) {
         auto& c = j["capabilities"];
         if (c.contains("background_processes"))
@@ -195,6 +203,10 @@ json workspace_config_to_json(const WorkspaceConfig& cfg)
             {"auto_commit",   cfg.git_auto_commit},
             {"commit_branch", cfg.git_commit_branch},
             {"commit_prefix", cfg.git_commit_prefix}
+        }},
+        {"chat", {
+            {"show_diffs",     cfg.chat_show_diffs},
+            {"diff_max_lines", cfg.chat_diff_max_lines}
         }},
         {"capabilities", {
             {"background_processes", cfg.capabilities.background_processes},

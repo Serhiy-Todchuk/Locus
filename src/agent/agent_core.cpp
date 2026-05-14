@@ -1174,6 +1174,48 @@ std::vector<TurnInfo> AgentCore::list_checkpoints() const
     return checkpoints_->list_turns(session_id_);
 }
 
+// S5.C -- read the byte-for-byte pre-mutation snapshot for `rel_path` in the
+// current turn's checkpoint directory. The chat panel calls this from the UI
+// thread when a `write_file` or `delete_file` tool result arrives, so it can
+// render a real before/after diff in the chat history.
+std::optional<std::string> AgentCore::read_current_pre_mutation(
+    const std::string& rel_path) const
+{
+    if (!checkpoints_ || session_id_.empty() || turn_id_ <= 0) return std::nullopt;
+
+    auto turn = checkpoints_->read_turn(session_id_, turn_id_);
+    if (!turn.has_value()) return std::nullopt;
+
+    // Normalise the requested path to forward-slash form -- the manifest
+    // stores rel paths that way regardless of host OS.
+    std::string needle = rel_path;
+    for (auto& c : needle) if (c == '\\') c = '/';
+
+    const CheckpointEntry* match = nullptr;
+    for (const auto& e : turn->entries) {
+        if (e.path == needle) { match = &e; break; }
+    }
+    if (!match) return std::nullopt;
+    // File didn't exist before mutation: caller treats nullopt as all-add.
+    if (!match->existed) return std::nullopt;
+    // Skipped (oversized) snapshot: no body on disk; treat as unknown.
+    if (match->skipped) return std::nullopt;
+
+    std::filesystem::path body = checkpoints_->root()
+                  / session_id_
+                  / std::to_string(turn_id_)
+                  / "files"
+                  / std::filesystem::path(needle);
+    std::error_code ec;
+    if (!std::filesystem::exists(body, ec)) return std::nullopt;
+
+    std::ifstream f(body, std::ios::binary);
+    if (!f.is_open()) return std::nullopt;
+    std::ostringstream ss;
+    ss << f.rdbuf();
+    return ss.str();
+}
+
 // -- Metrics export (S4.S) ---------------------------------------------------
 
 std::string AgentCore::export_metrics(const std::string& format) const

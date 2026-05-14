@@ -92,6 +92,15 @@ public:
     const std::string& current_session_id() const { return session_id_; }
     int current_turn_id() const { return turn_id_; }
 
+    // S5.C -- read the pre-mutation snapshot of a workspace-relative path for
+    // the current turn's checkpoint. Returns nullopt when no snapshot exists
+    // for that path (e.g. the file didn't exist before write_file, or the
+    // snapshot was skipped because the file was too large), or when the
+    // checkpoint store isn't active. Used by the chat panel to render
+    // `write_file` / `delete_file` diffs against the pre-mutation state.
+    std::optional<std::string> read_current_pre_mutation(
+        const std::string& rel_path) const;
+
     bool is_busy() const override;
     void cancel_turn() override;
 

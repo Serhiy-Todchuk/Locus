@@ -337,6 +337,16 @@ void LocusFrame::setup_aui_layout()
         agent_.set_attached_context({path, /*preview*/{}});
     });
 
+    // S5.C -- diff rendering hooks. The fetcher reads the pre-mutation
+    // snapshot for write_file / delete_file diffs from the current turn's
+    // checkpoint; the options carry the workspace toggle + line cap.
+    chat_panel_->set_pre_mutation_fetcher(
+        [this](const std::string& rel_path) -> std::optional<std::string> {
+            return agent_.read_current_pre_mutation(rel_path);
+        });
+    chat_panel_->set_diff_options(workspace_.config().chat_show_diffs,
+                                   workspace_.config().chat_diff_max_lines);
+
     // Slash-command suggestions: CLI-style commands + all registered tools.
     {
         std::vector<SlashItem> items = {
@@ -487,6 +497,12 @@ void LocusFrame::show_settings_dialog()
                 }
             }
         }
+
+        // S5.C -- pick up any change to the chat-diff toggles immediately;
+        // no restart required, the chat panel just reads them at next
+        // tool_result.
+        chat_panel_->set_diff_options(workspace_.config().chat_show_diffs,
+                                       workspace_.config().chat_diff_max_lines);
 
         spdlog::info("Settings saved to config.json");
     }
@@ -664,10 +680,14 @@ void LocusFrame::on_agent_tool_pending(wxThreadEvent& evt)
         bool needs_approval = payload.value("needs_approval", true);
 
         // Show tool call inline in chat (always, regardless of policy).
+        // S5.C -- args is also forwarded so on_tool_result can render an
+        // inline diff for successful edit_file / write_file / delete_file
+        // calls without the args being threaded through a second event.
         chat_panel_->on_tool_pending(
             wxString::FromUTF8(call_id),
             wxString::FromUTF8(tool),
-            wxString::FromUTF8(preview));
+            wxString::FromUTF8(preview),
+            args);
 
         if (!needs_approval) {
             // Auto-approved -- the dispatcher will not wait. Don't pop the
@@ -719,7 +739,8 @@ void LocusFrame::on_agent_tool_result(wxThreadEvent& evt)
         auto payload = nlohmann::json::parse(evt.GetString().ToUTF8().data());
         wxString call_id = wxString::FromUTF8(payload.value("call_id", ""));
         wxString display = wxString::FromUTF8(payload.value("display", ""));
-        chat_panel_->on_tool_result(call_id, display);
+        bool success = payload.value("success", true);
+        chat_panel_->on_tool_result(call_id, display, success);
     } catch (...) {}
 }
 

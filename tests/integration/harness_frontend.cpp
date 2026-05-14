@@ -158,7 +158,8 @@ void HarnessFrontend::on_tool_call_pending(const ToolCall& call,
 }
 
 void HarnessFrontend::on_tool_result(const std::string& call_id,
-                                     const std::string& display)
+                                     const std::string& display,
+                                     bool /*success*/)
 {
     std::lock_guard lock(mutex_);
     tool_results_.push_back({call_id, display});
