@@ -787,6 +787,17 @@ void ChatPanel::on_turn_start()
 
 void ChatPanel::on_token(const wxString& token)
 {
+    // S5.Z #1 -- after a tool call sealed the previous assistant bubble,
+    // assistant_id_ is 0; the next streamed token needs a fresh bubble so
+    // post-tool text lands chronologically AFTER the tool bubble instead of
+    // being re-rendered into the original (now stale) one.
+    if (assistant_id_ == 0) {
+        ++message_id_;
+        assistant_id_ = message_id_;
+        run_script(wxString::Format(
+            "addMsg(%d, 'msg-assistant streaming-cursor', '');",
+            assistant_id_));
+    }
     if (waiting_for_first_token_) {
         waiting_for_first_token_ = false;
         // Wipe the "Thinking..." placeholder so the streaming text starts
@@ -800,6 +811,18 @@ void ChatPanel::on_token(const wxString& token)
 
 void ChatPanel::on_reasoning_token(const wxString& token)
 {
+    // S5.Z #1 -- mirror the on_token seal-restart: the reasoning <details>
+    // block is anchored to the assistant bubble (addReasoning inserts before
+    // it), so when assistant_id_ is 0 we need a fresh anchor before queuing
+    // the reasoning token. Same idea as on_token: keep the chronological
+    // order intact across tool boundaries.
+    if (assistant_id_ == 0) {
+        ++message_id_;
+        assistant_id_ = message_id_;
+        run_script(wxString::Format(
+            "addMsg(%d, 'msg-assistant streaming-cursor', '');",
+            assistant_id_));
+    }
     if (waiting_for_first_token_) {
         waiting_for_first_token_ = false;
         // Reasoning lands in the separate <details> block above the assistant
@@ -843,15 +866,19 @@ void ChatPanel::on_turn_complete()
         token_buffer_.clear();
     }
 
-    // Final render with md4c.
-    std::string html = markdown_to_html(current_response_);
-    run_script(wxString::Format(
-        "setMsgHtml(%d, %s);",
-        assistant_id_, "'" + js_escape(wxString::FromUTF8(html)) + "'"));
-
-    // Remove streaming cursor.
-    run_script(wxString::Format(
-        "removeClassFromMsg(%d, 'streaming-cursor');", assistant_id_));
+    // S5.Z #1 -- assistant_id_ may legitimately be 0 here when the turn ends
+    // immediately after a tool call (the seal-and-restart path in
+    // on_tool_pending zeroed it and no further text token arrived to allocate
+    // a fresh bubble). Skip the assistant render in that case; otherwise do
+    // the final md4c pass + drop the streaming cursor.
+    if (assistant_id_ != 0) {
+        std::string html = markdown_to_html(current_response_);
+        run_script(wxString::Format(
+            "setMsgHtml(%d, %s);",
+            assistant_id_, "'" + js_escape(wxString::FromUTF8(html)) + "'"));
+        run_script(wxString::Format(
+            "removeClassFromMsg(%d, 'streaming-cursor');", assistant_id_));
+    }
 
     // Highlight code blocks.
     run_script("highlightAll();");
@@ -1066,6 +1093,57 @@ void ChatPanel::on_tool_pending(const wxString& call_id,
                                 const wxString& tool_name,
                                 const wxString& preview)
 {
+    // S5.Z #1 -- seal-and-restart. A tool call ends the current assistant
+    // streaming run; finalize the open assistant bubble (and reasoning block)
+    // here so post-tool tokens open a NEW bubble below the tool, preserving
+    // chronological order. Without this the original bubble remained the
+    // streaming target and post-tool text visually appeared above the tool.
+    if (reasoning_id_ != 0) {
+        if (!reasoning_buffer_.empty()) {
+            current_reasoning_ += reasoning_buffer_;
+            reasoning_buffer_.clear();
+            run_script(wxString::Format(
+                "setReasoningBody(%d, %s);",
+                reasoning_id_,
+                "'" + js_escape(wxString::FromUTF8(current_reasoning_)) + "'"));
+        }
+        run_script(wxString::Format(
+            "finalizeReasoning(%d, 'Thoughts');", reasoning_id_));
+        reasoning_id_ = 0;
+        current_reasoning_.clear();
+    }
+    if (assistant_id_ != 0) {
+        if (current_response_.empty() && token_buffer_.empty()) {
+            // No content tokens streamed into this bubble -- it's either still
+            // showing the "Thinking..." placeholder or was emptied when only
+            // reasoning streamed. Drop the empty bubble entirely so the tool
+            // call doesn't sit below a phantom assistant message.
+            run_script(wxString::Format(
+                "var d=document.getElementById('msg-%d');if(d)d.remove();",
+                assistant_id_));
+        } else {
+            // Flush any remaining buffered tokens and final-render with md4c
+            // so the sealed bubble matches the post-turn shape.
+            if (!token_buffer_.empty()) {
+                current_response_ += token_buffer_;
+                token_buffer_.clear();
+            }
+            std::string html = markdown_to_html(current_response_);
+            run_script(wxString::Format(
+                "setMsgHtml(%d, %s);",
+                assistant_id_,
+                "'" + js_escape(wxString::FromUTF8(html)) + "'"));
+            run_script(wxString::Format(
+                "removeClassFromMsg(%d, 'streaming-cursor');", assistant_id_));
+        }
+        assistant_id_ = 0;
+        current_response_.clear();
+        token_buffer_.clear();
+    }
+    // Placeholder no longer applies once we hand off to a tool; the next
+    // text token (if any) opens a fresh bubble without the placeholder.
+    waiting_for_first_token_ = false;
+
     ++message_id_;
     // Remember which DOM message id belongs to this tool call so the eventual
     // on_tool_result -- which can arrive after other unrelated chat events

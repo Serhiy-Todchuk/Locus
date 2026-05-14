@@ -48,9 +48,10 @@ wxIMPLEMENT_APP(LocusApp);
 // frame opens. The choice is pre-seeded into config.json so Workspace picks
 // it up during construction without a second config-rewrite path.
 //
-// `suppress_prompt=true` skips the modal entirely and seeds the file with
-// defaults (background processes off, semantic + code-aware + memory on,
-// web retrieval off). Used by the S5.L UI Automation harness and any other
+// `suppress_prompt=true` skips the modal entirely and seeds the file with a
+// minimal-cost shape (every bucket off). Matches the pre-S5.A unattended
+// behavior of the old semantic-search-only prompt, which wrote semantic=false
+// for scripted launches. Used by the S5.L UI Automation harness and any other
 // unattended launch via the `--no-first-time-prompts` flag.
 static void prompt_capabilities_if_first_open(const fs::path& locus_dir,
                                               bool suppress_prompt)
@@ -60,7 +61,17 @@ static void prompt_capabilities_if_first_open(const fs::path& locus_dir,
         return;
 
     WorkspaceConfig::Capabilities caps;  // defaults from the struct
-    if (!suppress_prompt) {
+    if (suppress_prompt) {
+        // Force "load nothing heavy" on unattended launches so a scripted
+        // run on a virgin workspace doesn't trigger an embedder + reindex
+        // it never asked for. The user can still flip these on later via
+        // Settings -> Capabilities.
+        caps.background_processes = false;
+        caps.semantic_search      = false;
+        caps.code_aware_search    = false;
+        caps.memory_bank          = false;
+        caps.web_retrieval        = false;
+    } else {
         CapabilitiesDialog dlg(nullptr, caps);
         // The dialog mutates `caps` on OK; on Cancel `caps` keeps the
         // defaults and the user gets the default workspace shape (which is
