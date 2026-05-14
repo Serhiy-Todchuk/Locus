@@ -11,6 +11,7 @@
 #include "ask_user_dialog.h"
 #include "terminal_panel.h"
 #include "tool_approval_dialog.h"
+#include "ui_state.h"
 #include "wx_frontend.h"
 #include "../../agent/agent_core.h"
 #include "../../core/workspace.h"
@@ -54,6 +55,9 @@ public:
 private:
     void create_status_bar();
     void setup_aui_layout();
+    // Apply window position / size / maximized state from saved_ui_state_.
+    // No-op when the saved values are missing or off-screen.
+    void apply_saved_window_geometry();
 
     // Toggle visibility of a managed AUI pane by name. The View menu's
     // checkboxes are kept in sync via MenuController::set_*_pane_visible.
@@ -105,6 +109,11 @@ private:
     AgentCore&   agent_;
     Workspace&   workspace_;
     McpManager*  mcp_ = nullptr;  // null when no servers configured
+
+    // Saved window + AUI layout from a previous session. Loaded in the ctor
+    // before AUI panes are wired up; applied in two phases (perspective
+    // before aui_.Update(), geometry after).
+    UiState                            saved_ui_state_;
 
     // Owned
     wxAuiManager                       aui_;

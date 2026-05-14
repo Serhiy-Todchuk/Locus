@@ -441,6 +441,7 @@ add_executable(locus_gui WIN32
     src/frontends/gui/locus_tray.cpp
     src/frontends/gui/menu_controller.cpp
     src/frontends/gui/ops_status_view.cpp
+    src/frontends/gui/ui_state.cpp
     src/frontends/gui/wx_frontend.cpp
     src/frontends/gui/activity_panel.cpp
     src/frontends/gui/metrics_view.cpp

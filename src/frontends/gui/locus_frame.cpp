@@ -2,6 +2,7 @@
 #include "locus_accessible.h"
 #include "locus_app.h"
 #include "ui_names.h"
+#include "ui_state.h"
 
 #include "../../core/watcher_pump.h"
 #include "../../index/embedding_worker.h"
@@ -10,6 +11,7 @@
 #include <spdlog/spdlog.h>
 
 #include <wx/aboutdlg.h>
+#include <wx/display.h>
 #include <wx/dirdlg.h>
 #include <wx/stdpaths.h>
 
@@ -32,6 +34,10 @@ LocusFrame::LocusFrame(AgentCore& agent, Workspace& workspace, McpManager* mcp)
 {
     SetName(ui_names::kMainFrame);
     gui::apply_locus_accessible_name(this);
+
+    // Load any previously-saved window layout. Applied later in two phases:
+    // AUI perspective after panes are added, geometry after aui_.Update().
+    saved_ui_state_ = load_ui_state();
 
     // AUI manager
     aui_.SetManagedWindow(this);
@@ -123,7 +129,34 @@ LocusFrame::LocusFrame(AgentCore& agent, Workspace& workspace, McpManager* mcp)
     create_status_bar();
     setup_aui_layout();
 
+    // Restore the user's saved AUI pane layout, if any. Must run after
+    // setup_aui_layout() so every pane exists in the manager, and before
+    // aui_.Update() so the loaded perspective is what gets laid out.
+    if (!saved_ui_state_.aui_perspective.empty()) {
+        if (aui_.LoadPerspective(
+                wxString::FromUTF8(saved_ui_state_.aui_perspective),
+                /*update=*/false)) {
+            spdlog::info("Restored AUI perspective from ~/.locus/ui_state.json");
+            // Sync the View-menu checkboxes with the actual pane visibility
+            // (the saved perspective may have closed panes we'd otherwise
+            // show as checked).
+            if (menu_) {
+                menu_->set_files_pane_visible   (aui_.GetPane("sidebar") .IsShown());
+                menu_->set_activity_pane_visible(aui_.GetPane("activity").IsShown());
+                menu_->set_terminal_pane_visible(aui_.GetPane("terminal").IsShown());
+            }
+        } else {
+            spdlog::warn("Failed to load saved AUI perspective; using defaults");
+        }
+    }
+
     aui_.Update();
+
+    // Restore the saved window geometry. Done after AUI Update so the wx
+    // sizing pass doesn't fight us, and after construction so child panels
+    // are fully built. The on-display sanity check below guards against a
+    // monitor going away between sessions (laptop undocked, etc.).
+    apply_saved_window_geometry();
 
     // System tray icon.
     tray_ = std::make_unique<LocusTray>(this);
@@ -474,8 +507,64 @@ void LocusFrame::refresh_index_stats()
 // Window lifecycle
 // ---------------------------------------------------------------------------
 
+void LocusFrame::apply_saved_window_geometry()
+{
+    const auto& s = saved_ui_state_;
+
+    // Apply size first (so position math, if needed, sees the right rect).
+    // Only apply when both dimensions look sane; otherwise the wxSize(1200,800)
+    // ctor default stands.
+    if (s.window_width >= 320 && s.window_height >= 240) {
+        SetSize(s.window_width, s.window_height);
+    }
+
+    // Apply position only when the rect lands on a currently-attached
+    // display. This guards against unplugging the monitor the window was
+    // last on -- without the check, the frame can spawn off-screen.
+    if (s.window_x != -1 && s.window_y != -1) {
+        wxRect want(s.window_x, s.window_y,
+                    s.window_width  >= 0 ? s.window_width  : 800,
+                    s.window_height >= 0 ? s.window_height : 600);
+        bool on_screen = false;
+        for (unsigned i = 0; i < wxDisplay::GetCount(); ++i) {
+            if (wxDisplay(i).GetGeometry().Intersects(want)) {
+                on_screen = true;
+                break;
+            }
+        }
+        if (on_screen) {
+            SetPosition(wxPoint(s.window_x, s.window_y));
+        } else {
+            spdlog::info("Saved window position is off-screen; centering on default display");
+        }
+    }
+
+    if (s.window_maximized) {
+        Maximize(true);
+    }
+}
+
 void LocusFrame::on_close(wxCloseEvent& evt)
 {
+    // Persist current window + AUI layout for the next launch. Done first
+    // so a later detach / shutdown failure can't lose the state. Errors
+    // are logged inside save_ui_state.
+    {
+        UiState s;
+        s.window_maximized = IsMaximized();
+        // When maximized, GetRect() returns the maximized extents; we still
+        // save them and re-apply Maximize() on next launch. The underlying
+        // restored geometry is lost (wx has no portable accessor for it),
+        // but the user just sees a maximized window again -- the common case.
+        wxRect r = GetRect();
+        s.window_x      = r.GetX();
+        s.window_y      = r.GetY();
+        s.window_width  = r.GetWidth();
+        s.window_height = r.GetHeight();
+        s.aui_perspective = aui_.SavePerspective().ToStdString();
+        save_ui_state(s);
+    }
+
     // The embedding worker runs on its own thread and fires on_progress
     // callbacks into this frame. Stop it here -- before destruction -- so no
     // callback can fire into freed memory. stop() joins the thread.
