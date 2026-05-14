@@ -205,6 +205,37 @@ int Indexer::reconcile_excluded_files()
     return static_cast<int>(to_drop.size());
 }
 
+int Indexer::reconcile_nonexistent_files()
+{
+    std::vector<std::string> to_drop;
+    if (auto* s = main_db_.prepare("SELECT path FROM files"); s) {
+        while (sqlite3_step(s) == SQLITE_ROW) {
+            auto* p = reinterpret_cast<const char*>(sqlite3_column_text(s, 0));
+            if (!p) continue;
+            std::string rel = p;
+            std::error_code ec;
+            fs::path abs = root_ / fs::path(rel);
+            // is_regular_file returns false for directories, missing paths,
+            // and symlinks-to-nothing -- exactly the set we want to evict.
+            if (!fs::is_regular_file(abs, ec))
+                to_drop.push_back(rel);
+        }
+        sqlite3_finalize(s);
+    }
+
+    if (!to_drop.empty()) {
+        main_db_.exec("BEGIN TRANSACTION");
+        if (vectors_db_) vectors_db_->exec("BEGIN TRANSACTION");
+        for (const auto& rel : to_drop) {
+            remove_file(rel);
+            spdlog::info("Dropped stale file row: {} (not a regular file)", rel);
+        }
+        main_db_.exec("COMMIT");
+        if (vectors_db_) vectors_db_->exec("COMMIT");
+    }
+    return static_cast<int>(to_drop.size());
+}
+
 // -- FTS5 operations ----------------------------------------------------------
 
 void Indexer::insert_fts(const std::string& rel_path_str, const std::string& content)
@@ -553,6 +584,17 @@ void Indexer::build_initial()
     if (reconciled > 0) {
         spdlog::info("Dropped {} stale row(s) from index after exclude check",
                      reconciled);
+    }
+
+    // Also drop any row whose on-disk path is gone or has become a directory.
+    // Older builds inserted directory rows when the watcher fired a "modified"
+    // event for the dir itself; those rows persist in stale DBs and surface
+    // as phantom file entries in the Files panel (e.g. a "src" file next to
+    // the "src" folder). One stat() per row, runs once per workspace open.
+    int nonfile = reconcile_nonexistent_files();
+    if (nonfile > 0) {
+        spdlog::info("Dropped {} stale row(s) from index for paths that "
+                     "no longer resolve to a regular file", nonfile);
     }
 
     // Overwrite the per-session counters with authoritative DB totals — after

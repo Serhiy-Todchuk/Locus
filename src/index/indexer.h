@@ -59,6 +59,16 @@ public:
     // exclude set has grown between runs. Returns the number of dropped rows.
     int reconcile_excluded_files();
 
+    // Walk the `files` table and drop any row whose path no longer resolves
+    // to a regular file on disk -- catches:
+    //   * directories that were inserted as files by older indexer code
+    //     (pre-S4.W is_regular_file guard at the top of index_file)
+    //   * files deleted while Locus wasn't running (the watcher never saw
+    //     the delete; otherwise process_events would have handled it)
+    // Returns the number of dropped rows. Runs at workspace open after the
+    // initial scan; cheap (one stat() per row, no locking).
+    int reconcile_nonexistent_files();
+
     struct Stats {
         int files_total    = 0;
         int files_indexed  = 0;   // text files with FTS content
