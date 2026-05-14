@@ -1,5 +1,6 @@
 #include "locus_app.h"
 #include "capabilities_dialog.h"
+#include "core/global_paths.h"
 #include "locus_frame.h"
 #include "recent_workspaces.h"
 
@@ -178,7 +179,13 @@ bool LocusApp::OnInit()
 #endif
     std::setlocale(LC_ALL, ".UTF-8");
 
-    // Single-instance enforcement is now workspace-scoped — WorkspaceLock
+    // S5.M -- one-shot migration of legacy global resources from
+    // %APPDATA%\Roaming\Locus (and XDG analogues) to ~/.locus/. Must run before
+    // any RecentWorkspaces / mcp.json / prompts lookup below. Idempotent --
+    // a no-op once the user has migrated.
+    global_paths::migrate_legacy_global_dir_once();
+
+    // Single-instance enforcement is now workspace-scoped -- WorkspaceLock
     // grabs an exclusive file lock inside .locus/ when the Workspace opens,
     // so two Locus GUIs on *different* folders can coexist, but two on the
     // same folder (or a nested one) fail loudly.

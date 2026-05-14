@@ -307,11 +307,14 @@ set_target_properties(sqlite_vec PROPERTIES
 
 add_library(locus_core STATIC
     src/core/workspace.cpp
+    src/core/workspace_config_json.cpp
     src/core/watcher_pump.cpp
     src/core/workspace_lock.cpp
     src/core/locus_session.cpp
     src/core/database.cpp
     src/core/file_watcher.cpp
+    src/core/global_config.cpp
+    src/core/global_paths.cpp
     src/core/memory_store.cpp
     src/index/indexer.cpp
     src/index/index_query.cpp

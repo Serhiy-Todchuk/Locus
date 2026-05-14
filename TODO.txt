@@ -1,33 +1,27 @@
 - Create an app icon
 - sample.docx has no heading
-- open workspace folder, open global locus folder menu items.
-- break down settings to global and workspace. Same with MCP, etc.?
-- We have all settings local per workspace. We should have global settings which, when new workspace is being opened, should be used as a "template" for new local workspace settings. In the settings panel only local workspace settings should be editabe. Also there could be some settings that are global only, and some settings that are local only exclusivelly if needed. Let's go through every setting we have and decide which one were t settle. Make a table [SettingName][GlobalBool][LocalBool][DefaultValue].
-- What do we do with MCP settings, prompts, global/local memory? what else should we move to global folder?
-- Another question: we have global folder at AppData\Roaming\Locus; But most of code agents have global folders at for example C:\Users\serhi\.aider; Shall we also move our global folder to C:\Users\serhi\.locus?
-- use monospace font for chat
-- merge statistics/activity log with chat window
+- use monospace font for chat?
+- merge statistics/activity log with chat window (decide after S5.G)
 - append prompt during running turn - queue next prompt
+- tool_approvals settings - shall we extend it to be able to prohibit each tool so it's description doesn't go into tools manifest/system prompt? "ask"|"auto"|"deny" + "hide"?
 - FastDebug
 - tokens per second counter per each turn?
-- Does Locus know how to work with MD files? Or this comes from LLM as given?
 - [Message truncated - exceeded 50,000 character limit]
-- GraphRAG
 - Can we remember window layout?
 
 
 
-Stream:
+Stream (bool):
 If set, partial message deltas will be sent. Tokens will be sent as data-only server-sent events (SSE) as they become available (JSON responses are prefixed by data:), with the stream terminated by a data: [DONE] message
-TemperatureЖ
+Temperature (0-1):
 The sampling temperature to use for text generation. The higher the temperature value is, the less deterministic the output text will be. It is not recommended to modify both temperature and top_p in the same call.
-Top-p:
+Top-p (0.01 - 1):
 The top-p sampling mass used for text generation. The top-p value determines the probability mass that is sampled at sampling time. For example, if top_p = 0.2, only the most likely tokens (summing to 0.2 cumulative probability) will be sampled. It is not recommended to modify both temperature and top_p in the same call.
-Frequency Penalty:
+Frequency Penalty (-2 - 2):
 Indicates how much to penalize new tokens based on their existing frequency in the text so far, decreasing model likelihood to repeat the same line verbatim.
-Presence Penalty:
+Presence Penalty (-2 - 2):
 Positive values penalize new tokens based on whether they appear in the text so far, increasing model likelihood to talk about new topics.
-Max tokens:
+Max tokens (16 - 16k):
 The maximum number of tokens to generate in any given call. Note that the model is not aware of this value, and generation will simply stop at the number of tokens specified.
-Stop:
+Stop (string):
 A string or a list of strings where the API will stop generating further tokens. The returned text will not contain the stop sequence.

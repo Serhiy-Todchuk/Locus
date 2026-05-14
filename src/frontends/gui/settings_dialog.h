@@ -47,10 +47,18 @@ private:
     wxPanel* build_capabilities_tab(wxWindow* parent);
 
     void on_ok(wxCommandEvent& evt);
+    void on_save_as_global_defaults(wxCommandEvent& evt);
     void refresh_mcp_list();
     void on_mcp_restart(wxCommandEvent& evt);
     void on_mcp_open_json(wxCommandEvent& evt);
     void on_mcp_select(wxListEvent& evt);
+
+    // S5.M -- snapshots the current dialog state into a WorkspaceConfig.
+    // Starts from `config_` so untouched fields survive; overwrites every
+    // field the dialog manages. Deliberately excludes MCP trust toggles
+    // (`mcp:*` approval keys) -- those are workspace-specific and the
+    // global-save path filters them out anyway.
+    WorkspaceConfig snapshot_dialog_state() const;
 
     WorkspaceConfig& config_;
     IToolRegistry&   tools_;

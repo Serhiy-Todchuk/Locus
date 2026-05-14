@@ -2,6 +2,8 @@
 
 #include "locus_accessible.h"
 #include "ui_names.h"
+#include "../../core/global_config.h"
+#include "../../core/global_paths.h"
 #include "../../llm/model_presets.h"
 #include "../../mcp/mcp_config.h"
 #include "../../mcp/mcp_manager.h"
@@ -99,8 +101,24 @@ SettingsDialog::SettingsDialog(wxWindow* parent, WorkspaceConfig& config,
 
     auto* main_sizer = new wxBoxSizer(wxVERTICAL);
     main_sizer->Add(notebook, 1, wxEXPAND | wxALL, 8);
-    main_sizer->Add(CreateStdDialogButtonSizer(wxOK | wxCANCEL),
-                    0, wxEXPAND | wxALL, 8);
+
+    // S5.M -- bottom button row: [Save as global defaults]  [spacer]  [OK] [Cancel].
+    // The global-save button captures the current dialog state as the template
+    // for any new workspace opened from this point on; it does NOT touch the
+    // current workspace's config (still gated by OK).
+    auto* button_row = new wxBoxSizer(wxHORIZONTAL);
+    auto* save_global_btn = new wxButton(this, wxID_ANY, "Save as global defaults");
+    save_global_btn->SetToolTip(
+        "Snapshot the current Settings values into ~/.locus/config.json. "
+        "Future workspaces will use them as their starting template. "
+        "Existing workspaces are not affected.");
+    save_global_btn->Bind(wxEVT_BUTTON,
+                          &SettingsDialog::on_save_as_global_defaults, this);
+    button_row->Add(save_global_btn, 0, wxALIGN_CENTER_VERTICAL);
+    button_row->AddStretchSpacer(1);
+    button_row->Add(CreateStdDialogButtonSizer(wxOK | wxCANCEL), 0,
+                    wxALIGN_CENTER_VERTICAL);
+    main_sizer->Add(button_row, 0, wxEXPAND | wxALL, 8);
 
     SetSizer(main_sizer);
 
@@ -860,6 +878,110 @@ void SettingsDialog::on_ok(wxCommandEvent& evt)
     }
 
     evt.Skip();
+}
+
+// ---------------------------------------------------------------------------
+// S5.M -- Global defaults snapshot
+// ---------------------------------------------------------------------------
+
+WorkspaceConfig SettingsDialog::snapshot_dialog_state() const
+{
+    // Start from the live workspace config so any fields the dialog doesn't
+    // manage (memory.*, agent.*, git.*) round-trip through the global file.
+    WorkspaceConfig out = config_;
+
+    out.llm_endpoint      = endpoint_ctrl_->GetValue().ToStdString();
+    out.llm_model         = model_ctrl_->GetValue().ToStdString();
+    out.llm_temperature   = temperature_ctrl_->GetValue();
+    out.llm_context_limit = context_ctrl_->GetValue();
+    out.llm_max_tokens    = max_tokens_ctrl_->GetValue();
+
+    if (tool_format_ctrl_) {
+        switch (tool_format_ctrl_->GetSelection()) {
+            case 0: out.llm_tool_format = "auto";   break;
+            case 1: out.llm_tool_format = "openai"; break;
+            case 2: out.llm_tool_format = "qwen";   break;
+            case 3: out.llm_tool_format = "claude"; break;
+            case 4: out.llm_tool_format = "none";   break;
+        }
+    }
+
+    if (top_p_ctrl_)          out.llm_top_p          = top_p_ctrl_->GetValue();
+    if (top_k_ctrl_)          out.llm_top_k          = top_k_ctrl_->GetValue();
+    if (min_p_ctrl_)          out.llm_min_p          = min_p_ctrl_->GetValue();
+    if (repeat_penalty_ctrl_) out.llm_repeat_penalty = repeat_penalty_ctrl_->GetValue();
+
+    // exclude_patterns -- parse from multi-line text control.
+    {
+        std::vector<std::string> patterns;
+        std::string text = exclude_ctrl_->GetValue().ToStdString();
+        std::istringstream iss(text);
+        std::string line;
+        while (std::getline(iss, line)) {
+            auto start = line.find_first_not_of(" \t\r");
+            if (start == std::string::npos) continue;
+            auto end = line.find_last_not_of(" \t\r");
+            patterns.push_back(line.substr(start, end - start + 1));
+        }
+        out.exclude_patterns = std::move(patterns);
+    }
+
+    out.semantic_search_enabled = semantic_enabled_ctrl_->GetValue();
+    out.embedding_model         = semantic_model_ctrl_->GetValue().ToStdString();
+    out.reranker_enabled        = reranker_enabled_ctrl_->GetValue();
+    out.reranker_model          = reranker_model_ctrl_->GetValue().ToStdString();
+    out.reranker_top_k          = reranker_top_k_ctrl_->GetValue();
+
+    if (cap_bg_)       out.capabilities.background_processes = cap_bg_->IsChecked();
+    if (cap_semantic_) out.capabilities.semantic_search      = cap_semantic_->IsChecked();
+    if (cap_code_)     out.capabilities.code_aware_search    = cap_code_->IsChecked();
+    if (cap_memory_)   out.capabilities.memory_bank          = cap_memory_->IsChecked();
+    if (cap_web_)      out.capabilities.web_retrieval        = cap_web_->IsChecked();
+
+    // Keep legacy mirrors in sync with the canonical capability bools.
+    out.memory_enabled = out.capabilities.memory_bank;
+
+    // Tool approvals -- one entry per per-tool dropdown that differs from the
+    // tool's default. mcp:* trust keys deliberately omitted; save_global_config
+    // filters them anyway, and the dialog manages them through a separate UI.
+    std::unordered_map<std::string, ToolApprovalPolicy> approvals;
+    for (size_t i = 0; i < tool_names_.size(); ++i) {
+        int sel = approval_choices_[i]->GetSelection();
+        ToolApprovalPolicy chosen = ToolApprovalPolicy::ask;
+        if (sel == 1) chosen = ToolApprovalPolicy::auto_approve;
+        else if (sel == 2) chosen = ToolApprovalPolicy::deny;
+        ITool* tool = tools_.find(tool_names_[i]);
+        ToolApprovalPolicy default_policy = tool ? tool->approval_policy()
+                                                 : ToolApprovalPolicy::ask;
+        if (chosen != default_policy)
+            approvals[tool_names_[i]] = chosen;
+    }
+    out.tool_approval_policies = std::move(approvals);
+
+    return out;
+}
+
+void SettingsDialog::on_save_as_global_defaults(wxCommandEvent& /*evt*/)
+{
+    if (wxMessageBox(
+            "Save the current Settings values as global defaults?\n\n"
+            "These values will be used as the template for any new workspace "
+            "you open from this point on. Existing workspaces are not affected.",
+            "Save as global defaults",
+            wxYES_NO | wxICON_QUESTION, this) != wxYES) {
+        return;
+    }
+
+    GlobalConfig snap = snapshot_dialog_state();
+    if (save_global_config(snap)) {
+        wxMessageBox(
+            wxString::Format("Saved to %s.",
+                wxString::FromUTF8(global_paths::config_path().string())),
+            "Locus", wxOK | wxICON_INFORMATION, this);
+    } else {
+        wxMessageBox("Failed to save global defaults. Check the log for details.",
+                     "Locus", wxOK | wxICON_ERROR, this);
+    }
 }
 
 // ---------------------------------------------------------------------------

@@ -34,6 +34,7 @@ add_executable(locus_tests
     test_model_presets.cpp
     test_ansi_parser.cpp
     test_capability_toggles.cpp
+    test_global_config.cpp
     retrieval_eval/metrics.cpp
     support/shared_embedder.cpp
 )

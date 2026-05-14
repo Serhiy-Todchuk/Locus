@@ -1,4 +1,5 @@
 #include "mcp/mcp_config.h"
+#include "core/global_paths.h"
 
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
@@ -18,21 +19,8 @@ fs::path McpConfigLoader::workspace_config_path(const fs::path& workspace_root)
 
 fs::path McpConfigLoader::global_config_path()
 {
-#ifdef _WIN32
-    // %APPDATA% is set on every interactive Windows session; service contexts
-    // may not have it, in which case we fall back to %USERPROFILE%.
-    if (const char* appdata = std::getenv("APPDATA"); appdata && *appdata)
-        return fs::path(appdata) / "Locus" / "mcp.json";
-    if (const char* userprofile = std::getenv("USERPROFILE"); userprofile && *userprofile)
-        return fs::path(userprofile) / "AppData" / "Roaming" / "Locus" / "mcp.json";
-    return {};
-#else
-    if (const char* xdg = std::getenv("XDG_CONFIG_HOME"); xdg && *xdg)
-        return fs::path(xdg) / "Locus" / "mcp.json";
-    if (const char* home = std::getenv("HOME"); home && *home)
-        return fs::path(home) / ".config" / "Locus" / "mcp.json";
-    return {};
-#endif
+    // S5.M -- resolves to ~/.locus/mcp.json (post-migration).
+    return global_paths::mcp_config_path();
 }
 
 std::vector<McpServerConfig> McpConfigLoader::parse_json(const std::string& body)

@@ -1,3 +1,4 @@
+#include "core/global_paths.h"
 #include "core/workspace.h"
 #include "core/locus_session.h"
 #include "core/watcher_pump.h"
@@ -198,6 +199,10 @@ int main(int argc, char* argv[])
     }
 #endif
     std::setlocale(LC_ALL, ".UTF-8");
+
+    // S5.M -- one-shot migration of legacy global resources from
+    // %APPDATA%\Roaming\Locus (and XDG analogues) to ~/.locus/. Idempotent.
+    locus::global_paths::migrate_legacy_global_dir_once();
 
     CliArgs args = parse_args(argc, argv);
 

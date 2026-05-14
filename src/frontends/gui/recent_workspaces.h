@@ -1,5 +1,7 @@
 #pragma once
 
+#include "core/global_paths.h"
+
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 
@@ -12,30 +14,20 @@
 namespace locus {
 
 // Manages a list of recently opened workspace paths.
-// Stored as a JSON array in AppData/Roaming/Locus/recent_workspaces.json.
+// Stored as a JSON array in ~/.locus/recent_workspaces.json (S5.M).
 class RecentWorkspaces {
 public:
     static constexpr int k_max_entries = 10;
 
-    // Returns the global config directory (e.g. AppData/Roaming/Locus).
+    // Returns the global config directory (~/.locus/).
     static std::filesystem::path config_dir()
     {
-        namespace fs = std::filesystem;
-#ifdef _WIN32
-        const char* appdata = std::getenv("APPDATA");
-        if (appdata)
-            return fs::path(appdata) / "Locus";
-#else
-        const char* home = std::getenv("HOME");
-        if (home)
-            return fs::path(home) / ".config" / "locus";
-#endif
-        return fs::current_path() / ".locus-global";
+        return global_paths::global_dir();
     }
 
     static std::filesystem::path file_path()
     {
-        return config_dir() / "recent_workspaces.json";
+        return global_paths::recent_workspaces_path();
     }
 
     // Load the recent list from disk. Returns empty vector on any error.

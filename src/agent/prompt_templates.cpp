@@ -1,4 +1,5 @@
 #include "prompt_templates.h"
+#include "core/global_paths.h"
 
 #include <spdlog/spdlog.h>
 
@@ -237,30 +238,8 @@ std::string PromptTemplateRegistry::substitute(
 
 fs::path PromptTemplateRegistry::default_global_dir()
 {
-#ifdef _WIN32
-    // %APPDATA%/Locus/prompts -- same root the rest of Locus's settings live.
-    const char* appdata = std::getenv("APPDATA");
-    if (appdata && *appdata) {
-        return fs::path(appdata) / "Locus" / "prompts";
-    }
-    // Fallback: %USERPROFILE%/AppData/Roaming/Locus/prompts
-    const char* user_profile = std::getenv("USERPROFILE");
-    if (user_profile && *user_profile) {
-        return fs::path(user_profile) / "AppData" / "Roaming" / "Locus" / "prompts";
-    }
-    return {};
-#else
-    // XDG first, then ~/.locus/prompts.
-    const char* xdg = std::getenv("XDG_CONFIG_HOME");
-    if (xdg && *xdg) {
-        return fs::path(xdg) / "locus" / "prompts";
-    }
-    const char* home = std::getenv("HOME");
-    if (home && *home) {
-        return fs::path(home) / ".locus" / "prompts";
-    }
-    return {};
-#endif
+    // S5.M -- resolves to ~/.locus/prompts (post-migration).
+    return global_paths::prompts_dir();
 }
 
 // -- Registry -----------------------------------------------------------------

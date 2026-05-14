@@ -1,11 +1,19 @@
 #include "menu_controller.h"
 #include "recent_workspaces.h"
 
+#include "../../core/global_config.h"
+#include "../../core/global_paths.h"
+
 #include <wx/aboutdlg.h>
 #include <wx/dirdlg.h>
+#include <wx/msgdlg.h>
 #include <wx/stdpaths.h>
+#include <wx/utils.h>
+
+#include <spdlog/spdlog.h>
 
 #include <algorithm>
+#include <filesystem>
 #include <utility>
 
 namespace locus {
@@ -19,6 +27,7 @@ namespace {
         ID_MENU_SAVE_SESSION,
         ID_MENU_OPEN_WORKSPACE,
         ID_MENU_SETTINGS,
+        ID_MENU_OPEN_GLOBAL_CONFIG,
         ID_MENU_VIEW_FILES,
         ID_MENU_VIEW_ACTIVITY,
         ID_MENU_VIEW_TERMINAL,
@@ -45,6 +54,7 @@ void MenuController::install()
     file_menu->AppendSubMenu(recent_menu_, "Recent Workspaces");
 
     file_menu->Append(ID_MENU_SETTINGS,       "Settings...\tCtrl+,");
+    file_menu->Append(ID_MENU_OPEN_GLOBAL_CONFIG, "Open Global Config...");
     file_menu->AppendSeparator();
     file_menu->Append(ID_MENU_QUIT, "Quit\tCtrl+Q");
 
@@ -113,6 +123,38 @@ void MenuController::install()
     frame_->Bind(wxEVT_MENU, [this](wxCommandEvent&) {
         if (hooks_.on_settings) hooks_.on_settings();
     }, ID_MENU_SETTINGS);
+
+    // S5.M -- File > Open Global Config. Creates ~/.locus/config.json with
+    // compiled defaults if missing, then shells out to the OS's default
+    // handler for .json (typically VS Code / Notepad++ / etc.).
+    frame_->Bind(wxEVT_MENU, [this](wxCommandEvent&) {
+        auto path = global_paths::config_path();
+        if (path.empty()) {
+            wxMessageBox("Could not resolve the global config path "
+                         "(no HOME / USERPROFILE).",
+                         "Locus", wxOK | wxICON_ERROR, frame_);
+            return;
+        }
+
+        std::error_code ec;
+        if (!std::filesystem::exists(path, ec)) {
+            // Seed with compiled defaults so the user has something to edit.
+            if (!save_global_config(GlobalConfig{})) {
+                wxMessageBox("Failed to create the global config file. "
+                             "Check the log for details.",
+                             "Locus", wxOK | wxICON_ERROR, frame_);
+                return;
+            }
+        }
+
+        wxString url = wxString::FromUTF8(path.string());
+        if (!wxLaunchDefaultApplication(url)) {
+            wxMessageBox(wxString::Format(
+                "Could not open %s in your default editor. "
+                "Open it manually to edit.", url),
+                "Locus", wxOK | wxICON_WARNING, frame_);
+        }
+    }, ID_MENU_OPEN_GLOBAL_CONFIG);
 
     frame_->Bind(wxEVT_MENU, [this](wxCommandEvent& e) {
         if (hooks_.on_toggle_files_pane) hooks_.on_toggle_files_pane(e.IsChecked());
