@@ -357,23 +357,14 @@ void LocusFrame::setup_aui_layout()
             return false;
         });
 
-    // Tool approval panel — slides in when a tool call needs approval.
-    approval_panel_ = new ToolApprovalPanel(this,
-        [this](const std::string& call_id, ToolDecision decision,
-               const nlohmann::json& modified_args) {
-            agent_.tool_decision(call_id, decision, modified_args);
-            // Panel's own dismiss() only hides the widget. AUI tracks pane
-            // visibility separately -- without this, the pane caption +
-            // frame keep drawing around the hidden content until the next
-            // turn-complete event fires the auto-cleanup path.
-            auto& pane = aui_.GetPane("approval");
-            if (pane.IsOk() && pane.IsShown()) {
-                pane.Hide();
-                aui_.Update();
-            }
-        });
+    // S5.Z #6 -- the tool-approval surface is a self-dismissing modal
+    // (ToolApprovalDialog) constructed per pending call inside
+    // on_agent_tool_pending; no permanent panel / AUI pane is owned by the
+    // frame. The dialog blocks the agent thread (already condvar-blocked in
+    // ToolDispatcher) until the user decides; X / Alt+F4 routes to a reject
+    // so the dispatcher never deadlocks.
 
-    // Right detail panel — Activity log (S2.2).
+    // Right detail panel -- Activity log (S2.2).
     activity_panel_ = new ActivityPanel(this, agent_);
 
     // Terminal panel (S5.B). Hidden by default; View menu toggles it.
@@ -391,11 +382,7 @@ void LocusFrame::setup_aui_layout()
         .Name("chat").Caption("Chat")
         .CenterPane());
 
-    aui_.AddPane(approval_panel_, wxAuiPaneInfo()
-        .Name("approval").Caption("Tool Approval")
-        .Bottom().MinSize(-1, 180).BestSize(-1, 220)
-        .CloseButton(false).PinButton(false)
-        .Hide());  // shown dynamically when a tool call needs approval
+    // S5.Z #6 -- approval pane removed; ToolApprovalDialog (modal) replaces it.
 
     aui_.AddPane(activity_panel_, wxAuiPaneInfo()
         .Name("activity").Caption("Activity")
@@ -593,7 +580,7 @@ void LocusFrame::on_agent_tool_pending(wxThreadEvent& evt)
         }
 
         if (tool == "ask_user") {
-            // Pop-up modal — disappears immediately after answer/cancel.
+            // Pop-up modal -- disappears immediately after answer/cancel.
             std::string question = args.value("question", "");
             AskUserDialog dlg(this, question);
             if (dlg.ShowModal() == wxID_OK) {
@@ -604,11 +591,18 @@ void LocusFrame::on_agent_tool_pending(wxThreadEvent& evt)
                 agent_.tool_decision(call_id, ToolDecision::reject, {});
             }
         } else {
-            // Show approval panel and update AUI.
-            approval_panel_->show_tool_call(call_id, tool, args, preview,
-                                            safety_warnings);
-            aui_.GetPane("approval").Show();
-            aui_.Update();
+            // S5.Z #6 -- modal approval dialog. Blocks until the user
+            // decides; the agent thread is already condvar-blocked in
+            // ToolDispatcher waiting on tool_decision, so wedging the UI
+            // here doesn't lose any background progress. ToolApprovalDialog
+            // funnels every exit path (button / Esc / Enter / X / Alt+F4)
+            // through agent_.tool_decision so the dispatcher always wakes.
+            ToolApprovalDialog::run(this, call_id, tool, args, preview,
+                safety_warnings,
+                [this](const std::string& cid, ToolDecision d,
+                       const nlohmann::json& modified) {
+                    agent_.tool_decision(cid, d, modified);
+                });
         }
     } catch (const std::exception& ex) {
         spdlog::warn("Failed to parse tool_pending payload: {}", ex.what());
@@ -617,12 +611,8 @@ void LocusFrame::on_agent_tool_pending(wxThreadEvent& evt)
 
 void LocusFrame::on_agent_tool_result(wxThreadEvent& evt)
 {
-    // Hide approval panel (tool was executed).
-    if (approval_panel_->IsShown()) {
-        approval_panel_->dismiss();
-        aui_.GetPane("approval").Hide();
-        aui_.Update();
-    }
+    // S5.Z #6 -- no docked approval panel to hide; the modal dialog already
+    // tore itself down via EndModal in send_decision when the user decided.
 
     try {
         // Same UTF-8 round-trip discipline as on_agent_tool_pending above --
@@ -641,12 +631,8 @@ void LocusFrame::on_agent_turn_complete(wxThreadEvent& /*evt*/)
     SetStatusText("Ready", 0);
     if (tray_) tray_->set_state(LocusTray::State::idle);
 
-    // Ensure approval panel is hidden.
-    if (approval_panel_->IsShown()) {
-        approval_panel_->dismiss();
-        aui_.GetPane("approval").Hide();
-        aui_.Update();
-    }
+    // S5.Z #6 -- no approval panel to dismiss; ToolApprovalDialog cleans up
+    // its own modal when the user decides.
 
     chat_panel_->on_turn_complete();
 }

@@ -10,7 +10,7 @@
 #include "settings_dialog.h"
 #include "ask_user_dialog.h"
 #include "terminal_panel.h"
-#include "tool_approval_panel.h"
+#include "tool_approval_dialog.h"
 #include "wx_frontend.h"
 #include "../../agent/agent_core.h"
 #include "../../core/workspace.h"
@@ -116,7 +116,8 @@ private:
     // Pane panels.
     FileTreePanel*     file_tree_panel_ = nullptr;  // file tree + index status (S1.6)
     ChatPanel*         chat_panel_     = nullptr;   // chat UI (S1.3)
-    ToolApprovalPanel* approval_panel_ = nullptr;   // tool approval (S1.4)
+    // Tool approval is a self-dismissing modal (ToolApprovalDialog) -- no
+    // owned panel field. S5.Z #6 removed the always-docked AUI pane.
     ActivityPanel*     activity_panel_ = nullptr;   // activity log (S2.2)
     TerminalPanel*     terminal_panel_ = nullptr;   // live terminal (S5.B)
 

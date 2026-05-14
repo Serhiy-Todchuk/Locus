@@ -1,4 +1,4 @@
-#include "tool_approval_panel.h"
+#include "tool_approval_dialog.h"
 #include "theme.h"
 
 #include <spdlog/spdlog.h>
@@ -14,12 +14,33 @@ enum {
     ID_BTN_MODIFY,
 };
 
-ToolApprovalPanel::ToolApprovalPanel(wxWindow* parent,
-                                     ToolDecisionCallback on_decision)
-    : wxPanel(parent, wxID_ANY)
+void ToolApprovalDialog::run(wxWindow* parent,
+                             const std::string& call_id,
+                             const std::string& tool_name,
+                             const nlohmann::json& args,
+                             const std::string& preview,
+                             const std::vector<std::string>& safety_warnings,
+                             ToolDecisionCallback on_decision)
+{
+    ToolApprovalDialog dlg(parent, std::move(on_decision));
+    dlg.show_tool_call(call_id, tool_name, args, preview, safety_warnings);
+    dlg.ShowModal();
+    // Defensive: if neither a button nor the close handler fired (shouldn't
+    // happen -- ShowModal can only exit through one of them), still unblock
+    // the agent via reject so we never deadlock the dispatcher.
+    if (!dlg.decision_sent_ && dlg.on_decision_) {
+        dlg.on_decision_(dlg.call_id_, ToolDecision::reject, {});
+    }
+}
+
+ToolApprovalDialog::ToolApprovalDialog(wxWindow* parent,
+                                       ToolDecisionCallback on_decision)
+    : wxDialog(parent, wxID_ANY, "Tool Approval",
+               wxDefaultPosition, wxSize(640, 460),
+               wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER)
     , on_decision_(std::move(on_decision))
 {
-    // Match the OS window colour so the panel blends with the dark (or light) frame.
+    // Match the OS window colour so the dialog blends with the dark (or light) frame.
     SetBackgroundColour(theme::panel_bg());
     create_controls();
 
@@ -45,14 +66,15 @@ ToolApprovalPanel::ToolApprovalPanel(wxWindow* parent,
 
     SetSizer(main_sizer_);
 
-    // Start hidden.
-    Hide();
-
-    // Global key handler for this panel.
-    Bind(wxEVT_CHAR_HOOK, &ToolApprovalPanel::on_key, this);
+    // Global key handler for this dialog.
+    Bind(wxEVT_CHAR_HOOK, &ToolApprovalDialog::on_key, this);
+    // Close-via-X / Alt+F4: route through send_decision(reject) so the agent
+    // condvar in ToolDispatcher releases instead of leaving the session
+    // wedged. evt.Skip() lets wxDialog's default handler call EndModal.
+    Bind(wxEVT_CLOSE_WINDOW, &ToolApprovalDialog::on_close, this);
 }
 
-void ToolApprovalPanel::create_controls()
+void ToolApprovalDialog::create_controls()
 {
     // Tool name badge.
     name_label_ = new wxStaticText(this, wxID_ANY, "");
@@ -70,7 +92,7 @@ void ToolApprovalPanel::create_controls()
         warning_label_->SetFont(wfont);
         // Dark amber on a subtly tinted background so it reads as warn,
         // not error. The bg colour change requires SetBackgroundStyle
-        // before the panel is shown for theme-aware repaint.
+        // before the dialog is shown for theme-aware repaint.
         warning_label_->SetForegroundColour(wxColour(120, 60, 0));
         warning_label_->SetBackgroundColour(wxColour(255, 244, 200));
     }
@@ -80,9 +102,9 @@ void ToolApprovalPanel::create_controls()
     preview_label_ = new wxStaticText(this, wxID_ANY, "");
     preview_label_->SetForegroundColour(theme::muted_fg());
 
-    // JSON args — Scintilla with JSON lexer.
+    // JSON args -- Scintilla with JSON lexer.
     args_stc_ = new wxStyledTextCtrl(this, wxID_ANY,
-        wxDefaultPosition, wxSize(-1, 150));
+        wxDefaultPosition, wxSize(-1, 200));
     args_stc_->SetLexer(wxSTC_LEX_JSON);
     args_stc_->SetReadOnly(true);
     args_stc_->SetWrapMode(wxSTC_WRAP_WORD);
@@ -101,7 +123,7 @@ void ToolApprovalPanel::create_controls()
     args_stc_->SetCaretForeground(theme::caret_fg());
     args_stc_->SetSelBackground(true, theme::selection_bg());
 
-    // JSON syntax colours — two palettes so tokens read well on either theme.
+    // JSON syntax colours -- two palettes so tokens read well on either theme.
     const wxColour c_number   = dark ? wxColour(181, 206, 168) : wxColour(0, 128, 128);
     const wxColour c_string   = dark ? wxColour(214, 157, 133) : wxColour(163, 21, 21);
     const wxColour c_property = dark ? wxColour(156, 220, 254) : wxColour(0, 0, 180);
@@ -144,21 +166,25 @@ void ToolApprovalPanel::create_controls()
     btn_reject_->SetBackgroundColour(wxColour(244, 67, 54));
     btn_reject_->SetForegroundColour(*wxWHITE);
 
-    btn_approve_->Bind(wxEVT_BUTTON, &ToolApprovalPanel::on_approve, this);
-    btn_reject_->Bind(wxEVT_BUTTON, &ToolApprovalPanel::on_reject, this);
-    btn_modify_->Bind(wxEVT_BUTTON, &ToolApprovalPanel::on_modify, this);
+    btn_approve_->Bind(wxEVT_BUTTON, &ToolApprovalDialog::on_approve, this);
+    btn_reject_->Bind(wxEVT_BUTTON, &ToolApprovalDialog::on_reject, this);
+    btn_modify_->Bind(wxEVT_BUTTON, &ToolApprovalDialog::on_modify, this);
 }
 
-void ToolApprovalPanel::show_tool_call(const std::string& call_id,
-                                       const std::string& tool_name,
-                                       const nlohmann::json& args,
-                                       const std::string& preview,
-                                       const std::vector<std::string>& safety_warnings)
+void ToolApprovalDialog::show_tool_call(const std::string& call_id,
+                                        const std::string& tool_name,
+                                        const nlohmann::json& args,
+                                        const std::string& preview,
+                                        const std::vector<std::string>& safety_warnings)
 {
     call_id_       = call_id;
     tool_name_     = tool_name;
     original_args_ = args;
     editing_       = false;
+
+    // Title carries the tool name so the user can tell calls apart in the
+    // taskbar / Alt+Tab view without opening the window.
+    SetTitle(wxString::FromUTF8("Tool Approval - " + tool_name));
 
     if (tool_name == "ask_user") {
         layout_ask_user();
@@ -187,9 +213,8 @@ void ToolApprovalPanel::show_tool_call(const std::string& call_id,
         warning_label_->Hide();
     }
 
-    Show();
     Layout();
-    GetParent()->Layout();
+    CentreOnParent();
 
     // Focus the right control.
     if (tool_name == "ask_user")
@@ -198,21 +223,15 @@ void ToolApprovalPanel::show_tool_call(const std::string& call_id,
         btn_approve_->SetFocus();
 }
 
-void ToolApprovalPanel::dismiss()
-{
-    Hide();
-    GetParent()->Layout();
-}
-
-void ToolApprovalPanel::layout_normal()
+void ToolApprovalDialog::layout_normal()
 {
     // Show: args STC, all three buttons. Hide: ask_input.
     args_stc_->Show();
     ask_input_->Hide();
 
-    // S4.A: edit_file / multi_edit_file render as a colored unified diff
-    // instead of raw JSON, so the user can approve at a glance. Modify mode
-    // flips back to JSON via on_modify() → render_json_view().
+    // S4.A: edit_file renders as a colored unified diff instead of raw JSON,
+    // so the user can approve at a glance. Modify mode flips back to JSON via
+    // on_modify() -> render_json_view().
     if (!render_diff_view())
         render_json_view();
 
@@ -232,7 +251,7 @@ enum : int {
     kStyleDiffHeader  = 43,
 };
 
-bool ToolApprovalPanel::render_diff_view()
+bool ToolApprovalDialog::render_diff_view()
 {
     if (tool_name_ != "edit_file") return false;
 
@@ -249,7 +268,7 @@ bool ToolApprovalPanel::render_diff_view()
                              e.value("replace_all", false)});
         }
     }
-    if (edits.empty()) return false;  // malformed — fall back to raw JSON
+    if (edits.empty()) return false;  // malformed -- fall back to raw JSON
 
     // Switch lexer off so only our hand-applied styling drives colour.
     args_stc_->SetReadOnly(false);
@@ -296,7 +315,7 @@ bool ToolApprovalPanel::render_diff_view()
     int idx = 0;
     for (const auto& e : edits) {
         std::string header = "@@ edit " + std::to_string(++idx) + "/" +
-                             std::to_string(edits.size()) + " — " + path;
+                             std::to_string(edits.size()) + " -- " + path;
         if (e.all) header += "  [replace_all]";
         push_line(header, kStyleDiffHeader);
 
@@ -322,7 +341,7 @@ bool ToolApprovalPanel::render_diff_view()
 
     args_stc_->SetText(wxString::FromUTF8(text.c_str()));
     args_stc_->StartStyling(0);
-    // Walk contiguous runs of the same style — SetStyling applies one style
+    // Walk contiguous runs of the same style -- SetStyling applies one style
     // over N bytes, so we issue one call per run.
     int run_start = 0;
     for (int i = 1; i <= static_cast<int>(styles.size()); ++i) {
@@ -336,7 +355,7 @@ bool ToolApprovalPanel::render_diff_view()
     return true;
 }
 
-void ToolApprovalPanel::render_json_view()
+void ToolApprovalDialog::render_json_view()
 {
     // Restore the JSON lexer + the pretty-printed args.
     args_stc_->SetReadOnly(false);
@@ -345,7 +364,7 @@ void ToolApprovalPanel::render_json_view()
     args_stc_->SetReadOnly(true);
 }
 
-void ToolApprovalPanel::layout_ask_user()
+void ToolApprovalDialog::layout_ask_user()
 {
     // Show: ask_input. Hide: args STC, modify button.
     args_stc_->Hide();
@@ -365,46 +384,42 @@ void ToolApprovalPanel::layout_ask_user()
 // Button handlers
 // ---------------------------------------------------------------------------
 
-void ToolApprovalPanel::on_approve(wxCommandEvent& /*evt*/)
+void ToolApprovalDialog::on_approve(wxCommandEvent& /*evt*/)
 {
     if (tool_name_ == "ask_user") {
         // Pack the user's response into modified args.
         std::string response = ask_input_->GetValue().ToStdString(wxConvUTF8);
         nlohmann::json modified = original_args_;
         modified["response"] = response;
-        if (on_decision_)
-            on_decision_(call_id_, ToolDecision::modify, modified);
+        send_decision(ToolDecision::modify, modified);
     } else if (editing_) {
         // Parse edited JSON.
         try {
             auto modified = nlohmann::json::parse(args_stc_->GetText().ToStdString());
-            if (on_decision_)
-                on_decision_(call_id_, ToolDecision::modify, modified);
+            send_decision(ToolDecision::modify, modified);
         } catch (const nlohmann::json::parse_error& e) {
             wxMessageBox(wxString::Format("Invalid JSON: %s", e.what()),
                          "Parse Error", wxOK | wxICON_WARNING, this);
             return;  // don't dismiss
         }
     } else {
-        if (on_decision_)
-            on_decision_(call_id_, ToolDecision::approve, {});
+        send_decision(ToolDecision::approve);
     }
-    dismiss();
 }
 
-void ToolApprovalPanel::on_reject(wxCommandEvent& /*evt*/)
+void ToolApprovalDialog::on_reject(wxCommandEvent& /*evt*/)
 {
     send_decision(ToolDecision::reject);
 }
 
-void ToolApprovalPanel::on_modify(wxCommandEvent& /*evt*/)
+void ToolApprovalDialog::on_modify(wxCommandEvent& /*evt*/)
 {
     if (tool_name_ == "ask_user") return;  // no modify for ask_user
 
     editing_ = !editing_;
 
     if (editing_) {
-        // Entering edit mode — always show JSON so the user can tweak args.
+        // Entering edit mode -- always show JSON so the user can tweak args.
         render_json_view();
         args_stc_->SetReadOnly(false);
         btn_modify_->SetLabel("Cancel Edit");
@@ -413,14 +428,14 @@ void ToolApprovalPanel::on_modify(wxCommandEvent& /*evt*/)
     } else {
         btn_modify_->SetLabel("Modify (M)");
         btn_approve_->SetLabel("Approve (Enter)");
-        // Leaving edit mode — go back to the preferred display: diff for edit
+        // Leaving edit mode -- go back to the preferred display: diff for edit
         // tools, JSON for everything else.
         if (!render_diff_view())
             render_json_view();
     }
 }
 
-void ToolApprovalPanel::on_key(wxKeyEvent& evt)
+void ToolApprovalDialog::on_key(wxKeyEvent& evt)
 {
     int key = evt.GetKeyCode();
 
@@ -461,11 +476,28 @@ void ToolApprovalPanel::on_key(wxKeyEvent& evt)
     }
 }
 
-void ToolApprovalPanel::send_decision(ToolDecision decision)
+void ToolApprovalDialog::on_close(wxCloseEvent& evt)
 {
+    // X / Alt+F4 / system close. The agent thread is condvar-blocked in
+    // ToolDispatcher waiting for tool_decision -- we MUST fire one before
+    // letting the modal loop end, otherwise the session is wedged.
+    if (!decision_sent_) {
+        decision_sent_ = true;
+        if (on_decision_)
+            on_decision_(call_id_, ToolDecision::reject, {});
+    }
+    // Let wxDialog's default close handler call EndModal so ShowModal returns.
+    evt.Skip();
+}
+
+void ToolApprovalDialog::send_decision(ToolDecision decision,
+                                       const nlohmann::json& modified_args)
+{
+    if (decision_sent_) return;  // defensive: double-click / re-entry
+    decision_sent_ = true;
     if (on_decision_)
-        on_decision_(call_id_, decision, {});
-    dismiss();
+        on_decision_(call_id_, decision, modified_args);
+    EndModal(wxID_OK);
 }
 
 } // namespace locus

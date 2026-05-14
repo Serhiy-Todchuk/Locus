@@ -2,6 +2,9 @@
 - sample.docx has no heading
 - open workspace folder, open global locus folder menu items.
 - break down settings to global and workspace. Same with MCP, etc.?
+- We have all settings local per workspace. We should have global settings which, when new workspace is being opened, should be used as a "template" for new local workspace settings. In the settings panel only local workspace settings should be editabe. Also there could be some settings that are global only, and some settings that are local only exclusivelly if needed. Let's go through every setting we have and decide which one were t settle. Make a table [SettingName][GlobalBool][LocalBool][DefaultValue].
+- What do we do with MCP settings, prompts, global/local memory? what else should we move to global folder?
+- Another question: we have global folder at AppData\Roaming\Locus; But most of code agents have global folders at for example C:\Users\serhi\.aider; Shall we also move our global folder to C:\Users\serhi\.locus?
 - use monospace font for chat
 - merge statistics/activity log with chat window
 - append prompt during running turn - queue next prompt

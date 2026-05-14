@@ -10,7 +10,7 @@
   in this dialog session; declining snaps the dropdown back.
 - **Task 5:** When `run_command` / `run_command_bg` is auto-approved, calls
   whose command string references paths *outside* the workspace re-trigger
-  the approval modal. The approval panel renders a yellow "WARNING:
+  the approval modal. The approval modal renders a yellow "WARNING:
   command references paths outside the workspace:" banner listing the
   offending tokens.
 
@@ -48,7 +48,7 @@
 
 **Expected**
 
-- The approval panel DOES open (Auto-Approve was downgraded to Ask).
+- The approval modal DOES open (Auto-Approve was downgraded to Ask).
 - Above the JSON args there is a bold yellow banner reading:
 
   ```
@@ -58,7 +58,7 @@
 
 - You can still click Approve / Modify / Reject. The warning is a
   prompt for review, not a refusal.
-- Hard fail: if the approval panel doesn't open at all (call runs
+- Hard fail: if the approval modal doesn't open at all (call runs
   silently), the dispatcher hook in `ToolDispatcher::dispatch` regressed.
 
 ---

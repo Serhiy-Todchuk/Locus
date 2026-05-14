@@ -444,7 +444,7 @@ add_executable(locus_gui WIN32
     src/frontends/gui/chat_panel.cpp
     src/frontends/gui/slash_popup.cpp
     src/frontends/gui/mention_popup.cpp
-    src/frontends/gui/tool_approval_panel.cpp
+    src/frontends/gui/tool_approval_dialog.cpp
     src/frontends/gui/ask_user_dialog.cpp
     src/frontends/gui/compaction_dialog.cpp
     src/frontends/gui/file_tree_panel.cpp
