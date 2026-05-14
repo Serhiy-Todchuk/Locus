@@ -1,5 +1,6 @@
 #include "terminal_panel.h"
 #include "locus_accessible.h"
+#include "theme.h"
 #include "ui_names.h"
 
 #include "../../tools/process_registry.h"
@@ -90,6 +91,8 @@ TerminalPanel::TerminalPanel(wxWindow* parent, ProcessSinkBroker* broker,
     sync->id      = k_sync_id;
     sync->command = "(no command yet)";
     sync->page    = new wxPanel(notebook_, wxID_ANY);
+    sync->page->SetBackgroundColour(
+        theme::is_dark() ? wxColour(30, 30, 30) : *wxWHITE);
     sync->stc     = new wxStyledTextCtrl(sync->page, wxID_ANY);
     auto* sync_sizer = new wxBoxSizer(wxVERTICAL);
     sync_sizer->Add(sync->stc, 1, wxEXPAND);
@@ -215,6 +218,10 @@ TerminalPanel::Tab* TerminalPanel::ensure_tab(int id, const std::string& command
     tab->id      = id;
     tab->command = command;
     tab->page    = new wxPanel(notebook_, wxID_ANY);
+    // Match the STC's theme bg so any gap (during resize, scrollbar gutter)
+    // doesn't expose the surrounding system colour.
+    tab->page->SetBackgroundColour(
+        theme::is_dark() ? wxColour(30, 30, 30) : *wxWHITE);
     tab->stc     = new wxStyledTextCtrl(tab->page, wxID_ANY);
     ensure_style_table(tab->stc);
     tab->stc->SetReadOnly(true);
@@ -405,21 +412,38 @@ int TerminalPanel::style_id_for(const AnsiStyle& s)
 
 void TerminalPanel::ensure_style_table(wxStyledTextCtrl* stc)
 {
-    // Monospace font + base colours.
+    // Theme-aware base colours. The white-on-dark-app default leaked the
+    // surrounding-pane bg through any uncovered STC area, producing a
+    // glaring red/white misrender in dark mode when the wxPanel parent's
+    // system colour bled through. Pin the bg/fg to a sane palette per
+    // theme; the SGR-driven palette below stays the same.
+    const bool dark = theme::is_dark();
+    const wxColour default_bg = dark ? wxColour(30, 30, 30)   : *wxWHITE;
+    const wxColour default_fg = dark ? wxColour(220, 220, 220) : *wxBLACK;
+
     wxFont mono(10, wxFONTFAMILY_TELETYPE, wxFONTSTYLE_NORMAL,
                 wxFONTWEIGHT_NORMAL, false, "Consolas");
     stc->StyleSetFont(wxSTC_STYLE_DEFAULT, mono);
-    stc->StyleSetBackground(wxSTC_STYLE_DEFAULT, *wxWHITE);
-    stc->StyleSetForeground(wxSTC_STYLE_DEFAULT, *wxBLACK);
+    stc->StyleSetBackground(wxSTC_STYLE_DEFAULT, default_bg);
+    stc->StyleSetForeground(wxSTC_STYLE_DEFAULT, default_fg);
     stc->StyleClearAll();
     stc->SetMarginWidth(0, 0);
     stc->SetMarginWidth(1, 0);
     stc->SetWrapMode(wxSTC_WRAP_NONE);
     stc->SetUseHorizontalScrollBar(true);
 
-    // Pre-populate the cross product of (fg, bg, bold). dim is collapsed onto
-    // bold for now -- few real terminals distinguish them and the visual
-    // difference on a white background is tiny.
+    // Cover the area outside the styled text too -- otherwise the wxPanel
+    // parent's system bg shows when scrollback is short.
+    stc->SetCaretLineBackground(default_bg);
+    stc->SetWhitespaceBackground(true, default_bg);
+
+    // Pre-populate the cross product of (fg, bg, bold). With 17 fg * 17 bg *
+    // 2 bold = 578 combos and STC's effective style cap around 254, the prior
+    // bare clamp collided many distinct styles onto id 254 and let the last
+    // loop iteration's writes win. The encoding below still clamps high
+    // combinations but skips them entirely instead of writing -- collisions
+    // now fall back to the default style (sane bg/fg) rather than whatever
+    // bold/colour the loop happened to land on last.
     for (int bold = 0; bold < 2; ++bold) {
         for (int bg = 0; bg < 17; ++bg) {
             for (int fg = 0; fg < 17; ++fg) {
@@ -427,13 +451,18 @@ void TerminalPanel::ensure_style_table(wxStyledTextCtrl* stc)
                 s.fg_index = fg == 16 ? -1 : static_cast<int8_t>(fg);
                 s.bg_index = bg == 16 ? -1 : static_cast<int8_t>(bg);
                 s.bold     = (bold != 0);
-                int id = style_id_for(s);
+                int raw_id = 1 + fg + bg * 17 + (s.bold ? 17 * 17 : 0);
+                int id     = style_id_for(s);
                 if (id == k_style_default) continue;
+                // Skip combinations whose raw id would otherwise alias onto
+                // the clamped id 254 -- the runtime lookup will fall through
+                // to the default style for those rare combos.
+                if (raw_id != id) continue;
                 stc->StyleSetFont(id, mono);
                 stc->StyleSetForeground(id,
-                    s.fg_index < 0 ? *wxBLACK : palette(s.fg_index));
+                    s.fg_index < 0 ? default_fg : palette(s.fg_index));
                 stc->StyleSetBackground(id,
-                    s.bg_index < 0 ? *wxWHITE : palette(s.bg_index));
+                    s.bg_index < 0 ? default_bg : palette(s.bg_index));
                 stc->StyleSetBold(id, s.bold);
             }
         }

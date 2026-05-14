@@ -176,6 +176,14 @@ private:
     // Escape a string for safe embedding in a JS string literal.
     static wxString js_escape(const wxString& s);
 
+    // Encode user-typed plain text for safe injection into the chat HTML:
+    // HTML-escapes &/</>/" and converts every line-break flavour the input
+    // control might emit (\r\n, \r, \n, U+0085 NEL, U+2028 LS, U+2029 PS)
+    // to `<br>`. Without this Shift+Enter newlines render as a single space
+    // (the HTML behaviour for raw whitespace) or as a box glyph when the
+    // line-break code point isn't a member of the rendering font.
+    static wxString user_text_to_html(const wxString& s);
+
     // Timer callback: flush buffered tokens to the WebView.
     void on_flush_timer(wxTimerEvent& evt);
 

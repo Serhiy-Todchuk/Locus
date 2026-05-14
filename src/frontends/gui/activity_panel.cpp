@@ -2,6 +2,7 @@
 
 #include "locus_accessible.h"
 #include "metrics_view.h"
+#include "theme.h"
 #include "ui_names.h"
 #include "../../agent/agent_core.h"
 
@@ -101,11 +102,20 @@ ActivityPanel::ActivityPanel(wxWindow* parent, ILocusCore& core)
     sizer->Add(notebook_, 1, wxEXPAND);
     SetSizer(sizer);
 
-    // Color hints per kind.
-    attr_error_.SetBackgroundColour(wxColour(0xFF, 0xE0, 0xE0));
-    attr_warning_.SetBackgroundColour(wxColour(0xFF, 0xF4, 0xD0));
-    attr_llm_.SetTextColour(wxColour(0x20, 0x40, 0x90));
-    attr_index_.SetTextColour(wxColour(0x50, 0x70, 0x50));
+    // Color hints per kind. Dark-mode palette uses muted dark tints so the
+    // default light-text foreground stays readable; light mode keeps the
+    // pale tints that work against black text.
+    if (theme::is_dark()) {
+        attr_error_  .SetBackgroundColour(wxColour(0x5A, 0x18, 0x18)); // dark red
+        attr_warning_.SetBackgroundColour(wxColour(0x4A, 0x3A, 0x10)); // dark amber
+        attr_llm_    .SetTextColour      (wxColour(0x8A, 0xB4, 0xFF)); // light blue
+        attr_index_  .SetTextColour      (wxColour(0x9C, 0xCC, 0x9C)); // light green
+    } else {
+        attr_error_  .SetBackgroundColour(wxColour(0xFF, 0xE0, 0xE0));
+        attr_warning_.SetBackgroundColour(wxColour(0xFF, 0xF4, 0xD0));
+        attr_llm_    .SetTextColour      (wxColour(0x20, 0x40, 0x90));
+        attr_index_  .SetTextColour      (wxColour(0x50, 0x70, 0x50));
+    }
 
     list_->Bind(wxEVT_LIST_ITEM_SELECTED, &ActivityPanel::on_item_selected, this);
 

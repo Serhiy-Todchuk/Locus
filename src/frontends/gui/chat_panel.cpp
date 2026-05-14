@@ -984,13 +984,31 @@ void ChatPanel::on_turn_complete()
     // on_tool_pending zeroed it and no further text token arrived to allocate
     // a fresh bubble). Skip the assistant render in that case; otherwise do
     // the final md4c pass + drop the streaming cursor.
+    //
+    // Same whitespace-only check as on_tool_pending: a reasoning-only turn
+    // (LLM emitted <think>...</think> followed by a stop, no visible text)
+    // leaves the assistant bubble allocated by on_reasoning_token but with
+    // no real content. Drop it rather than rendering an empty bubble.
     if (assistant_id_ != 0) {
-        std::string html = markdown_to_html(current_response_);
-        run_script(wxString::Format(
-            "setMsgHtml(%d, %s);",
-            assistant_id_, "'" + js_escape(wxString::FromUTF8(html)) + "'"));
-        run_script(wxString::Format(
-            "removeClassFromMsg(%d, 'streaming-cursor');", assistant_id_));
+        auto visibly_empty = [](const std::string& s) {
+            for (char c : s) {
+                if (c != ' ' && c != '\t' && c != '\n' && c != '\r')
+                    return false;
+            }
+            return true;
+        };
+        if (visibly_empty(current_response_)) {
+            run_script(wxString::Format(
+                "var d=document.getElementById('msg-%d');if(d)d.remove();",
+                assistant_id_));
+        } else {
+            std::string html = markdown_to_html(current_response_);
+            run_script(wxString::Format(
+                "setMsgHtml(%d, %s);",
+                assistant_id_, "'" + js_escape(wxString::FromUTF8(html)) + "'"));
+            run_script(wxString::Format(
+                "removeClassFromMsg(%d, 'streaming-cursor');", assistant_id_));
+        }
     }
 
     // Highlight code blocks.
@@ -1236,7 +1254,20 @@ void ChatPanel::on_tool_pending(const wxString& call_id,
         current_reasoning_.clear();
     }
     if (assistant_id_ != 0) {
-        if (current_response_.empty() && token_buffer_.empty()) {
+        // "Visibly empty" = current_response_ + token_buffer_ contains only
+        // whitespace. Models routinely emit a stray newline / space between
+        // a reasoning block and a tool call; that token would otherwise pin
+        // the bubble in the DOM (literal `empty()` returns false) and the
+        // user sees a tiny phantom assistant message under the reasoning
+        // "Thoughts" disclosure.
+        auto visibly_empty = [](const std::string& s) {
+            for (char c : s) {
+                if (c != ' ' && c != '\t' && c != '\n' && c != '\r')
+                    return false;
+            }
+            return true;
+        };
+        if (visibly_empty(current_response_) && visibly_empty(token_buffer_)) {
             // No content tokens streamed into this bubble -- it's either still
             // showing the "Thinking..." placeholder or was emptied when only
             // reasoning streamed. Drop the empty bubble entirely so the tool
@@ -1695,11 +1726,14 @@ bool ChatPanel::submit_current_input()
         }
     }
 
-    // Add user message bubble.
+    // Add user message bubble. user_text_to_html does the HTML escaping +
+    // newline -> <br> conversion (so Shift+Enter renders as a visible line
+    // break, not a single space or a box glyph for unusual line-break code
+    // points). js_escape then handles JS-string-literal safety only.
     ++message_id_;
     run_script(wxString::Format(
         "addMsg(%d, 'msg-user', %s);",
-        message_id_, "'" + js_escape(text) + "'"));
+        message_id_, "'" + js_escape(user_text_to_html(text)) + "'"));
 
     // Input stays editable while the agent is working -- AgentCore::send_message
     // is non-blocking and queues onto the agent thread, so the user can compose
@@ -2001,6 +2035,33 @@ void ChatPanel::run_script(const wxString& js)
         webview_->RunScript(next);
     }
     in_run_script_ = false;
+}
+
+wxString ChatPanel::user_text_to_html(const wxString& s)
+{
+    // Normalise every line-break flavour to a single \n first; then a single
+    // escape pass produces one `<br>` per logical line. Without normalisation
+    // a CRLF pair would produce `<br><br>` and double the gap.
+    wxString norm = s;
+    norm.Replace("\r\n", "\n", true);
+    norm.Replace("\r",   "\n", true);
+    norm.Replace(wxString::FromUTF8("\xC2\x85"),     "\n", true); // U+0085 NEL
+    norm.Replace(wxString::FromUTF8("\xE2\x80\xA8"), "\n", true); // U+2028 LS
+    norm.Replace(wxString::FromUTF8("\xE2\x80\xA9"), "\n", true); // U+2029 PS
+
+    wxString out;
+    out.reserve(norm.length() + 16);
+    for (auto ch : norm) {
+        switch (ch.GetValue()) {
+        case '&':  out += "&amp;";  break;
+        case '<':  out += "&lt;";   break;
+        case '>':  out += "&gt;";   break;
+        case '"':  out += "&quot;"; break;
+        case '\n': out += "<br>";   break;
+        default:   out += ch;       break;
+        }
+    }
+    return out;
 }
 
 wxString ChatPanel::js_escape(const wxString& s)
