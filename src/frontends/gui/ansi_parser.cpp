@@ -55,6 +55,7 @@ void AnsiParser::reset()
     text_buf_.clear();
     csi_buf_.clear();
     osc_saw_escape_ = false;
+    pending_cr_     = false;
 }
 
 void AnsiParser::flush_text(std::vector<AnsiEvent>& out)
@@ -149,20 +150,34 @@ void AnsiParser::consume(const char* data, std::size_t n, std::vector<AnsiEvent>
 {
     for (std::size_t i = 0; i < n; ++i) {
         char c = data[i];
+
+        // Resolve any deferred \r BEFORE processing this byte. \r\n is the
+        // normal Windows line ending and must produce a plain newline, not
+        // an erase-line. Lone \r still gets the erase-line semantics for
+        // cmake / ninja progress-overwrite. The deferral lets us straddle
+        // chunk boundaries -- a \r at the end of one chunk and \n at the
+        // start of the next still collapses to one newline.
+        if (pending_cr_) {
+            pending_cr_ = false;
+            if (c == '\n') {
+                text_buf_.push_back('\n');
+                continue;
+            }
+            // Anything else: emit the deferred erase_line, then fall through
+            // and process this byte normally.
+            flush_text(out);
+            AnsiEvent e; e.kind = AnsiEventKind::erase_line;
+            out.push_back(std::move(e));
+        }
+
         switch (state_) {
             case State::ground:
                 if (c == k_esc) {
                     flush_text(out);
                     state_ = State::escape;
                 } else if (c == '\r') {
-                    // Bare CR (no LF). Common with cmake / ninja progress.
-                    // Treat as "carriage return -- caller should overwrite
-                    // current line on next text". We flush pending text and
-                    // emit erase_line so the next text starts at column 0
-                    // on a cleared line.
-                    flush_text(out);
-                    AnsiEvent e; e.kind = AnsiEventKind::erase_line;
-                    out.push_back(std::move(e));
+                    // Defer: might be the start of a Windows \r\n pair.
+                    pending_cr_ = true;
                 } else {
                     text_buf_.push_back(c);
                 }

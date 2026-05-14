@@ -91,8 +91,6 @@ TerminalPanel::TerminalPanel(wxWindow* parent, ProcessSinkBroker* broker,
     sync->id      = k_sync_id;
     sync->command = "(no command yet)";
     sync->page    = new wxPanel(notebook_, wxID_ANY);
-    sync->page->SetBackgroundColour(
-        theme::is_dark() ? wxColour(30, 30, 30) : *wxWHITE);
     sync->stc     = new wxStyledTextCtrl(sync->page, wxID_ANY);
     auto* sync_sizer = new wxBoxSizer(wxVERTICAL);
     sync_sizer->Add(sync->stc, 1, wxEXPAND);
@@ -218,10 +216,6 @@ TerminalPanel::Tab* TerminalPanel::ensure_tab(int id, const std::string& command
     tab->id      = id;
     tab->command = command;
     tab->page    = new wxPanel(notebook_, wxID_ANY);
-    // Match the STC's theme bg so any gap (during resize, scrollbar gutter)
-    // doesn't expose the surrounding system colour.
-    tab->page->SetBackgroundColour(
-        theme::is_dark() ? wxColour(30, 30, 30) : *wxWHITE);
     tab->stc     = new wxStyledTextCtrl(tab->page, wxID_ANY);
     ensure_style_table(tab->stc);
     tab->stc->SetReadOnly(true);
@@ -308,11 +302,16 @@ void TerminalPanel::process_lifecycle(const LifeEvent& ev)
         case LifeKind::bg_exit: {
             auto it = tabs_.find(ev.id);
             if (it == tabs_.end()) return;
-            Tab& tab = *it->second;
-            tab.active    = false;
-            tab.exit_code = ev.exit_code;
-            tab.killed    = ev.killed;
-            set_tab_badge(find_tab_index(ev.id), tab);
+            // Always close the tab when the bg process is gone -- there's no
+            // way to interact with it any more, and the live "killed"-vs-
+            // "clean exit" branch we used to have was flaky in practice
+            // (the reader thread's was_killed flag races against
+            // TerminateJobObject on Windows, so signals to the panel landed
+            // inconsistently). Output history loss is the tradeoff; the user
+            // can copy from the tab before stopping if they need to keep it.
+            int idx = find_tab_index(ev.id);
+            if (idx >= 0) notebook_->DeletePage(static_cast<size_t>(idx));
+            tabs_.erase(it);
             break;
         }
     }
@@ -406,17 +405,23 @@ int TerminalPanel::style_id_for(const AnsiStyle& s)
     int bg = s.bg_index < 0 ? 16 : s.bg_index;
     int id = 1 + fg + bg * 17 + (s.bold ? 17 * 17 : 0);
     if (id < 1) id = 1;
-    if (id > 254) id = 254;  // STC reserves a few high ids; stay clear
+    // Scintilla reserves ids 32-39 for wxSTC_STYLE_DEFAULT, _LINENUMBER,
+    // _BRACELIGHT, _BRACEBAD, _CONTROLCHAR, _INDENTGUIDE, _CALLTIP,
+    // _LASTPREDEFINED. Without the skip, our loop overwrites wxSTC_STYLE_
+    // DEFAULT (the bg Scintilla paints over the empty area below text)
+    // with whatever (fg,bg,bold) combo happens to encode to 32 -- on the
+    // user's reporter setup that was (fg=14, bg=1, bold=0), staining the
+    // whole terminal pane bg with palette(1) = #B2182C (ANSI red).
+    if (id >= 32 && id <= 39) id += 8;
+    if (id > 254) id = 254;
     return id;
 }
 
 void TerminalPanel::ensure_style_table(wxStyledTextCtrl* stc)
 {
-    // Theme-aware base colours. The white-on-dark-app default leaked the
-    // surrounding-pane bg through any uncovered STC area, producing a
-    // glaring red/white misrender in dark mode when the wxPanel parent's
-    // system colour bled through. Pin the bg/fg to a sane palette per
-    // theme; the SGR-driven palette below stays the same.
+    // Theme-aware base colours. Hard-coded white-on-black left dark-mode
+    // builds with a glaring white terminal pane in an otherwise dark UI;
+    // pick neutral grey shades per theme so the panel blends in.
     const bool dark = theme::is_dark();
     const wxColour default_bg = dark ? wxColour(30, 30, 30)   : *wxWHITE;
     const wxColour default_fg = dark ? wxColour(220, 220, 220) : *wxBLACK;
@@ -432,18 +437,12 @@ void TerminalPanel::ensure_style_table(wxStyledTextCtrl* stc)
     stc->SetWrapMode(wxSTC_WRAP_NONE);
     stc->SetUseHorizontalScrollBar(true);
 
-    // Cover the area outside the styled text too -- otherwise the wxPanel
-    // parent's system bg shows when scrollback is short.
-    stc->SetCaretLineBackground(default_bg);
-    stc->SetWhitespaceBackground(true, default_bg);
-
-    // Pre-populate the cross product of (fg, bg, bold). With 17 fg * 17 bg *
-    // 2 bold = 578 combos and STC's effective style cap around 254, the prior
-    // bare clamp collided many distinct styles onto id 254 and let the last
-    // loop iteration's writes win. The encoding below still clamps high
-    // combinations but skips them entirely instead of writing -- collisions
-    // now fall back to the default style (sane bg/fg) rather than whatever
-    // bold/colour the loop happened to land on last.
+    // Pre-populate the cross product of (fg, bg, bold). dim is collapsed onto
+    // bold for now -- few real terminals distinguish them and the visual
+    // difference on a grey background is tiny. style_id_for skips Scintilla's
+    // reserved range 32-39 (see its body); `assigned` below stops later
+    // (clamped-onto-254) high combos from overwriting earlier valid styles.
+    std::vector<bool> assigned(256, false);
     for (int bold = 0; bold < 2; ++bold) {
         for (int bg = 0; bg < 17; ++bg) {
             for (int fg = 0; fg < 17; ++fg) {
@@ -451,13 +450,10 @@ void TerminalPanel::ensure_style_table(wxStyledTextCtrl* stc)
                 s.fg_index = fg == 16 ? -1 : static_cast<int8_t>(fg);
                 s.bg_index = bg == 16 ? -1 : static_cast<int8_t>(bg);
                 s.bold     = (bold != 0);
-                int raw_id = 1 + fg + bg * 17 + (s.bold ? 17 * 17 : 0);
                 int id     = style_id_for(s);
                 if (id == k_style_default) continue;
-                // Skip combinations whose raw id would otherwise alias onto
-                // the clamped id 254 -- the runtime lookup will fall through
-                // to the default style for those rare combos.
-                if (raw_id != id) continue;
+                if (assigned[static_cast<size_t>(id)]) continue;
+                assigned[static_cast<size_t>(id)] = true;
                 stc->StyleSetFont(id, mono);
                 stc->StyleSetForeground(id,
                     s.fg_index < 0 ? default_fg : palette(s.fg_index));
@@ -473,8 +469,23 @@ void TerminalPanel::write_styled(Tab& tab, const std::string& text,
                                   const AnsiStyle& style)
 {
     if (text.empty()) return;
+
+    // Robust byte-to-wxString decode. Windows console / Python output isn't
+    // always UTF-8 -- depending on the active codepage Python may emit CP1252
+    // / CP866 / OEM bytes for stderr. wxString::FromUTF8 silently returns
+    // EMPTY when any byte fails to validate, which used to drop entire
+    // chunks (only trailing \n got through, rendering as a lone control-char
+    // glyph on a red bg). Try UTF-8 first; on any decode failure fall back
+    // to Latin-1 (FromAscii / From8BitData) -- every byte maps to a valid
+    // wxString character, so the user at least sees the readable ASCII slice
+    // of mixed-encoding output.
+    wxString s = wxString::FromUTF8(text.data(), text.size());
+    if (s.IsEmpty() && !text.empty()) {
+        s = wxString::From8BitData(text.data(), text.size());
+    }
+
     int start_pos = tab.stc->GetLastPosition();
-    tab.stc->AppendText(wxString::FromUTF8(text));
+    tab.stc->AppendText(s);
     int end_pos = tab.stc->GetLastPosition();
     int id = style_id_for(style);
     if (end_pos > start_pos) {

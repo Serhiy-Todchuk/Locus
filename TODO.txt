@@ -6,3 +6,29 @@
 - append prompt during running turn - queue next prompt
 - tool_approvals settings - shall we extend it to be able to prohibit each tool so it's description doesn't go into tools manifest/system prompt? "ask"|"auto"|"deny" + "hide"?
 - FastDebug
+
+- code diff of edit_file tool looks good in chat, but it lacks few things: show line numbers per each line; show 4 lines before change and 4 lines after change, so user has surronding context about change.
+- write_file in chat takes too much lines and has no posibility to expand/collapse, make it smaller by default (let's say first 16 lines) and expand/collapse posibility. Also add line numbers?
+
+- "require read_file before edit_file" - put it into settings with default on.
+- if file was just written by LLM - shall we keep asking LLM to read before editing?
+
+- Why terminal text background is red? choose more neutral color so eyes are not "burning". Make sure text color also suites there.
+ Fix also red background. Choose more neutral color so eyes are not "burning". Make sure text color also suites there.
+
+- Background processes were disabled for the workspace, but agent still tried to use run_command_bg tool. How did it know that this tool exists. I thought the aim of having it disabled is context size saving thing, but it was still somewhere in manifest or system prompt.
+
+- I approved run_command tool:
+cd /d D:\\Projects\\AICodeAss && python -m http.server 8000
+but I saw nothing in terminal. Is it expected behavior?
+
+- Print background process's command as a first line in it's terminal tab (now it is only at terminal tab header).
+
+- Add "Reset to global defaults" button to every settings page.
+
+- Add image attachment for LLM prompt
+
+Start a python server for this folder so I an access html files through localhost
+Start "python -u -m http.server 8000" command as background process.
+run this exact command via run_command_bg:
+python -u -c "import sys; sys.stderr.write('TEST OUTPUT\n'); sys.stderr.flush(); import time; time.sleep(60)"

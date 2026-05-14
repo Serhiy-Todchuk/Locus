@@ -90,6 +90,11 @@ private:
     std::string  text_buf_;         // accumulating text run before flush
     std::string  csi_buf_;          // accumulating digits / ; inside CSI
     bool         osc_saw_escape_ = false;  // for OSC ESC \ termination
+    // Pending \r that we haven't resolved yet -- if the next byte is \n we
+    // treat the pair as a plain newline (Windows EOL); otherwise (incl. end
+    // of chunk + no follow-up byte yet) we emit erase_line for the cmake /
+    // ninja progress-overwrite case.
+    bool         pending_cr_ = false;
 };
 
 } // namespace locus

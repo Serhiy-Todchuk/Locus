@@ -73,6 +73,57 @@ View > Terminal toggles it.
 
 ---
 
+## Known pitfalls (lessons from bugs already fixed)
+
+These are documented because they cost real debugging time and the
+symptoms are weirder than the underlying cause:
+
+- **Lone `\r` vs CRLF**. The AnsiParser deliberately treats a bare `\r`
+  as "erase the current line" so `cmake` / `ninja` progress bars
+  (`[ 10%] Build` -> `[ 20%] Build`) overwrite correctly. Windows EOL
+  is `\r\n`, though, so we must collapse the pair into a plain `\n`;
+  otherwise every line of Python / Node / cmd output gets wiped by the
+  `\r` between `text` and `\n`. The parser's `pending_cr_` flag holds
+  the `\r` until it sees the next byte, including across chunk
+  boundaries. Regression cases live in [tests/test_ansi_parser.cpp]
+  ("CRLF collapses to one newline", "CRLF straddling a chunk boundary
+  still collapses", "lone CR straddling a chunk boundary still erases").
+  Symptom when broken: terminal shows a single gray rectangle (the
+  trailing `\n` rendered as a control-char placeholder) on each line
+  instead of the actual text.
+
+- **Scintilla style-id range overlap (the `#B2182C` red-tab-bg bug)**.
+  Scintilla reserves style ids 32-39 for `wxSTC_STYLE_DEFAULT`,
+  `_LINENUMBER`, `_BRACELIGHT`, `_BRACEBAD`, `_CONTROLCHAR`,
+  `_INDENTGUIDE`, `_CALLTIP`, `_LASTPREDEFINED`. `wxSTC_STYLE_DEFAULT`
+  (id=32) is in particular the style Scintilla paints over the empty
+  area below the last styled byte. The terminal panel encodes an
+  `(fg, bg, bold)` AnsiStyle into a style id as
+  `1 + fg + bg*17 + bold*289`. That formula collides with the reserved
+  range -- e.g. `(fg=14, bg=1, bold=0)` produces id=32, and the
+  ensure_style_table loop happily overwrites Scintilla's STYLE_DEFAULT
+  with bg=palette(1)=`#B2182C` (ANSI red). The whole terminal pane
+  then paints red.
+  Fix: `style_id_for` bumps any id in 32-39 by +8 so ANSI-styled text
+  lands at 40-47 and the reserved range stays untouched. The
+  `ensure_style_table` loop tracks per-id assignment in a
+  `vector<bool>` so a later high-id combo (the >254 clamp) can't
+  overwrite an earlier valid style either.
+  Symptom when broken: solid red (or whatever colour happens to be
+  palette[N] where N is whatever bg-index the formula maps to id=32)
+  in the entire terminal tab content area, regardless of any
+  `SetBackgroundColour` calls anywhere in the widget tree. This
+  almost nerd-sniped us into chasing the `wxWidgets#25678`
+  dark-mode-notebook-bg issue, which sounds related but isn't --
+  watch out for it.
+
+- **`wxString::FromUTF8` returns empty on any decode failure**. If a
+  process emits non-UTF-8 bytes (CP1252 / CP866 / OEM on Windows),
+  passing the chunk through `FromUTF8` drops the entire chunk
+  silently. `write_styled` now falls back to `From8BitData` (Latin-1)
+  on empty-result, so ASCII output at least survives mixed-encoding
+  streams.
+
 ## Out of scope for v1 (don't fail the plan over these)
 
 - Sending input back to the running process (interactive prompts, `git

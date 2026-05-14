@@ -126,6 +126,48 @@ TEST_CASE("ANSI parser: bare CR emits erase_line (cmake/ninja progress)",
     REQUIRE(join_text(events).find("20%") != std::string::npos);
 }
 
+TEST_CASE("ANSI parser: CRLF collapses to one newline (no erase_line)",
+          "[s5.b][ansi]")
+{
+    // Windows EOL convention. Lone \r still erases (test above), but \r\n is
+    // a plain line ending -- emitting erase_line for it wipes the preceding
+    // text from the terminal panel, which is exactly the bug a real Python
+    // -u "TEST OUTPUT\r\n" run hit.
+    AnsiParser parser;
+    std::vector<AnsiEvent> events;
+    feed(parser, "TEST OUTPUT\r\n", events);
+    REQUIRE(count_kind(events, AnsiEventKind::erase_line) == 0);
+    REQUIRE(join_text(events) == "TEST OUTPUT\n");
+}
+
+TEST_CASE("ANSI parser: CRLF straddling a chunk boundary still collapses",
+          "[s5.b][ansi]")
+{
+    // The \r lands at the end of chunk 1; the \n at the start of chunk 2.
+    // pending_cr_ must survive across consume() calls.
+    AnsiParser parser;
+    std::vector<AnsiEvent> events;
+    feed(parser, "TEST OUTPUT\r", events);
+    feed(parser, "\nMORE",        events);
+    REQUIRE(count_kind(events, AnsiEventKind::erase_line) == 0);
+    REQUIRE(join_text(events) == "TEST OUTPUT\nMORE");
+}
+
+TEST_CASE("ANSI parser: lone CR straddling a chunk boundary still erases",
+          "[s5.b][ansi]")
+{
+    // \r at end of chunk, then a non-\n byte at the start of the next chunk.
+    // The deferred erase_line should fire on the first byte of the new
+    // chunk so the progress-overwrite case still works across boundaries.
+    AnsiParser parser;
+    std::vector<AnsiEvent> events;
+    feed(parser, "[ 10%] Build\r", events);
+    feed(parser, "[ 20%] Build",  events);
+    REQUIRE(count_kind(events, AnsiEventKind::erase_line) == 1);
+    REQUIRE(join_text(events).find("10%") != std::string::npos);
+    REQUIRE(join_text(events).find("20%") != std::string::npos);
+}
+
 TEST_CASE("ANSI parser: cursor-position sequences are dropped silently",
           "[s5.b][ansi]")
 {
