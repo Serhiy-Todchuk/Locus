@@ -16,8 +16,8 @@
 - [x] **[S5.J](S5.J-llm-context-refactor.md)** -- LLMContext Class Refactor -- _Refactor_
 - [x] **[S5.O](S5.O-tool-safety-hardening.md)** -- Tool & Filesystem Safety Hardening -- _Safety_
 - [x] **[S5.P](S5.P-source-encoding-audit.md)** -- Source Encoding Audit & Lint -- _Hygiene_
-- [ ] **[S5.Q](S5.Q-large-file-decomposition.md)** -- Large File Decomposition (chat_panel & settings_dialog) -- _Refactor_
-- [ ] **[S5.D](S5.D-reserve-and-token-xray.md)** -- Reserve Enforcement + Token-Cost X-Ray -- _Context_
+- [x] **[S5.Q](S5.Q-large-file-decomposition.md)** -- Large File Decomposition (chat_panel & settings_dialog) -- _Refactor_
+- [x] **[S5.D](S5.D-reserve-and-token-xray.md)** -- Reserve Enforcement + Token-Cost X-Ray -- _Context_
 - [ ] **[S5.E](S5.E-pin-and-tag.md)** -- Per-Message Pin / Tag System -- _Context_
 - [ ] **[S5.F](S5.F-compaction-v2.md)** -- Compaction v2 (Toolkit + Auto + History Archive) -- _Context_
 - [ ] **[S5.G](S5.G-chat-activity-restructure.md)** -- Chat / Activity Restructure -- _UX_

@@ -2,6 +2,8 @@
 
 #include "../core/frontend_registry.h"
 
+#include <algorithm>
+
 namespace locus {
 
 // Tracks token usage vs. the context window limit and decides when the
@@ -14,6 +16,17 @@ public:
     ContextBudget(int context_limit, FrontendRegistry& frontends);
 
     int  limit() const { return limit_; }
+
+    // S5.D -- minimum response headroom. The agent loop refuses to dispatch
+    // an LLM round when prompt_estimate + reserve_ > limit_. Zero means no
+    // reserve is enforced (the pre-S5.D behaviour).
+    void set_reserve(int r)       { reserve_ = (r > 0 ? r : 0); }
+    int  reserve()          const { return reserve_; }
+
+    // Effective prompt capacity: context window minus the reserved headroom.
+    // check_overflow thresholds are computed against this value so the user
+    // sees compaction warnings relative to usable space, not the raw window.
+    int  effective_limit()  const { return std::max(1, limit_ - reserve_); }
 
     // Best-effort current token count. Uses the last server-reported total
     // when non-zero, otherwise the supplied heuristic fallback.
@@ -47,11 +60,12 @@ public:
 
 private:
     int               limit_;
+    int               reserve_               = 0;
     FrontendRegistry& frontends_;
-    int               server_total_ = 0;
-    int               prev_turn_total_ = 0;
-    int               last_prompt_tokens_     = 0;
-    int               last_completion_tokens_ = 0;
+    int               server_total_          = 0;
+    int               prev_turn_total_       = 0;
+    int               last_prompt_tokens_    = 0;
+    int               last_completion_tokens_= 0;
 };
 
 } // namespace locus

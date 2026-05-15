@@ -28,8 +28,11 @@ public:
 
     // Context meter. Called from ChatPanel::set_context_meter.
     // Returns true when a Layout() call is needed (label width may have changed).
+    // reserve_tokens (S5.D) is the headroom the agent loop keeps free; gauge
+    // color thresholds are applied against effective_limit = limit - reserve.
     bool set_context_meter(int used, int limit,
-                           int prompt_tokens, int completion_tokens);
+                           int prompt_tokens, int completion_tokens,
+                           int reserve_tokens = 0);
 
     // Live generation estimate update. Called from set_generation_progress.
     void set_generation_progress(int chars, int est_tokens);
@@ -67,6 +70,7 @@ private:
     int last_ctx_limit_           = 0;
     int last_ctx_prompt_          = 0;
     int last_ctx_completion_      = 0;
+    int last_ctx_reserve_         = 0;
     int live_completion_estimate_ = 0;
 
     std::string current_plan_id_;

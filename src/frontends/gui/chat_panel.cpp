@@ -10,6 +10,7 @@
 #include "ui_names.h"
 
 #include "../../agent/mention_parser.h"
+#include "../../llm/token_counter.h"
 
 #include <spdlog/spdlog.h>
 
@@ -363,6 +364,16 @@ body {
     line-height: 1.3;
 }
 
+/* S5.D per-message token chip */
+.token-chip {
+    display: inline-block;
+    font-size: 10px;
+    color: #aaa;
+    margin-left: 6px;
+    vertical-align: middle;
+    user-select: none;
+    opacity: 0.8;
+}
 .msg-reasoning {
     align-self: flex-start;
     background: transparent;
@@ -501,6 +512,13 @@ function addClassToMsg(id, cls) {
 function removeClassFromMsg(id, cls) {
     var d = document.getElementById('msg-' + id);
     if (d) d.classList.remove(cls);
+}
+function setMsgTokenChip(id, n) {
+    var d = document.getElementById('msg-' + id);
+    if (!d) return;
+    var chip = d.querySelector('.token-chip');
+    if (!chip) { chip = document.createElement('span'); chip.className = 'token-chip'; d.appendChild(chip); }
+    chip.textContent = '(' + n + ' t)';
 }
 function highlightAll() {
     if (typeof Prism !== 'undefined') Prism.highlightAll();
@@ -891,6 +909,16 @@ void ChatPanel::on_turn_complete()
 {
     flush_timer_.Stop();
     renderer_->end_turn();
+
+    // S5.D -- annotate the assistant bubble with server-reported completion
+    // tokens once the turn is sealed (end_turn has finalized the HTML).
+    if (show_per_message_tokens_ && last_completion_tokens_ > 0) {
+        int aid = renderer_->current_assistant_id();
+        if (aid > 0)
+            run_script(wxString::Format("setMsgTokenChip(%d, %d);",
+                                        aid, last_completion_tokens_));
+    }
+
     footer_chips_->clear_live_estimate();
     refresh_action_btn();
     if (undo_btn_) undo_btn_->Enable();
@@ -1133,9 +1161,17 @@ void ChatPanel::on_tool_result(const wxString& call_id,
 }
 
 void ChatPanel::set_context_meter(int used, int limit,
-                                   int prompt_tokens, int completion_tokens)
+                                   int prompt_tokens, int completion_tokens,
+                                   int reserve_tokens)
 {
-    footer_chips_->set_context_meter(used, limit, prompt_tokens, completion_tokens);
+    if (completion_tokens > 0) last_completion_tokens_ = completion_tokens;
+    footer_chips_->set_context_meter(used, limit, prompt_tokens,
+                                      completion_tokens, reserve_tokens);
+}
+
+void ChatPanel::set_show_per_message_tokens(bool show)
+{
+    show_per_message_tokens_ = show;
 }
 
 void ChatPanel::set_generation_progress(int chars, int est_tokens)
@@ -1249,6 +1285,14 @@ bool ChatPanel::submit_current_input()
     run_script(wxString::Format(
         "addMsg(%d, 'msg-user', %s);",
         message_id_, "'" + js_escape(user_text_to_html(text)) + "'"));
+
+    // S5.D -- per-message token chip: client-side heuristic estimate on the
+    // raw user text (effective_content may be slightly larger due to attached-
+    // context and file-change prefixes; this is close enough for the UI chip).
+    if (show_per_message_tokens_) {
+        int est = TokenCounter::estimate(text.ToStdString(wxConvUTF8)) + 4;
+        run_script(wxString::Format("setMsgTokenChip(%d, %d);", message_id_, est));
+    }
 
     if (on_send_)
         on_send_(text.ToStdString(wxConvUTF8));

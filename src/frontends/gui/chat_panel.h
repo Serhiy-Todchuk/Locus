@@ -114,7 +114,10 @@ public:
 
     // Footer updates.
     void set_context_meter(int used, int limit,
-                           int prompt_tokens = 0, int completion_tokens = 0);
+                           int prompt_tokens = 0, int completion_tokens = 0,
+                           int reserve_tokens = 0);
+    // S5.D -- show/hide per-message token chips.
+    void set_show_per_message_tokens(bool show);
     void set_generation_progress(int chars, int est_tokens);
 
     // Attached-context chip (above input).
@@ -207,6 +210,10 @@ private:
 
     // Monotonic message div ID shared with ChatStreamRenderer (passed by ref).
     int message_id_ = 0;
+
+    // S5.D -- per-message token chip state.
+    bool show_per_message_tokens_   = true;
+    int  last_completion_tokens_    = 0;
 
     // WebView readiness: SetPage() is async in WebView2.
     bool                  page_ready_     = false;

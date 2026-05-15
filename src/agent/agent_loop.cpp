@@ -189,6 +189,39 @@ AgentStepResult AgentLoop::run_step(const ConversationHistory& history,
             metrics_->record_first_token(ttft_ms);
     };
 
+    // S5.D -- refuse the LLM round when the prompt estimate already eats into
+    // the response reserve. The user must compact before the turn can proceed.
+    // We check here (after tool schemas are built) so the reserve-breach
+    // message names the actual manifest cost, not a stale estimate.
+    {
+        int limit   = budget_.limit();
+        int reserve = budget_.reserve();
+        if (limit > 0 && reserve > 0) {
+            int prompt_est = history.estimate_tokens();
+            if (prompt_est + reserve > limit) {
+                spdlog::warn("AgentLoop: reserve breach ({} prompt + {} reserve > {} limit)",
+                             prompt_est, reserve, limit);
+                std::string msg =
+                    "Context too full to generate a useful response. "
+                    "Prompt ~" + std::to_string(prompt_est) +
+                    " tokens + " + std::to_string(reserve) +
+                    " reserved headroom exceeds the " + std::to_string(limit) +
+                    " token context window. "
+                    "Use /compact (or the Compact button) to free space, "
+                    "then resend your message.";
+                activity_.emit(ActivityKind::warning,
+                               "Reserve breach -- compact required",
+                               msg);
+                frontends_.broadcast([&](IFrontend& fe) {
+                    fe.on_error(msg);
+                    fe.on_compaction_needed(prompt_est, limit);
+                });
+                out.had_error = true;
+                return out;
+            }
+        }
+    }
+
     StreamCallbacks cbs;
     cbs.on_token = [&](const std::string& token) {
         mark_first_token();

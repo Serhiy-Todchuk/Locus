@@ -119,6 +119,18 @@ WorkspaceConfig workspace_config_from_json(const json& j)
             cfg.chat_diff_collapse_threshold = c["diff_collapse_threshold"].get<int>();
     }
 
+    if (j.contains("compaction")) {
+        auto& c = j["compaction"];
+        if (c.contains("reserve_tokens"))
+            cfg.compaction_reserve_tokens = c["reserve_tokens"].get<int>();
+    }
+
+    if (j.contains("ui")) {
+        auto& u = j["ui"];
+        if (u.contains("show_per_message_tokens"))
+            cfg.ui_show_per_message_tokens = u["show_per_message_tokens"].get<bool>();
+    }
+
     if (j.contains("capabilities") && j["capabilities"].is_object()) {
         auto& c = j["capabilities"];
         if (c.contains("background_processes"))
@@ -224,7 +236,13 @@ json workspace_config_to_json(const WorkspaceConfig& cfg)
             {"memory_bank",          cfg.capabilities.memory_bank},
             {"web_retrieval",        cfg.capabilities.web_retrieval}
         }},
-        {"tool_approvals", approvals}
+        {"tool_approvals", approvals},
+        {"compaction", {
+            {"reserve_tokens", cfg.compaction_reserve_tokens}
+        }},
+        {"ui", {
+            {"show_per_message_tokens", cfg.ui_show_per_message_tokens}
+        }}
     };
 }
 

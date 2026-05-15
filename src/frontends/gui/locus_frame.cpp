@@ -349,6 +349,10 @@ void LocusFrame::setup_aui_layout()
                                    workspace_.config().chat_diff_context_lines,
                                    workspace_.config().chat_diff_collapse_threshold);
 
+    // S5.D -- per-message token chips.
+    chat_panel_->set_show_per_message_tokens(
+        workspace_.config().ui_show_per_message_tokens);
+
     // Slash-command suggestions: CLI-style commands + all registered tools.
     {
         std::vector<SlashItem> items = {
@@ -763,16 +767,17 @@ void LocusFrame::on_agent_context_meter(wxThreadEvent& evt)
 {
     int used  = evt.GetInt();
     int limit = static_cast<int>(evt.GetExtraLong());
-    int prompt = 0, completion = 0;
+    int prompt = 0, completion = 0, reserve = 0;
     auto payload_str = evt.GetString().ToUTF8();
     if (payload_str.length() > 0) {
         try {
             auto j = nlohmann::json::parse(std::string(payload_str.data(), payload_str.length()));
             prompt     = j.value("prompt", 0);
             completion = j.value("completion", 0);
+            reserve    = j.value("reserve", 0);
         } catch (...) { /* legacy event without payload -- ignore */ }
     }
-    chat_panel_->set_context_meter(used, limit, prompt, completion);
+    chat_panel_->set_context_meter(used, limit, prompt, completion, reserve);
 }
 
 void LocusFrame::on_agent_compaction(wxThreadEvent& /*evt*/)

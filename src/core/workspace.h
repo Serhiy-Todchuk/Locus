@@ -179,6 +179,15 @@ struct WorkspaceConfig {
     // for workspace search.
     int  memory_recency_half_life_days     = 21;
 
+    // S5.D -- minimum response headroom the agent loop guarantees the LLM.
+    // Negative value = auto: std::min(context_limit / 5, 4096).
+    // When context_limit is 0 (auto-detect not yet done), reserve is 0.
+    int  compaction_reserve_tokens   = -1;
+
+    // S5.D -- per-message token chip in chat. When true, each bubble shows a
+    // small grey "(N t)" estimate. Off-switch for users who find it noisy.
+    bool ui_show_per_message_tokens  = true;
+
     // S5.C -- inline diff rendering in chat. When `chat_show_diffs` is true,
     // successful `edit_file` / `write_file` / `delete_file` calls render a
     // red/green unified diff in the chat history below the tool bubble.

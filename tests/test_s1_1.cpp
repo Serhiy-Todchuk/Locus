@@ -28,7 +28,7 @@ struct StubFrontend : IFrontend {
         events.push_back("tool_result:" + id);
     }
     void on_turn_complete() override { events.push_back("turn_complete"); }
-    void on_context_meter(int used, int limit, int, int) override {
+    void on_context_meter(int used, int limit, int, int, int) override {
         events.push_back("ctx:" + std::to_string(used) + "/" + std::to_string(limit));
     }
     void on_compaction_needed(int, int) override { events.push_back("compaction"); }
@@ -50,7 +50,7 @@ struct ThrowingFrontend : IFrontend {
         throw std::runtime_error("boom");
     }
     void on_turn_complete() override { throw std::runtime_error("boom"); }
-    void on_context_meter(int, int, int, int) override { throw std::runtime_error("boom"); }
+    void on_context_meter(int, int, int, int, int) override { throw std::runtime_error("boom"); }
     void on_compaction_needed(int, int) override { throw std::runtime_error("boom"); }
     void on_session_reset() override { throw std::runtime_error("boom"); }
     void on_error(const std::string&) override { throw std::runtime_error("boom"); }

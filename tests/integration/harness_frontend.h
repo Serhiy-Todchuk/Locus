@@ -100,7 +100,8 @@ public:
     void on_tool_result(const std::string& call_id, const std::string& display, bool success) override;
     void on_turn_complete() override;
     void on_context_meter(int used_tokens, int limit,
-                          int prompt_tokens, int completion_tokens) override;
+                          int prompt_tokens, int completion_tokens,
+                          int reserve_tokens = 0) override;
     void on_compaction_needed(int used_tokens, int limit) override;
     void on_session_reset() override;
     void on_error(const std::string& message) override;

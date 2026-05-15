@@ -42,11 +42,14 @@ void ContextBudget::reset()
 
 bool ContextBudget::check_overflow(int used)
 {
-    double ratio = limit_ > 0 ? static_cast<double>(used) / limit_ : 0.0;
+    // S5.D -- thresholds are relative to effective_limit (= limit - reserve)
+    // so the user sees warnings before the reserved response headroom is eaten.
+    int eff = effective_limit();
+    double ratio = eff > 0 ? static_cast<double>(used) / eff : 0.0;
 
     if (ratio >= 1.0) {
-        spdlog::warn("ContextBudget: context FULL ({}/{} tokens, {:.0f}%)",
-                     used, limit_, ratio * 100);
+        spdlog::warn("ContextBudget: context full ({}/{} tokens, effective limit {})",
+                     used, limit_, eff);
         frontends_.broadcast([&](IFrontend& fe) {
             fe.on_compaction_needed(used, limit_);
         });
@@ -54,8 +57,8 @@ bool ContextBudget::check_overflow(int used)
     }
 
     if (ratio >= compaction_threshold) {
-        spdlog::warn("ContextBudget: context at {:.0f}% ({}/{} tokens)",
-                     ratio * 100, used, limit_);
+        spdlog::warn("ContextBudget: context at {:.0f}% of effective limit ({}/{} tokens)",
+                     ratio * 100, used, eff);
         frontends_.broadcast([&](IFrontend& fe) {
             fe.on_compaction_needed(used, limit_);
         });

@@ -10,14 +10,18 @@ int TokenCounter::estimate(const std::string& text)
 int TokenCounter::estimate(const std::vector<ChatMessage>& messages)
 {
     int total = 0;
-    for (auto& m : messages) {
-        // Role overhead: ~4 tokens per message framing.
-        total += 4;
-        total += estimate(m.content);
-        for (auto& tc : m.tool_calls) {
-            total += estimate(tc.name);
-            total += estimate(tc.arguments);
-        }
+    for (auto& m : messages)
+        total += estimate_message(m);
+    return total;
+}
+
+int TokenCounter::estimate_message(const ChatMessage& msg)
+{
+    // Role overhead: ~4 tokens per message framing.
+    int total = 4 + estimate(msg.content);
+    for (auto& tc : msg.tool_calls) {
+        total += estimate(tc.name);
+        total += estimate(tc.arguments);
     }
     return total;
 }

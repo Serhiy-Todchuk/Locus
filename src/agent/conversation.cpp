@@ -41,6 +41,11 @@ ConversationHistory& ConversationHistory::operator=(ConversationHistory&& other)
 void ConversationHistory::add(ChatMessage msg)
 {
     assert_owner_thread("add");
+    // S5.D -- cache the per-message token estimate so callers can display it
+    // without re-computing on every render. Computed here (once) rather than
+    // in TokenCounter::estimate so the value is stable for the message's lifetime.
+    if (msg.token_estimate == 0)
+        msg.token_estimate = TokenCounter::estimate_message(msg);
     messages_.push_back(std::move(msg));
 }
 
@@ -136,8 +141,13 @@ ConversationHistory ConversationHistory::from_json(const nlohmann::json& j)
 {
     ConversationHistory h;
     if (j.is_array()) {
-        for (auto& item : j)
-            h.messages_.push_back(ChatMessage::from_json(item));
+        for (auto& item : j) {
+            auto msg = ChatMessage::from_json(item);
+            // S5.D -- back-fill estimate for messages loaded from pre-S5.D sessions.
+            if (msg.token_estimate == 0)
+                msg.token_estimate = TokenCounter::estimate_message(msg);
+            h.messages_.push_back(std::move(msg));
+        }
     }
     return h;
 }

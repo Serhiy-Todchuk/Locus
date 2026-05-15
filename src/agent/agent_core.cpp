@@ -502,14 +502,19 @@ void AgentCore::process_message(const std::string& content)
 
     ctx_->add_message({MessageRole::user, effective_content});
 
+    // S5.D -- pass the per-message token estimate as tokens_in so the
+    // activity log can show how much each turn costs.
+    int user_msg_tokens = ctx_->history().messages().back().token_estimate;
     activity_->emit(ActivityKind::user_message,
                     "User message (" + std::to_string(user_input.size()) + " chars)",
-                    user_input);
+                    user_input,
+                    /*tokens_in=*/user_msg_tokens);
 
     frontends_.broadcast([&](IFrontend& fe) {
         fe.on_context_meter(ctx_->current_tokens(), ctx_->llm_config().context_limit,
                             ctx_->budget().last_prompt_tokens(),
-                            ctx_->budget().last_completion_tokens());
+                            ctx_->budget().last_completion_tokens(),
+                            ctx_->budget().reserve());
     });
 
     int round = 0;
@@ -546,7 +551,8 @@ void AgentCore::process_message(const std::string& content)
         frontends_.broadcast([&](IFrontend& fe) {
             fe.on_context_meter(ctx_->current_tokens(), ctx_->llm_config().context_limit,
                             ctx_->budget().last_prompt_tokens(),
-                            ctx_->budget().last_completion_tokens());
+                            ctx_->budget().last_completion_tokens(),
+                            ctx_->budget().reserve());
         });
 
         if (step.had_error) {
@@ -871,7 +877,8 @@ void AgentCore::apply_pending_compaction()
     frontends_.broadcast([&](IFrontend& fe) {
         fe.on_context_meter(ctx_->current_tokens(), ctx_->llm_config().context_limit,
                             ctx_->budget().last_prompt_tokens(),
-                            ctx_->budget().last_completion_tokens());
+                            ctx_->budget().last_completion_tokens(),
+                            ctx_->budget().reserve());
     });
 }
 
@@ -909,7 +916,8 @@ void AgentCore::reset_conversation()
     frontends_.broadcast([&](IFrontend& fe) {
         fe.on_context_meter(ctx_->current_tokens(), ctx_->llm_config().context_limit,
                             ctx_->budget().last_prompt_tokens(),
-                            ctx_->budget().last_completion_tokens());
+                            ctx_->budget().last_completion_tokens(),
+                            ctx_->budget().reserve());
     });
     frontends_.broadcast([](IFrontend& fe) { fe.on_session_reset(); });
 }
@@ -1027,7 +1035,8 @@ void AgentCore::load_session(const std::string& session_id)
     frontends_.broadcast([&](IFrontend& fe) {
         fe.on_context_meter(ctx_->current_tokens(), ctx_->llm_config().context_limit,
                             ctx_->budget().last_prompt_tokens(),
-                            ctx_->budget().last_completion_tokens());
+                            ctx_->budget().last_completion_tokens(),
+                            ctx_->budget().reserve());
     });
     frontends_.broadcast([](IFrontend& fe) { fe.on_session_reset(); });
 }

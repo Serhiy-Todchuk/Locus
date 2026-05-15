@@ -39,6 +39,7 @@ add_executable(locus_tests
     test_system_prompt_assembly.cpp
     test_llm_context.cpp
     test_tool_safety.cpp
+    test_reserve_enforcement.cpp
     test_source_hygiene.cpp
     retrieval_eval/metrics.cpp
     support/shared_embedder.cpp

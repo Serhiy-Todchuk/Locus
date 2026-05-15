@@ -51,6 +51,11 @@ struct ChatMessage {
     // For tool-result messages:
     std::string tool_call_id;
 
+    // S5.D -- heuristic token estimate populated by TokenCounter::estimate_message()
+    // when the message is added to ConversationHistory. 0 for messages loaded from
+    // pre-S5.D session files (estimate_message() re-computes on add/from_json).
+    int token_estimate = 0;
+
     nlohmann::json to_json() const;
     static ChatMessage from_json(const nlohmann::json& j);
 };

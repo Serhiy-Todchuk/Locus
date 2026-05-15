@@ -33,12 +33,14 @@ ChatFooterChips::ChatFooterChips(wxWindow* parent)
 }
 
 bool ChatFooterChips::set_context_meter(int used, int limit,
-                                         int prompt_tokens, int completion_tokens)
+                                         int prompt_tokens, int completion_tokens,
+                                         int reserve_tokens)
 {
     last_ctx_used_       = used;
     last_ctx_limit_      = limit;
     last_ctx_prompt_     = prompt_tokens;
     last_ctx_completion_ = completion_tokens;
+    last_ctx_reserve_    = reserve_tokens;
     if (completion_tokens > 0) live_completion_estimate_ = 0;
     refresh_ctx_label();
     return false;  // label width is fixed; no re-layout needed
@@ -134,9 +136,15 @@ bool ChatFooterChips::hide_plan_chip()
 
 void ChatFooterChips::refresh_ctx_label()
 {
-    int used  = last_ctx_used_;
-    int limit = last_ctx_limit_;
-    int pct = (limit > 0) ? (used * 100 / limit) : 0;
+    int used    = last_ctx_used_;
+    int limit   = last_ctx_limit_;
+    int reserve = last_ctx_reserve_;
+    // S5.D -- gauge and color thresholds are against the effective limit
+    // (raw window minus the reserved headroom) so the gauge turns red when
+    // the user-visible budget is exhausted, not when the LLM's output space
+    // is consumed.
+    int eff_limit = (reserve > 0 && limit > reserve) ? (limit - reserve) : limit;
+    int pct = (eff_limit > 0) ? (used * 100 / eff_limit) : 0;
     if (ctx_gauge_) ctx_gauge_->SetValue(std::min(pct, 100));
 
     wxString out_part;
@@ -159,6 +167,19 @@ void ChatFooterChips::refresh_ctx_label()
         label = wxString::Format("ctx: %d/%d (%d%%)", used, limit, pct);
     }
     if (ctx_label_) ctx_label_->SetLabel(label);
+
+    // Tooltip: stacked breakdown so the user understands the split.
+    if (ctx_label_) {
+        wxString tip = wxString::Format("Total: %d / %d tokens", used, limit);
+        if (last_ctx_prompt_ > 0)
+            tip += wxString::Format("\n  Prompt: %d", last_ctx_prompt_);
+        if (last_ctx_completion_ > 0)
+            tip += wxString::Format("\n  Last completion: %d", last_ctx_completion_);
+        if (reserve > 0)
+            tip += wxString::Format("\n  Reserved headroom: %d (effective limit: %d)",
+                                    reserve, eff_limit);
+        ctx_label_->SetToolTip(tip);
+    }
 
     if (ctx_gauge_) {
         if (pct < 60)

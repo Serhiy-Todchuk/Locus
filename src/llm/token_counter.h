@@ -14,6 +14,10 @@ class TokenCounter {
 public:
     static int estimate(const std::string& text);
     static int estimate(const std::vector<ChatMessage>& messages);
+
+    // S5.D -- per-message estimate: the same value estimate(messages) assigns
+    // per message (4 framing tokens + estimate(content) + tool-call bodies).
+    static int estimate_message(const ChatMessage& msg);
 };
 
 } // namespace locus

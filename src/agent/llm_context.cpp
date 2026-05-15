@@ -1,6 +1,7 @@
 #include "llm_context.h"
 
 #include "index/index_query.h"
+#include "core/workspace.h"
 
 #include <spdlog/spdlog.h>
 
@@ -49,6 +50,7 @@ LLMContext::LLMContext(IWorkspaceServices&                      services,
 {
     budget_         = std::make_unique<ContextBudget>(llm_config_.context_limit, frontends_);
     change_tracker_ = std::make_unique<FileChangeTracker>();
+    update_reserve();
 
     session_id_ = make_session_id();
     turn_id_    = 0;
@@ -72,6 +74,37 @@ LLMContext::LLMContext(IWorkspaceServices&                      services,
 int LLMContext::current_tokens() const
 {
     return budget_->current(history_.estimate_tokens());
+}
+
+int LLMContext::effective_limit() const
+{
+    return budget_->effective_limit();
+}
+
+bool LLMContext::would_breach_reserve(int incoming_estimate) const
+{
+    int limit   = llm_config_.context_limit;
+    int reserve = budget_->reserve();
+    if (limit <= 0 || reserve <= 0) return false;
+    return (incoming_estimate + reserve > limit);
+}
+
+void LLMContext::update_reserve()
+{
+    auto* ws = services_.workspace();
+    if (!ws) return;
+    int limit   = llm_config_.context_limit;
+    int cfg_val = ws->config().compaction_reserve_tokens;
+    int reserve = 0;
+    if (cfg_val >= 0) {
+        reserve = cfg_val;
+    } else if (limit > 0) {
+        reserve = std::min(limit / 5, 4096);
+    }
+    budget_->set_reserve(reserve);
+    if (reserve > 0)
+        spdlog::info("LLMContext: response reserve set to {} tokens (limit {})",
+                     reserve, limit);
 }
 
 // -- Session / turn identity -------------------------------------------------

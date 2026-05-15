@@ -79,14 +79,17 @@ public:
     // heuristic).
     int current_tokens() const;
 
-    // Effective context limit. S5.D will subtract `reserve_tokens()` here;
-    // pre-S5.D this just returns `llm_config_.context_limit`.
-    int effective_limit() const { return llm_config_.context_limit; }
+    // S5.D -- effective context limit: raw window minus the response reserve.
+    int effective_limit()  const;
+    int reserve_tokens()   const { return budget_->reserve(); }
 
-    // S5.D forward-looking surface. Stubbed to 0 / false here so callers can
-    // already wire to LLMContext; the real implementation lands with S5.D.
-    int  reserve_tokens() const { return 0; }
-    bool would_breach_reserve(int /*incoming_estimate*/) const { return false; }
+    // True when `incoming_estimate` (prompt tokens about to be sent) combined
+    // with the reserve would breach the raw context window.
+    bool would_breach_reserve(int incoming_estimate) const;
+
+    // Update the reserve after the context limit is known (e.g. after the
+    // server-probe fills in llm_config_.context_limit).
+    void update_reserve();
 
     // -- Session / turn identity (S4.B) -------------------------------------
 

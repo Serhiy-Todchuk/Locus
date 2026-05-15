@@ -83,11 +83,14 @@ public:
     // Context window usage update. `prompt_tokens` and `completion_tokens`
     // (S4.V Task 8) are the last server-reported split from the most recent
     // LLM round; 0 means "not yet reported" (e.g. session-open broadcast
-    // before any LLM call). Frontends are free to ignore the split and
-    // render only `used_tokens` -- the context meter still works.
+    // before any LLM call). `reserve_tokens` (S5.D) is the headroom the
+    // agent loop keeps free for the response; 0 means no reserve.
+    // Frontends are free to ignore the split/reserve and render only
+    // `used_tokens` -- the context meter still works.
     virtual void on_context_meter(int used_tokens, int limit,
                                   int prompt_tokens = 0,
-                                  int completion_tokens = 0) = 0;
+                                  int completion_tokens = 0,
+                                  int reserve_tokens = 0) = 0;
 
     // Context is critically full. Frontend should offer compaction options.
     virtual void on_compaction_needed(int used_tokens, int limit) = 0;

@@ -149,7 +149,7 @@ public:
         results.push_back({id, success});
     }
     void on_turn_complete() override {}
-    void on_context_meter(int, int, int, int) override {}
+    void on_context_meter(int, int, int, int, int) override {}
     void on_compaction_needed(int, int) override {}
     void on_session_reset() override {}
     void on_error(const std::string&) override {}
