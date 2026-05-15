@@ -2,21 +2,21 @@
 
 Manual-only harness that measures retrieval quality on a real workspace. Lets
 us tell whether a chunker tweak, embedder swap, or RRF parameter change
-actually helps — instead of shipping retrieval on vibes.
+actually helps -- instead of shipping retrieval on vibes.
 
 ## What it measures
 
 For each gold query in [queries.json](queries.json), runs `search_text`,
 `search_semantic`, and `search_hybrid` and computes:
 
-- **recall@K** for K ∈ {1, 3, 5, 10} — fraction of expected files retrieved in
+- **recall@K** for K ∈ {1, 3, 5, 10} -- fraction of expected files retrieved in
   the top K
-- **MRR** — mean reciprocal rank of the first hit
-- **nDCG@10** — discounted cumulative gain (binary relevance)
-- **wall time** — total time spent in each method's calls
+- **MRR** -- mean reciprocal rank of the first hit
+- **nDCG@10** -- discounted cumulative gain (binary relevance)
+- **wall time** -- total time spent in each method's calls
 
 Granularity is file-level (one path per relevant document). Symbol-level
-gold is intentionally not modelled here — `search_symbols` is a different beast
+gold is intentionally not modelled here -- `search_symbols` is a different beast
 and is covered by unit tests.
 
 ## Running
@@ -33,7 +33,7 @@ cmake --build build/release --target locus_retrieval_eval
 
 It will:
 1. Open the workspace (full index build runs synchronously in the ctor).
-2. Wait for the embedding queue to drain (capped at 600s — set `--no-wait` to
+2. Wait for the embedding queue to drain (capped at 600s -- set `--no-wait` to
    skip).
 3. Run every query through all three methods.
 4. Write a markdown report to `--out` and print a summary to stdout.
@@ -58,7 +58,7 @@ the improvement.
 ## Authoring queries
 
 Each entry in [queries.json](queries.json) is `{ query, expected_files[] }`.
-Keep `expected_files` tight — 1–3 paths per query. A query that lists 10
+Keep `expected_files` tight -- 1-3 paths per query. A query that lists 10
 "related" files inflates recall and washes out signal. If a real codebase
 question genuinely needs 5+ files, split it into multiple queries.
 

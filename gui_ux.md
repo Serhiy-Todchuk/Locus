@@ -1,4 +1,4 @@
-# Locus — GUI / UX Specification
+# Locus -- GUI / UX Specification
 
 Platform-, library-, and language-agnostic description of the user-facing
 surface. Any new client (desktop port, web, mobile, alternate UI library)
@@ -25,11 +25,11 @@ These are non-negotiable. Every screen below is a consequence of these.
    progress, never freezes the surface.
 4. **Token economy is visible.** The cost of a turn is not hidden. The
    user sees context usage, LOCUS.md cost, and is warned before limits
-   are exceeded — never silently truncated.
+   are exceeded -- never silently truncated.
 5. **Control over automation.** Features default to "ask"; "auto" is
    opt-in per-tool. The user is never surprised by what the agent did.
 6. **Keyboard-first where it matters.** Chat input, command palette,
-   approval decisions, navigation — all reachable without the mouse.
+   approval decisions, navigation -- all reachable without the mouse.
 7. **Lean native feel.** The app should feel like a desktop tool, not a
    browser tab. Small memory footprint, fast startup, no perceptible
    jank. UI must remain responsive during LLM inference.
@@ -65,26 +65,26 @@ Panes are resizable, closable, and their layout persists across restarts.
 Closing a pane also reflects in the View menu (its checkbox unticks), and
 re-ticking the View entry re-shows the pane with its last size.
 
-The window opens at a sensible default size (roughly 1200×800) centred on the
+The window opens at a sensible default size (roughly 1200x800) centred on the
 primary display on first run, then restores its previous geometry.
 
 The **status bar** is split into two cells:
 
-- Left cell — short status message: `Ready` when idle, `Agent working…`
+- Left cell -- short status message: `Ready` when idle, `Agent working...`
   while a turn is in progress, the selected file path when the user selects
-  something in the file tree, or `Error: …` on failure.
-- Right cell — current context meter: `ctx: used/limit`. Mirrors the
+  something in the file tree, or `Error: ...` on failure.
+- Right cell -- current context meter: `ctx: used/limit`. Mirrors the
   footer gauge in the chat pane; gives a glanceable reading even when the
   chat footer is out of view.
 
 ### 2.3 Background process + tray
 The "core" that owns workspace state, the LLM connection, and the conversation
 runs as a **background process** with a **system tray icon**. The main window
-is one view onto that core — closing it does not stop the agent.
+is one view onto that core -- closing it does not stop the agent.
 
 - Tray icon state: **idle / indexing / active / error** (visually distinct).
-  The icon tooltip names the current state (`Locus — idle`, `Locus —
-  working…`, `Locus — error`).
+  The icon tooltip names the current state (`Locus -- idle`, `Locus --
+  working...`, `Locus -- error`).
 - **Left double-click** the tray icon: restores and raises the window. If
   already shown, just brings it to the front.
 - **Right-click** opens the tray menu. The "Show/Hide Window" entry label
@@ -113,20 +113,20 @@ themselves).
 | **Assistant**    | Left-aligned bubble, neutral color. | Markdown rendered (headings, lists, tables, code blocks, blockquotes, inline code). Code blocks syntax-highlighted. |
 | **Reasoning**    | Dashed/muted block, collapsible, appears **above** the assistant bubble it belongs to. | Rendered as monospace text. Auto-collapses to "Thoughts" after the turn completes. |
 | **Tool call**    | Left-aligned muted bubble. Two parts: name + short preview, then a collapsible "Result" block. | Long results are truncated with a "(N chars truncated)" marker. Full result is expandable. |
-| **Error**        | Centered, error-colored. | Recoverable errors only — fatal problems use a dialog. |
+| **Error**        | Centered, error-colored. | Recoverable errors only -- fatal problems use a dialog. |
 | **System note**  | Styled like a tool bubble, but emitted by the client (e.g. `/help` output). | Makes clear the message is local, not from the LLM. |
 
 ### 3.2 Streaming behavior
 
 - Assistant tokens arrive incrementally. The bubble shows a **blinking cursor**
   marker until the turn completes.
-- Tokens are flushed at ~30 fps — buffered briefly to avoid thrash, not so
+- Tokens are flushed at ~30 fps -- buffered briefly to avoid thrash, not so
   long that the user feels lag.
 - Markdown is re-rendered on each flush so formatting appears as it's typed.
   Code syntax highlighting runs once at turn-complete (expensive).
 - Reasoning tokens stream into the reasoning block (separate from the
   assistant bubble). They may arrive before *or* interleaved with content.
-- The reasoning block appears with a summary of `Thinking…` while the turn
+- The reasoning block appears with a summary of `Thinking...` while the turn
   is live. When the turn completes, the summary flips to `Thoughts` and the
   block auto-collapses. The user can still expand it to read what the model
   was doing.
@@ -145,7 +145,7 @@ For each tool call in a turn:
    bubble. Closed by default. Opens to show the raw result (monospace,
    bounded height, scrollable).
 3. Results longer than a few hundred characters are **truncated inline** in
-   the bubble with a `… (N chars truncated)` marker. The full result is
+   the bubble with a `... (N chars truncated)` marker. The full result is
    still accessible via the expanded disclosure, and is never dropped from
    the conversation history unless the user compacts it.
 4. If the call was rejected or modified by the user, that is reflected on
@@ -156,11 +156,11 @@ For each tool call in a turn:
 A single thin bar at the bottom of the chat pane, left-to-right:
 
 - **Context meter**: progress bar + `ctx: used/limit (N%)`.
-  - Green under 60%, yellow 60–80%, red above 80%.
-- **Compact** button — opens the compaction dialog (Section 6).
-- **Stop** button — cancels the current turn. Only enabled while streaming.
+  - Green under 60%, yellow 60-80%, red above 80%.
+- **Compact** button -- opens the compaction dialog (Section 6).
+- **Stop** button -- cancels the current turn. Only enabled while streaming.
 - (spacer)
-- **LOCUS.md chip** — `[LOCUS.md: N tk]` when present, hidden when absent.
+- **LOCUS.md chip** -- `[LOCUS.md: N tk]` when present, hidden when absent.
   Tooltip explains it's the per-request overhead from workspace instructions.
 
 ### 3.5 Input
@@ -170,12 +170,12 @@ A multi-line text box below the chat log.
 - **Enter** sends. **Shift+Enter** inserts a newline.
 - Placeholder hints the affordances: `/` for commands, Enter to send,
   Shift+Enter for newline.
-- While the agent is working, the input is **read-only** (not disabled —
+- While the agent is working, the input is **read-only** (not disabled --
   disabling typically forces system colors that clash with dark themes).
   User can still select and copy text. Stop button in footer ends the turn.
 - On turn complete, focus returns to the input.
 - Submitted user messages are added to the chat log immediately, before
-  the agent responds — the user always sees their own message echoed so
+  the agent responds -- the user always sees their own message echoed so
   there is no doubt the submission landed.
 
 ### 3.6 Copy / selection
@@ -195,17 +195,17 @@ command palette for the chat.
 
 Two kinds of items appear in the same list:
 
-- **Built-in commands** — local, handled by the client (no LLM call):
-  - `/help` — show this list inline in the chat.
-  - `/reset` (alias `/clear`) — start a fresh conversation.
-  - `/compact` — open the compaction dialog.
-  - `/save` — save the current session to disk.
-  - `/settings` — open the settings dialog.
-  - `/quit` — (CLI) exit the client.
-  - `/history`, `/sessions`, `/load <id>` — (CLI) session bookkeeping.
+- **Built-in commands** -- local, handled by the client (no LLM call):
+  - `/help` -- show this list inline in the chat.
+  - `/reset` (alias `/clear`) -- start a fresh conversation.
+  - `/compact` -- open the compaction dialog.
+  - `/save` -- save the current session to disk.
+  - `/settings` -- open the settings dialog.
+  - `/quit` -- (CLI) exit the client.
+  - `/history`, `/sessions`, `/load <id>` -- (CLI) session bookkeeping.
   Any additional GUI equivalents for menu actions should be added here.
 
-- **Tools** — every tool registered in the workspace, tagged `[tool]`. Tool
+- **Tools** -- every tool registered in the workspace, tagged `[tool]`. Tool
   names come from the running core, not a hardcoded list. When the user
   picks a tool, the command is inserted into the input *as a hint*; on
   Enter it is sent as a regular user message (the LLM decides whether to
@@ -222,7 +222,7 @@ follows the slash token yet. It closes automatically when:
 
 - The input no longer starts with `/`.
 - The user types a space/tab/newline after the command name (arguments
-  phase — suggestions no longer apply).
+  phase -- suggestions no longer apply).
 - The user presses **Escape**.
 - The user clicks outside the popup.
 - The input loses focus.
@@ -253,7 +253,7 @@ When the user accepts a suggestion, the input's content becomes:
 ```
 
 with the cursor at the end, ready for arguments. The popup closes. Accepting
-does not submit — the user decides when to press Enter. Acceptance is
+does not submit -- the user decides when to press Enter. Acceptance is
 idempotent: the user can invoke the popup again immediately (e.g. to switch
 to a different command).
 
@@ -266,7 +266,7 @@ On Enter, the client inspects the input:
    Clear the input. Any associated output (e.g. `/help` text) appears as
    a System note in the chat.
 2. Otherwise: the input is sent as a normal user message. Tool-name slash
-   commands fall into this path — the LLM sees the text and may choose to
+   commands fall into this path -- the LLM sees the text and may choose to
    call that tool.
 
 ### 4.7 Rendering rules for list rows
@@ -288,14 +288,14 @@ Each row is a single line:
   There must be **no empty trailing row** when fewer items are shown.
 - Positioned so it does not run off-screen; if there isn't room below the
   input it opens above.
-- Does not steal focus from the input — the user keeps typing while the
+- Does not steal focus from the input -- the user keeps typing while the
   popup is open.
 
 ---
 
 ## 5. File Tree / Workspace Browser (left sidebar)
 
-A tree view of the workspace root. Lazy-loaded — children of a folder are
+A tree view of the workspace root. Lazy-loaded -- children of a folder are
 fetched when it is expanded.
 
 - The synthetic root node is hidden; top-level entries appear flush with
@@ -303,13 +303,13 @@ fetched when it is expanded.
 - Entries are sorted **directories first, then files, each group
   alphabetical**. The order is stable across rebuilds.
 - Distinct icons for: open folder / closed folder / generic file / code
-  file (source extensions like `.cpp`, `.py`, `.rs`, `.json`, `.cmake`, …)
-  / document file (`.md`, `.txt`, `.pdf`, `.docx`, `.xlsx`, `.html`, …).
+  file (source extensions like `.cpp`, `.py`, `.rs`, `.json`, `.cmake`, ...)
+  / document file (`.md`, `.txt`, `.pdf`, `.docx`, `.xlsx`, `.html`, ...).
   Icons may come from the host platform's icon set; the *distinction*
   between folders, code, and docs is required, not the exact pixels.
 - Clicking a file selects it (shows full path in status bar). Double-click
   or Enter on a directory toggles its expansion; on a file it fires a
-  "preview/open" action (future — may route through an attached editor).
+  "preview/open" action (future -- may route through an attached editor).
 - A small **stats strip** at the top of the pane (above the tree) shows
   `Files: N | Symbols: M | Headings: K`. When semantic search has finished
   embedding the workspace, a `| Vec: V` suffix is appended.
@@ -320,7 +320,7 @@ fetched when it is expanded.
     determinate and fills from `done/total`.
   - When idle (no indexing, embedding finished or disabled), the gauge is
     hidden.
-- Respects the workspace's exclude patterns — excluded files do not appear.
+- Respects the workspace's exclude patterns -- excluded files do not appear.
 
 ---
 
@@ -336,19 +336,19 @@ cover chat, does not pop out of the window.
 - **Arguments editor**: the JSON arguments, rendered with syntax
   highlighting (strings / numbers / property names / keywords / operators
   picked out in distinct colors, on both light and dark palettes). The
-  editor starts **read-only** — it is a display by default.
-- Buttons (arranged right-aligned, with accent colors to match intent —
+  editor starts **read-only** -- it is a display by default.
+- Buttons (arranged right-aligned, with accent colors to match intent --
   approve is "positive green", reject is "destructive red", modify is
   neutral):
-  - **Approve** — execute with the current args. Default-focused when the
+  - **Approve** -- execute with the current args. Default-focused when the
     drawer opens so Enter confirms.
-  - **Modify** — toggles the arguments editor into editable mode. The
+  - **Modify** -- toggles the arguments editor into editable mode. The
     Approve button re-labels to **Confirm** and the Modify button to
     **Cancel Edit**. Confirm parses the JSON; on a parse error an inline
     warning is shown and the drawer stays open so the user can fix it.
     Cancel Edit reverts to the original arguments and drops back to
     read-only mode.
-  - **Reject** — return a rejection to the LLM so it can try something else.
+  - **Reject** -- return a rejection to the LLM so it can try something else.
 - Keyboard while the drawer is focused: **Enter** = Approve (or Confirm if
   editing), **Escape** = Reject, **M** = toggle Modify. While the user is
   actively typing inside the editable arguments or the ask-user input,
@@ -370,7 +370,7 @@ switches to a question/answer form:
   answer rather than hanging.
 - Depending on the client, `ask_user` may surface as the bottom drawer
   *or* as a modal dialog that pops up centred on the window. Both are
-  acceptable — the behavior described above is what matters.
+  acceptable -- the behavior described above is what matters.
 
 ### 6.3 Policy per tool
 
@@ -396,10 +396,10 @@ silently drops content**.
 
 | Strategy                    | Description                                                                          |
 |-----------------------------|--------------------------------------------------------------------------------------|
-| **A — LLM Summary**         | Summarize the conversation into a compact digest. User previews and edits first.     |
-| **B — Drop tool results**   | Keep all user/assistant messages; strip verbose tool outputs. Preview shows which ones. |
-| **C — Drop oldest N turns** | Slider for N. Preview of which messages will vanish.                                 |
-| **D — Save and restart**    | Persist the session; start fresh with an optional briefing message (user-editable).  |
+| **A -- LLM Summary**         | Summarize the conversation into a compact digest. User previews and edits first.     |
+| **B -- Drop tool results**   | Keep all user/assistant messages; strip verbose tool outputs. Preview shows which ones. |
+| **C -- Drop oldest N turns** | Slider for N. Preview of which messages will vanish.                                 |
+| **D -- Save and restart**    | Persist the session; start fresh with an optional briefing message (user-editable).  |
 
 At the top of the dialog a bold **Current** line reads
 `Current: used / limit tokens (pct%)`. Both the **"After compaction: ~N
@@ -408,11 +408,11 @@ update live as the user changes strategy or slides the N-turns slider,
 so the saving is always visible before committing.
 
 Strategy C's preview list shows the first ~60 characters of each message
-that would be dropped, prefixed by its role (e.g. `[user] …`, `[assistant]
-…`). Rows are single-line and stable as the slider moves, so the user can
+that would be dropped, prefixed by its role (e.g. `[user] ...`, `[assistant]
+...`). Rows are single-line and stable as the slider moves, so the user can
 see exactly which turns are going away.
 
-Pinned items (see §9) are always excluded from summarization and deletion.
+Pinned items (see section9) are always excluded from summarization and deletion.
 Per-workspace default strategy is configurable and pre-selected.
 
 **Implementation status.** Strategies B (drop tool results) and C (drop
@@ -427,25 +427,25 @@ expose the chooser in a way that lets them be added without a redesign.
 Grouped sections (rendered as tabs or static-box groups depending on the
 client). Changes apply on OK / Apply. Cancel reverts.
 
-1. **LLM** — endpoint URL, model name, temperature, context length. A
+1. **LLM** -- endpoint URL, model name, temperature, context length. A
    muted hint next to the context field makes clear that `0 = auto-detect
    from server`. When any LLM field changes, the dialog warns that Locus
    must be restarted for the new endpoint/model to take effect; other
    categories apply live.
-2. **Indexing** — exclude glob patterns (one pattern per line, multi-line
+2. **Indexing** -- exclude glob patterns (one pattern per line, multi-line
    text box), an "Enable semantic search" checkbox, and the embedding
    model name. Changing the semantic toggle or the model reloads the
    embedder; a warning surfaces if the model file cannot be found.
-3. **Tools** — per-tool approval policy chooser (`Ask` / `Auto` /
+3. **Tools** -- per-tool approval policy chooser (`Ask` / `Auto` /
    `Deny`). Tools are listed **alphabetically** and the list is housed in
    a **scrollable region** so a long tool list never grows the dialog
    beyond the screen. Only tools whose chosen policy differs from the
-   tool's built-in default are persisted — this keeps the workspace
+   tool's built-in default are persisted -- this keeps the workspace
    config file tidy.
-4. **Session** *(planned)* — autosave on exit, startup behavior (open
+4. **Session** *(planned)* -- autosave on exit, startup behavior (open
    last workspace), start-on-login toggle.
-5. **Appearance** *(planned)* — theme (system / light / dark), font size.
-6. **Remote** *(planned)* — enable LAN access, port, bearer token display.
+5. **Appearance** *(planned)* -- theme (system / light / dark), font size.
+6. **Remote** *(planned)* -- enable LAN access, port, bearer token display.
 
 All settings are workspace-scoped unless marked "Global" next to the field.
 
@@ -459,7 +459,7 @@ the workspace config file on disk is updated atomically.
 Users can pin specific files, regions, or snippets into context. Pinned
 items:
 - Are always included in the prompt, surviving all compaction strategies.
-- Appear as a visible strip/list — the user can see what's pinned without
+- Appear as a visible strip/list -- the user can see what's pinned without
   leaving the chat.
 - Can be unpinned at any time.
 - Show a total token cost alongside LOCUS.md overhead.
@@ -480,7 +480,7 @@ UX rules:
   sending (not silently injected).
 - The user can toggle inclusion per-message.
 - Standalone mode without an editor: the user explicitly attaches a file
-  region via a UI gesture (drag into chat, right-click → attach).
+  region via a UI gesture (drag into chat, right-click -> attach).
 
 ---
 
@@ -516,14 +516,14 @@ newest** so the user can watch activity live.
 The following kinds are emitted; each carries both a short `summary` and a
 longer `detail` blob:
 
-- `system_prompt` — the system prompt was assembled/seeded.
-- `user_message` — the user submitted a turn.
-- `llm_response` — the LLM finished streaming; token usage is included.
-- `tool_call` — a tool invocation was requested.
-- `tool_result` — a tool invocation finished.
-- `index_event` — indexer/embedder progress or notable state changes.
-- `warning` — non-fatal issue surfaced to the user.
-- `error` — non-fatal error surfaced to the user.
+- `system_prompt` -- the system prompt was assembled/seeded.
+- `user_message` -- the user submitted a turn.
+- `llm_response` -- the LLM finished streaming; token usage is included.
+- `tool_call` -- a tool invocation was requested.
+- `tool_result` -- a tool invocation finished.
+- `index_event` -- indexer/embedder progress or notable state changes.
+- `warning` -- non-fatal issue surfaced to the user.
+- `error` -- non-fatal error surfaced to the user.
 
 Clients should give each kind a subtle visual hint so the user can skim
 the log. Suggested treatments: red-background row for errors,
@@ -537,7 +537,7 @@ Selecting a row populates the bottom pane with the full event detail:
 
 ```
 [<kind>]  <summary>
-tokens: total=<N> out=<N> delta=±<N>    (when applicable)
+tokens: total=<N> out=<N> delta=+/-<N>    (when applicable)
 ------------------------------------------------------------
 <full detail text, wrapped, read-only, selectable>
 ```
@@ -550,7 +550,7 @@ prompts, or stack traces are legible without horizontal scrolling.
 The core keeps a buffer of recent events. Any frontend that attaches
 mid-session (a web client joining, the GUI opening against a running
 core, etc.) can pull the backlog at attach time and then subscribe to new
-events — no activity is lost to late arrivals.
+events -- no activity is lost to late arrivals.
 
 ### 11.6 Lifecycle
 
@@ -564,13 +564,13 @@ related message.
 
 Top-level menus (exact labels may vary by platform convention):
 
-- **File** — Open Workspace…, Recent Workspaces (submenu), Settings…, Quit.
-- **View** — toggle Files / Activity panes (check-items that reflect
+- **File** -- Open Workspace..., Recent Workspaces (submenu), Settings..., Quit.
+- **View** -- toggle Files / Activity panes (check-items that reflect
   current pane visibility; re-checking re-shows a pane that was closed).
-- **Session** — Reset Conversation, Compact Context, Save Session, Saved
+- **Session** -- Reset Conversation, Compact Context, Save Session, Saved
   Sessions submenu (one entry per saved session, each with Open / Delete
-  children), Clear All Sessions…
-- **Help** — About, slash command reference, link to docs.
+  children), Clear All Sessions...
+- **Help** -- About, slash command reference, link to docs.
 
 ### 12.1 Recent Workspaces submenu
 
@@ -578,7 +578,7 @@ Top-level menus (exact labels may vary by platform convention):
 - Workspaces are deduplicated on their canonical path (case-insensitive
   on platforms where the filesystem is case-insensitive).
 - An empty list shows a disabled `(none)` placeholder.
-- The list is **global**, not per-workspace — it is shared across every
+- The list is **global**, not per-workspace -- it is shared across every
   workspace instance.
 
 ### 12.2 Saved Sessions submenu
@@ -586,7 +586,7 @@ Top-level menus (exact labels may vary by platform convention):
 - Rebuilt each time the Session menu opens, so sessions saved during the
   current run show up without restarting the app.
 - Each entry label format: `<timestamp>  <first-user-message preview>  (N msgs)`.
-  The preview is truncated at ~48 characters with `…`.
+  The preview is truncated at ~48 characters with `...`.
 - Each entry is itself a submenu with **Open** and **Delete** children.
 - If the disk store holds more sessions than the menu comfortably displays
   (say, more than ~50), the menu caps at that count and shows a disabled
@@ -599,7 +599,7 @@ Top-level menus (exact labels may vary by platform convention):
 ### 12.3 Cross-surface parity
 
 Every menu item that exists in the GUI should also be reachable as a slash
-command when that makes sense (see §4.1).
+command when that makes sense (see section4.1).
 
 ### 12.4 Global shortcuts
 
@@ -607,7 +607,7 @@ Actually bound today:
 
 | Shortcut         | Action                           |
 |------------------|----------------------------------|
-| Ctrl/Cmd + O     | Open Workspace…                  |
+| Ctrl/Cmd + O     | Open Workspace...                  |
 | Ctrl/Cmd + ,     | Open Settings                    |
 | Ctrl/Cmd + Q     | Quit                             |
 | Ctrl/Cmd + R     | Reset conversation               |
@@ -636,7 +636,7 @@ Planned / suggested for future clients (keep them free for parity):
 
 - **Recoverable** (bad LLM response, network hiccup, tool failure): show
   inline in chat as an error message. The status bar left cell mirrors
-  the latest error (`Error: …`). The tray icon flips to its error state
+  the latest error (`Error: ...`). The tray icon flips to its error state
   so the user notices even when the window is hidden. Offer retry where
   applicable.
 - **Configuration** (LLM unreachable, bad endpoint): show in a status
@@ -691,7 +691,7 @@ whole process.
 
 ### 15.2 Single-instance behaviour
 
-Launching a second instance is surfaced to the user explicitly — either
+Launching a second instance is surfaced to the user explicitly -- either
 with a message ("Locus is already running") or by forwarding the request
 to the existing instance so it can switch workspace. Two instances
 competing over the same `.locus/` directory is never allowed.
@@ -718,7 +718,7 @@ When building a new client (web, mobile, alternate desktop toolkit):
 
 - The slash command list is data, not UI: fetch it from core (built-in
   commands + tool names), don't hardcode.
-- The approval drawer is a **view** on a pending-call state, not a modal —
+- The approval drawer is a **view** on a pending-call state, not a modal --
   multiple clients may be attached to the same core; each sees the same
   pending call.
 - The chat is a **projection** of the conversation history owned by core.
@@ -727,7 +727,7 @@ When building a new client (web, mobile, alternate desktop toolkit):
 - Theme and window chrome are client choices; the grammar (messages, tool
   bubbles, reasoning blocks) is shared.
 
-Anything not listed here should still follow the principles in §1 when
+Anything not listed here should still follow the principles in section1 when
 ambiguous: **transparent, instant, user-controlled, cheap to run.**
 
 ---
@@ -736,7 +736,7 @@ ambiguous: **transparent, instant, user-controlled, cheap to run.**
 
 The core pushes the same set of events to every attached frontend. A new
 client is "feature-complete" when it handles all of these coherently. They
-are listed here so ports know what to wire up — the exact callback names
+are listed here so ports know what to wire up -- the exact callback names
 are implementation details; the *concepts* are the contract.
 
 | Event                    | What the client should do                                           |
@@ -751,9 +751,9 @@ are implementation details; the *concepts* are the contract.
 | compaction needed        | Open the compaction dialog automatically. |
 | session reset            | Clear the chat pane and the activity log; re-seed status bar to "Conversation reset". |
 | error                    | Show the error inline in chat, mirror it in the status bar, flip the tray to "error". |
-| embedding progress       | Update the file tree re-index gauge (pulse → determinate → hide). |
+| embedding progress       | Update the file tree re-index gauge (pulse -> determinate -> hide). |
 | activity event           | Append a row to the activity log (all of the above also fan out here for a unified timeline). |
 
 Clients may add their own concerns on top (notifications, sound cues,
 editor-attached context, remote control), but they must at minimum respond
-to the events above — otherwise the user loses operating transparency.
+to the events above -- otherwise the user loses operating transparency.

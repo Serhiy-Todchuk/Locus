@@ -19,7 +19,7 @@ report on.
 
 Above the chat input there are three buttons: **Chat** | **Plan** | **Execute**.
 When a plan is proposed, a **plan bubble** appears in the chat with numbered
-steps (`○` pending / `⧗` in progress / `✓` done / `✗` failed) and
+steps (`pending` pending / `in_progress` in progress / `done` done / `x` failed) and
 **Approve** / **Reject** links. Next to the context-token meter at the
 footer there's a **plan chip** showing live progress (`Plan: 2/4 -- ...`).
 
@@ -50,14 +50,14 @@ never executes -- and a Reject cleanly leaves the workspace untouched.
 
 3. Send. Wait for the plan bubble.
 4. Confirm:
-   - The bubble has **four** numbered steps, each with `○` (pending) glyph.
+   - The bubble has **four** numbered steps, each with `pending` (pending) glyph.
    - **Approve** and **Reject** links are visible.
    - The activity panel shows **only** `propose_plan` -- no `write_file`,
      no `list_directory`, no `search`. If anything else fired, that's a
      real bug (mode filter broken); capture the activity-panel screenshot.
 5. Click **Reject**.
 6. Confirm:
-   - The plan bubble locks (Approve / Reject disappear, glyphs stay `○`).
+   - The plan bubble locks (Approve / Reject disappear, glyphs stay `pending`).
    - The plan chip never appears in the footer.
    - The mode switcher stays on **Plan**.
    - **The workspace folder is still empty.** Open it in Explorer to
@@ -121,7 +121,7 @@ Open the Locus repo (`D:\Projects\AICodeAss\`) as the workspace.
    | 5 | `write_file` | **yes** -- approve it |
 
    Between steps the agent should call `mark_step_done` -- the bubble's
-   glyphs tick from `○` to `✓` and the chip advances `1/5 -> 5/5`.
+   glyphs tick from `pending` to `done` and the chip advances `1/5 -> 5/5`.
 6. When the chip reads `Plan: done (5/5)` (or similar) and the agent's
    final reply lands, open `audit-tools.md` at the workspace root.
    It should exist, be non-empty, and actually reference
@@ -130,7 +130,7 @@ Open the Locus repo (`D:\Projects\AICodeAss\`) as the workspace.
 
 ### Soft-pass notes (model-side variance, not bugs)
 
-- **Step glyphs never advance past `○` / `⧗`:** small models often skip
+- **Step glyphs never advance past `pending` / `in_progress`:** small models often skip
   `mark_step_done` even though they're running the steps. As long as the
   tools fire in roughly the right order and the file is written, the test
   passes.

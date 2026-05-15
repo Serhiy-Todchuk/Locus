@@ -141,14 +141,14 @@ by control type within a known parent (see the chat round-trip script).
 
 | Surface | Coverage |
 |---|---|
-| `wxFrame`, `wxPanel`, `wxButton`, `wxTextCtrl`, `wxStaticText` | ✓ full |
-| `wxToggleButton` (mode switcher) | ✓ -- exposes `TogglePattern`; the driver maps `click` to `Toggle` |
-| `wxNotebook` tabs (Activity panel, Settings dialog) | ✓ -- tabs are `TabItem` controls; `select_tab` uses `SelectionItemPattern` |
-| `wxWebView` (Edge backend) | ✓ -- DOM exposed as a UIA `Document` sub-tree; chat content readable via `walk_subtree` |
-| `wxTreeCtrl` (file tree) | ✓ -- standard `Tree` / `TreeItem` |
-| `wxTextCtrl` with `wxTE_RICH2` (chat input) | ✓ but Windows reports its Name as `"RichEdit Control"` (native RichEdit overrides wxAccessibility). Address by control type `document` under the chat panel: `{ parent_aid: "locus.chat.panel", control_type: "document" }`. |
-| `wxStyledTextCtrl` (Scintilla, tool approval JSON pane) | ✗ limited -- use `SendMessage`/`SCI_GETTEXT` direct to the HWND if needed |
-| `wxAuiNotebook` (main frame panels) | ✓ exposes `TabItem`; click via `select_tab` |
+| `wxFrame`, `wxPanel`, `wxButton`, `wxTextCtrl`, `wxStaticText` | done full |
+| `wxToggleButton` (mode switcher) | done -- exposes `TogglePattern`; the driver maps `click` to `Toggle` |
+| `wxNotebook` tabs (Activity panel, Settings dialog) | done -- tabs are `TabItem` controls; `select_tab` uses `SelectionItemPattern` |
+| `wxWebView` (Edge backend) | done -- DOM exposed as a UIA `Document` sub-tree; chat content readable via `walk_subtree` |
+| `wxTreeCtrl` (file tree) | done -- standard `Tree` / `TreeItem` |
+| `wxTextCtrl` with `wxTE_RICH2` (chat input) | done but Windows reports its Name as `"RichEdit Control"` (native RichEdit overrides wxAccessibility). Address by control type `document` under the chat panel: `{ parent_aid: "locus.chat.panel", control_type: "document" }`. |
+| `wxStyledTextCtrl` (Scintilla, tool approval JSON pane) | x limited -- use `SendMessage`/`SCI_GETTEXT` direct to the HWND if needed |
+| `wxAuiNotebook` (main frame panels) | done exposes `TabItem`; click via `select_tab` |
 
 ## Three demo scripts
 

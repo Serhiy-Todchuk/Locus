@@ -5,18 +5,18 @@
 ### Problem
 
 Modern AI coding assistants (GitHub Copilot, Cursor, etc.) are:
-- Cloud-dependent — useless when internet is down
-- Privacy-hostile — your private code and data leave your machine
-- Token-wasteful — context windows get bloated with irrelevant data
-- Opaque — the user cannot see or control what the AI is doing step by step
-- Generalist — not optimized for navigating large local datasets
+- Cloud-dependent -- useless when internet is down
+- Privacy-hostile -- your private code and data leave your machine
+- Token-wasteful -- context windows get bloated with irrelevant data
+- Opaque -- the user cannot see or control what the AI is doing step by step
+- Generalist -- not optimized for navigating large local datasets
 
 Consumer-grade local LLMs are now capable enough for serious work (e.g. Gemma 4 26B A4B),
 but no good tooling exists to wield them effectively, especially over large local data sets.
 
 ### Origin
 
-Locus started as a knowledge navigation tool — inspired by Google's Project Nomad — focused
+Locus started as a knowledge navigation tool -- inspired by Google's Project Nomad -- focused
 on searching and browsing large local datasets (Wikipedia dumps, document libraries, personal
 archives) with AI assistance. The coding agent features came later, once it became clear that
 navigating a codebase and navigating a document folder are fundamentally the same problem:
@@ -26,10 +26,10 @@ no reason to build two separate tools.
 ### Solution
 
 An AI agent assistant that:
-- Runs entirely locally — no internet required for core operation
+- Runs entirely locally -- no internet required for core operation
 - Is optimized for the constraints of local LLMs (limited context, slower inference)
 - Uses tools and smart data fetches instead of dumping raw data into context
-- Keeps the user in full control of every step — transparency over automation
+- Keeps the user in full control of every step -- transparency over automation
 - Builds and maintains a live index of the workspace so the AI can navigate it cheaply
 
 ---
@@ -40,7 +40,7 @@ An AI agent assistant that:
 - **Privacy**: Your data never leaves your machine (unless you explicitly choose it)
 - **Offline capability**: Emergency AI assistant when internet is down
 - **Token efficiency**: Smart retrieval over brute-force context stuffing
-- **User control**: User decides what happens at each step — AI proposes, user approves
+- **User control**: User decides what happens at each step -- AI proposes, user approves
 - **Large-data navigation**: Navigate codebases, document libraries, wiki dumps without
   spending a full context window just to find relevant files
 
@@ -104,8 +104,8 @@ It can run terminal commands (build, test, execute). User controls each step.
 
 ### 2. Knowledge Search Engine
 A locally downloaded copy of Wikipedia, documentation sets, or research papers.
-Ask natural-language questions; the AI searches the index — using both keyword and
-semantic (meaning-based) search — and retrieves relevant passages without loading
+Ask natural-language questions; the AI searches the index -- using both keyword and
+semantic (meaning-based) search -- and retrieves relevant passages without loading
 the entire dataset into context.
 Supports Kiwix `.zim` archives natively: Wikipedia stays as a single compressed file,
 no extraction needed.
@@ -121,19 +121,19 @@ connections, expand thoughts, and organize material.
 ---
 
 ### 5. Your Workstation in Your Pocket
-Locus Core runs as a background process on your PC. Any frontend — desktop, browser,
-or mobile — can connect to it over the local network. This means you can open your
+Locus Core runs as a background process on your PC. Any frontend -- desktop, browser,
+or mobile -- can connect to it over the local network. This means you can open your
 phone on the couch, on a train, or in another room, and work on the same project
 that's sitting on your desktop: read code, ask the agent questions, approve tool calls,
-run builds — everything short of physically being at the keyboard.
+run builds -- everything short of physically being at the keyboard.
 
 Your PC does the heavy lifting (LLM inference, file I/O, indexing). The phone is just
 a thin window into the workspace. Nothing leaves your network, and the full tool
-approval flow works exactly the same as on desktop — you see every action, approve
+approval flow works exactly the same as on desktop -- you see every action, approve
 or reject it, and stay in control.
 
 This is built for engineers who actually care about what's happening under the hood.
-You're not typing prompts into a black box and hoping for the best — you're operating
+You're not typing prompts into a black box and hoping for the best -- you're operating
 your workspace remotely with full visibility into every step the agent takes.
 
 ---

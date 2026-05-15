@@ -27,7 +27,7 @@ find_package(pugixml CONFIG REQUIRED)
 
 # llama-cpp / ggml upstream CMake configs use find_library with a single
 # IMPORTED_LOCATION, which breaks multi-config generators (VS picks the
-# debug .lib for Release builds → MTd/MT CRT mismatch). Patch each target
+# debug .lib for Release builds -> MTd/MT CRT mismatch). Patch each target
 # with IMPORTED_LOCATION_{DEBUG,RELEASE} derived from the vcpkg layout.
 foreach(_llama_tgt llama ggml::ggml ggml::ggml-base ggml::ggml-cpu)
     if(NOT TARGET ${_llama_tgt})
@@ -189,7 +189,7 @@ FetchContent_Declare(pdfium
 )
 FetchContent_MakeAvailable(pdfium)
 
-# PDFium imported target — headers, import lib, DLL path.
+# PDFium imported target -- headers, import lib, DLL path.
 add_library(pdfium SHARED IMPORTED)
 set_target_properties(pdfium PROPERTIES
     IMPORTED_LOCATION             "${pdfium_SOURCE_DIR}/bin/pdfium.dll"

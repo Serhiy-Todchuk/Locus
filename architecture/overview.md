@@ -7,16 +7,16 @@
 
 ## Deployment Model
 
-Locus Core runs as a **system tray background process** — always on, no visible window.
+Locus Core runs as a **system tray background process** -- always on, no visible window.
 Your PC does all the work: LLM inference, file indexing, tool execution. Frontends are
-thin clients that display results and relay user input — which means you can connect from
+thin clients that display results and relay user input -- which means you can connect from
 your phone, a tablet, or a browser on another machine and get the full agent experience
 over your local network. No cloud relay, no tunneling service required for LAN use.
 
 Frontends connect via one of two paths:
 
-- **C++ direct** — in-process virtual interface, zero overhead. For the wxWidgets frontend only.
-- **WebSocket + HTTP** — network API, language-agnostic. For all other frontends.
+- **C++ direct** -- in-process virtual interface, zero overhead. For the wxWidgets frontend only.
+- **WebSocket + HTTP** -- network API, language-agnostic. For all other frontends.
 
 Both paths are symmetric: the same `IFrontend` / `ILocusCore` concepts apply to both.
 The WebSocket server is an adapter that implements `IFrontend` over the wire.
@@ -33,7 +33,7 @@ The WebSocket server is an adapter that implements `IFrontend` over the wire.
          │  C++ virtual calls                    │  WebSocket + HTTP
          │  (same process, zero overhead)        │  (Crow server, JSON)
          │                                       │
-┌────────▼───────────────────────────────────────▼────────────────────────┐
+┌────────v───────────────────────────────────────v────────────────────────┐
 │                              Locus Core                                  │
 │                       (C++20, system tray daemon)                        │
 │                                                                          │
@@ -47,14 +47,14 @@ The WebSocket server is an adapter that implements `IFrontend` over the wire.
 │  │  - All registered frontends receive the same events              │   │
 │  └───────────────────────────┬──────────────────────────────────────┘   │
 │                              │                                           │
-│  ┌───────────────────────────▼──────────────────────────────────────┐   │
+│  ┌───────────────────────────v──────────────────────────────────────┐   │
 │  │                        Agent Core                                 │   │
 │  │  - Conversation manager (history, context, compaction)           │   │
 │  │  - Tool dispatcher + approval gate                               │   │
 │  │  - System prompt builder (LOCUS.md + workspace context)          │   │
 │  └──────┬───────────────┬──────────────┬─────────────────────────── ┘   │
 │         │               │              │                                 │
-│  ┌──────▼──────┐  ┌─────▼──────┐  ┌───▼─────────────────────────────┐  │
+│  ┌──────v──────┐  ┌─────v──────┐  ┌───v─────────────────────────────┐  │
 │  │ LLM Client  │  │  Tool Set  │  │      Workspace Engine            │  │
 │  │  LM Studio  │  │ (ITool API)│  │  File Watcher (ReadDirChangesW)  │  │
 │  │  OpenAI-    │  │ - Files    │  │  FTS5 Index     (SQLite)         │  │
@@ -75,15 +75,15 @@ locus/
 ├── architecture/           Design docs (this file, tech stack, tool protocol, etc.)
 ├── cmake/
 │   └── triplets/           vcpkg custom triplet (x64-windows-static)
-├── src/                    All source — headers and implementations live together
+├── src/                    All source -- headers and implementations live together
 │   ├── main.cpp            CLI entry point
-│   ├── workspace.{h,cpp}   Workspace class — owns DB, watcher, indexer, query
+│   ├── workspace.{h,cpp}   Workspace class -- owns DB, watcher, indexer, query
 │   ├── database.{h,cpp}    SQLite RAII wrapper, schema creation
 │   ├── file_watcher.{h,cpp} efsw wrapper, FileEvent queue with debounce
 │   ├── index/              Indexing subsystem (S3.D)
 │   │   ├── indexer.{h,cpp}      Full/incremental indexing: orchestrates extractors + symbols + chunks
 │   │   ├── index_query.{h,cpp}  Read-only query API over the index
-│   │   ├── tree_sitter_registry.{h,cpp}  TSParser + name→TSLanguage* map (shared with future ast_search)
+│   │   ├── tree_sitter_registry.{h,cpp}  TSParser + name->TSLanguage* map (shared with future ast_search)
 │   │   ├── symbol_extractor.{h,cpp}      ISymbolExtractor + RuleBasedSymbolExtractor + per-language registry
 │   │   ├── symbol_extractors/   Per-language SymbolRule tables (cpp, python, js_ts, go, rust, java, csharp)
 │   │   ├── prepared_statements.{h,cpp}   IndexerStatements RAII holder for the 14 sqlite_stmts
@@ -94,7 +94,7 @@ locus/
 ├── tests/                  Catch2 test files (one per subsystem)
 ├── tools/                  (reserved for future tool implementations)
 ├── build/                  CMake build output (git-ignored)
-├── CMakeLists.txt          Root build — locus_core lib, locus exe, tree-sitter grammars
+├── CMakeLists.txt          Root build -- locus_core lib, locus exe, tree-sitter grammars
 ├── CMakePresets.json        Debug/Release presets
 ├── vcpkg.json              Dependency manifest
 ├── CLAUDE.md               Claude Code working guide
@@ -111,7 +111,7 @@ Runtime directory created inside each workspace:
 └── .locus/                 Workspace-local data (git-ignored by users)
     ├── config.json         Workspace settings (exclude patterns, toggles)
     ├── index.db            SQLite database (FTS5 + symbols + headings + files)
-    └── locus.log           Rotating log file (max 10 MB × 3)
+    └── locus.log           Rotating log file (max 10 MB x 3)
 ```
 
 ---
@@ -163,18 +163,18 @@ The wxWidgets frontend lives in the same process as Core. It gets an `ILocusCore
 registers itself as an `IFrontend`, and calls/receives everything with zero overhead.
 Agent thread events are marshalled to the UI thread via `wxQueueEvent()` + custom `wxThreadEvent` types.
 
-#### WebSocket + HTTP (CrowServer → external clients)
+#### WebSocket + HTTP (CrowServer -> external clients)
 
 The `CrowFrontend` implements `IFrontend` and registers with Core like any other frontend.
 It runs a Crow HTTP/WebSocket server and translates Core callbacks into JSON WebSocket
 messages, routing incoming messages to `ILocusCore` calls. External clients (browser,
-VS Code extension, mobile app) connect to this server — they see the same logical
+VS Code extension, mobile app) connect to this server -- they see the same logical
 interface over the wire.
 
-**WebSocket** — streaming and bidirectional:
+**WebSocket** -- streaming and bidirectional:
 - LLM token streaming, tool approval flow, index progress, compaction events
 
-**HTTP REST** — stateless operations:
+**HTTP REST** -- stateless operations:
 - Workspace open/list/config, session management, settings
 
 **Authentication**:
@@ -198,9 +198,9 @@ Orchestrates the conversation loop:
 - Builds the prompt: `[system base] + [LOCUS.md] + [workspace metadata] + [history] + [user message]`
 - Sends to LLM, streams response back to connected frontends via API Server
 - Detects tool calls in the response
-- Pauses at each tool call → sends `tool_call_pending` to frontends via WebSocket
+- Pauses at each tool call -> sends `tool_call_pending` to frontends via WebSocket
 - Waits for approval from any connected frontend
-- Executes approved tools → injects result → resumes LLM generation
+- Executes approved tools -> injects result -> resumes LLM generation
 - Manages context window (compaction, pinning, summarization)
 
 ### 4. Tool Set (ITool interface)
@@ -214,15 +214,15 @@ Current tools: `read_file`, `write_file` (create or overwrite with `overwrite=tr
 ### 5. LLM Client
 - Currently: LM Studio OpenAI-compatible REST API (localhost:1234)
 - SSE streaming, tool call parsing, context length enforcement
-- Abstracted behind an interface — swap backends without touching Agent Core
+- Abstracted behind an interface -- swap backends without touching Agent Core
 
 ---
 
 ## Frontend Contract
 
 A frontend has exactly two responsibilities regardless of connection type:
-1. **Display** — render what Core sends (tokens, tool calls, index status)
-2. **Input** — send what the user does (messages, approvals, edit context)
+1. **Display** -- render what Core sends (tokens, tool calls, index status)
+2. **Input** -- send what the user does (messages, approvals, edit context)
 
 Core handles all logic. Frontends are display + input only.
 
@@ -238,11 +238,11 @@ Frontend responsibilities:          Core responsibilities:
 
 | Frontend | Connection | Overhead |
 |---|---|---|
-| CLI (C++) | `IFrontend` / `ILocusCore` direct | Zero — same process, virtual calls |
-| wxWidgets (C++) | `IFrontend` / `ILocusCore` direct | Zero — same process, virtual calls |
-| CrowServer (C++) | `IFrontend` / `ILocusCore` direct | Zero — same process, serves external clients |
-| Browser client | WebSocket + HTTP via CrowServer | Minimal — local loopback |
-| VS Code extension | WebSocket + HTTP via CrowServer | Minimal — local loopback |
+| CLI (C++) | `IFrontend` / `ILocusCore` direct | Zero -- same process, virtual calls |
+| wxWidgets (C++) | `IFrontend` / `ILocusCore` direct | Zero -- same process, virtual calls |
+| CrowServer (C++) | `IFrontend` / `ILocusCore` direct | Zero -- same process, serves external clients |
+| Browser client | WebSocket + HTTP via CrowServer | Minimal -- local loopback |
+| VS Code extension | WebSocket + HTTP via CrowServer | Minimal -- local loopback |
 | Mobile app | WebSocket + HTTP via CrowServer over LAN | Network RTT only |
 
 All three C++ frontends (CLI, wxWidgets, CrowServer) implement `IFrontend` and register
@@ -254,13 +254,13 @@ can be active simultaneously on the same session.
 ## WebSocket Message Protocol (sketch)
 
 ```
-// Frontend → Core
+// Frontend -> Core
 { "type": "send_message",      "session_id": "...", "content": "...", "edit_context": {...} }
 { "type": "tool_decision",     "call_id": "...",    "decision": "approve"|"reject"|"modify", "args": {...} }
 { "type": "set_edit_context",  "file": "...",       "line": 42, "col": 0, "selection": "..." }
 { "type": "compact_context",   "session_id": "...", "strategy": "A"|"B"|"C"|"D" }
 
-// Core → Frontend
+// Core -> Frontend
 { "type": "token",             "content": "..." }
 { "type": "tool_call_pending", "call_id": "...", "tool": "...", "args": {...}, "preview": "..." }
 { "type": "tool_result",       "call_id": "...", "display": "..." }
@@ -277,29 +277,29 @@ can be active simultaneously on the same session.
 ```
 User types message in frontend
            │
-           ▼  (WebSocket: send_message)
-     API Server → Agent Core
+           v  (WebSocket: send_message)
+     API Server -> Agent Core
            │
-           ▼
+           v
     Build prompt: LOCUS.md + workspace ctx + history + message
            │
-           ▼
+           v
       LLM Client streams response
            │
-           ├── text token → API Server → all frontends  (type: token)
+           ├── text token -> API Server -> all frontends  (type: token)
            │
            └── tool call detected
                       │
-                      ▼  (WebSocket: tool_call_pending)
+                      v  (WebSocket: tool_call_pending)
                All frontends show approval dialog
                       │
-                      ▼  (WebSocket: tool_decision from any frontend)
+                      v  (WebSocket: tool_decision from any frontend)
                Tool executes
                       │
-                      ▼  (WebSocket: tool_result)
+                      v  (WebSocket: tool_result)
                Result injected into context
                       │
-                      ▼
+                      v
                LLM generation resumes
 ```
 
@@ -308,11 +308,11 @@ User types message in frontend
 ## Context Management Strategy
 
 ### Preventive (keep the window lean)
-1. **Never pre-load** files — tools fetch only what's needed
-2. **Paginate** file reads — agent requests chunks, not full files
-3. **Summarize** tool results before injecting — digest + offer full on demand
-4. **Workspace context injection** — only relevant metadata, not everything
-5. **User-controlled pinning** — pinned items survive all compaction
+1. **Never pre-load** files -- tools fetch only what's needed
+2. **Paginate** file reads -- agent requests chunks, not full files
+3. **Summarize** tool results before injecting -- digest + offer full on demand
+4. **Workspace context injection** -- only relevant metadata, not everything
+5. **User-controlled pinning** -- pinned items survive all compaction
 
 ### Compaction (user-controlled, never silent)
 At configurable threshold (default 80%) a compaction event is sent to all frontends.
@@ -320,35 +320,35 @@ User picks a strategy:
 
 | Strategy | How | LLM needed |
 |---|---|---|
-| **A — LLM Summary** | LLM condenses history to a digest (user reviews) | Yes |
-| **B — Drop tool results** | Strip verbose tool output, keep turns | No |
-| **C — Drop oldest turns** | User selects N turns, sees preview | No |
-| **D — Save & restart** | Save session to `.locus/sessions/`, fresh context | Optional |
+| **A -- LLM Summary** | LLM condenses history to a digest (user reviews) | Yes |
+| **B -- Drop tool results** | Strip verbose tool output, keep turns | No |
+| **C -- Drop oldest turns** | User selects N turns, sees preview | No |
+| **D -- Save & restart** | Save session to `.locus/sessions/`, fresh context | Optional |
 
 ---
 
 ## Build Sequence
 
-1. **CLI prototype (C++20)** — no UI, no API server. Agent core + index + LLM client.
+1. **CLI prototype (C++20)** -- no UI, no API server. Agent core + index + LLM client.
    Validates architecture before any UI work. Tool approval via y/n prompts.
-2. **wxWidgets frontend (C++20)** — system tray daemon + first real UI.
-3. **CrowServer frontend (C++20)** — HTTP/WebSocket server, enables external clients.
-4. **External clients** — VS Code extension, browser web page, mobile app — all connect to CrowServer.
+2. **wxWidgets frontend (C++20)** -- system tray daemon + first real UI.
+3. **CrowServer frontend (C++20)** -- HTTP/WebSocket server, enables external clients.
+4. **External clients** -- VS Code extension, browser web page, mobile app -- all connect to CrowServer.
 
 ---
 
 ## Open Questions
 
 - Remote access: LAN only vs internet tunneling (Tailscale/ngrok)? LAN first.
-- Mobile: native app vs PWA (Progressive Web App)? Likely PWA first — reuses web frontend.
+- Mobile: native app vs PWA (Progressive Web App)? Likely PWA first -- reuses web frontend.
 
 ---
 
 ## See also
 
-- [agent-loop.md](agent-loop.md) — turn orchestration, threading, `AgentCore` collaborator split, M4 hook points
-- [tool-protocol.md](tool-protocol.md) — `ITool` contract, approval policies, adding a new tool
-- [workspace-index.md](workspace-index.md) — index schema, incremental updates, FTS5 + vector query API
-- [tech-stack.md](tech-stack.md) — library choices and rationale
-- [web-retrieval.md](web-retrieval.md) — web RAG pipeline (fetch → index → search)
-- [decisions/](decisions/) — ADR trail for load-bearing architectural decisions
+- [agent-loop.md](agent-loop.md) -- turn orchestration, threading, `AgentCore` collaborator split, M4 hook points
+- [tool-protocol.md](tool-protocol.md) -- `ITool` contract, approval policies, adding a new tool
+- [workspace-index.md](workspace-index.md) -- index schema, incremental updates, FTS5 + vector query API
+- [tech-stack.md](tech-stack.md) -- library choices and rationale
+- [web-retrieval.md](web-retrieval.md) -- web RAG pipeline (fetch -> index -> search)
+- [decisions/](decisions/) -- ADR trail for load-bearing architectural decisions

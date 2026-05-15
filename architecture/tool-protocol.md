@@ -1,7 +1,7 @@
 # Tool Protocol
 
 The tool system is the bridge between the LLM's intentions and real actions on the machine.
-Tools must be pluggable from day one — new tools should slot in without touching the agent core.
+Tools must be pluggable from day one -- new tools should slot in without touching the agent core.
 
 ---
 
@@ -47,19 +47,19 @@ class ITool {
 public:
     virtual ~ITool() = default;
 
-    // Identity — used by LLM and by the approval UI
+    // Identity -- used by LLM and by the approval UI
     virtual std::string              name()        const = 0;
     virtual std::string              description() const = 0;  // fed verbatim to LLM
     virtual std::vector<ToolParam>   params()      const = 0;
 
-    // Execution — called only after user approval (if required)
+    // Execution -- called only after user approval (if required)
     virtual ToolResult execute(const ToolCall& call,
                                IWorkspaceServices& ws) = 0;
 
     // Approval policy
-    // "always"  — pause for user before every execution (default)
-    // "auto"    — execute without pausing (read-only tools may use this)
-    // "never"   — tool is disabled; attempting to call it returns an error
+    // "always"  -- pause for user before every execution (default)
+    // "auto"    -- execute without pausing (read-only tools may use this)
+    // "never"   -- tool is disabled; attempting to call it returns an error
     virtual std::string approval_policy() const { return "always"; }
 
     // Optional: called before approval dialog to generate a human-readable
@@ -118,22 +118,22 @@ public:
 ```
 LLM output contains tool call
          │
-         ▼
+         v
   Parse & validate args against schema
          │
-         ├─── validation failed → inject error, continue LLM
+         ├─── validation failed -> inject error, continue LLM
          │
-         ▼
+         v
   Check approval_policy()
          │
-         ├─── "auto"   → execute immediately
+         ├─── "auto"   -> execute immediately
          │
-         └─── "always" → show approval dialog
+         └─── "always" -> show approval dialog
                 │   tool name + args + preview() text
                 │
-                ├─── Approve   → execute → inject result → continue LLM
-                ├─── Modify    → user edits args → execute → inject result
-                └─── Reject    → inject "user rejected tool call" → continue LLM
+                ├─── Approve   -> execute -> inject result -> continue LLM
+                ├─── Modify    -> user edits args -> execute -> inject result
+                └─── Reject    -> inject "user rejected tool call" -> continue LLM
 ```
 
 ---
@@ -170,7 +170,7 @@ public:
 1. Create a class that inherits `ITool`
 2. Implement the 4 required methods: `name`, `description`, `params`, `execute`
 3. Register it: `registry.register_tool(std::make_unique<MyTool>())`
-4. Done — the agent core picks it up automatically in the next session
+4. Done -- the agent core picks it up automatically in the next session
 
 No changes to the agent core, no changes to the approval flow, no changes to the prompt builder.
 
@@ -192,4 +192,4 @@ The same `ITool` interface can be implemented by:
 - Tools that call out to a subprocess (e.g. a Python script)
 - Tools provided by a workspace-local plugin (`LOCUS_TOOLS.md` describing a tool script)
 
-No protocol changes required — if it implements `ITool`, it works.
+No protocol changes required -- if it implements `ITool`, it works.

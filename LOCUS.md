@@ -1,6 +1,6 @@
 # Locus workspace guide
 
-You are coding **Locus itself** — a C++20 workspace-bound LLM agent.
+You are coding **Locus itself** -- a C++20 workspace-bound LLM agent.
 
 ## Before editing
 
@@ -51,14 +51,14 @@ add `--target <name>` to build them. Full reference: `CLAUDE.md` ->
 
 1. Mark `[x]` in the relevant `roadmap/Mx.md` or `roadmap/Mx/Sx.y-*.md`.
 2. Update `CLAUDE.md` "Current Stage".
-3. Non-trivial architectural shift → add `architecture/decisions/NNNN-title.md` and update
+3. Non-trivial architectural shift -> add `architecture/decisions/NNNN-title.md` and update
    CLAUDE.md "Key Decisions" table.
 
 ## Tool etiquette
 
 - Paginate file reads. No full-file dumps.
 - Prefer `edit` over `write_file` for existing files.
-- Index is never written by LLM — deterministic updates only.
+- Index is never written by LLM -- deterministic updates only.
 - Run tests after non-trivial changes, read the output.
 
 ## When stuck

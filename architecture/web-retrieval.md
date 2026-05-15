@@ -1,14 +1,14 @@
 # Web Retrieval Subsystem
 
 > RAG over web content. Fetch, index locally, query via existing search tools.
-> Full web pages never enter LLM context — only ranked snippets.
+> Full web pages never enter LLM context -- only ranked snippets.
 
 ---
 
 ## Design Principle: Index, Don't Inject
 
-Consumer-grade local LLMs have small context windows (4K–16K tokens).
-A single web page can be 5K–50K tokens of raw text. Injecting even one page
+Consumer-grade local LLMs have small context windows (4K-16K tokens).
+A single web page can be 5K-50K tokens of raw text. Injecting even one page
 would consume the entire context budget.
 
 **Solution**: treat fetched web content like temporary workspace files.
@@ -33,7 +33,7 @@ Total for one web lookup: ~300 tokens vs 10,000+ for raw page injection
 ```
 User message: "How does X work?"
          │
-         ▼
+         v
     Agent calls web_search("X")
     ┌─────────────────────────────────────────────────┐
     │ Search API (Brave / SearXNG / configurable)     │
@@ -41,11 +41,11 @@ User message: "How does X work?"
     │ Approval: always (user sees query before send)  │
     └─────────────┬───────────────────────────────────┘
                   │  ~50 tokens injected as tool result
-                  ▼
+                  v
     Agent picks a URL, calls web_fetch(url)
     ┌─────────────────────────────────────────────────┐
     │ 1. HTTP GET (cpr)                               │
-    │ 2. HTML → plain text (gumbo-parser)             │
+    │ 2. HTML -> plain text (gumbo-parser)             │
     │ 3. Extract: title, headings, text blocks        │
     │ 4. Store in web_pages table                     │
     │ 5. Index text in web_fts (FTS5)                 │
@@ -53,7 +53,7 @@ User message: "How does X work?"
     │ Approval: always (user sees URL before fetch)   │
     └─────────────┬───────────────────────────────────┘
                   │  ~30 tokens injected (outline only)
-                  ▼
+                  v
     Agent calls search_text("specific term")
     ┌─────────────────────────────────────────────────┐
     │ FTS5 searches BOTH local files AND web_fts      │
@@ -101,7 +101,7 @@ CREATE INDEX web_headings_page ON web_headings(page_id);
 
 ### Why separate tables?
 
-- **Lifecycle**: workspace index persists across sessions. Web cache is ephemeral —
+- **Lifecycle**: workspace index persists across sessions. Web cache is ephemeral --
   cleaned up when a session ends or after a configurable TTL.
 - **Search filtering**: agent can search "local only" or "local + web" explicitly.
   No risk of stale web results polluting workspace queries.
@@ -110,23 +110,23 @@ CREATE INDEX web_headings_page ON web_headings(page_id);
 
 ---
 
-## HTML → Text Extraction
+## HTML -> Text Extraction
 
 **Library: gumbo-parser** (Google, Apache 2.0, vcpkg: `gumbo`)
 
-- Correct HTML5 parser — handles malformed HTML gracefully
+- Correct HTML5 parser -- handles malformed HTML gracefully
 - Pure C, tiny footprint, no dependencies
 - Produces a DOM tree; walk it to extract text nodes
 
 Extraction rules:
 - **Skip**: `<script>`, `<style>`, `<nav>`, `<footer>`, `<header>`, `<aside>` tags
 - **Extract**: visible text nodes from `<body>`
-- **Preserve**: heading hierarchy (`<h1>`–`<h6>`) for outline generation
+- **Preserve**: heading hierarchy (`<h1>`-`<h6>`) for outline generation
 - **Preserve**: paragraph boundaries as line breaks (readable chunking)
 - **Strip**: all HTML tags, attributes, inline styles
 - **Truncate**: stop after `max_web_page_kb` (default 512 KB of extracted text)
 
-The result is clean, readable plain text — similar quality to browser "reader mode".
+The result is clean, readable plain text -- similar quality to browser "reader mode".
 
 ---
 
@@ -139,7 +139,7 @@ Name:        web_search
 Description: Search the web. Returns titles, URLs, and brief snippets.
 Params:      query (string, required), max_results (integer, default 5)
 Approval:    always
-Result:      [{title, url, snippet}, ...] — compact, ~50 tokens total
+Result:      [{title, url, snippet}, ...] -- compact, ~50 tokens total
 ```
 
 ### `web_fetch`
@@ -150,7 +150,7 @@ Description: Fetch a web page and index it for searching. Returns page outline.
 Params:      url (string, required)
 Approval:    always
 Result:      {title, url, word_count, headings: [{level, text}, ...]}
-             — compact outline, ~30 tokens. Full content indexed, not returned.
+             -- compact outline, ~30 tokens. Full content indexed, not returned.
 ```
 
 ### `web_read`
@@ -159,16 +159,16 @@ Result:      {title, url, word_count, headings: [{level, text}, ...]}
 Name:        web_read
 Description: Read a section of a previously fetched web page by heading.
 Params:      url (string, required),
-             heading (string, optional — read section under this heading),
-             offset (integer, optional — line offset),
-             length (integer, optional — number of lines)
+             heading (string, optional -- read section under this heading),
+             offset (integer, optional -- line offset),
+             length (integer, optional -- number of lines)
 Approval:    auto
 Result:      Text content of the requested section, paginated.
 ```
 
 After `web_fetch`, the agent has three ways to access web content:
-1. `search_text` / `search_hybrid` — finds specific terms across local + web
-2. `web_read` — reads a specific section by heading (like `read_file` but for web pages)
+1. `search_text` / `search_hybrid` -- finds specific terms across local + web
+2. `web_read` -- reads a specific section by heading (like `read_file` but for web pages)
 3. Both return snippets/sections, never full pages
 
 ---
@@ -241,21 +241,21 @@ struct WebConfig {
 
 ## Security Considerations
 
-- `web_fetch` requires user approval for every URL — no silent fetching
-- `web_search` requires user approval for every query — user sees what is sent
+- `web_fetch` requires user approval for every URL -- no silent fetching
+- `web_search` requires user approval for every query -- user sees what is sent
 - No cookies, no JavaScript execution, no form submission
 - User-Agent identifies as Locus (not a browser)
 - HTTPS only by default; HTTP allowed only with explicit config flag
 - API keys stored in `.locus/config.json` (workspace-local, gitignored)
-- Fetched content is local-only — never sent anywhere except back to the local LLM
+- Fetched content is local-only -- never sent anywhere except back to the local LLM
 
 ---
 
 ## Open Questions
 
 - Should web content participate in semantic/vector search (S2.1) or FTS5 only?
-  Leaning FTS5-only initially — embedding web pages adds CPU cost for ephemeral content.
+  Leaning FTS5-only initially -- embedding web pages adds CPU cost for ephemeral content.
 - Rate limiting: should Locus enforce its own rate limit beyond the API provider's?
-  Probably yes — a simple token bucket (1 req/sec default) prevents accidental bursts.
+  Probably yes -- a simple token bucket (1 req/sec default) prevents accidental bursts.
 - Robots.txt: should `web_fetch` respect robots.txt? Probably not for single-page fetches
   (we're acting like a user clicking a link, not a crawler), but worth discussing.

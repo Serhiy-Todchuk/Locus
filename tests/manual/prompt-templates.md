@@ -2,13 +2,13 @@
 
 **Feature:** Markdown files that act as text macros. `/<name>` in the chat
 expands `.md` body and sends it to the agent as the user's message. Pure
-text expansion — no tools, no LLM passes — the agent then decides what to
+text expansion -- no tools, no LLM passes -- the agent then decides what to
 do with the resulting input.
 
 **On-disk:**
 
-- `<workspace>/.locus/prompts/<name>.md` — project, wins on collision.
-- `%APPDATA%\Locus\prompts\<name>.md` — global, available in every workspace.
+- `<workspace>/.locus/prompts/<name>.md` -- project, wins on collision.
+- `%APPDATA%\Locus\prompts\<name>.md` -- global, available in every workspace.
 
 **Body rules:**
 
@@ -69,7 +69,7 @@ Open any workspace (Locus repo is fine).
      This should NEVER expand either.
      ```
 
-2. In chat: `/reload`. Confirmation line shows the new count (≥ 3).
+2. In chat: `/reload`. Confirmation line shows the new count (>= 3).
 
 3. `/help`. Output shows the standard help text **plus** a *Templates
    (project):* section listing `/echo <marker_id>` with the description
@@ -80,7 +80,7 @@ Open any workspace (Locus repo is fine).
 4. `/echo 7 name=Locus`. The agent's reply contains
    `QA-7-END; named:Locus; missing:{nope}`. In the activity panel the
    most recent `user_message` has the summary
-   *"Prompt template /echo expanded (… chars)"*, and its detail is the
+   *"Prompt template /echo expanded (... chars)"*, and its detail is the
    substituted body the LLM received.
 
 5. `/help` again -- still the real help text, not the `help.md` body.
@@ -88,7 +88,7 @@ Open any workspace (Locus repo is fine).
    the `read_file.md` body.
 
 6. `/definitely_not_a_command`. Chat shows an error line:
-   *"Unknown command '/definitely_not_a_command'. …"*. No
+   *"Unknown command '/definitely_not_a_command'. ..."*. No
    `user_message`, no `llm_request`, no `tool_call` in the activity
    panel for this input.
 
@@ -96,7 +96,7 @@ Open any workspace (Locus repo is fine).
 
 - Agent literally echoes `{0}` instead of `7` (substitution broken).
 - Missing references collapse to empty string instead of staying literal.
-- `/help` outputs the template body (built-in precedence broken — escalate).
+- `/help` outputs the template body (built-in precedence broken -- escalate).
 - `/read_file CLAUDE.md` outputs the template body (tool precedence broken).
 - Unknown slash is silently dispatched to the LLM as a regular message.
 
@@ -116,7 +116,7 @@ oversized bodies.
 
 1. Open `cmd.exe` and run `echo %APPDATA%` to confirm the path. Create
    `%APPDATA%\Locus\prompts\` if it doesn't exist.
-2. Note your model's context limit (Settings → LLM → *Context limit*).
+2. Note your model's context limit (Settings -> LLM -> *Context limit*).
    Call this `N` (Gemma 4 E4B = 8192).
 
 ### Steps
@@ -141,7 +141,7 @@ oversized bodies.
 
 2. `/reload`. `/help` should list `global_only` under *Templates
    (global):* and `shared` under *Templates (project):* (the global
-   `shared` is shadowed — it should NOT appear under global).
+   `shared` is shadowed -- it should NOT appear under global).
 
 3. `/global_only` -- agent receives `GLOBAL_ONLY_OK`. `/shared` --
    agent receives `PROJECT_VERSION`, never the global fallback.
@@ -158,12 +158,12 @@ oversized bodies.
    `<workspace>\.locus\prompts\huge.md`. `/reload`, then `/huge`.
    The chat shows an inline warning like *"warning: prompt template
    '/huge' expanded to ~XXXX tokens (>4096, half of context 8192)."*
-   The turn still runs — cancel it once the warning has fired; you
+   The turn still runs -- cancel it once the warning has fired; you
    don't need to wait for the LLM response.
 
 ### Hard fails
 
-- Global template doesn't show up in `/help` despite being on disk —
+- Global template doesn't show up in `/help` despite being on disk --
   check the path is exactly `%APPDATA%\Locus\prompts\`.
 - `/shared` returns `GLOBAL_VERSION` (project-wins broken).
 - Step 4 returns `PROJECT_VERSION` instead of `V2` (mtime cache stale).

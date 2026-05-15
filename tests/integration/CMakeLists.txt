@@ -1,5 +1,5 @@
 # Manual-only LLM-driven integration tests. NOT registered with ctest /
-# catch_discover_tests — runs only when the user explicitly launches the exe.
+# catch_discover_tests -- runs only when the user explicitly launches the exe.
 #
 # Requires LM Studio to be running at http://127.0.0.1:1234 (or the URL set
 # via LOCUS_INT_TEST_ENDPOINT) with a tool-calling capable model loaded.
@@ -58,4 +58,4 @@ add_custom_command(TARGET locus_integration_tests POST_BUILD
             "${PDFIUM_DLL}" "$<TARGET_FILE_DIR:locus_integration_tests>"
 )
 
-# Deliberately NOT calling catch_discover_tests() — this target is manual-only.
+# Deliberately NOT calling catch_discover_tests() -- this target is manual-only.

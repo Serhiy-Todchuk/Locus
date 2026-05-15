@@ -1,6 +1,6 @@
 # Manual-only retrieval evaluation harness (S4.K).
 #
-# NOT registered with ctest — running it requires a fully indexed workspace +
+# NOT registered with ctest -- running it requires a fully indexed workspace +
 # the bge-m3 embedding GGUF, which takes minutes and many GB of RAM. Run by
 # hand when iterating on retrieval (chunker, embedder, reranker, RRF):
 #
@@ -9,9 +9,9 @@
 #       --workspace . --queries tests/retrieval_eval/queries.json
 #
 # Returns:
-#   0  — pass
-#   1  — regression detected vs. tests/retrieval_eval/baseline.json
-#   2  — harness error
+#   0  -- pass
+#   1  -- regression detected vs. tests/retrieval_eval/baseline.json
+#   2  -- harness error
 
 add_executable(locus_retrieval_eval
     main.cpp
@@ -35,4 +35,4 @@ add_custom_command(TARGET locus_retrieval_eval POST_BUILD
             "${PDFIUM_DLL}" "$<TARGET_FILE_DIR:locus_retrieval_eval>"
 )
 
-# Deliberately NOT calling catch_discover_tests / add_test() — manual-only.
+# Deliberately NOT calling catch_discover_tests / add_test() -- manual-only.

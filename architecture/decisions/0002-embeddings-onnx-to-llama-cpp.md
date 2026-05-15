@@ -19,11 +19,11 @@ Two problems made it unshippable under our build constraints:
    symbols referenced by the linker. The MSVC linker strips those TUs. At runtime the model
    load fails with "invalid model" because the schemas it references were never registered.
    Both Debug and Release were affected. `/WHOLEARCHIVE:ONNX::onnx` was attempted and did not
-   resolve it — the stripping happens across multiple nested archives and the schema registry
+   resolve it -- the stripping happens across multiple nested archives and the schema registry
    has no single anchor symbol to whole-archive.
 2. **No tokenizer.** `all-MiniLM-L6-v2.onnx` ships without a tokenizer. We were running a
    placeholder FNV-hash tokenizer that produced technically-valid but semantically-meaningless
-   token IDs — good enough to prove the pipeline wired up, nowhere near good enough to ship.
+   token IDs -- good enough to prove the pipeline wired up, nowhere near good enough to ship.
 
 ## Decision
 
@@ -39,7 +39,7 @@ Replace ONNX Runtime with **llama.cpp's C API** (vcpkg `llama-cpp`, transitively
 ## Consequences
 
 **Wins**
-- Links cleanly under static CRT — llama.cpp has no equivalent static-constructor schema
+- Links cleanly under static CRT -- llama.cpp has no equivalent static-constructor schema
   registry. No `/WHOLEARCHIVE` games required.
 - Real tokenizer. The WordPiece vocab shipped inside the GGUF produces correct token IDs; no
   more FNV stub.

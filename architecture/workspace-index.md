@@ -13,9 +13,9 @@ The index answers questions like:
 - "Show me all markdown files modified in the last week"
 - "What Python files import `asyncio`?"
 - "Find the section about 'Byzantine fault tolerance' in this Wikipedia dump"
-- "What code in this repo handles memory allocation?" ← requires semantic search
+- "What code in this repo handles memory allocation?" <- requires semantic search
 
-Without an index, the agent would have to read files blindly — catastrophic for large workspaces.
+Without an index, the agent would have to read files blindly -- catastrophic for large workspaces.
 With an index, the agent issues a cheap query and gets back ranked, targeted results.
 
 **The index is NEVER updated by the LLM.** Only by deterministic, algorithmic processes.
@@ -51,30 +51,30 @@ This keeps it fast, accurate, and free from hallucination contamination.
 ## Index Database
 
 **SQLite** with two search layers:
-1. **FTS5** — keyword / BM25 ranked full-text search
-2. **sqlite-vec** — vector similarity search (semantic)
+1. **FTS5** -- keyword / BM25 ranked full-text search
+2. **sqlite-vec** -- vector similarity search (semantic)
 
 Storage is **split across two files** in `.locus/`:
 
-- `index.db` — always present. Holds the deterministic skeleton: files, FTS5,
+- `index.db` -- always present. Holds the deterministic skeleton: files, FTS5,
   symbols, headings. Opened by the main `Database` connection.
-- `vectors.db` — present only when semantic search is enabled. Holds `chunks`
+- `vectors.db` -- present only when semantic search is enabled. Holds `chunks`
   and the `vec0` virtual table `chunk_vectors`. Opened by a separate `Database`
   connection; loads the sqlite-vec extension only here.
 
 The split gives three things:
 
-1. **Concurrent writes** — each file has its own SQLite WAL. The indexer's FTS /
+1. **Concurrent writes** -- each file has its own SQLite WAL. The indexer's FTS /
    symbols writes no longer serialise behind the embedding worker's vector
    inserts. Background embedding can't stall foreground re-indexing.
-2. **A detachable cache** — vectors are derived from chunk text + embedding
+2. **A detachable cache** -- vectors are derived from chunk text + embedding
    model. Changing models or reclaiming disk is one `rm vectors.db`; the main
    index is untouched.
-3. **Zero cost when semantic is off** — if `semantic_search.enabled = false`
+3. **Zero cost when semantic is off** -- if `semantic_search.enabled = false`
    (or the model file is missing), `vectors.db` is never created and the
    sqlite-vec extension is never initialised.
 
-### Schema — `index.db`
+### Schema -- `index.db`
 
 ```sql
 -- Core file registry
@@ -115,16 +115,16 @@ CREATE INDEX symbols_file ON symbols(file_id);
 CREATE TABLE headings (
     id          INTEGER PRIMARY KEY,
     file_id     INTEGER REFERENCES files(id),
-    level       INTEGER,               -- 1–6
+    level       INTEGER,               -- 1-6
     text        TEXT,
     line_number INTEGER
 );
 ```
 
-### Schema — `vectors.db` (optional)
+### Schema -- `vectors.db` (optional)
 
 ```sql
--- Semantic chunks. file_id references files(id) in index.db — this is a
+-- Semantic chunks. file_id references files(id) in index.db -- this is a
 -- cross-file logical reference, not a FK (orphaned chunks are acceptable
 -- since they'll be cleaned up on the next re-index of that file).
 CREATE TABLE chunks (
@@ -137,7 +137,7 @@ CREATE TABLE chunks (
 );
 CREATE INDEX chunks_file ON chunks(file_id);
 
--- Vector table (sqlite-vec extension — loaded only on this DB).
+-- Vector table (sqlite-vec extension -- loaded only on this DB).
 CREATE VIRTUAL TABLE chunk_vectors USING vec0(
     chunk_id    INTEGER PRIMARY KEY,
     embedding   FLOAT[384]
@@ -145,7 +145,7 @@ CREATE VIRTUAL TABLE chunk_vectors USING vec0(
 ```
 
 Semantic search becomes a two-step read: query `vectors.db` for the top-K
-nearest `chunk_id` → `file_id`, then resolve `file_id` → `path` from
+nearest `chunk_id` -> `file_id`, then resolve `file_id` -> `path` from
 `index.db`. Both lookups are cheap (tiny K, single-row PK fetches).
 
 ---
@@ -153,7 +153,7 @@ nearest `chunk_id` → `file_id`, then resolve `file_id` → `path` from
 ## Chunking Strategy
 
 Chunking splits files into meaningful units for embedding. The goal is that each chunk is
-semantically coherent — a complete thought, function, or section — not an arbitrary slice.
+semantically coherent -- a complete thought, function, or section -- not an arbitrary slice.
 
 ### Code files (Tree-sitter)
 - Each **function or method body** = one chunk (most natural semantic unit)
@@ -184,7 +184,7 @@ No dependency on LM Studio being available. No VRAM used.
 - Output dimension: 384
 - Speed: ~5,000 chunks/minute on CPU (typical)
 - Quality: good for code and English text; sufficient for most use cases
-- Tokenisation: WordPiece vocab embedded in the GGUF — no auxiliary `vocab.txt` needed
+- Tokenisation: WordPiece vocab embedded in the GGUF -- no auxiliary `vocab.txt` needed
 
 **Upgrade option: `nomic-embed-text-v1.5` (GGUF)**
 - Size: ~280MB
@@ -195,7 +195,7 @@ No dependency on LM Studio being available. No VRAM used.
 Swapped from ONNX Runtime in April 2026: vcpkg's static-CRT onnxruntime dropped ONNX schema
 registration constructors at link time, causing "invalid model" failures. llama.cpp is a
 single-file C library with no linker-sensitive static registrations and ships a correct
-tokenizer. See [tech-stack.md § 5](tech-stack.md) for details.
+tokenizer. See [tech-stack.md section 5](tech-stack.md) for details.
 
 Model is configured per workspace. Changing the model triggers a full re-embedding pass.
 
@@ -207,7 +207,7 @@ Model is configured per workspace. Changing the model triggers a full re-embeddi
 
 ### Incremental updates
 - When a file changes: delete all chunks + vectors for that file, re-chunk, re-embed
-- Only the changed file is processed — no full rebuild
+- Only the changed file is processed -- no full rebuild
 - Very large files (> `max_file_size_kb`) are not embedded (only FTS indexed)
 
 ---
@@ -221,11 +221,11 @@ Neither keyword nor semantic search alone is best. They complement each other:
 **Hybrid search uses Reciprocal Rank Fusion (RRF)** to merge the two ranked lists:
 
 ```
-rrf_score(doc) = Σ  1 / (60 + rank_i(doc))
+rrf_score(doc) = Sum  1 / (60 + rank_i(doc))
 ```
 
 Each result list contributes a term. Documents appearing in both lists score higher.
-k=60 is the standard constant — robust without tuning.
+k=60 is the standard constant -- robust without tuning.
 
 ```
 Query: "memory allocation management"
@@ -237,22 +237,22 @@ Query: "memory allocation management"
     │                 │
     └────────┬────────┘
              │ RRF merge
-             ▼
+             v
     Final ranked results
     { path, line_start, label, snippet, score }
 ```
 
-### `search_hybrid(query, options?)` — default search tool
+### `search_hybrid(query, options?)` -- default search tool
 Runs both and merges. Returns ranked snippets, not full files.
 Options: filter by path prefix, extension, language, symbol kind.
 
-### `search_text(query, options?)` — keyword only
+### `search_text(query, options?)` -- keyword only
 FTS5 BM25. Used when semantic is disabled or for exact-match queries.
 
-### `search_symbols(name, kind?, language?)` — code symbol lookup
+### `search_symbols(name, kind?, language?)` -- code symbol lookup
 Exact + prefix match on the `symbols` table. Fast, no embedding needed.
 
-### `search_semantic(query, options?)` — vector only
+### `search_semantic(query, options?)` -- vector only
 Pure cosine similarity. Useful when exact terms are unknown.
 
 ---
@@ -263,13 +263,13 @@ The agent never touches SQLite directly. High-level tools only:
 
 | Tool | Search type | Token cost | When to use |
 |---|---|---|---|
-| `search_hybrid` | BM25 + semantic | Low | Default — most queries |
+| `search_hybrid` | BM25 + semantic | Low | Default -- most queries |
 | `search_text` | BM25 keyword | Very low | Exact names, IDs, error strings |
 | `search_symbols` | Symbol table | Minimal | "Where is class X defined?" |
 | `get_file_outline` | Index metadata | Minimal | Understand a file before reading it |
 | `list_directory` | File registry | Minimal | Explore folder structure |
 
-All tools return **ranked snippets with locations** — never full file contents.
+All tools return **ranked snippets with locations** -- never full file contents.
 Full content is fetched only via `read_file` when the agent decides it's necessary.
 
 ---
@@ -305,7 +305,7 @@ Full content is fetched only via `read_file` when the agent decides it's necessa
 
 Semantic search is **opt-in per workspace** (disabled by default) because:
 - Initial embedding of a large workspace takes time and CPU
-- Small workspaces benefit little from it — BM25 is already excellent there
+- Small workspaces benefit little from it -- BM25 is already excellent there
 - Some workspaces (binary assets, build output) have no useful text to embed
 
 ---

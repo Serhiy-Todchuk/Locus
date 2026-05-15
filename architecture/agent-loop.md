@@ -14,7 +14,7 @@ This is a cross-cutting guide. For the owned data structures see
 
 ## 1. Responsibilities
 
-`AgentCore` is the single turn orchestrator. After S3.A it is a thin composition root — the
+`AgentCore` is the single turn orchestrator. After S3.A it is a thin composition root -- the
 heavy lifting lives in four collaborators that are owned via `unique_ptr` and wired up in the
 constructor. Everything else (index, tools, LLM, frontends) is external; `AgentCore` binds them
 together into a conversation.
@@ -34,7 +34,7 @@ together into a conversation.
 | Tool-facing workspace surface | `IWorkspaceServices` (implemented by `Workspace`) | [core/workspace_services.h](../src/core/workspace_services.h) |
 
 **Invariant:** only the agent thread writes `history_`. Collaborators never hold conversation
-history directly — `AgentLoop::run_step` returns an `AgentStepResult` that `AgentCore` appends,
+history directly -- `AgentLoop::run_step` returns an `AgentStepResult` that `AgentCore` appends,
 and `ToolDispatcher::dispatch` receives a `ChatMessage` append callback that runs on the agent
 thread. This keeps `history_` lock-free and single-writer.
 
@@ -44,11 +44,11 @@ thread. This keeps `history_` lock-free and single-writer.
 
 ```
 ┌────────────────────┐    send_message()    ┌─────────────────────┐
-│  UI / CLI thread   │─────────────────────▶│  message_queue_     │
+│  UI / CLI thread   │─────────────────────>│  message_queue_     │
 │ (also: tool_       │     push + notify    │  (mutex + cv)       │
 │  decision, cancel) │                      └──────────┬──────────┘
 └────────────────────┘                                 │ pop
-                                                       ▼
+                                                       v
                                            ┌──────────────────────┐
                                            │   Agent thread       │
                                            │   agent_thread_func  │
@@ -56,8 +56,8 @@ thread. This keeps `history_` lock-free and single-writer.
                                            └──────────┬───────────┘
                                                       │
               ┌───────────────────────────────────────┼───────────────────────────────┐
-              ▼                                       ▼                               ▼
-    IFrontend callbacks                 decision_cv_.wait()              tools_.find() → execute
+              v                                       v                               v
+    IFrontend callbacks                 decision_cv_.wait()              tools_.find() -> execute
     (on_token, on_tool_call_pending,    (released when UI thread or      (ran on agent thread)
      on_tool_result, ...)               cancel_turn() notifies)
     fired on agent thread
@@ -75,14 +75,14 @@ Key rules:
   notifies its `decision_cv_`.
 - `cancel_turn()` sets `cancel_requested_` and calls `dispatcher_->wake()` so a turn blocked on
   approval unwinds; `stop()` additionally notifies `queue_cv_` so the worker loop exits when
-  the queue is empty. `cancel_requested_` is a reference shared with `ToolDispatcher` — the
+  the queue is empty. `cancel_requested_` is a reference shared with `ToolDispatcher` -- the
   dispatcher sees the flag without any extra signalling.
 
 ---
 
 ## 3. Turn lifecycle
 
-A "turn" is one user message → zero or more LLM calls with tool dispatch in between → final
+A "turn" is one user message -> zero or more LLM calls with tool dispatch in between -> final
 text-only assistant message. The loop caps at `k_max_rounds = 20` to prevent runaway tool
 chains.
 
@@ -93,14 +93,14 @@ send_message(content)           enqueue, return                  non-blocking
 send_message_sync(content)      enqueue, wait for sync_cv_       blocking (CLI)
 ```
 
-Both paths funnel to `agent_thread_func()` → `process_message()`.
+Both paths funnel to `agent_thread_func()` -> `process_message()`.
 
 ### 3.2 `AgentCore::process_message` phases
 
 ```
 process_message(content)
  ├─ busy_ = true; cancel_requested_ = false
- ├─ on_turn_start broadcast                              ──▶ all frontends
+ ├─ on_turn_start broadcast                              ──> all frontends
  ├─ slash_->try_dispatch(content, token_cb, error_cb)    ── if true: on_turn_complete, return
  ├─ history_.add(user message)
  ├─ activity_->emit(user_message)
@@ -109,14 +109,14 @@ process_message(content)
  ├─ for round = 1..k_max_rounds:
  │    ├─ if cancel_requested_: emit on_error, break
  │    ├─ budget_->check_overflow(current_token_count())  ── may emit on_compaction_needed, break if full
- │    ├─ step = loop_->run_step(history_)                ◀── AgentLoop
+ │    ├─ step = loop_->run_step(history_)                <── AgentLoop
  │    ├─ on_context_meter broadcast
  │    ├─ if step.had_error: break
- │    ├─ history_.add(step.assistant_msg)                ◀── only writer of history_
+ │    ├─ history_.add(step.assistant_msg)                <── only writer of history_
  │    ├─ if step.tool_calls.empty(): break
  │    └─ for each call in step.tool_calls:
  │         ├─ if cancel_requested_: break
- │         └─ dispatcher_->dispatch(call, append_fn)     ◀── ToolDispatcher
+ │         └─ dispatcher_->dispatch(call, append_fn)     <── ToolDispatcher
  │
  ├─ if round >= k_max_rounds: on_error broadcast
  ├─ on_turn_complete broadcast
@@ -125,21 +125,21 @@ process_message(content)
 
 `append_fn` is a lambda that calls `history_.add(msg)`; `ToolDispatcher` never touches history
 directly. Round `1` is always "LLM produces text and/or requests tool calls." Subsequent rounds
-only happen when the previous one emitted tool calls — each tool result injects a `tool`
+only happen when the previous one emitted tool calls -- each tool result injects a `tool`
 message and the loop asks the LLM to continue.
 
-### 3.3 `AgentLoop::run_step` — one LLM round
+### 3.3 `AgentLoop::run_step` -- one LLM round
 
 ```
 run_step(history) -> AgentStepResult
  ├─ build_tool_schemas()  ── read from IToolRegistry
  ├─ llm_.stream_completion(history, schemas, callbacks):
- │    ├─ on_token          ──▶ accumulated_text       + on_token broadcast
- │    ├─ on_reasoning_token──▶ accumulated_reasoning  + on_reasoning_token broadcast
- │    ├─ on_tool_calls     ──▶ tool_call_requests = calls
- │    ├─ on_complete       ──▶ trace log
- │    ├─ on_error          ──▶ on_error broadcast, activity_.emit(error), had_error=true
- │    └─ on_usage          ──▶ budget_.set_server_total(total_tokens)
+ │    ├─ on_token          ──> accumulated_text       + on_token broadcast
+ │    ├─ on_reasoning_token──> accumulated_reasoning  + on_reasoning_token broadcast
+ │    ├─ on_tool_calls     ──> tool_call_requests = calls
+ │    ├─ on_complete       ──> trace log
+ │    ├─ on_error          ──> on_error broadcast, activity_.emit(error), had_error=true
+ │    └─ on_usage          ──> budget_.set_server_total(total_tokens)
  │
  ├─ if had_error: return { had_error=true }
  ├─ activity_.emit(llm_response) with tokens_in, tokens_delta (via ContextBudget)
@@ -150,12 +150,12 @@ run_step(history) -> AgentStepResult
     }
 ```
 
-The loop owns neither tool execution nor history mutation — it is a pure "build a request,
+The loop owns neither tool execution nor history mutation -- it is a pure "build a request,
 stream a response, hand back the pieces" component. Tool-call parsing (id/name/args) happens
 inside the loop via `ToolRegistry::parse_tool_call`; the dispatcher receives fully parsed
 `ToolCall` values.
 
-### 3.4 `ToolDispatcher::dispatch` — approval gate + execute + inject
+### 3.4 `ToolDispatcher::dispatch` -- approval gate + execute + inject
 
 ```
 dispatch(call, append_result)
@@ -171,19 +171,19 @@ dispatch(call, append_result)
  │
  ├─ if policy == manual:
  │     preview = tool->preview(call)
- │     on_tool_call_pending broadcast                ──▶ frontend shows approval UI
+ │     on_tool_call_pending broadcast                ──> frontend shows approval UI
  │     decision_cv_.wait until pending_decision_ || cancel_flag_.load()
  │     if cancelled: append "cancelled", return
  │     if decision == reject: append "rejected", return
  │     if decision == modify && !mod_args.empty(): effective_call.args = mod_args
  │
- ├─ result = tool->execute(effective_call, services_)         ◀── runs on agent thread
+ ├─ result = tool->execute(effective_call, services_)         <── runs on agent thread
  ├─ activity_.emit(tool_result or error)
  ├─ append_result(ChatMessage{tool, tool_call_id, result.content})
  └─ on_tool_result broadcast (display text, not raw content)
 ```
 
-`auto_approve` tools skip the `on_tool_call_pending` step entirely — the frontend never sees
+`auto_approve` tools skip the `on_tool_call_pending` step entirely -- the frontend never sees
 an approval event, only `on_tool_result`. The dispatcher holds its own `decision_mutex_` /
 `decision_cv_`; `AgentCore::tool_decision` forwards the user choice via
 `submit_decision(decision, modified_args)`, and `cancel_turn()` calls `wake()` to release
@@ -319,7 +319,7 @@ they fire around:
 | `after_turn` | just before `on_turn_complete` broadcast | checkpoint GC, memory bank write-back, telemetry, **auto-commit (S4.L)** | auto-commit fires when the workspace is a git repo, `git_auto_commit` is on, and the agent touched at least one file this turn |
 
 S3.A landed these as method seams on `AgentLoop` / `ToolDispatcher` rather than a formal
-observer registry — a subscription API is overkill while there is exactly one `AgentCore` per
+observer registry -- a subscription API is overkill while there is exactly one `AgentCore` per
 workspace. An explicit observer interface can come later if a second consumer per hook appears.
 
 ### 5.1 Plan mode (S4.D)
@@ -337,7 +337,7 @@ Plan mode is a `process_message`-level state, not a new phase:
 
 - `after_tool_success` snapshots prior file state for any mutating tool result, keyed by
   `(session_id, turn_id)`.
-- A `turn_id` counter — currently implicit in round iteration — becomes an explicit member on
+- A `turn_id` counter -- currently implicit in round iteration -- becomes an explicit member on
   `AgentCore` and is included in `ActivityEvent`.
 - `SessionStore` (to be promoted from `SessionManager`) gains `undo_turn(session_id,
   turn_id)` which restores files and emits an activity event.
@@ -364,7 +364,7 @@ full spec and the reactivation gate.
 - Parallel dispatch replaces this with a fan-out: each independent call runs on a worker,
   results are collected in the original order and fed back through the same `AppendFn` so
   `AgentCore` remains the sole writer of `history_`.
-- Approval UI already supports multiple pending calls per round via `call_id` — the
+- Approval UI already supports multiple pending calls per round via `call_id` -- the
   constraint is on tool-level declarations of whether a tool is parallel-safe, not on
   `AgentCore`'s plumbing.
 
@@ -390,7 +390,7 @@ Compaction itself is user-driven, never automatic:
 | `drop_tool_results` (B) | `ConversationHistory::drop_tool_results()` | any time |
 | `drop_oldest` (C) | `ConversationHistory::drop_oldest_turns(n)` | any time |
 
-Strategy A ("LLM summarize") and D ("save and restart") live in [overview.md](overview.md) §
+Strategy A ("LLM summarize") and D ("save and restart") live in [overview.md](overview.md) section
 Context Management and are not yet implemented in `AgentCore`.
 
 The seed system message at `history_.messages()[0]` is **never compacted**:
@@ -412,7 +412,7 @@ Every externally-visible moment in a turn emits an `ActivityEvent` to the ring b
 | `tool_call` | start of `ToolDispatcher::dispatch` | before approval wait |
 | `tool_result` | after successful `tool->execute` (via `ToolDispatcher`) | |
 | `error` | LLM error, unknown tool, tool failure | |
-| `index_event` | external subsystems via `AgentCore::emit_index_event` → `ActivityLog::emit_index_event` | indexer, embedding worker |
+| `index_event` | external subsystems via `AgentCore::emit_index_event` -> `ActivityLog::emit_index_event` | indexer, embedding worker |
 
 Late-joining frontends (web clients, mid-session IDE attach) call
 `AgentCore::get_activity(since_id=N)`, which delegates to `ActivityLog::get_since(N)`, to catch
@@ -425,7 +425,7 @@ up without replaying conversation history. Ring buffer cap: `k_activity_buffer_m
 **Do not break these:**
 
 1. **Single-writer history.** Only the agent thread writes `history_`. Collaborators never
-   hold it directly — `AgentLoop` returns an `AgentStepResult` that `AgentCore` appends, and
+   hold it directly -- `AgentLoop` returns an `AgentStepResult` that `AgentCore` appends, and
    `ToolDispatcher` receives an `AppendFn` callback. Any M4 hook that wants to append
    (checkpoint's turn marker, verify's injection) must do so via that same callback running
    on the agent thread.
@@ -433,15 +433,15 @@ up without replaying conversation history. Ring buffer cap: `k_activity_buffer_m
    predicate that includes `cancel_flag_.load()`. `AgentCore::cancel_turn` sets the shared
    `cancel_requested_` atomic and calls `dispatcher_->wake()` to notify the condvar. Any new
    wait path must honour the same pattern, or `cancel_turn()` hangs.
-3. **`sync_cv_` must always fire.** `send_message_sync` blocks on it — every exit path from
+3. **`sync_cv_` must always fire.** `send_message_sync` blocks on it -- every exit path from
    `process_message` (normal completion, error, round cap, cancellation) relies on the
    `sync_turn_done_ = true; sync_cv_.notify_all()` at the bottom of `agent_thread_func`.
 4. **Frontend callbacks never throw across the boundary.** `FrontendRegistry::broadcast`
-   isolates exceptions per frontend — individual frontend bugs cannot take down the agent
+   isolates exceptions per frontend -- individual frontend bugs cannot take down the agent
    thread. Preserve this when adding fan-out points.
 5. **`tool_decision()` is thread-agnostic.** It's called from the UI thread in all current
    frontends, but may come from a websocket thread once `CrowServer` ships (M5). `AgentCore`
-   forwards it to `ToolDispatcher::submit_decision` which takes the dispatcher's own mutex —
+   forwards it to `ToolDispatcher::submit_decision` which takes the dispatcher's own mutex --
    do not add thread-affinity assumptions on either side.
 6. **Cancellation is cooperative.** `cancel_requested_` is checked between rounds and between
    tool calls within a round; it does **not** interrupt an in-flight `llm_.stream_completion`
@@ -454,17 +454,17 @@ up without replaying conversation history. Ring buffer cap: `k_activity_buffer_m
 
 ## 9. Where to look next
 
-- [src/agent/agent_core.cpp](../src/agent/agent_core.cpp) — composition root, thread + queue, `process_message`
-- [src/agent/agent_loop.cpp](../src/agent/agent_loop.cpp) — single LLM round: schema, streaming, usage
-- [src/agent/tool_dispatcher.cpp](../src/agent/tool_dispatcher.cpp) — approval gate + execute + inject
-- [src/agent/activity_log.cpp](../src/agent/activity_log.cpp) — ring buffer + frontend fan-out
-- [src/agent/context_budget.cpp](../src/agent/context_budget.cpp) — token accounting, overflow policy
-- [src/agent/slash_commands.cpp](../src/agent/slash_commands.cpp) — parser + dispatcher + autocomplete
-- [src/agent/conversation.h](../src/agent/conversation.h) — `ConversationHistory`, `ChatMessage`, token estimation
-- [src/core/workspace_services.h](../src/core/workspace_services.h) — `IWorkspaceServices` tool-facing surface
-- [src/core/frontend.h](../src/core/frontend.h) — `IFrontend`, `ILocusCore`, `ToolDecision`, `CompactionStrategy`
-- [tool-protocol.md](tool-protocol.md) — `ITool`, approval policies, adding new tools
-- [overview.md](overview.md) — system-wide component map and context strategy
-- [decisions/](decisions/) — ADR trail for load-bearing architectural decisions
-- [roadmap/M3/S3.A-agent-core-split.md](../roadmap/M3/S3.A-agent-core-split.md) — the extraction of `AgentLoop`, `ToolDispatcher`, `ActivityLog`, `ContextBudget` (done)
-- [roadmap/M4/S4.B-checkpoint-undo.md](../roadmap/M4/S4.B-checkpoint-undo.md), [S4.D-plan-mode.md](../roadmap/M4/S4.D-plan-mode.md) — features that use the hook points above (parked: [S4.C-auto-verify.md](../roadmap/backlog/S4.C-auto-verify.md))
+- [src/agent/agent_core.cpp](../src/agent/agent_core.cpp) -- composition root, thread + queue, `process_message`
+- [src/agent/agent_loop.cpp](../src/agent/agent_loop.cpp) -- single LLM round: schema, streaming, usage
+- [src/agent/tool_dispatcher.cpp](../src/agent/tool_dispatcher.cpp) -- approval gate + execute + inject
+- [src/agent/activity_log.cpp](../src/agent/activity_log.cpp) -- ring buffer + frontend fan-out
+- [src/agent/context_budget.cpp](../src/agent/context_budget.cpp) -- token accounting, overflow policy
+- [src/agent/slash_commands.cpp](../src/agent/slash_commands.cpp) -- parser + dispatcher + autocomplete
+- [src/agent/conversation.h](../src/agent/conversation.h) -- `ConversationHistory`, `ChatMessage`, token estimation
+- [src/core/workspace_services.h](../src/core/workspace_services.h) -- `IWorkspaceServices` tool-facing surface
+- [src/core/frontend.h](../src/core/frontend.h) -- `IFrontend`, `ILocusCore`, `ToolDecision`, `CompactionStrategy`
+- [tool-protocol.md](tool-protocol.md) -- `ITool`, approval policies, adding new tools
+- [overview.md](overview.md) -- system-wide component map and context strategy
+- [decisions/](decisions/) -- ADR trail for load-bearing architectural decisions
+- [roadmap/M3/S3.A-agent-core-split.md](../roadmap/M3/S3.A-agent-core-split.md) -- the extraction of `AgentLoop`, `ToolDispatcher`, `ActivityLog`, `ContextBudget` (done)
+- [roadmap/M4/S4.B-checkpoint-undo.md](../roadmap/M4/S4.B-checkpoint-undo.md), [S4.D-plan-mode.md](../roadmap/M4/S4.D-plan-mode.md) -- features that use the hook points above (parked: [S4.C-auto-verify.md](../roadmap/backlog/S4.C-auto-verify.md))

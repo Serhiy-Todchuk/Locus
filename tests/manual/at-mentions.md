@@ -14,7 +14,7 @@ won't pop the dropdown.
 **Single-slot model:** Locus currently supports one attached file at a time.
 If a message has multiple `@` mentions, only the first resolved one is
 attached (last-write wins if the user follows up with another `@<path>`
-message). The detach "✕" on the chip works unchanged.
+message). The detach "x" on the chip works unchanged.
 
 ---
 
@@ -33,12 +33,12 @@ message). The detach "✕" on the chip works unchanged.
 
 - The user bubble shows the full message including the `@src/.../chat_panel.cpp`
   token verbatim.
-- The "📎" attached-file chip above the input lights up with
+- The "[attach]" attached-file chip above the input lights up with
   `src/frontends/gui/chat_panel.cpp`.
 - The LLM response references the actual contents of `chat_panel.cpp`
   (the attached-context block prepended to the user turn injects the
-  file's outline + preview, same as right-click → Attach).
-- Clicking the chip's "✕" detaches the file.
+  file's outline + preview, same as right-click -> Attach).
+- Clicking the chip's "x" detaches the file.
 
 ---
 

@@ -6,10 +6,10 @@
 
 ---
 
-## 1. Core Language — C++20
+## 1. Core Language -- C++20
 
 **Decided.** C++ is the right choice for Locus core:
-- User's native language — fastest iteration, deepest control
+- User's native language -- fastest iteration, deepest control
 - All key dependencies (SQLite, Tree-sitter, libzim, pdfium) are C/C++ native
 - Zero runtime overhead, instant startup, minimal memory footprint
 - Direct control over threading, memory, and performance-critical paths
@@ -19,13 +19,13 @@
 
 ---
 
-## 2. Frontend — v1: wxWidgets + wxWebView
+## 2. Frontend -- v1: wxWidgets + wxWebView
 
-**Decided for v1** — deferred until after CLI prototype.
+**Decided for v1** -- deferred until after CLI prototype.
 
-- Native widgets via wxWidgets — proper text selection/copy, system tray, file dialogs, all built-in
-- Chat display: `wxWebView` (Edge/WebView2, OS-provided — not bundled Chromium, not Electron)
-- Markdown rendering: `md4c` (C library) converts markdown → HTML, injected into WebView
+- Native widgets via wxWidgets -- proper text selection/copy, system tray, file dialogs, all built-in
+- Chat display: `wxWebView` (Edge/WebView2, OS-provided -- not bundled Chromium, not Electron)
+- Markdown rendering: `md4c` (C library) converts markdown -> HTML, injected into WebView
 - Code syntax highlighting: Prism.js (~20KB) embedded in WebView's HTML template
 - Streaming LLM output: `wxTimer` flushes token buffer via `wxWebView::RunScript()` (DOM append)
 - Dockable layout: `wxAuiManager` for sidebar + chat + right panel
@@ -48,7 +48,7 @@ Three C++ frontends, all implementing `IFrontend` and linking `locus_core`:
 | **wxWidgets** | `src/frontends/wx/*` (M1) | Desktop GUI with system tray, chat UI, tool panels |
 | **CrowServer** | `src/frontends/crow/*` (M3) | HTTP/WebSocket server for external clients |
 
-External clients connect to CrowServer — they are not C++ frontends themselves:
+External clients connect to CrowServer -- they are not C++ frontends themselves:
 
 | Client | Technology | Connection |
 |---|---|---|
@@ -62,9 +62,9 @@ Multiple frontends and clients can be active simultaneously on the same session.
 
 ## 4. Index Database
 
-**SQLite + FTS5 + sqlite-vec** — all in one `.locus/index.db` file.
+**SQLite + FTS5 + sqlite-vec** -- all in one `.locus/index.db` file.
 
-- SQLite C API — native, zero overhead from C++
+- SQLite C API -- native, zero overhead from C++
 - **FTS5**: BM25-ranked full-text search, porter stemming, unicode tokenizer
 - **sqlite-vec**: vector virtual table extension for semantic search
   - Cosine similarity, exact + approximate KNN
@@ -76,15 +76,15 @@ No server, no config, single file, zero external process.
 
 ## 5. Semantic Embeddings
 
-**llama.cpp C API** — in-process CPU inference, no dependency on LM Studio being up.
+**llama.cpp C API** -- in-process CPU inference, no dependency on LM Studio being up.
 
 - llama.cpp, MIT, vcpkg: `llama-cpp` (transitively pulls `ggml`)
 - Models stored as `.gguf` files (single file: weights + vocab + metadata)
-- **Default model**: `all-MiniLM-L6-v2.Q8_0.gguf` — ~25MB, 384-dim, good quality, fast on CPU
+- **Default model**: `all-MiniLM-L6-v2.Q8_0.gguf` -- ~25MB, 384-dim, good quality, fast on CPU
 - **Upgrade model**: any BERT-family GGUF (e.g. `bge-small-en`, `nomic-embed-text` GGUF builds)
 - Runs in a background thread at lower priority than FTS indexing
 - Opt-in per workspace; disabled by default
-- Tokenisation uses the WordPiece vocabulary embedded inside the GGUF file — no separate `vocab.txt` needed
+- Tokenisation uses the WordPiece vocabulary embedded inside the GGUF file -- no separate `vocab.txt` needed
 
 **Why not ONNX Runtime?** The vcpkg `onnxruntime` port under `x64-windows-static` strips
 ONNX schema-registration static constructors at link time, causing runtime "invalid model"
@@ -98,12 +98,12 @@ See [workspace-index.md](workspace-index.md) for chunking strategy and hybrid se
 
 ## 6. Code Parser
 
-**Tree-sitter** — the C library, linked directly.
+**Tree-sitter** -- the C library, linked directly.
 
 - 100+ languages, incremental, error-tolerant
-- C API — zero FFI overhead from C++
+- C API -- zero FFI overhead from C++
 - Grammars packaged separately per language (vcpkg or bundled)
-- Used by GitHub, Neovim, Helix, Zed — battle-tested at scale
+- Used by GitHub, Neovim, Helix, Zed -- battle-tested at scale
 
 ---
 
@@ -115,7 +115,7 @@ See [workspace-index.md](workspace-index.md) for chunking strategy and hybrid se
   - Windows: `ReadDirectoryChangesW`
   - Linux (future): `inotify`
   - macOS (future): `FSEvents`
-- Cross-platform by design — correct abstraction for future portability
+- Cross-platform by design -- correct abstraction for future portability
 - vcpkg: `efsw` package, MIT licensed
 
 Using efsw instead of calling `ReadDirectoryChangesW` directly keeps the watcher
@@ -129,20 +129,20 @@ behind one clean interface now, making future cross-platform support a drop-in.
 
 - `cpr` wraps libcurl with a clean C++ API, vcpkg: `cpr`
 - Streaming: Server-Sent Events (SSE) parsed from the response body
-- LM Studio exposes OpenAI-compatible REST — same protocol works with real
+- LM Studio exposes OpenAI-compatible REST -- same protocol works with real
   OpenAI/Claude endpoints by changing the base URL (future backend option)
 
 ---
 
-## 9. API Server (Core ↔ Remote Frontends)
+## 9. API Server (Core <-> Remote Frontends)
 
-**Crow** — lightweight C++ HTTP + WebSocket microframework.
+**Crow** -- lightweight C++ HTTP + WebSocket microframework.
 
-- WebSocket built-in — required for streaming LLM tokens + tool approval flow
+- WebSocket built-in -- required for streaming LLM tokens + tool approval flow
 - HTTP REST for stateless operations (workspace mgmt, sessions, settings)
 - MIT licensed, vcpkg: `crowcpp-crow`
 
-`CrowFrontend` is the third C++ frontend — it implements `IFrontend`, registers
+`CrowFrontend` is the third C++ frontend -- it implements `IFrontend`, registers
 with Core directly, and exposes the session to external clients (browser, VS Code
 extension, mobile) via HTTP/WebSocket. The CLI and wxWidgets frontends bypass Crow
 entirely (direct C++ interface).
@@ -151,7 +151,7 @@ entirely (direct C++ interface).
 
 ## 10. ZIM File Support
 
-**libzim** — official Kiwix C++ library for reading `.zim` archives.
+**libzim** -- official Kiwix C++ library for reading `.zim` archives.
 
 - Random access to articles by title or path, MIT licensed
 - vcpkg: `libzim`
@@ -174,14 +174,14 @@ std::string html = item.getData().data();
 - Fallback: poppler (lighter, LGPL) if pdfium proves too heavy
 
 **DOCX / XLSX**: miniz + pugixml (both header-only)
-- `.docx` / `.xlsx` are ZIP archives — miniz decompresses, pugixml parses inner XML
+- `.docx` / `.xlsx` are ZIP archives -- miniz decompresses, pugixml parses inner XML
 - vcpkg: `miniz`, `pugixml`
 
 ---
 
 ## 12. JSON
 
-**nlohmann/json** — header-only, clean C++ API, vcpkg: `nlohmann-json`.
+**nlohmann/json** -- header-only, clean C++ API, vcpkg: `nlohmann-json`.
 Used for API protocol messages, config files, LLM request/response parsing.
 If JSON parsing ever becomes a bottleneck (unlikely): swap hot paths to simdjson.
 
@@ -189,7 +189,7 @@ If JSON parsing ever becomes a bottleneck (unlikely): swap hot paths to simdjson
 
 ## 13. Logging
 
-**spdlog** — fast, header-only, MIT licensed, vcpkg: `spdlog`.
+**spdlog** -- fast, header-only, MIT licensed, vcpkg: `spdlog`.
 
 - Multiple sinks: rotating file log in `.locus/locus.log` + stderr for CLI/debug
 - Structured levels: trace / debug / info / warn / error / critical
@@ -200,14 +200,14 @@ If JSON parsing ever becomes a bottleneck (unlikely): swap hot paths to simdjson
 
 ## 14. Threading Model
 
-**`std::thread` + `std::mutex` / `std::queue`** — explicit, manual, no framework.
+**`std::thread` + `std::mutex` / `std::queue`** -- explicit, manual, no framework.
 
 Fits the project philosophy: direct control, no hidden runtime, predictable behaviour.
 
 Thread layout:
 | Thread | Responsibility |
 |---|---|
-| Main | wxWidgets event loop (UI thread) — never blocks |
+| Main | wxWidgets event loop (UI thread) -- never blocks |
 | Agent | LLM request, SSE streaming, tool dispatch |
 | Indexer (FTS) | File traversal + FTS5 index build/update |
 | Indexer (Vec) | llama.cpp embedding, sqlite-vec writes (lower priority) |
@@ -221,10 +221,10 @@ No lock-free structures unless profiling shows a bottleneck.
 
 ## 15. Test Framework
 
-**Catch2** — clean syntax, good C++ integration, MIT licensed, vcpkg: `catch2`.
+**Catch2** -- clean syntax, good C++ integration, MIT licensed, vcpkg: `catch2`.
 
 - Unit tests for: index subsystem, hybrid search ranking, tool protocol, context manager
-- CLI prototype ships with tests from day one — not bolted on later
+- CLI prototype ships with tests from day one -- not bolted on later
 - Test binary is a separate CMake target, not linked into the main binary
 
 ---
@@ -233,7 +233,7 @@ No lock-free structures unless profiling shows a bottleneck.
 
 **HTML parser: gumbo-parser** (Google, Apache 2.0, vcpkg: `gumbo`)
 
-- Pure C HTML5 parser — handles malformed real-world HTML correctly
+- Pure C HTML5 parser -- handles malformed real-world HTML correctly
 - Produces a DOM tree; Locus walks it to extract visible text, skip script/style/nav
 - Tiny footprint, no dependencies beyond libc
 - Used for: converting fetched web pages to clean plain text for FTS5 indexing
@@ -242,12 +242,12 @@ No lock-free structures unless profiling shows a bottleneck.
 
 - Brave Search API: clean JSON REST, free tier (2,000 queries/month)
 - Alternative: SearXNG (self-hosted metasearch, no API key, no limits)
-- API endpoint is configurable — any provider returning the expected JSON shape works
+- API endpoint is configurable -- any provider returning the expected JSON shape works
 - HTTP calls via cpr (already a dependency)
 
 **Architecture**: fetched web pages are indexed in separate FTS5 tables (`web_fts`),
 not injected into LLM context. The agent queries web content through the same
-search tools used for local files. Full pages never enter context — only ranked snippets.
+search tools used for local files. Full pages never enter context -- only ranked snippets.
 
 See [web-retrieval.md](web-retrieval.md) for the full pipeline design.
 
@@ -257,9 +257,9 @@ See [web-retrieval.md](web-retrieval.md) for the full pipeline design.
 
 | Layer | Choice | vcpkg package |
 |---|---|---|
-| Language | C++20 | — |
-| Build | CMake + vcpkg | — |
-| Frontend: CLI | Terminal REPL | — |
+| Language | C++20 | -- |
+| Build | CMake + vcpkg | -- |
+| Frontend: CLI | Terminal REPL | -- |
 | Frontend: wxWidgets | wxWidgets + wxWebView | `wxwidgets`, `md4c` |
 | Frontend: CrowServer | Crow HTTP/WS for external clients | `crowcpp-crow` |
 | Index database | SQLite + FTS5 | `sqlite3` |
@@ -269,11 +269,11 @@ See [web-retrieval.md](web-retrieval.md) for the full pipeline design.
 | File watcher | efsw | `efsw` |
 | LLM HTTP client | cpr | `cpr` |
 | HTML parser | gumbo-parser | `gumbo` |
-| Web search API | Brave Search (configurable) | — |
+| Web search API | Brave Search (configurable) | -- |
 | ZIM reader | libzim | `libzim` |
 | PDF extraction | pdfium | `pdfium` |
 | DOCX/XLSX | miniz + pugixml | `miniz`, `pugixml` |
 | JSON | nlohmann/json | `nlohmann-json` |
 | Logging | spdlog | `spdlog` |
-| Threading | std::thread + std::mutex/queue | — |
+| Threading | std::thread + std::mutex/queue | -- |
 | Tests | Catch2 | `catch2` |

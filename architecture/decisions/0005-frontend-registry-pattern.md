@@ -29,8 +29,8 @@ threw from a callback would crash the agent thread.
 
 ## Decision
 
-Introduce `FrontendRegistry` — a thread-safe, exception-isolated list of `IFrontend*`
-owned by `AgentCore` — and route every outbound event through it.
+Introduce `FrontendRegistry` -- a thread-safe, exception-isolated list of `IFrontend*`
+owned by `AgentCore` -- and route every outbound event through it.
 
 Properties:
 
@@ -59,13 +59,13 @@ Properties:
   The C++ direct path (wxWidgets, CLI) and the network path use the exact same
   `IFrontend` contract and the same registry.
 - Frontend bugs stay local. A `wxQueueEvent` failure, a broken socket, a UTF-8 decode
-  exception — all caught at the registry boundary, logged, and skipped.
+  exception -- all caught at the registry boundary, logged, and skipped.
 - Testing is straightforward: a fake frontend that records events is a drop-in consumer.
   No coupling to a specific singleton or thread model.
 
 **Costs**
 - The mutex must be held across every fan-out call. In practice callbacks are dispatcher-
-  cheap (post to a queue, append to a buffer), so contention is negligible — but long-running
+  cheap (post to a queue, append to a buffer), so contention is negligible -- but long-running
   work in a callback would serialise all frontends. Enforced by convention, not the type
   system.
 - Delivery order is registration order, not semantic priority. Today this does not matter
@@ -80,10 +80,10 @@ Properties:
   caller (CLI bootstrap, GUI bootstrap, Crow startup) instead of solving it once. Every new
   lifecycle combination re-invents the same loop. Rejected.
 - **Observer pattern with typed signals per event.** Boost.Signals2-style. More ceremony
-  (one signal per `IFrontend` method), no real win — `broadcast([](IFrontend& fe){ ... })`
+  (one signal per `IFrontend` method), no real win -- `broadcast([](IFrontend& fe){ ... })`
   is already as concise as a slot connect. Also pulls in a dependency we don't need.
 - **Lock-free copy-on-write list for frontends.** The registration rate is approximately
-  once-per-frontend-lifetime. Optimising for lock-free reads here is premature — the mutex
+  once-per-frontend-lifetime. Optimising for lock-free reads here is premature -- the mutex
   is never the bottleneck.
 - **Let exceptions propagate.** Rejected as a correctness hazard. A frontend throwing would
   abort the entire turn, corrupt `busy_`/`sync_turn_done_` state, and hang
