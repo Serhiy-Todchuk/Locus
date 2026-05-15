@@ -54,6 +54,27 @@ two open windows can target two different folders.
 Your PC does all the compute. Nothing leaves your network unless you point Locus
 at a remote LLM endpoint yourself.
 
+## Implemented Capabilities
+
+The current codebase is already a working local-agent platform, not just a
+prototype shell around chat completion:
+
+- **Agent runtime**: streaming conversations, tool-call parsing across OpenAI-style
+  and XML-style model outputs, approval gates, plan mode, slash commands, sessions,
+  compaction, file-change awareness, and per-turn activity logging.
+- **Safe workspace operations**: read-before-edit discipline, app-level checkpoints
+  and `/undo`, inline diff rendering, delete/write/edit tools, command execution,
+  background processes, and outside-workspace shell-path warnings.
+- **Workspace intelligence**: SQLite FTS5 indexing, document extraction, symbols,
+  headings, AST/regex search, optional local embeddings, hybrid retrieval,
+  reranking, and a retrieval evaluation harness.
+- **Extensibility and memory**: MCP client support, prompt templates, model presets,
+  sampler controls, workspace-scoped memory with search, and git-aware workflows
+  including auto-commit support.
+- **Desktop polish already landed in M5**: terminal panel, capability toggles,
+  global settings, inline diffs in chat, UI automation scripts, metrics view, and
+  the `LLMContext` refactor that centralizes conversation-facing state.
+
 ## First-time setup on a new PC
 
 End-to-end checklist for getting Locus running on a fresh Windows 11 machine.

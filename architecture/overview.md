@@ -1,22 +1,32 @@
 # Architecture Overview
 
-> Status: Architecture phase. Core decisions made. CLI prototype is next milestone.
-> Language: C++20. Core is a headless daemon; frontends attach via API.
+> Status: M5 implementation. CLI, native Windows GUI, workspace indexing,
+> local-agent loop, tool approvals, MCP, retrieval, memory, metrics, and UI
+> automation are implemented. M6 will add connected/front-end expansion.
+> Language: C++20. Today the CLI and wxWidgets GUI host the core in-process;
+> M6 introduces the WebSocket/HTTP adapter for external frontends.
 
 ---
 
 ## Deployment Model
 
-Locus Core runs as a **system tray background process** -- always on, no visible window.
-Your PC does all the work: LLM inference, file indexing, tool execution. Frontends are
-thin clients that display results and relay user input -- which means you can connect from
-your phone, a tablet, or a browser on another machine and get the full agent experience
-over your local network. No cloud relay, no tunneling service required for LAN use.
+The current product ships two entry points from the same C++ core:
+
+- `locus.exe` -- terminal CLI for direct workspace sessions.
+- `locus_gui.exe` -- native Windows desktop app using wxWidgets and WebView2.
+
+Your PC does the local work: file indexing, embeddings, reranking, tool execution,
+session storage, checkpoints, logs, and memory. LLM inference is local when pointed
+at LM Studio/Ollama/llama-server-style OpenAI-compatible endpoints; remote model
+servers are opt-in.
+
+The M6 target is to split the same core behind a WebSocket/HTTP adapter so browser,
+VS Code, and LAN clients can attach without duplicating the agent runtime.
 
 Frontends connect via one of two paths:
 
-- **C++ direct** -- in-process virtual interface, zero overhead. For the wxWidgets frontend only.
-- **WebSocket + HTTP** -- network API, language-agnostic. For all other frontends.
+- **C++ direct** -- implemented. The wxWidgets frontend and CLI call the core in-process.
+- **WebSocket + HTTP** -- planned for M6. Language-agnostic API for external frontends.
 
 Both paths are symmetric: the same `IFrontend` / `ILocusCore` concepts apply to both.
 The WebSocket server is an adapter that implements `IFrontend` over the wire.
@@ -184,37 +194,42 @@ interface over the wire.
 
 ### 2. Workspace Engine
 The heart of the system. Responsible for:
-- Watching the workspace folder for changes (`ReadDirectoryChangesW` on Windows)
-- FTS5 keyword index (SQLite + FTS5)
-- Vector semantic index (sqlite-vec + llama.cpp in-process embeddings)
-- ZIM archive support via libzim (for Kiwix/Wikipedia workspaces)
-- Document text extraction (PDF via pdfium, DOCX via ZIP+XML)
-- Managing the `.locus/` directory inside each workspace
+- Watching the workspace folder for changes.
+- FTS5 keyword index over files, headings, symbols, and extracted text.
+- Optional vector semantic index with sqlite-vec and llama.cpp GGUF embeddings.
+- Optional cross-encoder reranking for top-K precision.
+- Document text extraction for Markdown, text, JSON/YAML, HTML, PDF, DOCX, XLSX,
+  and ZIP/XML-backed formats.
+- Managing the `.locus/` directory inside each workspace: config, indexes,
+  sessions, checkpoints, metrics, memory, and logs.
 
 See: [workspace-index.md](workspace-index.md)
 
 ### 3. Agent Core
 Orchestrates the conversation loop:
-- Builds the prompt: `[system base] + [LOCUS.md] + [workspace metadata] + [history] + [user message]`
-- Sends to LLM, streams response back to connected frontends via API Server
-- Detects tool calls in the response
-- Pauses at each tool call -> sends `tool_call_pending` to frontends via WebSocket
-- Waits for approval from any connected frontend
-- Executes approved tools -> injects result -> resumes LLM generation
-- Manages context window (compaction, pinning, summarization)
+- Owns `LLMContext`: conversation history, immutable system prompt assembly,
+  context budget, file-change tracker, attached context, checkpoints, and session ids.
+- Sends prompts to the configured LLM client and streams tokens to the active frontend.
+- Detects tool calls in OpenAI-style and XML-style stream formats.
+- Pauses at tool calls, asks the frontend for approval or argument edits, then executes
+  through `ToolDispatcher`.
+- Records activity and metrics, handles slash commands, and manages compaction.
 
 ### 4. Tool Set (ITool interface)
 See: [tool-protocol.md](tool-protocol.md)
 
-Current tools: `read_file`, `write_file` (create or overwrite with `overwrite=true`),
-`edit_file` (exact-string replace, atomic batch), `delete_file`, `list_directory`,
-`search` (mode: text / symbols / semantic / hybrid), `get_file_outline`,
-`run_command`, `ask_user`. Planned: `web_search`, `web_fetch`, `web_read`.
+Current built-in tools include file operations, directory listing, unified search
+(`text`, `symbols`, `semantic`, `hybrid`, `regex`, `ast`), file outlines, foreground
+and background commands, process inspection/output/stop, plan-mode tools, memory tools,
+and interactive `ask_user`. MCP can add external tools at runtime. Web retrieval tools
+remain planned for M6.
 
 ### 5. LLM Client
-- Currently: LM Studio OpenAI-compatible REST API (localhost:1234)
-- SSE streaming, tool call parsing, context length enforcement
-- Abstracted behind an interface -- swap backends without touching Agent Core
+- OpenAI-compatible REST/SSE client for local servers such as LM Studio.
+- Model/context auto-detection where the server exposes metadata.
+- Stream decoders for OpenAI-style tool calls plus XML-style formats used by local models.
+- Context length enforcement, stall timeout handling, sampler options, and model presets.
+- Abstracted behind `ILLMClient` so backend swaps do not touch Agent Core.
 
 ---
 
