@@ -1,5 +1,9 @@
 # Locus
 
+<p align="center">
+  <img src="assets/icons/github/locus-github-front-1024.png" alt="Locus app icon" width="180">
+</p>
+
 **A local AI agent for your workspace.**
 
 Locus is a local-first coding and knowledge-base agent for people who want AI help

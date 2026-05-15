@@ -1,0 +1,28 @@
+﻿{
+    "name":  "Locus icon asset set",
+    "source":  "source/locus-icon.svg",
+    "macos":  {
+                  "iconset":  "macos/Locus.iconset",
+                  "app":  "macos/Locus.icns"
+              },
+    "design":  "Data stack contained inside a hexagonal local-control boundary.",
+    "usage":  {
+                  "about_window":  "about/",
+                  "window_header":  "header/",
+                  "github_front_page":  "github/locus-github-front-1024.png",
+                  "explorer_finder_taskbar":  [
+                                                  "windows/locus.ico",
+                                                  "macos/Locus.icns"
+                                              ],
+                  "tray":  "tray/"
+              },
+    "windows":  {
+                    "tray":  [
+                                 "tray/locus-tray-idle.ico",
+                                 "tray/locus-tray-active.ico",
+                                 "tray/locus-tray-indexing.ico",
+                                 "tray/locus-tray-error.ico"
+                             ],
+                    "app":  "windows/locus.ico"
+                }
+}

@@ -1,0 +1,22 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="Locus app icon">
+  <rect x="64" y="64" width="896" height="896" rx="190" fill="#111820"/>
+  <g fill="none" stroke="#20B7D8" stroke-width="50" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M590 215 L725 293"/>
+    <path d="M795 420 L795 604"/>
+    <path d="M725 731 L590 809"/>
+    <path d="M434 809 L299 731"/>
+    <path d="M229 604 L229 420"/>
+    <path d="M299 293 L434 215"/>
+  </g>
+  <g fill="#EAF4F7">
+    <circle cx="512" cy="170" r="58"/>
+    <circle cx="795" cy="333" r="58"/>
+    <circle cx="795" cy="691" r="58"/>
+    <circle cx="512" cy="854" r="58"/>
+    <circle cx="229" cy="691" r="58"/>
+    <circle cx="229" cy="333" r="58"/>
+    <polygon points="512,318 704,420 512,522 320,420"/>
+    <polygon points="320,620 512,722 704,620 704,681 512,783 320,681"/>
+  </g>
+  <polygon points="320,535 512,637 704,535 704,596 512,698 320,596" fill="#73DCEB"/>
+</svg>
