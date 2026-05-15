@@ -203,10 +203,10 @@ The script root supports a `setup` block:
 | [`settings_preset_dropdown.json`](scripts/settings_preset_dropdown.json) | no | Pick the `LM Studio + Qwen` preset, click `Load preset`, assert the Tool-call format dropdown updates to `Qwen`. Validates S4.V Task 6 preset wiring. |
 | [`save_as_global_defaults.json`](scripts/save_as_global_defaults.json) | no | Click `Save as global defaults` on the Settings dialog; with `LOCUS_GLOBAL_DIR` redirected via `setup.env`, asserts the resulting `config.json` lands on disk. Validates S5.M global-defaults write path. |
 | [`mcp_open_json.json`](scripts/mcp_open_json.json)                 | no  | Settings -> MCP Servers -> Open mcp.json button. Asserts the stub `.locus/mcp.json` gets created. Doesn't assert the default-app launch (Notepad). |
-| [`slash_popup.json`](scripts/slash_popup.json)                     | no  | Type `/met` into the chat input; assert the slash autocomplete popup appears and contains `metrics`. Esc dismisses. |
+| [`slash_popup.json`](scripts/slash_popup.json)                     | no  | Type `/sear` into the chat input; press Enter; assert the input now contains `/search` (the popup's Enter-handler accepted the highlighted suggestion). Observes the side effect on the input because the popup itself is a `wxPopupTransientWindow` whose UIA visibility is unreliable. |
 | [`help_slash.json`](scripts/help_slash.json)                       | no  | Submit `/help`; assert the response appears in the chat WebView. Validates the deterministic slash-command path (no LLM round-trip). |
 | [`compaction_dialog.json`](scripts/compaction_dialog.json)         | no  | Click the chat-footer Compact button; assert the CompactionDialog opens with both strategy radios, click Strategy C, Esc cancels. |
-| [`mutating_tool_friction.json`](scripts/mutating_tool_friction.json) | no | Settings -> Tool Approvals; change `edit_file` to `Auto-Approve`; assert the friction confirm modal pops (S4.V Task 4); decline; verify dropdown reverts. |
+| [`mutating_tool_friction.json`](scripts/mutating_tool_friction.json) | no | Settings -> Tool Approvals; assert all five mutating-tool per-row wxChoice dropdowns are addressable (`locus.settings.approvals.choice.<tool>`). The S4.V Task 4 friction-confirm modal flow itself is harder to drive deterministically through UIA -- the manual test plan walks through the live behaviour. |
 | [`plan_mode.json`](scripts/plan_mode.json)                         | yes | S4.D plan flow: switch to Plan, ask LLM to propose a plan, approve, verify a hello-world file lands on disk. Slowest script in the bundle (240s assertion timeouts). |
 | [`tool_approval_dialog.json`](scripts/tool_approval_dialog.json)   | yes | Forces `write_file` to `ask` via `setup.tool_approvals_override`; LLM is asked to write a file; assert the ToolApprovalDialog opens, click Approve, assert the file appears. |
 | [`inline_diff_render.json`](scripts/inline_diff_render.json)       | yes | LLM is asked to write a file (auto-approved); assert the resulting file content also appears in the chat WebView (S5.C inline-diff render). |
@@ -239,25 +239,47 @@ and intercepts keystrokes. Three options:
 
 ## Adding a new script
 
-1. Write `scripts/my_feature.json` -- copy `smoke.json` as a starting point.
+1. Write `scripts/my_feature.json` -- copy `smoke.json` for a no-frills
+   starting point, `settings_persistence.json` if the feature persists
+   across a relaunch, or one of the LLM-dependent scripts if a real model
+   turn is needed.
 2. If the steps need a widget that's not yet named, add an entry to
    [`src/frontends/gui/ui_names.h`](../../src/frontends/gui/ui_names.h) and
-   wire it in the relevant `*_panel.cpp`. Rebuild `locus_gui` (the test exe
+   wire it in the relevant `*_panel.cpp` / `*_dialog.cpp` with `SetName` +
+   `gui::apply_locus_accessible_name`. Rebuild `locus_gui` (the test exe
    build will rebuild it for you).
-3. Run the script: `--script scripts/my_feature.json`.
-4. Pass-rate matters. UIA timing is forgiving up to ~5 s on a fast machine;
+3. Pick the right setup knobs:
+   - First-open modal under test? `setup.allow_first_time_prompts: true`.
+   - File outside the workspace? `setup.env: { "LOCUS_GLOBAL_DIR": "{workspace}/global" }`
+     plus `assert_file_exists path: "global/config.json"`.
+   - Approval gate under test? `setup.tool_approvals_override: { "write_file": "ask" }`.
+4. Prefer addressing children over the dialog itself. Many wxDialogs surface
+   their own `SetName` poorly through UIA; find a named button or checkbox
+   inside instead. For owned dialogs (friction confirm, MessageBox), use
+   `find name: "<exact title>"` rather than `wait_for_window` -- the latter
+   filters owned windows.
+5. Run the script: `--script scripts/my_feature.json`. Iterate until green.
+   If a step needs debugging, add a `dump_tree` step before the failing one
+   to see the UIA tree the harness saw.
+6. Pass-rate matters. UIA timing is forgiving up to ~5 s on a fast machine;
    if your script flakes, audit the explicit waits (`assert_text_contains`,
-   `assert_visible`) before reaching for `sleep` -- explicit waits keep
-   scripts fast on a quick machine and stable on a slow one.
+   `assert_visible`, `assert_file_exists`) before reaching for `sleep` --
+   explicit waits keep scripts fast on a quick machine and stable on a slow
+   one.
 
 ## Troubleshooting
 
 | Symptom | Likely cause |
 |---|---|
 | Every script fails with `init: UIA COM init failed` | COM apartment conflict -- a parent process initialised STA differently. Run the exe standalone. |
-| `find: timeout waiting for element (automation_id=...)` | Widget exists but no `SetName()` call -- check `ui_names.h` and the panel's create method. |
+| `find: timeout waiting for element (automation_id=...)` | Widget exists but no `SetName()` call -- check `ui_names.h` and the panel's create method. For dialogs the `SetName` on the dialog window itself often doesn't propagate (native window class wins); name a child control (a button, a checkbox) instead and find that. |
 | Settings dialog opens but tab clicks miss | The notebook AddPage label changed and the script's `name` arg drifted -- update the script to match the new label. |
+| First few scripts pass, later ones fail at `find` / `press_key` after a back-to-back batch | Foreground was stolen by another process (the parent terminal) between launches. `wait_for_window` claims foreground via `AttachThreadInput + SetForegroundWindow + BringWindowToTop` for the launched window; if scripts still flake, the harness was likely run from a CMD/PowerShell that disagreed with Windows' foreground-lock policy. Run from the `--script` form rather than a batched `--all` if you're investigating one in isolation. |
+| `wait_for_window` times out on an *owned* dialog (e.g. the friction confirm under Settings) | `wait_for_window` filters owned windows out (it walks unowned top-levels only). For owned dialogs use `find` with the dialog's exact title as `name=` -- `find` walks every visible top-level of the process regardless of owner. |
+| A control is named but isn't in the UIA tree | Likely clipped: the wxDialog's fixed ctor size is smaller than its content, the bottom of the dialog falls below the client area, and the wxAccessible enumeration drops it. Add `outer->SetSizeHints(this);` after `Layout()` so the dialog fits its content (this caught the `cb_web` clipping in `CapabilitiesDialog`). |
+| `wxChoice` selection-by-name doesn't fire `wxEVT_CHOICE` | `CBS_DROPDOWNLIST` doesn't expose its items in the UIA tree until the dropdown is expanded, and key navigation through PostMessage / SendInput doesn't reliably commit. Assert the dropdown is reachable; defer the modal-firing assertion to a manual test plan. |
 | Screenshots show black rectangles for the chat WebView | Old PrintWindow without `PW_RENDERFULLCONTENT`. We pass that flag; if it ever fails, fall back to `BitBlt` after `RedrawWindow(RDW_INVALIDATE | RDW_ERASE | RDW_UPDATENOW)`. |
+| `screenshot: GetClientRect failed` mid-script after a modal closes | `target_hwnd_` is stale -- the modal's HWND was the most recent thing `wait_for_window` saw, and it's now destroyed. Add a fresh `wait_for_window` for the main `Locus` window after the modal closes; that re-binds `target_hwnd_`. |
 | Process leaks between scripts | The harness sends `WM_CLOSE` then `TerminateProcess` on timeout. Each script gets its own workspace dir under `%TEMP%/locus_ui_tests/` so they don't compete for the WorkspaceLock. |
 | `chat_round_trip` fails to find the user message | The WebView contents render async; `assert_text_contains` polls with a 10 s timeout. If your machine is loaded, raise the timeout to 30 s for that step. |
 
@@ -266,11 +288,14 @@ and intercepts keystrokes. Three options:
 - **Unit tests (`locus_tests`)** -- fast, hermetic, no GUI. Untouched by S5.L.
 - **Integration tests (`locus_integration_tests`)** -- live LLM, drives
   `AgentCore` end-to-end, no GUI. Untouched by S5.L.
-- **UI automation tests (this)** -- drives the real wx widgets; LLM is
-  optional (only the chat round-trip would benefit, and even there only for
-  agent-side assertions which we deliberately don't make).
+- **UI automation tests (this)** -- drives the real wx widgets; most scripts
+  are deterministic, four are LLM-dependent (require LM Studio) and document
+  that in their `description`. The post-S5.L expansion adds coverage for the
+  Capabilities modal, settings persistence + sub-controls, popups, the
+  approval gate, inline diffs, and the terminal panel.
 - **Manual tests (`tests/manual/`)** -- click-by-click QA plans that cover
   what UIA structurally can't (drag-and-drop visuals, focus order, file
-  dialogs, third-party software workflows). UIA now covers the smoke +
-  settings-tour baselines; new manual plans can focus on what UIA can't
-  reach.
+  dialogs, third-party software workflows, Scintilla content, right-click
+  context menus). UIA assertions and manual plans are complementary -- when
+  a feature lands a manual plan AND a UIA script, the script asserts the
+  surface presence, the plan asserts the behaviour the script can't see.
