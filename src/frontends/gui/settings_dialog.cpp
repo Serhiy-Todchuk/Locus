@@ -400,6 +400,8 @@ wxPanel* SettingsDialog::build_llm_tab(wxWindow* parent)
     outer->Add(ctx_hint,     0, wxLEFT | wxRIGHT | wxBOTTOM, 8);
     outer->Add(mt_hint,      0, wxLEFT | wxRIGHT | wxBOTTOM, 8);
     outer->Add(sampler_hint, 0, wxLEFT | wxRIGHT | wxBOTTOM, 8);
+    add_reset_button(panel, outer,
+        [this](const WorkspaceConfig& cfg) { reset_llm_tab_to(cfg); });
     panel->SetSizer(outer);
     return panel;
 }
@@ -514,6 +516,9 @@ wxPanel* SettingsDialog::build_index_tab(wxWindow* parent)
     reranker_enabled_ctrl_->SetValue(config_.reranker_enabled);
     outer->Add(reranker_enabled_ctrl_, 0, wxLEFT | wxRIGHT | wxBOTTOM, 8);
 
+    add_reset_button(panel, outer,
+        [this](const WorkspaceConfig& cfg) { reset_index_tab_to(cfg); });
+
     panel->SetSizer(outer);
     return panel;
 }
@@ -544,6 +549,19 @@ wxPanel* SettingsDialog::build_approvals_tab(wxWindow* parent)
 {
     auto* panel = new wxPanel(parent);
     auto* outer = new wxBoxSizer(wxVERTICAL);
+
+    // Edit-safety toggle (S4.A guard). Belongs here rather than on the Index
+    // tab because it's about restricting what edit_file accepts -- same
+    // domain as the per-tool approval dropdowns below.
+    require_read_before_edit_ctrl_ = new wxCheckBox(panel, wxID_ANY,
+        "Require read_file before edit_file (default on)");
+    require_read_before_edit_ctrl_->SetValue(config_.require_read_before_edit);
+    require_read_before_edit_ctrl_->SetToolTip(
+        "When checked, edit_file refuses any path the agent hasn't read in "
+        "this session via read_file. Cuts hallucinated edits on local "
+        "models. Uncheck if you trust the loaded model to propose accurate "
+        "old_string matches without confirming the file content first.");
+    outer->Add(require_read_before_edit_ctrl_, 0, wxLEFT | wxRIGHT | wxTOP, 8);
 
     auto* scroll = new wxScrolledWindow(panel, wxID_ANY,
         wxDefaultPosition, wxDefaultSize,
@@ -614,6 +632,8 @@ wxPanel* SettingsDialog::build_approvals_tab(wxWindow* parent)
     scroll->FitInside();
 
     outer->Add(scroll, 1, wxEXPAND | wxALL, 8);
+    add_reset_button(panel, outer,
+        [this](const WorkspaceConfig& cfg) { reset_approvals_tab_to(cfg); });
     panel->SetSizer(outer);
     return panel;
 }
@@ -673,6 +693,9 @@ wxPanel* SettingsDialog::build_mcp_tab(wxWindow* parent)
         wxDefaultPosition, wxSize(-1, 80), wxST_NO_AUTORESIZE);
     mcp_detail_->SetFont(hint_font);
     outer->Add(mcp_detail_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
+
+    add_reset_button(panel, outer,
+        [this](const WorkspaceConfig& cfg) { reset_mcp_tab_to(cfg); });
 
     panel->SetSizer(outer);
 
@@ -929,6 +952,12 @@ void SettingsDialog::on_ok(wxCommandEvent& evt)
 
     bool approvals_changed = (new_approvals != config_.tool_approval_policies);
 
+    bool new_require_read = config_.require_read_before_edit;
+    if (require_read_before_edit_ctrl_)
+        new_require_read = require_read_before_edit_ctrl_->IsChecked();
+    if (new_require_read != config_.require_read_before_edit)
+        approvals_changed = true;
+
     // S5.A Capabilities tab. Reads off the five checkboxes built in
     // build_capabilities_tab. The semantic + memory checkboxes are the
     // canonical source for their legacy mirror flags -- assigning here
@@ -981,6 +1010,7 @@ void SettingsDialog::on_ok(wxCommandEvent& evt)
         config_.reranker_model    = new_reranker_md;
         config_.reranker_top_k    = new_reranker_top_k;
         config_.tool_approval_policies = std::move(new_approvals);
+        config_.require_read_before_edit = new_require_read;
         config_.capabilities      = new_caps;
         config_.memory_enabled    = new_caps.memory_bank;
 
@@ -1073,7 +1103,135 @@ WorkspaceConfig SettingsDialog::snapshot_dialog_state() const
     }
     out.tool_approval_policies = std::move(approvals);
 
+    if (require_read_before_edit_ctrl_)
+        out.require_read_before_edit = require_read_before_edit_ctrl_->IsChecked();
+
     return out;
+}
+
+void SettingsDialog::add_reset_button(
+    wxPanel* panel, wxBoxSizer* outer,
+    std::function<void(const WorkspaceConfig&)> on_reset)
+{
+    auto* row = new wxBoxSizer(wxHORIZONTAL);
+    row->AddStretchSpacer(1);
+    auto* btn = new wxButton(panel, wxID_ANY, "Reset to global defaults");
+    btn->SetToolTip(
+        "Reload the controls on this tab from ~/.locus/config.json. "
+        "Other tabs are unaffected. Click OK to commit the new values, "
+        "or Cancel to discard them.");
+    btn->Bind(wxEVT_BUTTON,
+              [on_reset = std::move(on_reset)](wxCommandEvent&) {
+                  on_reset(load_global_config_or_defaults());
+              });
+    row->Add(btn, 0, wxALIGN_CENTER_VERTICAL);
+    outer->Add(row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
+}
+
+// ---------------------------------------------------------------------------
+// Per-tab reset implementations
+// ---------------------------------------------------------------------------
+
+void SettingsDialog::reset_llm_tab_to(const WorkspaceConfig& cfg)
+{
+    if (endpoint_ctrl_)    endpoint_ctrl_->ChangeValue(wxString::FromUTF8(cfg.llm_endpoint));
+    if (model_ctrl_)       model_ctrl_->ChangeValue(wxString::FromUTF8(cfg.llm_model));
+    if (temperature_ctrl_) temperature_ctrl_->SetValue(cfg.llm_temperature);
+    if (context_ctrl_)     context_ctrl_->SetValue(cfg.llm_context_limit);
+    if (max_tokens_ctrl_)
+        max_tokens_ctrl_->SetValue(cfg.llm_max_tokens > 0 ? cfg.llm_max_tokens : 8192);
+
+    if (tool_format_ctrl_) {
+        ToolFormat tf = tool_format_from_string(cfg.llm_tool_format);
+        int sel = 0;
+        switch (tf) {
+            case ToolFormat::Auto:   sel = 0; break;
+            case ToolFormat::OpenAi: sel = 1; break;
+            case ToolFormat::Qwen:   sel = 2; break;
+            case ToolFormat::Claude: sel = 3; break;
+            case ToolFormat::None:   sel = 4; break;
+        }
+        tool_format_ctrl_->SetSelection(sel);
+    }
+
+    if (top_p_ctrl_)             top_p_ctrl_->SetValue(cfg.llm_top_p);
+    if (top_k_ctrl_)             top_k_ctrl_->SetValue(cfg.llm_top_k);
+    if (min_p_ctrl_)             min_p_ctrl_->SetValue(cfg.llm_min_p);
+    if (repeat_penalty_ctrl_)    repeat_penalty_ctrl_->SetValue(cfg.llm_repeat_penalty);
+    if (frequency_penalty_ctrl_) frequency_penalty_ctrl_->SetValue(cfg.llm_frequency_penalty);
+    if (presence_penalty_ctrl_)  presence_penalty_ctrl_->SetValue(cfg.llm_presence_penalty);
+
+    // The preset dropdown was a one-shot picker -- after Reset, the user
+    // can't tell which (if any) preset matches the new values. Snap it back
+    // to "Custom" so we don't display a stale match.
+    if (preset_ctrl_) preset_ctrl_->SetSelection(0);
+}
+
+void SettingsDialog::reset_index_tab_to(const WorkspaceConfig& cfg)
+{
+    if (exclude_ctrl_) {
+        std::string text;
+        for (size_t i = 0; i < cfg.exclude_patterns.size(); ++i) {
+            if (i > 0) text += '\n';
+            text += cfg.exclude_patterns[i];
+        }
+        exclude_ctrl_->ChangeValue(wxString::FromUTF8(text));
+    }
+    if (semantic_enabled_ctrl_) semantic_enabled_ctrl_->SetValue(cfg.semantic_search_enabled);
+    if (semantic_model_ctrl_)   semantic_model_ctrl_->ChangeValue(wxString::FromUTF8(cfg.embedding_model));
+    if (reranker_enabled_ctrl_) reranker_enabled_ctrl_->SetValue(cfg.reranker_enabled);
+    if (reranker_model_ctrl_)   reranker_model_ctrl_->ChangeValue(wxString::FromUTF8(cfg.reranker_model));
+    if (reranker_top_k_ctrl_)   reranker_top_k_ctrl_->SetValue(cfg.reranker_top_k);
+}
+
+void SettingsDialog::reset_capabilities_tab_to(const WorkspaceConfig& cfg)
+{
+    if (cap_bg_)       cap_bg_->SetValue(cfg.capabilities.background_processes);
+    if (cap_semantic_) cap_semantic_->SetValue(cfg.capabilities.semantic_search);
+    if (cap_code_)     cap_code_->SetValue(cfg.capabilities.code_aware_search);
+    if (cap_memory_)   cap_memory_->SetValue(cfg.capabilities.memory_bank);
+    if (cap_web_)      cap_web_->SetValue(cfg.capabilities.web_retrieval);
+}
+
+void SettingsDialog::reset_approvals_tab_to(const WorkspaceConfig& cfg)
+{
+    if (require_read_before_edit_ctrl_)
+        require_read_before_edit_ctrl_->SetValue(cfg.require_read_before_edit);
+
+    // Apply the policy from `cfg` for each known tool; tools without an entry
+    // fall back to the tool's compiled-in default. approval_prev_sel_ is
+    // updated in lockstep so the next Auto-Approve friction confirm doesn't
+    // re-fire spuriously when the user toggles back.
+    for (size_t i = 0; i < tool_names_.size(); ++i) {
+        ITool* tool = tools_.find(tool_names_[i]);
+        ToolApprovalPolicy effective = tool ? tool->approval_policy()
+                                            : ToolApprovalPolicy::ask;
+        auto it = cfg.tool_approval_policies.find(tool_names_[i]);
+        if (it != cfg.tool_approval_policies.end()) effective = it->second;
+
+        int sel = 0;
+        switch (effective) {
+            case ToolApprovalPolicy::ask:          sel = 0; break;
+            case ToolApprovalPolicy::auto_approve: sel = 1; break;
+            case ToolApprovalPolicy::deny:         sel = 2; break;
+        }
+        approval_choices_[i]->SetSelection(sel);
+        approval_prev_sel_[i] = sel;
+    }
+}
+
+void SettingsDialog::reset_mcp_tab_to(const WorkspaceConfig& /*cfg*/)
+{
+    // Global config never carries mcp:* approval keys (save_global_config
+    // strips them), so "reset to global defaults" for MCP = clear all trust
+    // toggles to off. The list of servers itself comes from the manager's
+    // live snapshot and isn't a "setting" we can reset.
+    if (!mcp_) return;
+    std::fill(mcp_current_trust_.begin(), mcp_current_trust_.end(), false);
+    if (mcp_trust_ && mcp_selected_ >= 0 &&
+        mcp_selected_ < static_cast<int>(mcp_current_trust_.size())) {
+        mcp_trust_->SetValue(false);
+    }
 }
 
 void SettingsDialog::on_save_as_global_defaults(wxCommandEvent& /*evt*/)
@@ -1167,6 +1325,9 @@ wxPanel* SettingsDialog::build_capabilities_tab(wxWindow* parent)
             "Adds web fetch + search tools when M6 web RAG ships. Currently "
             "a placeholder -- no tools register against this bucket yet.",
             config_.capabilities.web_retrieval);
+
+    add_reset_button(panel, outer,
+        [this](const WorkspaceConfig& cfg) { reset_capabilities_tab_to(cfg); });
 
     panel->SetSizer(outer);
     return panel;

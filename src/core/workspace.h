@@ -143,6 +143,15 @@ struct WorkspaceConfig {
     // SQLite scan per turn and a single line in the prompt.
     bool notify_external_changes = true;
 
+    // S4.A -- edit_file refuses paths that haven't been read via read_file
+    // earlier in the session. Mirrors Claude Code's hallucinated-edit
+    // mitigation: forces the model to confirm the exact byte content before
+    // proposing an old_string/new_string pair. Default on. Disable when the
+    // loaded model is trusted (or the workspace's edits are dominated by
+    // single-file passes already preceded by a read), trading some safety
+    // for ~one fewer round trip per edit.
+    bool require_read_before_edit = true;
+
     // S4.R — workspace-scoped memory bank. When enabled, two tools land in the
     // manifest (`add_memory`, `search_memory`), a slot is reserved in the
     // system prompt for pinned + recently-used entries, and `/memorize` is

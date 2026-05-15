@@ -79,6 +79,8 @@ WorkspaceConfig workspace_config_from_json(const json& j)
             cfg.process_output_buffer_kb = ag["process_output_buffer_kb"].get<int>();
         if (ag.contains("notify_external_changes"))
             cfg.notify_external_changes = ag["notify_external_changes"].get<bool>();
+        if (ag.contains("require_read_before_edit"))
+            cfg.require_read_before_edit = ag["require_read_before_edit"].get<bool>();
     }
 
     if (j.contains("memory")) {
@@ -190,7 +192,8 @@ json workspace_config_to_json(const WorkspaceConfig& cfg)
         {"agent", {
             {"tool_manifest_warn_tokens", cfg.tool_manifest_warn_tokens},
             {"process_output_buffer_kb",  cfg.process_output_buffer_kb},
-            {"notify_external_changes",   cfg.notify_external_changes}
+            {"notify_external_changes",   cfg.notify_external_changes},
+            {"require_read_before_edit",  cfg.require_read_before_edit}
         }},
         {"memory", {
             {"enabled",                    cfg.memory_enabled},

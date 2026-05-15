@@ -8,6 +8,7 @@
 #include <wx/notebook.h>
 #include <wx/spinctrl.h>
 
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -60,6 +61,22 @@ private:
     // global-save path filters them out anyway.
     WorkspaceConfig snapshot_dialog_state() const;
 
+    // Per-tab "Reset to global defaults" handlers. Each reloads its tab's
+    // controls from the supplied global config and leaves the other tabs
+    // alone. OK still has to be pressed to commit; Cancel discards.
+    // The MCP variant clears all trust toggles because global config
+    // never carries mcp:* approval entries (filtered on save).
+    void reset_llm_tab_to(const WorkspaceConfig& cfg);
+    void reset_index_tab_to(const WorkspaceConfig& cfg);
+    void reset_capabilities_tab_to(const WorkspaceConfig& cfg);
+    void reset_approvals_tab_to(const WorkspaceConfig& cfg);
+    void reset_mcp_tab_to(const WorkspaceConfig& cfg);
+
+    // Appends a right-aligned "Reset to global defaults" button to `outer`.
+    // The lambda is called with the freshly-loaded global config each click.
+    void add_reset_button(wxPanel* panel, wxBoxSizer* outer,
+                          std::function<void(const WorkspaceConfig&)> on_reset);
+
     WorkspaceConfig& config_;
     IToolRegistry&   tools_;
     McpManager*      mcp_;
@@ -109,6 +126,11 @@ private:
     wxCheckBox*        reranker_enabled_ctrl_ = nullptr;
     wxTextCtrl*        reranker_model_ctrl_   = nullptr;
     wxSpinCtrl*        reranker_top_k_ctrl_   = nullptr;
+
+    // S4.A / S5.Z -- workspace-level edit-safety toggle on the Tool Approvals
+    // tab. When checked, edit_file refuses files that haven't been read in
+    // this session. Default true.
+    wxCheckBox*        require_read_before_edit_ctrl_ = nullptr;
 
     // Tool approval controls — one choice per tool, same order as tool_names_.
     std::vector<std::string> tool_names_;

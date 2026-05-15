@@ -636,6 +636,30 @@ TEST_CASE("EditFileTool: requires prior read_file in session", "[s4.a]")
     fs::remove_all(tmp);
 }
 
+TEST_CASE("EditFileTool: a prior write_file counts as having seen the file",
+          "[s4.a]")
+{
+    // The agent authored every byte via write_file, so the read-before-edit
+    // guard must let a follow-up edit_file through without an intervening
+    // read_file. Forcing a read_file here would burn a wasted round trip.
+    locus::tools::ReadTracker::instance().clear();
+    auto tmp = make_temp_workspace();
+
+    locus::test::FakeWorkspaceServices ws{tmp};
+    locus::WriteFileTool writer;
+    locus::ToolCall write_call{"w", "write_file",
+        {{"path", "fresh.txt"}, {"content", "hello"}}};
+    auto w = writer.execute(write_call, ws);
+    REQUIRE(w.success);
+
+    locus::EditFileTool editor;
+    auto e = editor.execute(one_edit("fresh.txt", "hello", "world"), ws);
+    REQUIRE(e.success);
+    REQUIRE(read_entire_file(tmp / "fresh.txt") == "world");
+
+    fs::remove_all(tmp);
+}
+
 TEST_CASE("EditFileTool: rejects old_string == new_string", "[s4.a]")
 {
     locus::tools::ReadTracker::instance().clear();

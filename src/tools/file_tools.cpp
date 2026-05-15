@@ -1,6 +1,7 @@
 #include "tools/file_tools.h"
 #include "tools/shared.h"
 
+#include "core/workspace.h"
 #include "core/workspace_services.h"
 
 #include <spdlog/spdlog.h>
@@ -133,6 +134,11 @@ ToolResult WriteFileTool::execute(const ToolCall& call, IWorkspaceServices& ws)
 
     out.write(content.data(), static_cast<std::streamsize>(content.size()));
     out.close();
+
+    // The agent just authored every byte on disk -- no point forcing a
+    // read_file before a follow-up edit_file. Mark as seen so the guard
+    // at the top of EditFileTool::execute lets the next edit through.
+    ReadTracker::instance().mark_read(full);
 
     spdlog::trace("write_file: {} ({}, {} bytes)", rel_path,
                   exists ? "overwrote" : "created", content.size());
@@ -308,7 +314,14 @@ ToolResult EditFileTool::execute(const ToolCall& call, IWorkspaceServices& ws)
         return error_result("Error: file does not exist: " + rel_path +
                             " (use write_file to create a new file)");
 
-    if (!ReadTracker::instance().was_read(full))
+    // Per-workspace toggle (Settings > Tool Approvals). Default on; when the
+    // user trusts the model enough to skip the confirm-read prerequisite, the
+    // workspace config flips this off and edit_file goes straight to the
+    // old_string match.
+    bool require_read = true;
+    if (Workspace* w = ws.workspace())
+        require_read = w->config().require_read_before_edit;
+    if (require_read && !ReadTracker::instance().was_read(full))
         return error_result("Error: read the file first. Call read_file on '" +
                             rel_path +
                             "' before edit_file so the exact content is confirmed.");
@@ -339,6 +352,11 @@ ToolResult EditFileTool::execute(const ToolCall& call, IWorkspaceServices& ws)
     std::string werr = write_atomic(full, buf);
     if (!werr.empty())
         return error_result("Error: " + werr);
+
+    // edit_file already required a prior read (or had the guard disabled),
+    // but renew the mark so multi-edit chains in the same turn keep working
+    // even if some future cleanup pass were to expire entries by recency.
+    ReadTracker::instance().mark_read(full);
 
     spdlog::trace("edit_file: {} ({} edit{}, {} bytes)",
                   rel_path, edits.size(), edits.size() == 1 ? "" : "s",
