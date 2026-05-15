@@ -258,6 +258,21 @@ Element UiaSession::wait_for_window(const std::string& title_prefix, int timeout
         EnumWindows(enum_cb, reinterpret_cast<LPARAM>(&ctx));
         if (ctx.match) {
             target_hwnd_ = ctx.match;
+            // Force the launched window to foreground. Windows blocks new
+            // processes from auto-stealing focus (the foreground-lock timeout
+            // -- well known when running tests back to back). Attach the
+            // calling thread to the current foreground's input queue so
+            // SetForegroundWindow is honoured; otherwise SendInput-based
+            // accelerators (Ctrl+,, Ctrl+`) route to whoever has focus.
+            DWORD fg_tid = GetWindowThreadProcessId(GetForegroundWindow(), nullptr);
+            DWORD my_tid = GetCurrentThreadId();
+            bool attached = (fg_tid && fg_tid != my_tid)
+                && AttachThreadInput(fg_tid, my_tid, TRUE);
+            SetForegroundWindow(ctx.match);
+            BringWindowToTop(ctx.match);
+            ShowWindow(ctx.match, SW_SHOW);
+            if (attached) AttachThreadInput(fg_tid, my_tid, FALSE);
+
             IUIAutomationElement* el = nullptr;
             if (SUCCEEDED(automation_->ElementFromHandle(ctx.match, &el)) && el) {
                 return Element{el};
@@ -566,7 +581,7 @@ bool UiaSession::type_text(const Element& el, const std::string& text)
 
 bool UiaSession::press_key(const std::string& key_name, const std::string& modifiers)
 {
-    static const std::array<std::pair<std::string, WORD>, 24> keys = {{
+    static const std::array<std::pair<std::string, WORD>, 32> keys = {{
         {"ENTER",     VK_RETURN},
         {"RETURN",    VK_RETURN},
         {"ESC",       VK_ESCAPE},
@@ -580,6 +595,15 @@ bool UiaSession::press_key(const std::string& key_name, const std::string& modif
         {"RIGHT",     VK_RIGHT},
         {"COMMA",     VK_OEM_COMMA},
         {"PERIOD",    VK_OEM_PERIOD},
+        // OEM_3 is backtick / tilde on US keyboards -- used by the Ctrl+`
+        // terminal-toggle accelerator.
+        {"BACKTICK",  VK_OEM_3},
+        {"TILDE",     VK_OEM_3},
+        {"HOME",      VK_HOME},
+        {"END",       VK_END},
+        {"PAGEUP",    VK_PRIOR},
+        {"PAGEDOWN",  VK_NEXT},
+        {"DELETE",    VK_DELETE},
         {"F1",        VK_F1},
         {"F2",        VK_F2},
         {"F3",        VK_F3},
@@ -591,6 +615,7 @@ bool UiaSession::press_key(const std::string& key_name, const std::string& modif
         {"F9",        VK_F9},
         {"F10",       VK_F10},
         {"F11",       VK_F11},
+        {"F12",       VK_F12},
     }};
     auto it = std::find_if(keys.begin(), keys.end(),
         [&](const auto& p) { return p.first == key_name; });
@@ -666,7 +691,7 @@ bool UiaSession::press_key_to(const Element& target,
         return false;
     }
 
-    static const std::array<std::pair<std::string, WORD>, 24> keys = {{
+    static const std::array<std::pair<std::string, WORD>, 32> keys = {{
         {"ENTER",     VK_RETURN},
         {"RETURN",    VK_RETURN},
         {"ESC",       VK_ESCAPE},
@@ -680,6 +705,13 @@ bool UiaSession::press_key_to(const Element& target,
         {"RIGHT",     VK_RIGHT},
         {"COMMA",     VK_OEM_COMMA},
         {"PERIOD",    VK_OEM_PERIOD},
+        {"BACKTICK",  VK_OEM_3},
+        {"TILDE",     VK_OEM_3},
+        {"HOME",      VK_HOME},
+        {"END",       VK_END},
+        {"PAGEUP",    VK_PRIOR},
+        {"PAGEDOWN",  VK_NEXT},
+        {"DELETE",    VK_DELETE},
         {"F1",        VK_F1},
         {"F2",        VK_F2},
         {"F3",        VK_F3},
@@ -691,6 +723,7 @@ bool UiaSession::press_key_to(const Element& target,
         {"F9",        VK_F9},
         {"F10",       VK_F10},
         {"F11",       VK_F11},
+        {"F12",       VK_F12},
     }};
     auto it = std::find_if(keys.begin(), keys.end(),
         [&](const auto& p) { return p.first == key_name; });

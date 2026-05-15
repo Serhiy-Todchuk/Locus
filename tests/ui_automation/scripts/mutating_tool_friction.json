@@ -1,0 +1,56 @@
+{
+  "name": "mutating_tool_friction",
+  "description": "Settings -> Tool Approvals tab. Verify each mutating tool's per-row wxChoice (named `locus.settings.approvals.choice.<tool_name>`) is reachable from UIA -- a precondition for the S4.V Task 4 friction-confirm pop-up. The pop-up itself is harder to drive via UIA (wxChoice CBS_DROPDOWNLIST selection-by-key doesn't reliably fire wxEVT_CHOICE through PostMessage / SendInput on all Windows builds); the manual test plan at tests/manual/tool-safety.md walks through the live behaviour.",
+  "setup": {
+    "workspace": "tmp"
+  },
+  "steps": [
+    { "op": "launch" },
+    {
+      "op": "wait_for_window",
+      "args": { "title_prefix": "Locus", "timeout_ms": 20000 }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.chat.panel", "timeout_ms": 15000 }
+    },
+    { "op": "sleep", "args": { "ms": 400 } },
+    { "op": "press_key", "args": { "key": "COMMA", "modifiers": "CTRL" } },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.settings.notebook", "timeout_ms": 5000 }
+    },
+    {
+      "op": "select_tab",
+      "args": { "parent_aid": "locus.settings.notebook", "index": 3 }
+    },
+    { "op": "sleep", "args": { "ms": 400 } },
+    { "op": "screenshot", "args": { "name": "01_approvals_tab" } },
+
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.settings.approvals.choice.edit_file", "timeout_ms": 5000 }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.settings.approvals.choice.write_file", "timeout_ms": 5000 }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.settings.approvals.choice.delete_file", "timeout_ms": 5000 }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.settings.approvals.choice.run_command", "timeout_ms": 5000 }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.settings.approvals.choice.run_command_bg", "timeout_ms": 5000 }
+    },
+    { "op": "screenshot", "args": { "name": "02_mutating_dropdowns_reachable" } },
+
+    { "op": "press_key", "args": { "key": "ESC" } },
+    { "op": "sleep", "args": { "ms": 300 } },
+    { "op": "quit", "args": { "wait_ms": 5000 } }
+  ]
+}

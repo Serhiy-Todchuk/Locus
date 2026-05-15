@@ -1,5 +1,7 @@
 #include "mcp_settings_panel.h"
 
+#include "../locus_accessible.h"
+#include "../ui_names.h"
 #include "../../../core/global_config.h"
 #include "../../../mcp/mcp_client.h"
 #include "../../../mcp/mcp_config.h"
@@ -73,6 +75,8 @@ McpSettingsPanel::McpSettingsPanel(wxWindow* parent, const WorkspaceConfig& conf
     mcp_list_->AppendColumn("Status",  wxLIST_FORMAT_LEFT, 90);
     mcp_list_->AppendColumn("Tools",   wxLIST_FORMAT_LEFT, 60);
     mcp_list_->AppendColumn("Command", wxLIST_FORMAT_LEFT, 280);
+    mcp_list_->SetName(ui_names::kSettingsMcpList);
+    gui::apply_locus_accessible_name(mcp_list_);
     outer->Add(mcp_list_, 1, wxEXPAND | wxALL, 8);
 
     auto* btn_row = new wxBoxSizer(wxHORIZONTAL);
@@ -80,6 +84,12 @@ McpSettingsPanel::McpSettingsPanel(wxWindow* parent, const WorkspaceConfig& conf
     mcp_open_btn_    = new wxButton(this, k_mcp_open_id,    "Open mcp.json");
     mcp_trust_       = new wxCheckBox(this, wxID_ANY,
         "Trust selected server (auto-approve all mcp:<server>:* tools)");
+    mcp_restart_btn_->SetName(ui_names::kSettingsMcpRestartBtn);
+    mcp_open_btn_->SetName(ui_names::kSettingsMcpOpenJsonBtn);
+    mcp_trust_->SetName(ui_names::kSettingsMcpTrustCheck);
+    gui::apply_locus_accessible_name(mcp_restart_btn_);
+    gui::apply_locus_accessible_name(mcp_open_btn_);
+    gui::apply_locus_accessible_name(mcp_trust_);
     btn_row->Add(mcp_restart_btn_, 0, wxRIGHT, 6);
     btn_row->Add(mcp_open_btn_,    0, wxRIGHT, 18);
     btn_row->Add(mcp_trust_, 1, wxALIGN_CENTER_VERTICAL);

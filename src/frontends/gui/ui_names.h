@@ -28,6 +28,10 @@ inline constexpr const char* kChatModeChat   = "locus.chat.mode_chat";
 inline constexpr const char* kChatModePlan   = "locus.chat.mode_plan";
 inline constexpr const char* kChatModeExec   = "locus.chat.mode_execute";
 inline constexpr const char* kChatCtxLabel   = "locus.chat.ctx_label";
+inline constexpr const char* kChatPlanChip       = "locus.chat.plan_chip";
+inline constexpr const char* kChatCommitChip     = "locus.chat.commit_chip";
+inline constexpr const char* kChatSlashPopup     = "locus.chat.slash_popup";
+inline constexpr const char* kChatMentionPopup   = "locus.chat.mention_popup";
 
 // --- Activity panel -------------------------------------------------------
 inline constexpr const char* kActivityPanel    = "locus.activity.panel";
@@ -49,5 +53,52 @@ inline constexpr const char* kSettingsTabIndex        = "locus.settings.tab.inde
 inline constexpr const char* kSettingsTabApprovals    = "locus.settings.tab.approvals";
 inline constexpr const char* kSettingsTabMcp          = "locus.settings.tab.mcp";
 inline constexpr const char* kSettingsTabCapabilities = "locus.settings.tab.capabilities";
+inline constexpr const char* kSettingsSaveAsGlobalBtn = "locus.settings.save_as_global_btn";
+
+// Settings -> LLM tab sub-controls (S5.L Phase A extension).
+inline constexpr const char* kSettingsLlmEndpoint     = "locus.settings.llm.endpoint";
+inline constexpr const char* kSettingsLlmModel        = "locus.settings.llm.model";
+inline constexpr const char* kSettingsLlmTemperature  = "locus.settings.llm.temperature";
+inline constexpr const char* kSettingsLlmContextLimit = "locus.settings.llm.context_limit";
+inline constexpr const char* kSettingsLlmMaxTokens    = "locus.settings.llm.max_tokens";
+inline constexpr const char* kSettingsLlmPresetChoice = "locus.settings.llm.preset_choice";
+inline constexpr const char* kSettingsLlmPresetApplyBtn = "locus.settings.llm.preset_apply_btn";
+inline constexpr const char* kSettingsLlmToolFormat   = "locus.settings.llm.tool_format";
+
+// Settings -> Tool Approvals tab.
+inline constexpr const char* kSettingsApprovalsList   = "locus.settings.approvals.list";
+// Per-tool dropdowns are named "locus.settings.approvals.choice.<tool_name>"
+// composed at construction; not a constant here.
+
+// Settings -> MCP tab.
+inline constexpr const char* kSettingsMcpList         = "locus.settings.mcp.list";
+inline constexpr const char* kSettingsMcpRestartBtn   = "locus.settings.mcp.restart_btn";
+inline constexpr const char* kSettingsMcpOpenJsonBtn  = "locus.settings.mcp.open_json_btn";
+inline constexpr const char* kSettingsMcpTrustCheck   = "locus.settings.mcp.trust_check";
+
+// --- Capabilities first-open dialog (S5.A) --------------------------------
+inline constexpr const char* kCapabilitiesDialog    = "locus.capabilities.dialog";
+inline constexpr const char* kCapabilityBg          = "locus.capabilities.cb_background";
+inline constexpr const char* kCapabilitySemantic    = "locus.capabilities.cb_semantic";
+inline constexpr const char* kCapabilityCode        = "locus.capabilities.cb_code";
+inline constexpr const char* kCapabilityMemory      = "locus.capabilities.cb_memory";
+inline constexpr const char* kCapabilityWeb         = "locus.capabilities.cb_web";
+
+// --- Compaction dialog ----------------------------------------------------
+inline constexpr const char* kCompactionDialog       = "locus.compaction.dialog";
+inline constexpr const char* kCompactionStrategyB    = "locus.compaction.strategy_b";
+inline constexpr const char* kCompactionStrategyC    = "locus.compaction.strategy_c";
+inline constexpr const char* kCompactionTurnsSlider  = "locus.compaction.turns_slider";
+inline constexpr const char* kCompactionPreviewList  = "locus.compaction.preview_list";
+
+// --- Tool approval dialog -------------------------------------------------
+inline constexpr const char* kToolApprovalDialog        = "locus.tool_approval.dialog";
+inline constexpr const char* kToolApprovalArgsView      = "locus.tool_approval.args_view";
+inline constexpr const char* kToolApprovalApproveBtn    = "locus.tool_approval.approve_btn";
+inline constexpr const char* kToolApprovalRejectBtn     = "locus.tool_approval.reject_btn";
+inline constexpr const char* kToolApprovalModifyBtn     = "locus.tool_approval.modify_btn";
+inline constexpr const char* kToolApprovalSafetyBanner  = "locus.tool_approval.safety_banner";
+inline constexpr const char* kToolApprovalAskInput      = "locus.tool_approval.ask_input";
+inline constexpr const char* kToolApprovalNameLabel     = "locus.tool_approval.name_label";
 
 } // namespace locus::ui_names

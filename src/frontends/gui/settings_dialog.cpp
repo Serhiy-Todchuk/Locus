@@ -65,6 +65,8 @@ SettingsDialog::SettingsDialog(wxWindow* parent, WorkspaceConfig& config,
         "Existing workspaces are not affected.");
     save_global_btn->Bind(wxEVT_BUTTON,
                           &SettingsDialog::on_save_as_global_defaults, this);
+    save_global_btn->SetName(ui_names::kSettingsSaveAsGlobalBtn);
+    gui::apply_locus_accessible_name(save_global_btn);
     button_row->Add(save_global_btn, 0, wxALIGN_CENTER_VERTICAL);
     button_row->AddStretchSpacer(1);
     button_row->Add(CreateStdDialogButtonSizer(wxOK | wxCANCEL), 0,

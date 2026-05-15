@@ -15,8 +15,11 @@ Unlike `locus_tests` and `locus_integration_tests`, this suite:
   protocol as `tests/integration/`: run explicitly when needed.
 - **Windows only.** UIA is a Windows API. Cross-platform UI testing is a
   separate problem -- AT-SPI on Linux, `AXUIElement` on macOS.
-- **Three scripts ship in v1.** This proves the harness; broader coverage
-  follows feature work in later M5 stages.
+- **Many scripts ship now.** The initial S5.L set was three (smoke /
+  settings-tour / chat-round-trip); the post-S5.L expansion adds capability
+  modal coverage, settings persistence + sub-controls, popups (slash, MCP
+  open-json, compaction), mutating-tool friction confirm, plus LLM-driven
+  tests for the approval dialog, inline diffs, and the terminal panel.
 
 ## What ships
 
@@ -25,10 +28,24 @@ tests/ui_automation/
   main.cpp              # entry: parses CLI, dispatches to ScriptRunner
   uia_session.{h,cpp}   # COM wrapper: find / click / type / screenshot
   script_runner.{h,cpp} # JSON-driven step dispatcher
-  scripts/
+  scripts/              # each .json = one test
     smoke.json
     settings_tour.json
     chat_round_trip.json
+    plan_mode.json                  # LLM-dependent
+    capabilities_first_open.json
+    menu_and_view_toggles.json
+    settings_persistence.json
+    settings_preset_dropdown.json
+    save_as_global_defaults.json
+    mcp_open_json.json
+    slash_popup.json
+    help_slash.json
+    compaction_dialog.json
+    mutating_tool_friction.json
+    tool_approval_dialog.json       # LLM-dependent
+    inline_diff_render.json         # LLM-dependent
+    terminal_panel_run.json         # LLM-dependent
   output/               # gitignored: per-script artifacts land here
 ```
 
@@ -102,14 +119,16 @@ fail the script loudly.
 | `find`                 | `automation_id` *or* `name`, `timeout_ms` | Sanity-check that a control is reachable. |
 | `click`                | `automation_id` *or* `name`, `timeout_ms` | Prefers `InvokePattern`, falls back to `SelectionItem`, `Toggle`, then synthesised mouse click. |
 | `type`                 | `automation_id`, `text`, `timeout_ms` | Prefers `ValuePattern.SetValue` (atomic); falls back to per-character `SendInput`. |
-| `press_key`            | `key`, optional `modifiers` (`"CTRL"`, `"ALT"`, `"SHIFT"`, plus/comma separated) | Keys: `ENTER`/`RETURN`, `ESC`/`ESCAPE`, `TAB`, `SPACE`, `BACKSPACE`, `UP`, `DOWN`, `LEFT`, `RIGHT`, `COMMA`, `PERIOD`, `F1`..`F11`. |
+| `press_key`            | `key`, optional `modifiers` (`"CTRL"`, `"ALT"`, `"SHIFT"`, plus/comma separated) | Keys: `ENTER`/`RETURN`, `ESC`/`ESCAPE`, `TAB`, `SPACE`, `BACKSPACE`, `UP`, `DOWN`, `LEFT`, `RIGHT`, `COMMA`, `PERIOD`, `BACKTICK`/`TILDE`, `HOME`, `END`, `PAGEUP`, `PAGEDOWN`, `DELETE`, `F1`..`F12`. |
 | `select_tab`           | `parent_aid` + `index` (zero-based), or `name` for label-bearing tabs | wxNotebook on Windows wraps SysTabControl32 which doesn't propagate tab labels to UIA Name -- so `parent_aid` + `index` is the reliable shape. The `name` shape works for wxAuiNotebook and other strips that DO surface labels. |
 | `get_text`             | `automation_id`, optional `walk_subtree` | Reads a control's value (Edit / Text / Document patterns). |
 | `assert_text_contains` | `automation_id`, `substring`, optional `walk_subtree`, `timeout_ms` | Polls until the substring appears or the timeout elapses. |
 | `assert_visible`       | `automation_id`, `timeout_ms` | Element exists and isn't off-screen. |
 | `screenshot`           | optional `name` (default `step_NN.png`) | `PrintWindow(PW_RENDERFULLCONTENT)` -- captures WebView2 content. |
 | `sleep`                | `ms` (default 100) | Use sparingly -- prefer `assert_text_contains` for real waits. |
-| `quit`                 | `wait_ms` (default 3000) | WM_CLOSE first, terminate on timeout. |
+| `quit`                 | `wait_ms` (default 3000) | WM_CLOSE first, terminate on timeout. Calling `launch` again later in the script is allowed -- the runner re-spawns against the same workspace dir, so settings-persistence-across-restart tests work in one script. |
+| `dump_tree`            | optional `name` (default `tree.txt`), `depth` (default 8) | Walk the UIA tree under the launched window; useful for debugging an `automation_id` that doesn't resolve. |
+| `assert_file_exists`   | `path` (workspace-relative) **or** `any_of` (array of relative paths), `timeout_ms` | Polls until at least one candidate exists. Used by tests that drive the LLM into writing a file or by Save-as-global-defaults to check `~/.locus/config.json` (paths are relative to the resolved workspace dir, so combine with `setup.env` and `{workspace}` substitution for paths outside it). |
 
 ## Naming controls
 
@@ -147,16 +166,53 @@ by control type within a known parent (see the chat round-trip script).
 | `wxWebView` (Edge backend) | done -- DOM exposed as a UIA `Document` sub-tree; chat content readable via `walk_subtree` |
 | `wxTreeCtrl` (file tree) | done -- standard `Tree` / `TreeItem` |
 | `wxTextCtrl` with `wxTE_RICH2` (chat input) | done but Windows reports its Name as `"RichEdit Control"` (native RichEdit overrides wxAccessibility). Address by control type `document` under the chat panel: `{ parent_aid: "locus.chat.panel", control_type: "document" }`. |
-| `wxStyledTextCtrl` (Scintilla, tool approval JSON pane) | x limited -- use `SendMessage`/`SCI_GETTEXT` direct to the HWND if needed |
+| `wxStyledTextCtrl` (Scintilla, tool approval JSON pane, terminal panel tabs) | x limited -- the wrapper is reachable by automation_id (e.g. `locus.tool_approval.args_view`) but the rendered text content doesn't propagate cleanly through UIA. Surface assertions (visibility, parent presence, tab existence) work; reading the buffer text doesn't. Use `SendMessage`/`SCI_GETTEXT` direct to the HWND when you really need the content. |
 | `wxAuiNotebook` (main frame panels) | done exposes `TabItem`; click via `select_tab` |
+| `wxPopupTransientWindow` (slash + @-mention popups) | done -- now named (`locus.chat.slash_popup` / `locus.chat.mention_popup`) and addressable via `assert_text_contains` with `walk_subtree`. |
 
-## Three demo scripts
+## What we deliberately don't test via UIA
 
-| Script | What it covers |
-|---|---|
-| [`smoke.json`](scripts/smoke.json) | Launch, main window appears, three named panels reachable, screenshot, clean quit. |
-| [`settings_tour.json`](scripts/settings_tour.json) | Ctrl+, opens Settings, click through LLM / Index / Tool Approvals / MCP Servers, screenshot each, Esc closes the dialog, quit. |
-| [`chat_round_trip.json`](scripts/chat_round_trip.json) | Type into chat input, press Enter, assert the user bubble appears in the WebView. Does not require an LLM -- the user-side render happens before any server round-trip. |
+A few areas are excluded by design rather than by oversight:
+
+- **Reading Scintilla content** -- the tool-approval JSON pane and terminal-panel tabs render with `wxStyledTextCtrl`. UIA exposes them as panes but not their rendered text. We assert surfaces (the dialog opens, the panel is visible, a specific button exists) and use the chat WebView as the parallel signal when the same content is mirrored there.
+- **Right-click context menus** -- the harness has no `right_click` op today; the file-tree "Attach to context" path and terminal-panel tab context menus aren't UIA-tested. The single-click and Ctrl+key paths cover the deterministic surfaces.
+- **Default-app handoff** -- `Open mcp.json` and `Open Global Config...` end with `wxLaunchDefaultApplication`. We assert the on-disk side effect (the file gets created), not that Notepad ended up open.
+- **@-mention popup contents** -- the mention popup itself is named, but its candidate list comes from `IndexQuery::list_directory`, which is empty in a fresh tmp workspace. Tests for the popup will land once the harness gains a `setup.seed_files` option (or the test points at a non-tmp workspace).
+
+## Setup options
+
+The script root supports a `setup` block:
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `workspace`                 | string | `"tmp"` | Workspace path. `"tmp"` creates `%TEMP%/locus_ui_tests/<script>_<rand>/` afresh each run. Any absolute path opens an existing workspace (script doesn't clean it up). |
+| `allow_first_time_prompts`  | bool   | `false` | When true, skip the `.locus/config.json` pre-seed AND don't auto-inject `--no-first-time-prompts` to the launch args. Used by `capabilities_first_open.json` to exercise the Capabilities first-open modal. |
+| `env`                       | object | `{}`    | Map of env-var to value, applied via `SetEnvironmentVariableA` in the harness before launch. `{workspace}` substitution is supported in values. Used by `save_as_global_defaults.json` to redirect `LOCUS_GLOBAL_DIR` into the script's own tmp dir. |
+| `tool_approvals_override`   | object | `{}`    | Merges into the tmp workspace's pre-seeded `tool_approvals` block (tool name -> `"ask"`/`"auto"`/`"deny"`). Used by `tool_approval_dialog.json` to flip a tool that's auto-approved by default back to `ask` so the approval dialog actually fires. |
+
+## Bundled scripts
+
+| Script | Needs LLM? | What it covers |
+|---|---|---|
+| [`smoke.json`](scripts/smoke.json)                                 | no  | Launch, main window appears, three named panels reachable, screenshot, clean quit. |
+| [`settings_tour.json`](scripts/settings_tour.json)                 | no  | Ctrl+, opens Settings, click through the 5 tabs, screenshot each, Esc closes the dialog, quit. |
+| [`chat_round_trip.json`](scripts/chat_round_trip.json)             | no  | Type into chat input, press Enter, assert the user bubble appears in the WebView. User-side render only -- no agent reply asserted. |
+| [`menu_and_view_toggles.json`](scripts/menu_and_view_toggles.json) | no  | `Ctrl+`` toggles the terminal pane. Validates the accelerator wiring + AUI pane show. |
+| [`capabilities_first_open.json`](scripts/capabilities_first_open.json) | no | Fresh workspace with `allow_first_time_prompts=true`; the S5.A capabilities modal appears, toggle a checkbox, OK, relaunch, verify the change persisted on the Capabilities tab. |
+| [`settings_persistence.json`](scripts/settings_persistence.json)   | no  | Change temperature on the LLM tab, OK, quit, relaunch, verify the new value sticks. End-to-end Settings -> WorkspaceConfig -> config.json -> WorkspaceConfig round-trip. |
+| [`settings_preset_dropdown.json`](scripts/settings_preset_dropdown.json) | no | Pick the `LM Studio + Qwen` preset, click `Load preset`, assert the Tool-call format dropdown updates to `Qwen`. Validates S4.V Task 6 preset wiring. |
+| [`save_as_global_defaults.json`](scripts/save_as_global_defaults.json) | no | Click `Save as global defaults` on the Settings dialog; with `LOCUS_GLOBAL_DIR` redirected via `setup.env`, asserts the resulting `config.json` lands on disk. Validates S5.M global-defaults write path. |
+| [`mcp_open_json.json`](scripts/mcp_open_json.json)                 | no  | Settings -> MCP Servers -> Open mcp.json button. Asserts the stub `.locus/mcp.json` gets created. Doesn't assert the default-app launch (Notepad). |
+| [`slash_popup.json`](scripts/slash_popup.json)                     | no  | Type `/met` into the chat input; assert the slash autocomplete popup appears and contains `metrics`. Esc dismisses. |
+| [`help_slash.json`](scripts/help_slash.json)                       | no  | Submit `/help`; assert the response appears in the chat WebView. Validates the deterministic slash-command path (no LLM round-trip). |
+| [`compaction_dialog.json`](scripts/compaction_dialog.json)         | no  | Click the chat-footer Compact button; assert the CompactionDialog opens with both strategy radios, click Strategy C, Esc cancels. |
+| [`mutating_tool_friction.json`](scripts/mutating_tool_friction.json) | no | Settings -> Tool Approvals; change `edit_file` to `Auto-Approve`; assert the friction confirm modal pops (S4.V Task 4); decline; verify dropdown reverts. |
+| [`plan_mode.json`](scripts/plan_mode.json)                         | yes | S4.D plan flow: switch to Plan, ask LLM to propose a plan, approve, verify a hello-world file lands on disk. Slowest script in the bundle (240s assertion timeouts). |
+| [`tool_approval_dialog.json`](scripts/tool_approval_dialog.json)   | yes | Forces `write_file` to `ask` via `setup.tool_approvals_override`; LLM is asked to write a file; assert the ToolApprovalDialog opens, click Approve, assert the file appears. |
+| [`inline_diff_render.json`](scripts/inline_diff_render.json)       | yes | LLM is asked to write a file (auto-approved); assert the resulting file content also appears in the chat WebView (S5.C inline-diff render). |
+| [`terminal_panel_run.json`](scripts/terminal_panel_run.json)       | yes | LLM is asked to run a small shell command; assert the chat WebView shows the output, `Ctrl+`` brings up the terminal panel and the panel is visible. |
+
+LLM-dependent scripts require LM Studio reachable at `http://127.0.0.1:1234` with a tool-calling model loaded. On flakes, see the per-script `output/<name>/run.log` and the workspace's `.locus/locus.log` for dropped-tool-call warnings (model behaviour, not the harness).
 
 ## Why no `--mock-llm` mode for chat tests in v1
 

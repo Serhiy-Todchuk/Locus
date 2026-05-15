@@ -1,0 +1,57 @@
+{
+  "name": "slash_popup",
+  "description": "Type `/sear` into the chat input, press Enter to accept the highlighted suggestion (the popup's handle_key intercepts Enter when visible and routes to accept_slash, which replaces the input with `/search `). Validates the slash popup + filter + accept path end-to-end via the side-effect on the chat input. The popup itself is a wxPopupTransientWindow whose UIA visibility is unreliable, so we observe the input text instead. The slash item list comes from LocusFrame::set_slash_commands (built-in `reset/compact/save/settings/undo` + tool names from SlashCommandDispatcher::complete) -- `metrics` and other AgentCore-only slashes do NOT appear in the popup by design.",
+  "setup": {
+    "workspace": "tmp"
+  },
+  "steps": [
+    { "op": "launch" },
+    {
+      "op": "wait_for_window",
+      "args": { "title_prefix": "Locus", "timeout_ms": 20000 }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.chat.panel", "timeout_ms": 15000 }
+    },
+    {
+      "op": "click",
+      "args": {
+        "parent_aid": "locus.chat.panel",
+        "control_type": "document",
+        "timeout_ms": 10000
+      }
+    },
+    {
+      "op": "type",
+      "args": {
+        "parent_aid": "locus.chat.panel",
+        "control_type": "document",
+        "text": "/sear"
+      }
+    },
+    { "op": "sleep", "args": { "ms": 500 } },
+    { "op": "screenshot", "args": { "name": "01_popup_shown" } },
+
+    {
+      "op": "press_key",
+      "args": {
+        "parent_aid": "locus.chat.panel",
+        "control_type": "document",
+        "key": "ENTER"
+      }
+    },
+    { "op": "sleep", "args": { "ms": 300 } },
+    {
+      "op": "assert_text_contains",
+      "args": {
+        "parent_aid": "locus.chat.panel",
+        "control_type": "document",
+        "substring": "/search",
+        "timeout_ms": 5000
+      }
+    },
+    { "op": "screenshot", "args": { "name": "02_after_enter_accept" } },
+    { "op": "quit", "args": { "wait_ms": 5000 } }
+  ]
+}

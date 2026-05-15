@@ -1,5 +1,8 @@
 #include "capabilities_dialog.h"
 
+#include "locus_accessible.h"
+#include "ui_names.h"
+
 #include <wx/sizer.h>
 #include <wx/stattext.h>
 
@@ -13,6 +16,9 @@ CapabilitiesDialog::CapabilitiesDialog(wxWindow* parent,
     , caps_(caps)
     , initial_(caps)
 {
+    SetName(ui_names::kCapabilitiesDialog);
+    gui::apply_locus_accessible_name(this);
+
     auto* outer = new wxBoxSizer(wxVERTICAL);
 
     auto* hint = new wxStaticText(this, wxID_ANY,
@@ -34,6 +40,8 @@ CapabilitiesDialog::CapabilitiesDialog(wxWindow* parent,
         "list_processes -- the agent can start dev servers, watchers, "
         "and long-running jobs that survive across turns.",
         caps_.background_processes);
+    cb_bg_->SetName(ui_names::kCapabilityBg);
+    gui::apply_locus_accessible_name(cb_bg_);
 
     build_row(grid, cb_semantic_,
         "Semantic search",
@@ -42,6 +50,8 @@ CapabilitiesDialog::CapabilitiesDialog(wxWindow* parent,
         "and loads the embedding model into memory. Useful for "
         "natural-language code / doc retrieval; costs RAM + disk.",
         caps_.semantic_search);
+    cb_semantic_->SetName(ui_names::kCapabilitySemantic);
+    gui::apply_locus_accessible_name(cb_semantic_);
 
     build_row(grid, cb_code_,
         "Code-aware search",
@@ -50,6 +60,8 @@ CapabilitiesDialog::CapabilitiesDialog(wxWindow* parent,
         "the get_file_outline tool. Skip if the workspace is text-only "
         "(wiki, docs archive, ZIM library).",
         caps_.code_aware_search);
+    cb_code_->SetName(ui_names::kCapabilityCode);
+    gui::apply_locus_accessible_name(cb_code_);
 
     build_row(grid, cb_memory_,
         "Memory bank",
@@ -59,6 +71,8 @@ CapabilitiesDialog::CapabilitiesDialog(wxWindow* parent,
         "pinned + recently-used entries. Skip for one-shot or "
         "single-session workspaces.",
         caps_.memory_bank);
+    cb_memory_->SetName(ui_names::kCapabilityMemory);
+    gui::apply_locus_accessible_name(cb_memory_);
 
     build_row(grid, cb_web_,
         "Web retrieval",
@@ -67,6 +81,8 @@ CapabilitiesDialog::CapabilitiesDialog(wxWindow* parent,
         "ships. Currently a placeholder -- no tools register against "
         "this bucket yet.",
         caps_.web_retrieval);
+    cb_web_->SetName(ui_names::kCapabilityWeb);
+    gui::apply_locus_accessible_name(cb_web_);
 
     outer->Add(grid, 1, wxEXPAND | wxLEFT | wxRIGHT, 12);
 
@@ -75,6 +91,11 @@ CapabilitiesDialog::CapabilitiesDialog(wxWindow* parent,
 
     SetSizer(outer);
     Layout();
+    // Fit() grows the dialog if the fixed ctor size (560x460) is too small
+    // for all five rows of (checkbox + hint). Without this, cb_web and its
+    // hint get clipped below the visible client area and disappear from the
+    // UIA tree, breaking the S5.L capabilities_first_open script.
+    outer->SetSizeHints(this);
 
     Bind(wxEVT_BUTTON, &CapabilitiesDialog::on_ok, this, wxID_OK);
 }

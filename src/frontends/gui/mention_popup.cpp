@@ -1,5 +1,8 @@
 #include "mention_popup.h"
 
+#include "locus_accessible.h"
+#include "ui_names.h"
+
 #include <wx/display.h>
 
 #include <algorithm>
@@ -42,6 +45,9 @@ MentionPopup::MentionPopup(wxWindow* parent, std::vector<std::string> file_paths
     : wxPopupTransientWindow(parent, wxBORDER_SIMPLE)
     , all_paths_(std::move(file_paths))
 {
+    SetName(ui_names::kChatMentionPopup);
+    gui::apply_locus_accessible_name(this);
+
     list_ = new wxListBox(this, wxID_ANY, wxDefaultPosition, wxSize(420, 200),
                           0, nullptr, wxLB_SINGLE | wxLB_NEEDED_SB);
 

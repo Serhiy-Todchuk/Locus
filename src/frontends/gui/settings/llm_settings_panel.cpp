@@ -1,5 +1,7 @@
 #include "llm_settings_panel.h"
 
+#include "../locus_accessible.h"
+#include "../ui_names.h"
 #include "../../../core/global_config.h"
 #include "../../../llm/llm_client.h"
 #include "../../../llm/model_presets.h"
@@ -28,10 +30,14 @@ LlmSettingsPanel::LlmSettingsPanel(wxWindow* parent, const WorkspaceConfig& conf
             preset_ctrl_->Append(wxString::FromUTF8(p.name));
         preset_ctrl_->SetSelection(0);
         preset_ctrl_->Bind(wxEVT_CHOICE, &LlmSettingsPanel::on_preset_choice, this);
+        preset_ctrl_->SetName(ui_names::kSettingsLlmPresetChoice);
+        gui::apply_locus_accessible_name(preset_ctrl_);
         preset_row->Add(preset_ctrl_, 1, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
 
         auto* apply_btn = new wxButton(this, wxID_ANY, "Load preset");
         apply_btn->Bind(wxEVT_BUTTON, &LlmSettingsPanel::on_preset_apply, this);
+        apply_btn->SetName(ui_names::kSettingsLlmPresetApplyBtn);
+        gui::apply_locus_accessible_name(apply_btn);
         preset_row->Add(apply_btn, 0, wxALIGN_CENTER_VERTICAL);
 
         outer->Add(preset_row, 0, wxEXPAND | wxALL, 8);
@@ -116,6 +122,8 @@ LlmSettingsPanel::LlmSettingsPanel(wxWindow* parent, const WorkspaceConfig& conf
     endpoint_ctrl_ = new wxTextCtrl(this, wxID_ANY,
         wxString::FromUTF8(config.llm_endpoint));
     endpoint_ctrl_->SetToolTip(kTipEndpoint);
+    endpoint_ctrl_->SetName(ui_names::kSettingsLlmEndpoint);
+    gui::apply_locus_accessible_name(endpoint_ctrl_);
     grid->Add(endpoint_ctrl_, 1, wxEXPAND);
 
     auto* lbl_model = new wxStaticText(this, wxID_ANY, "Model:");
@@ -124,6 +132,8 @@ LlmSettingsPanel::LlmSettingsPanel(wxWindow* parent, const WorkspaceConfig& conf
     model_ctrl_ = new wxTextCtrl(this, wxID_ANY,
         wxString::FromUTF8(config.llm_model));
     model_ctrl_->SetToolTip(kTipModel);
+    model_ctrl_->SetName(ui_names::kSettingsLlmModel);
+    gui::apply_locus_accessible_name(model_ctrl_);
     grid->Add(model_ctrl_, 1, wxEXPAND);
 
     auto* lbl_temp = new wxStaticText(this, wxID_ANY, "Temperature:");
@@ -135,6 +145,8 @@ LlmSettingsPanel::LlmSettingsPanel(wxWindow* parent, const WorkspaceConfig& conf
     temperature_ctrl_->SetDigits(2);
     temperature_ctrl_->SetValue(config.llm_temperature);
     temperature_ctrl_->SetToolTip(kTipTemperature);
+    temperature_ctrl_->SetName(ui_names::kSettingsLlmTemperature);
+    gui::apply_locus_accessible_name(temperature_ctrl_);
     grid->Add(temperature_ctrl_, 0);
 
     auto* lbl_ctx = new wxStaticText(this, wxID_ANY, "Context limit:");
@@ -144,6 +156,8 @@ LlmSettingsPanel::LlmSettingsPanel(wxWindow* parent, const WorkspaceConfig& conf
     context_ctrl_->SetRange(0, 1048576);
     context_ctrl_->SetValue(config.llm_context_limit);
     context_ctrl_->SetToolTip(kTipContextLimit);
+    context_ctrl_->SetName(ui_names::kSettingsLlmContextLimit);
+    gui::apply_locus_accessible_name(context_ctrl_);
     grid->Add(context_ctrl_, 0);
 
     auto* lbl_max = new wxStaticText(this, wxID_ANY, "Max tokens (per response):");
@@ -153,6 +167,8 @@ LlmSettingsPanel::LlmSettingsPanel(wxWindow* parent, const WorkspaceConfig& conf
     max_tokens_ctrl_->SetRange(256, 1048576);
     max_tokens_ctrl_->SetValue(config.llm_max_tokens > 0 ? config.llm_max_tokens : 8192);
     max_tokens_ctrl_->SetToolTip(kTipMaxTokens);
+    max_tokens_ctrl_->SetName(ui_names::kSettingsLlmMaxTokens);
+    gui::apply_locus_accessible_name(max_tokens_ctrl_);
     grid->Add(max_tokens_ctrl_, 0);
 
     auto* lbl_tf = new wxStaticText(this, wxID_ANY, "Tool-call format:");
@@ -177,6 +193,8 @@ LlmSettingsPanel::LlmSettingsPanel(wxWindow* parent, const WorkspaceConfig& conf
         tool_format_ctrl_->SetSelection(sel);
     }
     tool_format_ctrl_->SetToolTip(kTipToolFormat);
+    tool_format_ctrl_->SetName(ui_names::kSettingsLlmToolFormat);
+    gui::apply_locus_accessible_name(tool_format_ctrl_);
     grid->Add(tool_format_ctrl_, 0);
 
     auto* lbl_top_p = new wxStaticText(this, wxID_ANY, "top_p:");

@@ -1,5 +1,8 @@
 #include "slash_popup.h"
 
+#include "locus_accessible.h"
+#include "ui_names.h"
+
 #include <wx/display.h>
 
 #include <algorithm>
@@ -22,6 +25,9 @@ SlashPopup::SlashPopup(wxWindow* parent, std::vector<SlashItem> items)
     : wxPopupTransientWindow(parent, wxBORDER_SIMPLE)
     , all_items_(std::move(items))
 {
+    SetName(ui_names::kChatSlashPopup);
+    gui::apply_locus_accessible_name(this);
+
     list_ = new wxListBox(this, wxID_ANY, wxDefaultPosition, wxSize(360, 200),
                           0, nullptr, wxLB_SINGLE | wxLB_NEEDED_SB);
 

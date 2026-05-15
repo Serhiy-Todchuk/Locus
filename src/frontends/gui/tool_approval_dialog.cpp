@@ -1,5 +1,8 @@
 #include "tool_approval_dialog.h"
+
+#include "locus_accessible.h"
 #include "theme.h"
+#include "ui_names.h"
 
 #include <spdlog/spdlog.h>
 
@@ -40,6 +43,9 @@ ToolApprovalDialog::ToolApprovalDialog(wxWindow* parent,
                wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER)
     , on_decision_(std::move(on_decision))
 {
+    SetName(ui_names::kToolApprovalDialog);
+    gui::apply_locus_accessible_name(this);
+
     // Match the OS window colour so the dialog blends with the dark (or light) frame.
     SetBackgroundColour(theme::panel_bg());
     create_controls();
@@ -82,6 +88,8 @@ void ToolApprovalDialog::create_controls()
     font.SetWeight(wxFONTWEIGHT_BOLD);
     font.SetPointSize(font.GetPointSize() + 1);
     name_label_->SetFont(font);
+    name_label_->SetName(ui_names::kToolApprovalNameLabel);
+    gui::apply_locus_accessible_name(name_label_);
 
     // S4.V outside-workspace warning banner. Hidden by default; populated
     // and shown by show_tool_call when safety_warnings is non-empty.
@@ -97,6 +105,8 @@ void ToolApprovalDialog::create_controls()
         warning_label_->SetBackgroundColour(wxColour(255, 244, 200));
     }
     warning_label_->Hide();
+    warning_label_->SetName(ui_names::kToolApprovalSafetyBanner);
+    gui::apply_locus_accessible_name(warning_label_);
 
     // Preview text.
     preview_label_ = new wxStaticText(this, wxID_ANY, "");
@@ -105,6 +115,8 @@ void ToolApprovalDialog::create_controls()
     // JSON args -- Scintilla with JSON lexer.
     args_stc_ = new wxStyledTextCtrl(this, wxID_ANY,
         wxDefaultPosition, wxSize(-1, 200));
+    args_stc_->SetName(ui_names::kToolApprovalArgsView);
+    gui::apply_locus_accessible_name(args_stc_);
     args_stc_->SetLexer(wxSTC_LEX_JSON);
     args_stc_->SetReadOnly(true);
     args_stc_->SetWrapMode(wxSTC_WRAP_WORD);
@@ -155,11 +167,19 @@ void ToolApprovalDialog::create_controls()
     ask_input_->SetBackgroundColour(theme::text_bg());
     ask_input_->SetForegroundColour(theme::text_fg());
     ask_input_->Hide();
+    ask_input_->SetName(ui_names::kToolApprovalAskInput);
+    gui::apply_locus_accessible_name(ask_input_);
 
     // Buttons.
     btn_approve_ = new wxButton(this, ID_BTN_APPROVE, "Approve (Enter)");
     btn_reject_  = new wxButton(this, ID_BTN_REJECT,  "Reject (Esc)");
     btn_modify_  = new wxButton(this, ID_BTN_MODIFY,  "Modify (M)");
+    btn_approve_->SetName(ui_names::kToolApprovalApproveBtn);
+    btn_reject_->SetName(ui_names::kToolApprovalRejectBtn);
+    btn_modify_->SetName(ui_names::kToolApprovalModifyBtn);
+    gui::apply_locus_accessible_name(btn_approve_);
+    gui::apply_locus_accessible_name(btn_reject_);
+    gui::apply_locus_accessible_name(btn_modify_);
 
     btn_approve_->SetBackgroundColour(wxColour(76, 175, 80));
     btn_approve_->SetForegroundColour(*wxWHITE);

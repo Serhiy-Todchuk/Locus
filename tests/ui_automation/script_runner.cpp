@@ -74,7 +74,8 @@ ScriptResult ScriptRunner::run()
     std::filesystem::path workspace_dir;
     bool is_tmp = false;
     if (script_.contains("setup") && script_["setup"].is_object()) {
-        std::string ws = get_string(script_["setup"], "workspace", "tmp");
+        const auto& setup = script_["setup"];
+        std::string ws = get_string(setup, "workspace", "tmp");
         if (ws == "tmp" || ws.empty()) {
             workspace_dir = opts_.temp_workspace_root / (result.name + "_" + short_random_id());
             std::error_code ec;
@@ -82,6 +83,32 @@ ScriptResult ScriptRunner::run()
             is_tmp = true;
         } else {
             workspace_dir = ws;
+        }
+
+        // Per-script setup options.
+        if (setup.contains("allow_first_time_prompts") &&
+            setup["allow_first_time_prompts"].is_boolean())
+        {
+            allow_first_time_prompts_ = setup["allow_first_time_prompts"].get<bool>();
+        }
+
+        // setup.env -- map of env-var name to value, applied via
+        // SetEnvironmentVariableA in this process; the launched locus_gui
+        // inherits the harness's environment. Used by global-defaults tests
+        // to point LOCUS_GLOBAL_DIR at a fresh tmp dir.
+        if (setup.contains("env") && setup["env"].is_object()) {
+            for (auto it = setup["env"].begin(); it != setup["env"].end(); ++it) {
+                if (!it.value().is_string()) continue;
+                std::string val = it.value().get<std::string>();
+                // Allow {workspace} substitution so scripts can reference the
+                // resolved workspace dir without having to know it up front.
+                size_t p = val.find("{workspace}");
+                while (p != std::string::npos) {
+                    val.replace(p, 11, workspace_dir.string());
+                    p = val.find("{workspace}", p + workspace_dir.string().size());
+                }
+                ::SetEnvironmentVariableA(it.key().c_str(), val.c_str());
+            }
         }
     } else {
         workspace_dir = opts_.temp_workspace_root / (result.name + "_" + short_random_id());
@@ -97,7 +124,10 @@ ScriptResult ScriptRunner::run()
     // existing workspace inherit its policies. The semantic_search=false
     // hint mirrors what --no-first-time-prompts writes; with this file
     // already on disk, LocusApp's first-open guard becomes a no-op.
-    if (is_tmp) {
+    //
+    // Scripts that want to exercise the first-open dialog set
+    // setup.allow_first_time_prompts=true to skip the pre-seed.
+    if (is_tmp && !allow_first_time_prompts_) {
         try {
             auto cfg_path = workspace_dir / ".locus" / "config.json";
             std::error_code ec;
@@ -114,6 +144,21 @@ ScriptResult ScriptRunner::run()
                 {"run_command",    "auto"},
                 {"run_command_bg", "auto"}
             };
+            // Scripts can override / extend the pre-seed via
+            // setup.tool_approvals_override -- used by tool_approval_dialog.json
+            // to flip write_file back to "ask" so the approval gate fires.
+            if (script_.contains("setup") && script_["setup"].is_object()) {
+                const auto& setup = script_["setup"];
+                if (setup.contains("tool_approvals_override") &&
+                    setup["tool_approvals_override"].is_object())
+                {
+                    for (auto it = setup["tool_approvals_override"].begin();
+                              it != setup["tool_approvals_override"].end(); ++it) {
+                        if (it.value().is_string())
+                            cfg["tool_approvals"][it.key()] = it.value().get<std::string>();
+                    }
+                }
+            }
             std::ofstream f(cfg_path);
             f << cfg.dump(2) << '\n';
         } catch (const std::exception& ex) {
@@ -329,11 +374,12 @@ Element ScriptRunner::resolve_target(const Json& args, int timeout_ms)
 
 StepResult ScriptRunner::op_launch(const Json& args)
 {
-    // Always pass --no-first-time-prompts so a fresh tmp workspace doesn't
-    // block on the semantic-search modal. Scripts may add more args via
-    // `extra_args` -- order matters; we put the flag first so a user-supplied
-    // override (vanishingly unlikely) could still take effect downstream.
-    std::vector<std::string> extra{ "--no-first-time-prompts" };
+    // By default pass --no-first-time-prompts so a fresh tmp workspace doesn't
+    // block on the semantic-search modal. Scripts that exercise the first-open
+    // dialog opt out via setup.allow_first_time_prompts=true.
+    std::vector<std::string> extra;
+    if (!allow_first_time_prompts_)
+        extra.push_back("--no-first-time-prompts");
     if (args.contains("extra_args") && args["extra_args"].is_array()) {
         for (auto& v : args["extra_args"])
             if (v.is_string()) extra.push_back(v.get<std::string>());

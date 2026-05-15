@@ -90,6 +90,11 @@ private:
     Json            script_;
     std::filesystem::path output_dir_;
     std::string     workspace_path_used_;  // resolved at runtime
+    // setup.allow_first_time_prompts -- when true, skip the tmp-workspace
+    // `.locus/config.json` pre-seed AND the auto-injection of the
+    // `--no-first-time-prompts` launch flag, so the capabilities first-open
+    // modal can fire for the capabilities_first_open.json script.
+    bool            allow_first_time_prompts_ = false;
 };
 
 // Convenience: load a script from disk. Throws std::runtime_error on parse

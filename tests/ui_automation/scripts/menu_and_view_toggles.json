@@ -1,0 +1,37 @@
+{
+  "name": "menu_and_view_toggles",
+  "description": "Press Ctrl+` (the View > Terminal accelerator wired in MenuController) to toggle the terminal panel on, screenshot, toggle off, screenshot. Validates the accelerator wiring + AUI pane show/hide for the terminal pane. The terminal panel is hidden by default (S5.B); the script also confirms that the panel widget exists in the UIA tree once shown.",
+  "setup": {
+    "workspace": "tmp"
+  },
+  "steps": [
+    { "op": "launch" },
+    {
+      "op": "wait_for_window",
+      "args": { "title_prefix": "Locus", "timeout_ms": 20000 }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.chat.panel", "timeout_ms": 15000 }
+    },
+    { "op": "screenshot", "args": { "name": "01_baseline" } },
+
+    { "op": "press_key", "args": { "key": "BACKTICK", "modifiers": "CTRL" } },
+    { "op": "sleep", "args": { "ms": 400 } },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.terminal.panel", "timeout_ms": 5000 }
+    },
+    {
+      "op": "assert_visible",
+      "args": { "automation_id": "locus.terminal.panel", "timeout_ms": 5000 }
+    },
+    { "op": "screenshot", "args": { "name": "02_terminal_shown" } },
+
+    { "op": "press_key", "args": { "key": "BACKTICK", "modifiers": "CTRL" } },
+    { "op": "sleep", "args": { "ms": 400 } },
+    { "op": "screenshot", "args": { "name": "03_terminal_hidden" } },
+
+    { "op": "quit", "args": { "wait_ms": 5000 } }
+  ]
+}

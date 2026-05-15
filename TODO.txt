@@ -1,3 +1,4 @@
+- use app icons
 - sample.docx has no heading
 - use monospace font for chat?
 - merge statistics/activity log with chat window (decide after S5.G)
@@ -5,4 +6,5 @@
 - FastDebug
 - Add image attachment for LLM prompt
 
-Wrap up — update docs/comments/TODOs, then we're done.
+Short commit message?
+Wrap up — update docs/comments, then we're done.

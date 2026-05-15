@@ -1,5 +1,8 @@
 #include "compaction_dialog.h"
 
+#include "locus_accessible.h"
+#include "ui_names.h"
+
 #include "../../llm/token_counter.h"
 
 #include <algorithm>
@@ -23,6 +26,9 @@ CompactionDialog::CompactionDialog(wxWindow* parent,
     , used_tokens_(used_tokens)
     , limit_tokens_(limit_tokens)
 {
+    SetName(ui_names::kCompactionDialog);
+    gui::apply_locus_accessible_name(this);
+
     create_controls(used_tokens, limit_tokens);
     layout();
 
@@ -53,10 +59,14 @@ void CompactionDialog::create_controls(int used_tokens, int limit_tokens)
         "Drop tool results  (keep conversation flow, strip tool output)",
         wxDefaultPosition, wxDefaultSize, wxRB_GROUP);
     radio_b_->SetValue(true);
+    radio_b_->SetName(ui_names::kCompactionStrategyB);
+    gui::apply_locus_accessible_name(radio_b_);
 
     // Strategy C: drop oldest turns.
     radio_c_ = new wxRadioButton(this, ID_RADIO_C,
         "Drop oldest turns  (remove N oldest exchanges)");
+    radio_c_->SetName(ui_names::kCompactionStrategyC);
+    gui::apply_locus_accessible_name(radio_c_);
 
     // Turns slider (for strategy C).
     // history includes system message at [0], so user turns ≈ (size - 1) / 2.
@@ -66,11 +76,15 @@ void CompactionDialog::create_controls(int used_tokens, int limit_tokens)
                                  wxDefaultPosition, wxDefaultSize,
                                  wxSL_HORIZONTAL | wxSL_LABELS);
     turns_slider_->Enable(false);  // disabled until radio C is selected
+    turns_slider_->SetName(ui_names::kCompactionTurnsSlider);
+    gui::apply_locus_accessible_name(turns_slider_);
 
     // Preview list (for strategy C).
     preview_list_ = new wxListBox(this, wxID_ANY,
         wxDefaultPosition, wxSize(-1, 120));
     preview_list_->Enable(false);
+    preview_list_->SetName(ui_names::kCompactionPreviewList);
+    gui::apply_locus_accessible_name(preview_list_);
 
     // Buttons.
     btn_ok_ = new wxButton(this, wxID_OK, "Compact");

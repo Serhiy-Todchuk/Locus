@@ -1,0 +1,45 @@
+{
+  "name": "compaction_dialog",
+  "description": "Click the Compact button in the chat footer; the CompactionDialog should open even on an empty conversation. The script verifies both strategy radios are reachable, clicks Strategy C, presses Esc to cancel, and quits. Validates the dialog shell renders + the named radios are addressable; no actual compaction happens because the conversation has no turns to drop.",
+  "setup": {
+    "workspace": "tmp"
+  },
+  "steps": [
+    { "op": "launch" },
+    {
+      "op": "wait_for_window",
+      "args": { "title_prefix": "Locus", "timeout_ms": 20000 }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.chat.panel", "timeout_ms": 15000 }
+    },
+    { "op": "sleep", "args": { "ms": 300 } },
+
+    {
+      "op": "click",
+      "args": { "automation_id": "locus.chat.compact_btn", "timeout_ms": 5000 }
+    },
+    { "op": "sleep", "args": { "ms": 600 } },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.compaction.strategy_b", "timeout_ms": 8000 }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.compaction.strategy_c", "timeout_ms": 5000 }
+    },
+    { "op": "screenshot", "args": { "name": "01_compaction_open" } },
+
+    {
+      "op": "click",
+      "args": { "automation_id": "locus.compaction.strategy_c", "timeout_ms": 5000 }
+    },
+    { "op": "sleep", "args": { "ms": 300 } },
+    { "op": "screenshot", "args": { "name": "02_strategy_c_selected" } },
+
+    { "op": "press_key", "args": { "key": "ESC" } },
+    { "op": "sleep", "args": { "ms": 300 } },
+    { "op": "quit", "args": { "wait_ms": 5000 } }
+  ]
+}

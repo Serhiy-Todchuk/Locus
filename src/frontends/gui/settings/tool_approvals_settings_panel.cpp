@@ -1,5 +1,7 @@
 #include "tool_approvals_settings_panel.h"
 
+#include "../locus_accessible.h"
+#include "../ui_names.h"
 #include "../../../core/global_config.h"
 #include "../../../tools/tool.h"
 
@@ -45,6 +47,8 @@ ToolApprovalsSettingsPanel::ToolApprovalsSettingsPanel(wxWindow* parent,
         wxDefaultPosition, wxDefaultSize,
         wxVSCROLL | wxBORDER_SIMPLE);
     scroll->SetScrollRate(0, 12);
+    scroll->SetName(ui_names::kSettingsApprovalsList);
+    gui::apply_locus_accessible_name(scroll);
 
     auto* scroll_sizer = new wxFlexGridSizer(2, wxSize(8, 4));
     scroll_sizer->AddGrowableCol(0, 1);
@@ -80,6 +84,12 @@ ToolApprovalsSettingsPanel::ToolApprovalsSettingsPanel(wxWindow* parent,
             case ToolApprovalPolicy::deny:         sel = 2; break;
         }
         choice->SetSelection(sel);
+
+        // Per-tool automation id: "locus.settings.approvals.choice.<tool_name>".
+        // S5.L mutating-tool friction-confirm script addresses these by name.
+        std::string aid = "locus.settings.approvals.choice." + tname;
+        choice->SetName(wxString::FromUTF8(aid));
+        gui::apply_locus_accessible_name(choice);
 
         scroll_sizer->Add(label, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, 4);
         scroll_sizer->Add(choice, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);

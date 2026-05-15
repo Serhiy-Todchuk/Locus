@@ -1,5 +1,8 @@
 #include "chat_footer_chips.h"
 
+#include "../locus_accessible.h"
+#include "../ui_names.h"
+
 #include <algorithm>
 
 namespace locus {
@@ -30,6 +33,13 @@ ChatFooterChips::ChatFooterChips(wxWindow* parent)
     commit_chip_ = new wxStaticText(parent, wxID_ANY, "");
     plan_chip_->Hide();
     commit_chip_->Hide();
+
+    ctx_label_->SetName(ui_names::kChatCtxLabel);
+    plan_chip_->SetName(ui_names::kChatPlanChip);
+    commit_chip_->SetName(ui_names::kChatCommitChip);
+    gui::apply_locus_accessible_name(ctx_label_);
+    gui::apply_locus_accessible_name(plan_chip_);
+    gui::apply_locus_accessible_name(commit_chip_);
 }
 
 bool ChatFooterChips::set_context_meter(int used, int limit,

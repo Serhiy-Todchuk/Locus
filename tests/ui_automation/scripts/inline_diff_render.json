@@ -1,0 +1,59 @@
+{
+  "name": "inline_diff_render",
+  "description": "S5.C inline-diff rendering. With write_file pre-seeded to auto-approve (tmp workspace default), prompts the LLM to create a small file. After the tool completes, the chat WebView should contain a red/green diff body. The script asserts both: (a) the file lands on disk; (b) the content shows up in the WebView DOM (the inline diff HTML is injected into the chat). Requires LM Studio at http://127.0.0.1:1234 with a tool-calling model.",
+  "setup": {
+    "workspace": "tmp"
+  },
+  "steps": [
+    { "op": "launch" },
+    {
+      "op": "wait_for_window",
+      "args": { "title_prefix": "Locus", "timeout_ms": 30000 }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.chat.panel", "timeout_ms": 30000 }
+    },
+
+    {
+      "op": "click",
+      "args": { "parent_aid": "locus.chat.panel", "control_type": "document" }
+    },
+    {
+      "op": "type",
+      "args": {
+        "parent_aid": "locus.chat.panel",
+        "control_type": "document",
+        "text": "Use the write_file tool to create greeting.txt with the exact contents 'hello-from-inline-diff'. One file, one line. Don't run it."
+      }
+    },
+    { "op": "sleep", "args": { "ms": 300 } },
+    {
+      "op": "press_key",
+      "args": {
+        "parent_aid": "locus.chat.panel",
+        "control_type": "document",
+        "key": "ENTER"
+      }
+    },
+
+    {
+      "op": "assert_file_exists",
+      "args": { "path": "greeting.txt", "timeout_ms": 240000 }
+    },
+    { "op": "screenshot", "args": { "name": "01_file_on_disk" } },
+
+    {
+      "op": "assert_text_contains",
+      "args": {
+        "automation_id": "locus.chat.webview",
+        "substring": "hello-from-inline-diff",
+        "walk_subtree": true,
+        "timeout_ms": 30000
+      }
+    },
+    { "op": "screenshot", "args": { "name": "02_diff_visible_in_chat" } },
+
+    { "op": "quit", "args": { "wait_ms": 5000 } }
+  ]
+}

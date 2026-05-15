@@ -1,0 +1,79 @@
+{
+  "name": "settings_persistence",
+  "description": "Open Settings, change the LLM model field on the LLM tab, click OK, quit, re-launch the same workspace and verify the new value sticks. End-to-end workspace_config_json round-trip through the UI -- catches regressions in Settings -> WorkspaceConfig commit + .locus/config.json read. The model field is a plain wxTextCtrl; spinners are harder to drive via WM_CHAR.",
+  "setup": {
+    "workspace": "tmp"
+  },
+  "steps": [
+    { "op": "launch" },
+    {
+      "op": "wait_for_window",
+      "args": { "title_prefix": "Locus", "timeout_ms": 20000 }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.chat.panel", "timeout_ms": 15000 }
+    },
+    { "op": "sleep", "args": { "ms": 400 } },
+    { "op": "press_key", "args": { "key": "COMMA", "modifiers": "CTRL" } },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.settings.notebook", "timeout_ms": 5000 }
+    },
+    {
+      "op": "select_tab",
+      "args": { "parent_aid": "locus.settings.notebook", "index": 0 }
+    },
+    { "op": "sleep", "args": { "ms": 300 } },
+
+    {
+      "op": "click",
+      "args": { "automation_id": "locus.settings.llm.model", "timeout_ms": 5000 }
+    },
+    {
+      "op": "type",
+      "args": { "automation_id": "locus.settings.llm.model", "text": "uia-persistence-marker" }
+    },
+    { "op": "screenshot", "args": { "name": "01_model_changed" } },
+
+    { "op": "press_key", "args": { "key": "ENTER" } },
+    { "op": "sleep", "args": { "ms": 500 } },
+    { "op": "quit", "args": { "wait_ms": 5000 } },
+
+    { "op": "sleep", "args": { "ms": 500 } },
+
+    { "op": "launch" },
+    {
+      "op": "wait_for_window",
+      "args": { "title_prefix": "Locus", "timeout_ms": 20000 }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.chat.panel", "timeout_ms": 15000 }
+    },
+    { "op": "sleep", "args": { "ms": 400 } },
+    { "op": "press_key", "args": { "key": "COMMA", "modifiers": "CTRL" } },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.settings.notebook", "timeout_ms": 5000 }
+    },
+    {
+      "op": "select_tab",
+      "args": { "parent_aid": "locus.settings.notebook", "index": 0 }
+    },
+    { "op": "sleep", "args": { "ms": 400 } },
+    {
+      "op": "assert_text_contains",
+      "args": {
+        "automation_id": "locus.settings.llm.model",
+        "substring": "uia-persistence-marker",
+        "timeout_ms": 5000
+      }
+    },
+    { "op": "screenshot", "args": { "name": "02_model_persisted" } },
+
+    { "op": "press_key", "args": { "key": "ESC" } },
+    { "op": "sleep", "args": { "ms": 300 } },
+    { "op": "quit", "args": { "wait_ms": 5000 } }
+  ]
+}

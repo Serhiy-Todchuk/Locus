@@ -1,0 +1,68 @@
+{
+  "name": "settings_preset_dropdown",
+  "description": "S4.V Task 6 -- pick a known preset on the LLM tab's preset dropdown, click `Load preset`, verify the Tool format dropdown updates to the preset's pinned format (Qwen). Validates the preset machinery wires the static table through to the controls without an LLM round-trip. The wxChoice item is addressed by name under the parent's UIA subtree -- wxChoice surfaces ListItem children even when collapsed.",
+  "setup": {
+    "workspace": "tmp"
+  },
+  "steps": [
+    { "op": "launch" },
+    {
+      "op": "wait_for_window",
+      "args": { "title_prefix": "Locus", "timeout_ms": 20000 }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.chat.panel", "timeout_ms": 15000 }
+    },
+    { "op": "sleep", "args": { "ms": 400 } },
+    { "op": "press_key", "args": { "key": "COMMA", "modifiers": "CTRL" } },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.settings.notebook", "timeout_ms": 5000 }
+    },
+    {
+      "op": "select_tab",
+      "args": { "parent_aid": "locus.settings.notebook", "index": 0 }
+    },
+    { "op": "sleep", "args": { "ms": 400 } },
+
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.settings.llm.preset_choice", "timeout_ms": 5000 }
+    },
+    {
+      "op": "click",
+      "args": { "automation_id": "locus.settings.llm.preset_choice" }
+    },
+    { "op": "sleep", "args": { "ms": 200 } },
+    {
+      "op": "press_key",
+      "args": { "automation_id": "locus.settings.llm.preset_choice", "key": "DOWN" }
+    },
+    {
+      "op": "press_key",
+      "args": { "automation_id": "locus.settings.llm.preset_choice", "key": "DOWN" }
+    },
+    { "op": "sleep", "args": { "ms": 300 } },
+    { "op": "screenshot", "args": { "name": "01_qwen_preset_selected" } },
+
+    {
+      "op": "click",
+      "args": { "automation_id": "locus.settings.llm.preset_apply_btn" }
+    },
+    { "op": "sleep", "args": { "ms": 400 } },
+    {
+      "op": "assert_text_contains",
+      "args": {
+        "automation_id": "locus.settings.llm.tool_format",
+        "substring": "Qwen",
+        "timeout_ms": 5000
+      }
+    },
+    { "op": "screenshot", "args": { "name": "02_preset_applied" } },
+
+    { "op": "press_key", "args": { "key": "ESC" } },
+    { "op": "sleep", "args": { "ms": 300 } },
+    { "op": "quit", "args": { "wait_ms": 5000 } }
+  ]
+}
