@@ -242,6 +242,17 @@ private:
     // usage callback fires it's the exact "N".
     void refresh_ctx_label();
 
+    // S5.Z #3 -- recompute the action-button label + enabled state from
+    // `streaming_` and whether the input has text. Four states:
+    //   idle + empty  -> "Submit", disabled
+    //   idle + text   -> "Submit", click submits
+    //   streaming + empty -> "Stop", click interrupts
+    //   streaming + text  -> "Queue", click queues onto AgentCore
+    // Called from create_input/footer (initial), on_input_text (every key
+    // stroke), and the streaming-state transitions on turn_start /
+    // turn_complete / on_error / on_session_reset.
+    void refresh_action_btn();
+
     std::function<void(const std::string&)> on_send_;
     std::function<void()> on_compact_;
     std::function<void()> on_stop_;

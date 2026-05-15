@@ -872,15 +872,29 @@ void ChatPanel::create_footer()
     compact_btn_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
         if (on_compact_) on_compact_();
     });
-    stop_btn_ = new wxButton(this, wxID_ANY, "Stop",
+    // Polymorphic action button. Label + behavior switch through four states
+    // (Send-disabled / Send / Stop / Queue) based on the streaming flag and
+    // whether the input has text. The variable name stays `stop_btn_` and
+    // the automation id stays `kChatStopBtn` to avoid breaking UI tests.
+    stop_btn_ = new wxButton(this, wxID_ANY, "Submit",
                              wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
     stop_btn_->SetName(ui_names::kChatStopBtn);
     gui::apply_locus_accessible_name(stop_btn_);
-    stop_btn_->SetToolTip("Stop the current generation");
     stop_btn_->Disable();
     stop_btn_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
-        if (on_stop_) on_stop_();
+        // Dispatch on live state. submit_current_input handles both the
+        // idle-send and the streaming-queue cases (it just calls on_send_,
+        // which queues onto AgentCore's thread regardless of agent state).
+        if (streaming_) {
+            bool has_text =
+                !input_->GetValue().Trim().Trim(false).IsEmpty();
+            if (has_text) submit_current_input();
+            else if (on_stop_) on_stop_();
+        } else {
+            submit_current_input();
+        }
     });
+    refresh_action_btn();
     undo_btn_ = new wxButton(this, wxID_ANY, "Undo",
                              wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
     undo_btn_->SetName(ui_names::kChatUndoBtn);
@@ -914,7 +928,7 @@ void ChatPanel::on_turn_start()
     wait_ticks_              = 0;
     turn_start_time_         = std::chrono::steady_clock::now();
 
-    stop_btn_->Enable();
+    refresh_action_btn();
     if (undo_btn_) undo_btn_->Disable();
 
     // Create the assistant bubble pre-populated with a "Thinking..."
@@ -1047,7 +1061,7 @@ void ChatPanel::on_turn_complete()
     run_script("highlightAll();");
 
     streaming_ = false;
-    stop_btn_->Disable();
+    refresh_action_btn();
     if (undo_btn_) undo_btn_->Enable();
     input_->SetFocus();
     // M5 polish -- the live estimate retired in favour of the ctx label's
@@ -1067,7 +1081,7 @@ void ChatPanel::on_session_reset()
     reasoning_buffer_.clear();
     streaming_ = false;
     waiting_for_first_token_ = false;
-    stop_btn_->Disable();
+    refresh_action_btn();
     message_id_ = 0;
     assistant_id_ = 0;
     reasoning_id_ = 0;
@@ -1481,6 +1495,30 @@ void ChatPanel::set_context_meter(int used, int limit,
     refresh_ctx_label();
 }
 
+void ChatPanel::refresh_action_btn()
+{
+    if (!stop_btn_) return;
+    const bool has_text = input_ &&
+        !input_->GetValue().Trim().Trim(false).IsEmpty();
+
+    if (streaming_) {
+        if (has_text) {
+            stop_btn_->SetLabel("Queue");
+            stop_btn_->SetToolTip(
+                "Queue this message. The agent will pick it up after the "
+                "current turn completes.");
+        } else {
+            stop_btn_->SetLabel("Stop");
+            stop_btn_->SetToolTip("Stop the current generation");
+        }
+        stop_btn_->Enable();
+    } else {
+        stop_btn_->SetLabel("Submit");
+        stop_btn_->SetToolTip("Submit the message (Enter)");
+        stop_btn_->Enable(has_text);
+    }
+}
+
 void ChatPanel::refresh_ctx_label()
 {
     int used  = last_ctx_used_;
@@ -1712,6 +1750,7 @@ void ChatPanel::on_input_text(wxCommandEvent& evt)
 {
     update_slash_popup();
     update_mention_popup();
+    refresh_action_btn();
     evt.Skip();
 }
 
@@ -1739,6 +1778,7 @@ bool ChatPanel::submit_current_input()
         if (!name.empty() && on_slash_command_(name, rest)) {
             input_->Clear();
             hide_slash_popup();
+            refresh_action_btn();
             return true;
         }
     }
@@ -1746,6 +1786,7 @@ bool ChatPanel::submit_current_input()
     input_->Clear();
     hide_slash_popup();
     hide_mention_popup();
+    refresh_action_btn();
 
     // S4.V -- pull the first valid `@<path>` mention out of the message and
     // auto-attach it. The token stays in the message verbatim so the user
