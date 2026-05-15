@@ -10,20 +10,18 @@
 
 ## Stages
 
-| Stage | File | Summary |
-|---|---|---|
-| S3.A done | [agent-core-split](S3.A-agent-core-split.md) | Split 850-LOC `AgentCore` into loop / dispatcher / activity / budget collaborators |
-| S3.B done | [llm-client-split](S3.B-llm-client-split.md) | Split transport / stream-decoder / token-counter; prepare for multi-format + weak/strong |
-| S3.C done | [workspace-services](S3.C-workspace-services.md) | Replace `WorkspaceContext` raw-pointer struct with `IWorkspaceServices` interface |
-| S3.D done | [indexer-split](S3.D-indexer-split.md) | Extract Tree-sitter symbol rules + language registry + prepared-statement holder |
-| S3.E done | [tools-folder](S3.E-tools-folder.md) | Split `tools.cpp` into `src/tools/` subfolder by family |
-| S3.F done | [locus-frame-split](S3.F-locus-frame-split.md) | Extract menu controller; move file-watcher pump into Core |
-| S3.G done | [locus-session](S3.G-locus-session.md) | Bundle Workspace + LLM + ToolRegistry + AgentCore into `LocusSession` |
-| S3.H done | [src-layering](S3.H-src-layering.md) | Consistent `src/{core,agent,llm,index,tools,frontends,util}/` layout |
-| S3.I done | [threading-model](S3.I-threading-model.md) | Document threads, ownership, cross-thread invariants |
-| S3.J done | [slash-commands](S3.J-slash-commands.md) | Extract slash-command tokenizer + dispatcher into its own module |
-| S3.K done | [docs](S3.K-docs.md) | `agent-loop.md`, `threading-model.md`, ADR trail under `architecture/decisions/` |
-| S3.L done | [tool-catalog-hygiene](S3.L-tool-catalog-hygiene.md) | Consolidate search family into one `search(mode=...)` tool; `available()` / `visible_in_mode()` gating hooks; per-turn manifest-size log + threshold warning |
+- [x] **[S3.A](S3.A-agent-core-split.md)** -- Split 850-LOC `AgentCore` into loop / dispatcher / activity / budget collaborators
+- [x] **[S3.B](S3.B-llm-client-split.md)** -- Split transport / stream-decoder / token-counter; prepare for multi-format + weak/strong
+- [x] **[S3.C](S3.C-workspace-services.md)** -- Replace `WorkspaceContext` raw-pointer struct with `IWorkspaceServices` interface
+- [x] **[S3.D](S3.D-indexer-split.md)** -- Extract Tree-sitter symbol rules + language registry + prepared-statement holder
+- [x] **[S3.E](S3.E-tools-folder.md)** -- Split `tools.cpp` into `src/tools/` subfolder by family
+- [x] **[S3.F](S3.F-locus-frame-split.md)** -- Extract menu controller; move file-watcher pump into Core
+- [x] **[S3.G](S3.G-locus-session.md)** -- Bundle Workspace + LLM + ToolRegistry + AgentCore into `LocusSession`
+- [x] **[S3.H](S3.H-src-layering.md)** -- Consistent `src/{core,agent,llm,index,tools,frontends,util}/` layout
+- [x] **[S3.I](S3.I-threading-model.md)** -- Document threads, ownership, cross-thread invariants
+- [x] **[S3.J](S3.J-slash-commands.md)** -- Extract slash-command tokenizer + dispatcher into its own module
+- [x] **[S3.K](S3.K-docs.md)** -- `agent-loop.md`, `threading-model.md`, ADR trail under `architecture/decisions/`
+- [x] **[S3.L](S3.L-tool-catalog-hygiene.md)** -- Consolidate search family into one `search(mode=...)` tool; `available()` / `visible_in_mode()` gating hooks; per-turn manifest-size log + threshold warning
 
 ## Suggested order
 

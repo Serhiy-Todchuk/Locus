@@ -8,16 +8,14 @@
 
 ## Stages
 
-| Stage | Title |
-|---|---|
-| S6.0 | Prompt-Injection Scanner (5-category: instruction override, role impersonation, exfiltration, encoding evasion, social eng) -- lands before S6.1 so untrusted HTML pulled by web RAG is vetted on ingress. Inspired by Thoth's defense layers. Stage doc TBD. |
-| [S6.1](S6.1-web-retrieval.md) | Web Retrieval (RAG) |
-| [S6.2](S6.2-zim-reader.md) | ZIM Reader (Wikipedia / Kiwix) |
-| [S6.3](S6.3-crow-frontend.md) | CrowServer Frontend |
-| [S6.4](S6.4-remote-access.md) | Remote Access |
-| [S6.5](S6.5-web-frontend.md) | Web / Browser Frontend |
-| [S6.6](S6.6-vscode-shim.md) | VS Code Shim |
-| [S6.7](S6.7-skills.md) | Skills (On-Demand Capability Packs) |
+- [ ] **S6.0** -- Prompt-Injection Scanner (5-category: instruction override, role impersonation, exfiltration, encoding evasion, social eng) -- lands before S6.1 so untrusted HTML pulled by web RAG is vetted on ingress. Stage doc TBD.
+- [ ] **[S6.1](S6.1-web-retrieval.md)** -- Web Retrieval (RAG)
+- [ ] **[S6.2](S6.2-zim-reader.md)** -- ZIM Reader (Wikipedia / Kiwix)
+- [ ] **[S6.3](S6.3-crow-frontend.md)** -- CrowServer Frontend
+- [ ] **[S6.4](S6.4-remote-access.md)** -- Remote Access
+- [ ] **[S6.5](S6.5-web-frontend.md)** -- Web / Browser Frontend
+- [ ] **[S6.6](S6.6-vscode-shim.md)** -- VS Code Shim
+- [ ] **[S6.7](S6.7-skills.md)** -- Skills (On-Demand Capability Packs)
 
 ## Dependencies
 

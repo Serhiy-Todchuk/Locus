@@ -8,28 +8,26 @@
 
 ## Stages (in execution order)
 
-| Stage | Title | Theme |
-|---|---|---|
-| [S4.A](S4.A-diff-editing.md) | Diff-Based Editing done | Editing |
-| [S4.P](S4.P-grep.md) | Grep Tool (Regex over Raw Content) done | Tools |
-| [S4.J](S4.J-embeddings-reranker.md) | Better Embeddings + Reranker done | Retrieval |
-| [S4.B](S4.B-checkpoint-undo.md) | Checkpoint & Undo done | Safety |
-| [S4.K](S4.K-retrieval-eval.md) | Retrieval Evaluation Harness done | Retrieval |
-| [S4.I](S4.I-background-commands.md) | Background / Long-Running Commands done | Process model |
-| [S4.S](S4.S-telemetry.md) | Telemetry & Agent Performance Metrics done | Observability |
-| [S4.M](S4.M-ast-search.md) | Tree-Sitter Query Tool (Structural Grep) done | Tools |
-| [S4.T](S4.T-file-change-awareness.md) | File-Change Awareness Between Turns done | Context |
-| [S4.N](S4.N-tool-call-robustness.md) | Tool-Call Robustness Across Model Families done | LLM compat |
-| [S4.U](S4.U-stream-decode-completeness.md) | Stream Decode Completeness + max_tokens Discipline done | LLM compat |
-| [S4.D](S4.D-plan-mode.md) | Plan Mode done | Workflow |
-| [S4.G](S4.G-mcp.md) | MCP (Model Context Protocol) Client done | Extensibility |
-| [S4.R](S4.R-memory-bank.md) | Memory Bank (Persistent + Searchable) done Phase 1 | Context |
-| [S4.L](S4.L-git-native.md) | Git Integration (.gitignore + Auto-Commit) done | Workspace policy |
-| [S4.F](S4.F-kv-cache.md) | KV / Prompt Cache Preservation done | Performance |
-| [S4.W](S4.W-list-directory-completeness.md) | list_directory: Surface Unindexed Files done | Tools |
-| [S4.X](S4.X-prompt-templates.md) | Prompt Templates done | Workflow |
-| [S4.Y](S4.Y-grammar-coverage.md) | Tree-sitter Grammar Coverage Expansion done | Tools |
-| [S4.V](S4.V-misc-gaps.md) | Miscellaneous Smaller Gaps done | Mixed |
+- [x] **[S4.A](S4.A-diff-editing.md)** -- Diff-Based Editing -- _Editing_
+- [x] **[S4.P](S4.P-grep.md)** -- Grep Tool (Regex over Raw Content) -- _Tools_
+- [x] **[S4.J](S4.J-embeddings-reranker.md)** -- Better Embeddings + Reranker -- _Retrieval_
+- [x] **[S4.B](S4.B-checkpoint-undo.md)** -- Checkpoint & Undo -- _Safety_
+- [x] **[S4.K](S4.K-retrieval-eval.md)** -- Retrieval Evaluation Harness -- _Retrieval_
+- [x] **[S4.I](S4.I-background-commands.md)** -- Background / Long-Running Commands -- _Process model_
+- [x] **[S4.S](S4.S-telemetry.md)** -- Telemetry & Agent Performance Metrics -- _Observability_
+- [x] **[S4.M](S4.M-ast-search.md)** -- Tree-Sitter Query Tool (Structural Grep) -- _Tools_
+- [x] **[S4.T](S4.T-file-change-awareness.md)** -- File-Change Awareness Between Turns -- _Context_
+- [x] **[S4.N](S4.N-tool-call-robustness.md)** -- Tool-Call Robustness Across Model Families -- _LLM compat_
+- [x] **[S4.U](S4.U-stream-decode-completeness.md)** -- Stream Decode Completeness + max_tokens Discipline -- _LLM compat_
+- [x] **[S4.D](S4.D-plan-mode.md)** -- Plan Mode -- _Workflow_
+- [x] **[S4.G](S4.G-mcp.md)** -- MCP (Model Context Protocol) Client -- _Extensibility_
+- [x] **[S4.R](S4.R-memory-bank.md)** -- Memory Bank (Persistent + Searchable) (Phase 1) -- _Context_
+- [x] **[S4.L](S4.L-git-native.md)** -- Git Integration (.gitignore + Auto-Commit) -- _Workspace policy_
+- [x] **[S4.F](S4.F-kv-cache.md)** -- KV / Prompt Cache Preservation -- _Performance_
+- [x] **[S4.W](S4.W-list-directory-completeness.md)** -- list_directory: Surface Unindexed Files -- _Tools_
+- [x] **[S4.X](S4.X-prompt-templates.md)** -- Prompt Templates -- _Workflow_
+- [x] **[S4.Y](S4.Y-grammar-coverage.md)** -- Tree-sitter Grammar Coverage Expansion -- _Tools_
+- [x] **[S4.V](S4.V-misc-gaps.md)** -- Miscellaneous Smaller Gaps -- _Mixed_
 
 ## Prerequisites from M3
 
