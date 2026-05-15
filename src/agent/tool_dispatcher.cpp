@@ -216,6 +216,19 @@ void ToolDispatcher::dispatch(const ToolCall& call, const AppendFn& append_resul
         return;
     }
 
+    // Register the call as awaiting a decision BEFORE broadcasting
+    // on_tool_call_pending. The harness frontend (and any frontend that
+    // auto-approves synchronously inside the callback) calls submit_decision
+    // before returning from on_tool_call_pending. submit_decision checks
+    // awaiting_dispatches_ and drops the decision if the call_id is absent --
+    // so the insert must precede the broadcast to avoid the race.
+    // For auto-approve calls we still insert+erase so the book-keeping is
+    // symmetric; the condvar path is skipped entirely below.
+    if (policy != ToolApprovalPolicy::auto_approve) {
+        std::lock_guard pre_lock(decision_mutex_);
+        awaiting_dispatches_.insert(call.id);
+    }
+
     // Always notify frontends that a tool call is in flight, regardless of
     // policy. The chat panel needs this to render the tool-name header above
     // the eventual result; without it, results land in the chat with no
@@ -235,13 +248,11 @@ void ToolDispatcher::dispatch(const ToolCall& call, const AppendFn& append_resul
     if (policy == ToolApprovalPolicy::auto_approve) {
         spdlog::trace("ToolDispatcher: auto-approve '{}'", call.tool_name);
     } else {
-        // Approval gate for non-auto-approved calls. The frontend already
-        // received on_tool_call_pending above, which is where the GUI's
-        // approval panel was opened. We just need to wait for the user's
-        // decision now.
+        // Approval gate: awaiting_dispatches_ was already populated above.
+        // Just wait for the decision (or cancellation).
 
         std::unique_lock lock(decision_mutex_);
-        awaiting_dispatches_.insert(call.id);
+        // awaiting_dispatches_ already has call.id -- no second insert needed.
         decision_cv_.wait(lock, [&] {
             return pending_decisions_.find(call.id) != pending_decisions_.end()
                    || cancel_flag_.load();
