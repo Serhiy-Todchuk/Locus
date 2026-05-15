@@ -1,10 +1,35 @@
-# Locus -- Local LLM Agent Assistant
+# Locus
 
-> Locus -- an open-source, local workspace AI assistant built for privacy and efficiency.
-> Privacy first: whether your machine is offline or your data simply cannot leave it, Locus is designed around locally running LLMs - secure, practical, and under your control.
-> Efficiency by design: Locus is optimized for limited hardware, with careful use of RAM, CPU, and context window budget.
-> Workspace-native: Locus works across any local workspace, from code repositories to personal documents and offline knowledge bases, combining general assistance, coding agent workflows, and robust navigation of large local datasets.
-> Flexible by choice: local models come first, but you can also connect server-based LLMs like ChatGPT or Claude when your workflow needs them.
+**A local AI agent for your workspace.**
+
+Locus is a local-first coding and knowledge-base agent for people who want AI help
+without uploading their code, documents, or private notes to a cloud service.
+
+It indexes your workspace, connects to a local OpenAI-compatible LLM server, and gives
+the model tools to search, edit, run commands, remember facts, and explain what it
+finds. Tool calls, context use, activity, diffs, metrics, and undo points are surfaced
+so the agent's workflow stays inspectable instead of mysterious.
+
+Unlike cloud-first agents retrofitted for local models, Locus is designed around the
+constraints of consumer hardware: smaller context windows, slower inference, limited
+VRAM, and models that need clear tools instead of giant pasted prompts.
+
+## Why Locus
+
+- **Your workspace stays local.** Indexes, embeddings, sessions, memory, logs, and
+  checkpoints live on your machine.
+- **Built for local LLMs.** Locus uses indexed retrieval, semantic search, reranking,
+  context budgeting, compaction, and lean tool manifests so smaller models spend less
+  time guessing and more time using the right context.
+- **Transparent by default.** You can see what context the agent is using, what tools
+  it wants to call, what changed, what it ran, how long it took, and what can be
+  undone.
+- **It understands more than code.** Search across repositories, PDFs, DOCX, XLSX,
+  Markdown, HTML, JSON/YAML, and offline knowledge bases.
+- **It can act, but you stay in control.** File edits, deletes, shell commands, and
+  MCP tools go through visible approval policies.
+- **It is already a real app.** Native Windows GUI, CLI, indexing, semantic search,
+  undo, plan mode, metrics, memory, MCP, and background commands are implemented.
 
 ## Project Status
 
@@ -44,17 +69,7 @@ Two binaries ship from the same codebase:
 | [tests/integration/README.md](tests/integration/README.md) | Manual end-to-end tests that drive `AgentCore` against a live local LLM |
 | [tests/retrieval_eval/README.md](tests/retrieval_eval/README.md) | Retrieval quality benchmark (recall@K, MRR, nDCG) |
 
-## How It Works
-
-Locus indexes a workspace folder, connects to a local LLM, and exposes an agent that
-can read, write, search, and run commands inside that folder. Every tool call is
-shown to you for approval before execution. One workspace per Locus instance --
-two open windows can target two different folders.
-
-Your PC does all the compute. Nothing leaves your network unless you point Locus
-at a remote LLM endpoint yourself.
-
-## Implemented Capabilities
+## What Works Today
 
 The current codebase is already a working local-agent platform, not just a
 prototype shell around chat completion:
@@ -74,6 +89,17 @@ prototype shell around chat completion:
 - **Desktop polish already landed in M5**: terminal panel, capability toggles,
   global settings, inline diffs in chat, UI automation scripts, metrics view, and
   the `LLMContext` refactor that centralizes conversation-facing state.
+
+## How It Works
+
+Locus runs against one local workspace folder at a time. It builds a search index,
+stores per-workspace state under `.locus/`, and exposes tools the model can call
+inside that folder. Mutating tools are visible in the activity stream and pass
+through approval policies before execution.
+
+Your PC does the local work: indexing, embeddings, reranking, tool execution,
+sessions, checkpoints, memory, and logs. Nothing leaves your network unless you
+point Locus at a remote LLM endpoint yourself.
 
 ## First-time setup on a new PC
 
