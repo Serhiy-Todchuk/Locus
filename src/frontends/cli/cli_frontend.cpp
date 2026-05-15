@@ -105,7 +105,7 @@ void CliFrontend::on_tool_result(const std::string& /*call_id*/,
 
 void CliFrontend::on_turn_start()
 {
-    // Nothing to do in CLI — the prompt already indicates we're waiting.
+    // Nothing to do in CLI -- the prompt already indicates we're waiting.
 }
 
 void CliFrontend::on_turn_complete()

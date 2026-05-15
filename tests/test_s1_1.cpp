@@ -38,7 +38,7 @@ struct StubFrontend : IFrontend {
     void on_activity(const ActivityEvent&) override {}
 };
 
-// Throws on every callback — used to test exception isolation.
+// Throws on every callback -- used to test exception isolation.
 struct ThrowingFrontend : IFrontend {
     void on_turn_start() override { throw std::runtime_error("boom"); }
     void on_token(std::string_view) override { throw std::runtime_error("boom"); }
@@ -101,7 +101,7 @@ TEST_CASE("FrontendRegistry exception isolation", "[s1.1]")
     ThrowingFrontend bad;
     StubFrontend good;
 
-    // Bad frontend registered first — should not prevent good from receiving.
+    // Bad frontend registered first -- should not prevent good from receiving.
     reg.register_frontend(&bad);
     reg.register_frontend(&good);
 

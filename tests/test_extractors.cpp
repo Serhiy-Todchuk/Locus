@@ -38,7 +38,7 @@ TEST_CASE("PdfiumExtractor reads IRS W-9 sample", "[s2.3][pdf]")
     // W-9 always contains these literal strings
     REQUIRE(r.text.find("W-9") != std::string::npos);
     REQUIRE(r.text.find("Taxpayer") != std::string::npos);
-    // At least one page → at least one pseudo-heading
+    // At least one page -> at least one pseudo-heading
     REQUIRE(!r.headings.empty());
     REQUIRE(r.headings[0].text.rfind("Page ", 0) == 0);
 }
@@ -85,7 +85,7 @@ TEST_CASE("XlsxExtractor reads POI SampleSS", "[s2.3][xlsx]")
 
     REQUIRE_FALSE(r.is_binary);
     REQUIRE(!r.text.empty());
-    // At least one sheet → heading emitted
+    // At least one sheet -> heading emitted
     REQUIRE(!r.headings.empty());
 }
 

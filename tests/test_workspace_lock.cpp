@@ -47,7 +47,7 @@ TEST_CASE("WorkspaceLock: releases on destruction - next acquirer succeeds", "[s
     auto ws = fresh_dir("release");
     {
         locus::WorkspaceLock first{ws};
-        // first falls out of scope here — OS releases the lock.
+        // first falls out of scope here -- OS releases the lock.
     }
     REQUIRE_NOTHROW(locus::WorkspaceLock{ws});
     fs::remove_all(ws);

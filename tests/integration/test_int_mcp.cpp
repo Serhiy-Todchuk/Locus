@@ -120,7 +120,7 @@ TEST_CASE("MCP echo tool round-trips via the agent loop",
     auto root = make_temp_workspace_with_mock();
 
     // Tear-down guard. Run before LocusSession destruction in case of REQUIRE
-    // bail-out — fs::remove_all without the session torn down would race
+    // bail-out -- fs::remove_all without the session torn down would race
     // against the still-running mock child holding cwd.
     struct Cleanup {
         fs::path root;
@@ -195,7 +195,7 @@ TEST_CASE("MCP echo tool round-trips via the agent loop",
             return;
         }
 
-        // Argument shape — the model should have passed text="banana-42".
+        // Argument shape -- the model should have passed text="banana-42".
         INFO("call args: " << call->args.dump());
         REQUIRE(call->args.contains("text"));
         REQUIRE_THAT(call->args["text"].get<std::string>(),

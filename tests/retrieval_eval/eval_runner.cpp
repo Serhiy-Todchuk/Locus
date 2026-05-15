@@ -77,11 +77,11 @@ std::vector<GoldQuery> load_queries(const fs::path& queries_json)
     for (const auto& entry : j["queries"]) {
         ++idx;
         if (!entry.contains("query") || !entry["query"].is_string()) {
-            spdlog::warn("queries.json[{}]: missing 'query' string — skipped", idx);
+            spdlog::warn("queries.json[{}]: missing 'query' string -- skipped", idx);
             continue;
         }
         if (!entry.contains("expected_files") || !entry["expected_files"].is_array()) {
-            spdlog::warn("queries.json[{}]: missing 'expected_files' array — skipped", idx);
+            spdlog::warn("queries.json[{}]: missing 'expected_files' array -- skipped", idx);
             continue;
         }
         GoldQuery g;
@@ -91,7 +91,7 @@ std::vector<GoldQuery> load_queries(const fs::path& queries_json)
                 g.expected_files.insert(normalise_slashes(p.get<std::string>()));
         }
         if (g.expected_files.empty()) {
-            spdlog::warn("queries.json[{}]: 'expected_files' empty for '{}' — skipped",
+            spdlog::warn("queries.json[{}]: 'expected_files' empty for '{}' -- skipped",
                          idx, g.query);
             continue;
         }
@@ -114,7 +114,7 @@ EvalRun run_all(Workspace& ws, const std::vector<GoldQuery>& queries,
 
     auto* idx = ws.index();
     if (!idx)
-        throw std::runtime_error("Workspace has no IndexQuery — cannot run eval");
+        throw std::runtime_error("Workspace has no IndexQuery -- cannot run eval");
 
     // Decide which methods are runnable.
     run.text.enabled     = true;
@@ -198,8 +198,8 @@ void append_method_row(std::string& out, const char* name,
     out += name;
     out += " |";
     if (!m.enabled) {
-        for (size_t i = 0; i < ks.size(); ++i) out += " — |";
-        out += " — | — | — | (";
+        for (size_t i = 0; i < ks.size(); ++i) out += " -- |";
+        out += " -- | -- | -- | (";
         out += m.disabled_reason;
         out += ") |\n";
         return;
@@ -263,15 +263,15 @@ std::string format_markdown(const EvalRun& run, const std::string& workspace_roo
            "expected file in top-K_max. wall = total wall time spent inside "
            "this method's calls._\n";
 
-    // Per-query table — useful to spot queries whose ground truth is wrong vs.
+    // Per-query table -- useful to spot queries whose ground truth is wrong vs.
     // genuinely hard. Mark with ✓ when the method recovered ≥1 expected file
-    // within rank 3 (a tight bar; many "hard" queries hit at rank 5–10).
-    out += "\n## Per-query — recall@3 hits\n\n";
+    // within rank 3 (a tight bar; many "hard" queries hit at rank 5-10).
+    out += "\n## Per-query -- recall@3 hits\n\n";
     out += "| # | Query | text | semantic | hybrid |\n";
     out += "|---|---|---|---|---|\n";
 
     auto cell = [&](const PerMethodResult& m, size_t qi) -> std::string {
-        if (!m.enabled || qi >= m.per_query.size()) return "—";
+        if (!m.enabled || qi >= m.per_query.size()) return "--";
         // recall_at_k[1] corresponds to ks[1]; assume ks[1] == 3 (caller controls).
         size_t i3 = 0;
         for (size_t i = 0; i < run.ks.size(); ++i) {
@@ -285,7 +285,7 @@ std::string format_markdown(const EvalRun& run, const std::string& workspace_roo
         out += "| ";
         out += std::to_string(i + 1);
         out += " | ";
-        // Markdown-escape pipe in queries — none expected, but be safe.
+        // Markdown-escape pipe in queries -- none expected, but be safe.
         std::string q = run.queries[i].query;
         std::replace(q.begin(), q.end(), '|', '/');
         out += q;

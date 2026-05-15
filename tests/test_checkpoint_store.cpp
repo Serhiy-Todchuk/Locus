@@ -194,7 +194,7 @@ TEST_CASE("CheckpointStore: re-snapshotting same path in a turn is a no-op", "[s
     write_file(target, "MUTATED");
 
     // A second snapshot for the same path within the same turn must NOT
-    // overwrite the original snapshot — otherwise undo would restore the
+    // overwrite the original snapshot -- otherwise undo would restore the
     // already-mutated state.
     REQUIRE(store.snapshot_before("sess1", 1, ws_root, target, "edit"));
 

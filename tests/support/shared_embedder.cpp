@@ -24,7 +24,7 @@ namespace locus::test {
 
 namespace {
 
-// 384-dim, English-only, ~37 MB on disk — Workspace tests don't care about
+// 384-dim, English-only, ~37 MB on disk -- Workspace tests don't care about
 // quality, only about exercising the semantic-search code path, so the
 // smallest reasonable bi-encoder wins.
 const std::string k_model_filename = "bge-small-en-v1.5-Q8_0.gguf";
@@ -36,7 +36,7 @@ fs::path resolve_model_path()
 {
     // Mirror Workspace's resolution: walk up from the exe dir looking for
     // models/<filename>. Tests run from build/<cfg>/tests/<cfg>/, so the
-    // models/ directory at the repo root is 4–5 levels up.
+    // models/ directory at the repo root is 4-5 levels up.
     fs::path exe_dir = fs::current_path();
 #ifdef _WIN32
     {
@@ -89,7 +89,7 @@ namespace {
 
 // Catch2 listener: install the provider before any test runs and tear it
 // down before the process exits. Doing this in a listener (rather than at
-// static-init time) keeps the load lazy — tests that never touch semantic
+// static-init time) keeps the load lazy -- tests that never touch semantic
 // search never trigger the model load.
 class EmbedderListener : public Catch::EventListenerBase {
 public:

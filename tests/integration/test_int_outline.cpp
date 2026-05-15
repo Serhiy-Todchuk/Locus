@@ -8,7 +8,7 @@ namespace {
 
 // Ask the LLM to outline a specific sample document and verify it invoked the
 // outline tool and got back a non-empty result. Keep assertions loose on the
-// display format — we just want evidence the extractor produced headings.
+// display format -- we just want evidence the extractor produced headings.
 void check_outline_of(const std::string& rel_path, std::string_view marker)
 {
     auto& h = harness();
@@ -47,7 +47,7 @@ TEST_CASE("outline works on PDF sample (PDFium)", "[integration][llm][outline]")
 TEST_CASE("outline works on DOCX sample", "[integration][llm][outline]")
 {
     // The Apache POI SampleDoc.docx has no explicit HeadingN styles so its
-    // outline is empty — we only check that the extractor ran (tool produced
+    // outline is empty -- we only check that the extractor ran (tool produced
     // a result with the path header) rather than asserting a specific marker.
     check_outline_of("tests/sample_docs/sample.docx", "sample.docx");
 }

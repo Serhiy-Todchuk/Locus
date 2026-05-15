@@ -14,15 +14,15 @@ class McpManager;
 
 
 // One bundled lifecycle for everything that hangs off an open workspace:
-// `Workspace` → `ILLMClient` → `ToolRegistry` → `AgentCore`. Frontends (CLI,
+// `Workspace` -> `ILLMClient` -> `ToolRegistry` -> `AgentCore`. Frontends (CLI,
 // GUI, future Crow server) construct one of these and forget about wiring
-// order — destruction unwinds in reverse declaration order automatically.
+// order -- destruction unwinds in reverse declaration order automatically.
 //
 // Threading: the AgentCore thread is started at the end of the constructor
 // and stopped at the top of the destructor, so the bundle is safe to drop
 // from the calling thread even mid-turn.
 //
-// LLM config resolution layers (lowest to highest priority — each non-empty
+// LLM config resolution layers (lowest to highest priority -- each non-empty
 // value overrides the previous):
 //   1. defaults baked into LLMConfig
 //   2. workspace .locus/config.json   (llm_endpoint / llm_model / ... )

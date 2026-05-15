@@ -38,7 +38,7 @@ struct TurnSample {
     long long                             ttft_ms            = 0;
 };
 
-// Per-tool aggregate. Counts and latency only — fine-grained per-call detail
+// Per-tool aggregate. Counts and latency only -- fine-grained per-call detail
 // stays in the activity log.
 struct ToolStat {
     int       calls    = 0;
@@ -69,7 +69,7 @@ public:
 
     // -- Recording (called from agent thread) --------------------------------
 
-    // Bracket one user-message turn. begin_turn returns nothing — end_turn
+    // Bracket one user-message turn. begin_turn returns nothing -- end_turn
     // closes the most recently opened sample.
     void begin_turn(int turn_id);
     void end_turn(bool had_error);
@@ -113,7 +113,7 @@ public:
     // Sections separated by a blank line. UTF-8.
     std::string to_csv() const;
 
-    // Aggregates used by the GUI tab. Held by value — small POD.
+    // Aggregates used by the GUI tab. Held by value -- small POD.
     struct Aggregates {
         int       turn_count       = 0;
         int       tokens_in_total  = 0;   // sum of completion+prompt deltas

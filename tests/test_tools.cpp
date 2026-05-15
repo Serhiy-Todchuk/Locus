@@ -239,7 +239,7 @@ TEST_CASE("WriteFileTool: overwrites when overwrite=true", "[s0.6][s4.a]")
 
 TEST_CASE("WriteFileTool: overwrite=false on a fresh path still creates", "[s4.a]")
 {
-    // overwrite=false means "do not replace an existing file" — it must not
+    // overwrite=false means "do not replace an existing file" -- it must not
     // block creation of a brand-new path.
     auto tmp = make_temp_workspace();
 
@@ -426,7 +426,7 @@ TEST_CASE("ToolRegistry: build_schema_json filters by available() predicate", "[
 
     locus::test::FakeWorkspaceServices ws{fs::temp_directory_path()};
 
-    // Unfiltered overload still sees both — backward compatibility for tests.
+    // Unfiltered overload still sees both -- backward compatibility for tests.
     REQUIRE(registry.build_schema_json().size() == 2);
 
     // Filtered overload drops the unavailable one.
@@ -461,7 +461,7 @@ TEST_CASE("ToolRegistry: build_schema_json filters by visible_in_mode()", "[s3.l
 
 TEST_CASE("ITool defaults: available()=true, visible_in_mode only in agent", "[s3.l]")
 {
-    // Built-in tools use the default predicates — verify the defaults match
+    // Built-in tools use the default predicates -- verify the defaults match
     // today's behavior so existing callers don't silently change.
     locus::ToolRegistry registry;
     locus::register_builtin_tools(registry);
@@ -499,7 +499,7 @@ TEST_CASE("Tool approval policies are correct", "[s0.6]")
     REQUIRE(registry.find("delete_file")->approval_policy() == locus::ToolApprovalPolicy::ask);
     REQUIRE(registry.find("run_command")->approval_policy() == locus::ToolApprovalPolicy::ask);
 
-    // S4.I — background-process tools.
+    // S4.I -- background-process tools.
     REQUIRE(registry.find("run_command_bg")->approval_policy() == locus::ToolApprovalPolicy::ask);
     REQUIRE(registry.find("read_process_output")->approval_policy() == locus::ToolApprovalPolicy::auto_approve);
     REQUIRE(registry.find("stop_process")->approval_policy() == locus::ToolApprovalPolicy::ask);
@@ -605,7 +605,7 @@ TEST_CASE("EditFileTool: preserves indentation exactly", "[s4.a]")
 {
     locus::tools::ReadTracker::instance().clear();
     auto tmp = make_temp_workspace();
-    // Tabs, spaces, mixed — the exact-match rule must keep them intact.
+    // Tabs, spaces, mixed -- the exact-match rule must keep them intact.
     std::string body = "fn main() {\n\treturn 0;\n}\n";
     write_test_file(tmp, "m.rs", body);
     prime_read(tmp, "m.rs");
@@ -722,7 +722,7 @@ TEST_CASE("EditFileTool: batch is atomic - one bad edit aborts all", "[s4.a]")
     auto result = tool.execute(call, ws);
     REQUIRE_FALSE(result.success);
     REQUIRE_THAT(result.content, ContainsSubstring("edit 2/3"));
-    // File untouched — atomicity.
+    // File untouched -- atomicity.
     REQUIRE(read_entire_file(tmp / "f.txt") == "red green blue");
 
     fs::remove_all(tmp);

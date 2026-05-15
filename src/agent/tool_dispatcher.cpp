@@ -290,7 +290,7 @@ void ToolDispatcher::dispatch(const ToolCall& call, const AppendFn& append_resul
     }
 
     // Snapshot the file *after* approval/modification but *before* the tool
-    // mutates anything — so an Undo restores the bytes the user actually saw.
+    // mutates anything -- so an Undo restores the bytes the user actually saw.
     maybe_snapshot(effective_call);
 
     auto exec_t0 = std::chrono::steady_clock::now();
@@ -323,7 +323,7 @@ void ToolDispatcher::dispatch(const ToolCall& call, const AppendFn& append_resul
     {
         std::string sum = "Tool result: " + call.tool_name;
         sum += result.success ? " (ok)" : " (failed)";
-        sum += " — " + std::to_string(result.content.size()) + " chars";
+        sum += " -- " + std::to_string(result.content.size()) + " chars";
         activity_.emit(result.success ? ActivityKind::tool_result
                                       : ActivityKind::error,
                        std::move(sum),

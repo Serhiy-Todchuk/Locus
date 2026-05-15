@@ -1,13 +1,13 @@
-// locus_retrieval_eval — manual-only eval harness for hybrid retrieval.
+// locus_retrieval_eval -- manual-only eval harness for hybrid retrieval.
 //
 //   locus_retrieval_eval [--workspace <dir>] [--queries <path>] [--out <path>]
 //                        [--baseline <path>] [--top-k <N>] [--tolerance <f>]
 //                        [--curate-from <sessions_dir>] [--verbose] [--no-wait]
 //
 // Returns:
-//   0  — success, no regression
-//   1  — regression detected (drop > tolerance vs. baseline)
-//   2  — harness error (bad args, missing index, etc.)
+//   0  -- success, no regression
+//   1  -- regression detected (drop > tolerance vs. baseline)
+//   2  -- harness error (bad args, missing index, etc.)
 //
 // Defaults assume cwd is the repo root (the workspace under test).
 
@@ -48,7 +48,7 @@ struct Args {
 void print_help()
 {
     std::cout <<
-        "locus_retrieval_eval — measure retrieval quality on a workspace.\n"
+        "locus_retrieval_eval -- measure retrieval quality on a workspace.\n"
         "\n"
         "Options:\n"
         "  --workspace <dir>         Workspace to open (default: cwd)\n"
@@ -117,7 +117,7 @@ void wait_for_embeddings(EmbeddingWorker& worker, int max_seconds)
         }
         if (s.done == last_done) {
             ++silent_seconds;
-            if (silent_seconds > 30) {  // no progress for 30s — likely idle
+            if (silent_seconds > 30) {  // no progress for 30s -- likely idle
                 spdlog::warn("Embedding queue made no progress in 30s ({}/{}); "
                              "proceeding", s.done, s.total);
                 return;
@@ -147,7 +147,7 @@ int main(int argc, char** argv) try
 
     args.workspace = fs::absolute(args.workspace);
 
-    // -- --curate-from — short-circuit, no workspace needed -------------------
+    // -- --curate-from -- short-circuit, no workspace needed -------------------
     if (!args.curate_from.empty()) {
         auto curated = eval::curate_from_sessions(args.curate_from);
         std::cout << eval::to_queries_json_template(curated) << "\n";
@@ -172,7 +172,7 @@ int main(int argc, char** argv) try
     spdlog::info("Opening workspace: {}", args.workspace.string());
     Workspace ws(args.workspace);
 
-    // Wait for embeddings — semantic / hybrid recall is meaningless without
+    // Wait for embeddings -- semantic / hybrid recall is meaningless without
     // them. The initial index is synchronous (build_initial finished inside
     // the Workspace ctor), but the embedding worker is async.
     if (auto* w = ws.embedding_worker(); w && !args.no_wait) {
@@ -236,7 +236,7 @@ int main(int argc, char** argv) try
         ss << b.rdbuf();
         baseline_text = ss.str();
     } else {
-        spdlog::info("No baseline at {} — first run; rerun with --write-baseline "
+        spdlog::info("No baseline at {} -- first run; rerun with --write-baseline "
                      "to commit one", args.baseline_path.string());
         return 0;
     }

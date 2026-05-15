@@ -74,7 +74,7 @@ void FileWatcher::stop()
     // OS-specific watch thread, so no callback can fire into our Listener
     // (or push_raw) after this returns. Without this, the implicit member-
     // destruction order tears down mutex_, pending_, and listener_ while the
-    // efsw thread is still alive — racing with handleFileAction → push_raw.
+    // efsw thread is still alive -- racing with handleFileAction -> push_raw.
     if (watcher_) {
         watcher_.reset();
         spdlog::trace("File watcher stopped");
@@ -102,7 +102,7 @@ void FileWatcher::push_raw(FileAction action, const fs::path& dir,
     fs::path rel_path = fs::relative(abs_path, root_);
 
     if (is_excluded(rel_path)) {
-        // Log each excluded path at most once — otherwise SQLite WAL flushes
+        // Log each excluded path at most once -- otherwise SQLite WAL flushes
         // on .locus/vectors.db-wal turn the trace log into a firehose.
         std::string rel_str = rel_path.string();
         std::lock_guard<std::mutex> lock(mutex_);

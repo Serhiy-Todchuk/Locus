@@ -29,7 +29,7 @@ struct SymbolRule {
 
 // Per-language symbol extractor. Implementations walk the parse tree and
 // produce a flat list of `ExtractedSymbol`s. The DB persistence side stays
-// in `Indexer` — this interface is purely about turning AST nodes into
+// in `Indexer` -- this interface is purely about turning AST nodes into
 // language-agnostic structs.
 class ISymbolExtractor {
 public:
@@ -61,7 +61,7 @@ private:
 std::unique_ptr<ISymbolExtractor> make_rule_based_symbol_extractor(
     std::vector<SymbolRule> rules);
 
-// Per-language factories — implementation lives in
+// Per-language factories -- implementation lives in
 // `symbol_extractors/<lang>_extractor.cpp`. They only assemble a rule table
 // and forward to `make_rule_based_symbol_extractor`.
 std::unique_ptr<ISymbolExtractor> make_c_symbol_extractor();

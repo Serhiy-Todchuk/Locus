@@ -5,7 +5,7 @@
 // `/undo` slash command then restores that state.
 //
 // We assert against the file system (file present / absent / content matches)
-// and the agent's emitted text — not on LLM prose, since `/undo` is handled
+// and the agent's emitted text -- not on LLM prose, since `/undo` is handled
 // by AgentCore directly without an LLM round-trip.
 
 #include "harness_fixture.h"

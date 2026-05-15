@@ -346,7 +346,7 @@ void Indexer::index_file(const fs::path& rel_path)
     int64_t mtime = std::chrono::duration_cast<std::chrono::seconds>(
         sctp.time_since_epoch()).count();
 
-    // Fast path — skip any file whose size+mtime match what's already in the
+    // Fast path -- skip any file whose size+mtime match what's already in the
     // index. Saves re-chunking + re-embedding every chunk on every startup.
     // When semantic search is enabled, also require that chunks already exist
     // for this file (guards against a wiped or freshly-enabled vectors.db).
@@ -597,7 +597,7 @@ void Indexer::build_initial()
                      "no longer resolve to a regular file", nonfile);
     }
 
-    // Overwrite the per-session counters with authoritative DB totals — after
+    // Overwrite the per-session counters with authoritative DB totals -- after
     // the fast-path skip landed, symbols/headings/chunks_total only reflect
     // files re-indexed this session, which reads as "0 symbols" on a warm
     // start. Callers (main.cpp, integration harness) feed these into the

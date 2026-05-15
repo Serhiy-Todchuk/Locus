@@ -1,5 +1,5 @@
 {
-  "_about": "Gold-standard retrieval evaluation queries against WS1 (the Locus repo itself). 'expected_files' lists relative paths from the workspace root that MUST appear in retrieved results for full recall on a query — keep them tight (1–3 paths per query) so recall@K stays meaningful. Add new queries via tests/retrieval_eval/curate.* (extracts from saved sessions) or by hand. Run: locus_retrieval_eval --workspace . --queries tests/retrieval_eval/queries.json",
+  "_about": "Gold-standard retrieval evaluation queries against WS1 (the Locus repo itself). 'expected_files' lists relative paths from the workspace root that MUST appear in retrieved results for full recall on a query -- keep them tight (1-3 paths per query) so recall@K stays meaningful. Add new queries via tests/retrieval_eval/curate.* (extracts from saved sessions) or by hand. Run: locus_retrieval_eval --workspace . --queries tests/retrieval_eval/queries.json",
   "queries": [
     { "query": "diff-based file editing tool", "expected_files": ["src/tools/file_tools.cpp", "src/tools/file_tools.h"] },
     { "query": "edit_file old_string new_string", "expected_files": ["src/tools/file_tools.cpp"] },

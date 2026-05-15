@@ -12,10 +12,10 @@ namespace locus {
 class LocusFrame;
 
 // wxApp entry point. Owns one `LocusSession` (workspace + LLM + tools +
-// agent, bundled — see src/core/locus_session.h) plus the main frame.
+// agent, bundled -- see src/core/locus_session.h) plus the main frame.
 // Single-instance enforcement is per-workspace via the Workspace's
 // internal `WorkspaceLock` (file lock inside `.locus/`), not a
-// process-global wxSingleInstanceChecker — so two GUIs on different folders
+// process-global wxSingleInstanceChecker -- so two GUIs on different folders
 // coexist, but two on the same (or nested) folder fail cleanly.
 class LocusApp : public wxApp {
 public:

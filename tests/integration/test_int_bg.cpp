@@ -10,8 +10,8 @@
 using namespace locus::integration;
 using namespace std::chrono_literals;
 
-// S4.I — background command tools. These use the LLM to chain run_command_bg
-// → read_process_output / list_processes / stop_process in a single turn.
+// S4.I -- background command tools. These use the LLM to chain run_command_bg
+// -> read_process_output / list_processes / stop_process in a single turn.
 // Small models (Gemma 4 E4B) tend to call them sequentially within one
 // response, which is exactly the behaviour we want to validate.
 
@@ -81,7 +81,7 @@ TEST_CASE("agent stops a long-running background process",
     REQUIRE(r.tool_called("run_command_bg"));
     REQUIRE(r.tool_called("stop_process"));
 
-    // Verify directly via the registry that the process did get killed —
+    // Verify directly via the registry that the process did get killed --
     // the LLM may have invented a process_id, so we check the most recent
     // entry actually terminated.
     auto* reg = h.workspace().processes();

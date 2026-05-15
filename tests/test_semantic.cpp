@@ -27,7 +27,7 @@ namespace fs = std::filesystem;
 // Walk up to 6 levels looking for a "models/<name>" sibling.
 static fs::path find_model()
 {
-    // Smallest model first — these tests only exercise embed() mechanics, not
+    // Smallest model first -- these tests only exercise embed() mechanics, not
     // multilingual quality, so the 37 MB bge-small load (~600 ms) beats the
     // 600 MB bge-m3 load (~6 s) every time. bge-m3 stays as a fallback for
     // environments that only have the recommended profile installed.
@@ -277,7 +277,7 @@ TEST_CASE("RRF merge empty inputs", "[s2.1]")
 }
 
 // ============================================================================
-// Embedder tests — fail-hard when the GGUF model is missing
+// Embedder tests -- fail-hard when the GGUF model is missing
 // ============================================================================
 
 // Construct an Embedder.  The model must be present at models/*.gguf; a

@@ -416,6 +416,17 @@ target_link_libraries(locus_core PUBLIC
     pugixml::pugixml
 )
 
+# S5.P source-encoding lint -- fail the build if em-dashes or other prohibited
+# non-ASCII characters appear in src/ or tests/ outside the allow-list.
+add_custom_command(TARGET locus_core POST_BUILD
+    COMMAND ${CMAKE_COMMAND}
+        -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
+        -DALLOWLIST=${CMAKE_SOURCE_DIR}/scripts/non_ascii_allowlist.txt
+        -P ${CMAKE_SOURCE_DIR}/scripts/check_no_em_dashes.cmake
+    COMMENT "S5.P: checking source files for prohibited non-ASCII characters"
+    VERBATIM
+)
+
 # -- Main executable -----------------------------------------------------------
 
 add_executable(locus

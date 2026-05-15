@@ -63,7 +63,7 @@ TEST_CASE("symbol search locates a class definition", "[integration][llm][search
 
     REQUIRE_FALSE(r.timed_out);
     REQUIRE(r.tool_called("search"));
-    // Any mode is acceptable — we assert on whether the right file comes back.
+    // Any mode is acceptable -- we assert on whether the right file comes back.
     REQUIRE((search_result_mentions(r, "agent_core.h") ||
              search_result_mentions(r, "agent_core.cpp")));
 }
@@ -84,7 +84,7 @@ TEST_CASE("semantic / hybrid search finds embedding code", "[integration][llm][s
 
     std::string mode = search_mode(r);
     INFO("mode=" << mode);
-    // Accept either semantic or hybrid — both should surface the embedding code.
+    // Accept either semantic or hybrid -- both should surface the embedding code.
     bool plausible =
         search_result_mentions(r, "embedding_worker") ||
         search_result_mentions(r, "embedder") ||
@@ -121,13 +121,13 @@ TEST_CASE("regex search finds an exact punctuation-preserving identifier",
     REQUIRE(r.errors.empty());
     REQUIRE(r.tool_called("search"));
 
-    // The LLM was told to use regex mode explicitly. Accept regex only —
+    // The LLM was told to use regex mode explicitly. Accept regex only --
     // the whole point is that regex preserves casing / punctuation that FTS5
     // would tokenize away.
     REQUIRE(search_mode(r) == "regex");
 
     // SQLITE_TRANSIENT lives in indexer.cpp, index_query.cpp, embedding_worker.cpp.
-    // Any one of those surfacing is enough — the LLM's report might cite just one.
+    // Any one of those surfacing is enough -- the LLM's report might cite just one.
     bool mentioned =
         search_result_mentions(r, "indexer.cpp") ||
         search_result_mentions(r, "index_query.cpp") ||

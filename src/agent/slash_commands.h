@@ -25,7 +25,7 @@ public:
     using std::runtime_error::runtime_error;
 };
 
-// Result of parsing a slash command. `is_help == true` for `/help` — in that
+// Result of parsing a slash command. `is_help == true` for `/help` -- in that
 // case tool_name/args are unused. For any other `/<name>`, tool_name is the
 // identifier after the slash; the tool itself may or may not exist (the
 // dispatcher handles the unknown case).

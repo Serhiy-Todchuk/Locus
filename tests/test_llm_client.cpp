@@ -117,7 +117,7 @@ TEST_CASE("SseParser: partial line flushed on finish", "[s0.5]")
         return true;
     });
 
-    // No trailing newline — must be flushed by finish().
+    // No trailing newline -- must be flushed by finish().
     parser.feed("data: unterminated");
     parser.finish();
 
@@ -213,7 +213,7 @@ TEST_CASE("Token estimation: conversation", "[s0.5]")
     // user:   4 overhead + 5/4=1 (rounds: (5+3)/4=2) = 6
     // total = 14
     CHECK(tokens > 0);
-    CHECK(tokens < 50);  // sanity — not wildly off
+    CHECK(tokens < 50);  // sanity -- not wildly off
 }
 
 // ============================================================================

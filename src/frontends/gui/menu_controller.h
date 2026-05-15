@@ -11,7 +11,7 @@
 namespace locus {
 
 // Owns the application menu bar and its dynamic submenus (Recent Workspaces,
-// Saved Sessions). Holds no app state itself — every action runs through the
+// Saved Sessions). Holds no app state itself -- every action runs through the
 // hooks supplied at construction. LocusFrame supplies the hooks.
 class MenuController {
 public:
@@ -35,7 +35,7 @@ public:
         // S5.B -- Terminal panel toggle (Ctrl+`).
         std::function<void(bool show)>              on_toggle_terminal_pane;
         std::function<void()>                       on_about;
-        // Called when the Session menu opens — controller uses the returned
+        // Called when the Session menu opens -- controller uses the returned
         // list to rebuild the Saved Sessions submenu so newly-saved sessions
         // appear without restarting the app.
         std::function<std::vector<SessionInfo>()>   provide_sessions;
@@ -44,7 +44,7 @@ public:
     MenuController(wxFrame* frame, Hooks hooks);
 
     // Build the wxMenuBar and attach it to the owning frame. Idempotent only
-    // in the sense that calling twice is undefined — call exactly once.
+    // in the sense that calling twice is undefined -- call exactly once.
     void install();
 
     // Rebuild the "Recent Workspaces" submenu from disk.

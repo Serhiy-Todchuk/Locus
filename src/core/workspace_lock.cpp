@@ -27,7 +27,7 @@ using json = nlohmann::json;
 namespace {
 
 // Best-effort read of the lock file's diagnostic JSON. Returns "" on any
-// error — the caller folds whatever comes back into the error message.
+// error -- the caller folds whatever comes back into the error message.
 std::string read_lock_diagnostic(const fs::path& p)
 {
     std::ifstream in(p, std::ios::binary);
@@ -76,7 +76,7 @@ bool ancestor_is_stale(const fs::path& lock_path)
                            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
                            nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (h == INVALID_HANDLE_VALUE)
-        return true;  // file not openable → treat as stale
+        return true;  // file not openable -> treat as stale
 
     OVERLAPPED ov{};
     BOOL ok = LockFileEx(h,
@@ -173,7 +173,7 @@ WorkspaceLock::WorkspaceLock(const fs::path& workspace_root)
     handle_ = h;
 
     // Overwrite the lock file with our diagnostic JSON. Fixed-size layout not
-    // required — the file is only ever read for human-readable hints.
+    // required -- the file is only ever read for human-readable hints.
     json info;
     info["pid"]     = static_cast<long long>(GetCurrentProcessId());
     info["started"] = now_iso8601();

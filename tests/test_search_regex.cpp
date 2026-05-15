@@ -1,4 +1,4 @@
-// S4.P — regex mode on the unified `search` tool.
+// S4.P -- regex mode on the unified `search` tool.
 //
 // These tests drive the real `Workspace` so the indexer's file enumeration
 // (which regex mode consumes via `list_directory`) is exercised end-to-end.
@@ -95,7 +95,7 @@ TEST_CASE("search mode=regex rejects malformed pattern", "[s4.p][search][regex]"
     {
         locus::Workspace ws(tmp);
         locus::SearchTool tool;
-        // Unclosed group — invalid ECMAScript regex.
+        // Unclosed group -- invalid ECMAScript regex.
         auto result = tool.execute(regex_call({
             {"mode", "regex"},
             {"query", "foo("},
@@ -124,7 +124,7 @@ TEST_CASE("search regex matches punctuation-heavy identifiers", "[s4.p][search][
         locus::Workspace ws(tmp);
         locus::SearchRegexTool tool;
 
-        // Arrow + member — FTS5 would lose the punctuation entirely.
+        // Arrow + member -- FTS5 would lose the punctuation entirely.
         auto arrow = tool.execute(
             locus::ToolCall{"r", "search_regex",
                 {{"query", "->m_cache"}}}, ws);

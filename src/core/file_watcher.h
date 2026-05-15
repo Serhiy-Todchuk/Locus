@@ -73,7 +73,7 @@ private:
     std::vector<FileEvent> ready_;
     // Dedupe set for excluded-path trace logging. efsw fires per-event for
     // every excluded file (SQLite WAL flushes on `.locus/vectors.db-wal` can
-    // emit several events per second) — we only want to see each excluded
+    // emit several events per second) -- we only want to see each excluded
     // path once. Bounded by the number of unique excluded paths encountered.
     std::unordered_set<std::string> excluded_logged_;
 };

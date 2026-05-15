@@ -15,7 +15,7 @@
 
 #ifdef _WIN32
 // Forward-declare opaque HANDLE (void*) without dragging windows.h into this
-// header — keeps compile times sane for callers that just want the registry.
+// header -- keeps compile times sane for callers that just want the registry.
 using LocusOsHandle = void*;
 #endif
 
@@ -124,7 +124,7 @@ public:
 
     // Read buffered output for `id`. If `since_offset` is std::nullopt, the
     // registry reads "everything new since the last read of this pid by this
-    // tool" — it keeps the per-pid bookkeeping so the LLM doesn't have to.
+    // tool" -- it keeps the per-pid bookkeeping so the LLM doesn't have to.
     // Returns std::nullopt if `id` is unknown.
     std::optional<BackgroundProcess::ReadResult>
     read_output(int id, std::optional<std::size_t> since_offset);

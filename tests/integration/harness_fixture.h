@@ -33,7 +33,7 @@ struct PromptResult {
     const ObservedToolResult* find_result_for(std::string_view tool_name) const;
 };
 
-// The shared integration harness. Heavy — opens the repo as a workspace,
+// The shared integration harness. Heavy -- opens the repo as a workspace,
 // connects to LM Studio, starts an agent thread. Lazy-constructed on first
 // access and kept alive for the life of the process.
 class IntegrationHarness {
@@ -105,7 +105,7 @@ private:
     std::unique_ptr<HarnessFrontend> frontend_;
 };
 
-// Convenience — same as IntegrationHarness::shared().
+// Convenience -- same as IntegrationHarness::shared().
 inline IntegrationHarness& harness() { return IntegrationHarness::shared(); }
 
 } // namespace locus::integration

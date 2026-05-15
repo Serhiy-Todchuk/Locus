@@ -25,7 +25,7 @@ public:
 
 // Create a new file, or overwrite an existing one when `overwrite=true` is
 // set explicitly. Parent directories are created as needed. Without
-// `overwrite`, the tool fails if the target already exists — protects
+// `overwrite`, the tool fails if the target already exists -- protects
 // against hallucinated paths that happen to collide with existing files.
 // For modifying existing files, prefer `edit_file`.
 class WriteFileTool : public ITool {
@@ -53,19 +53,19 @@ public:
 };
 
 // Exact string-match edit (Claude-Code-style: find `old_string` in the file,
-// replace with `new_string`). Always takes an atomic list of edits — pass a
+// replace with `new_string`). Always takes an atomic list of edits -- pass a
 // one-element array for the common single-edit case. Either every edit
 // applies, or the file is left untouched. Each edit is applied in order to
 // the running buffer; later edits see the results of earlier edits.
 // Uniqueness fails when `old_string` occurs more than once and `replace_all`
-// is false — the LLM is expected to widen the match with surrounding context
+// is false -- the LLM is expected to widen the match with surrounding context
 // and retry. Requires a prior `read_file` on the same path in this process
 // (S4.A).
 class EditFileTool : public ITool {
 public:
     std::string name()        const override { return "edit_file"; }
     std::string description() const override {
-        return "Edit a file by exact string replacement. Prefer this over write_file — "
+        return "Edit a file by exact string replacement. Prefer this over write_file -- "
                "it is faster, cheaper, and immune to drift. Pass an `edits` array "
                "(use a single element for one change, multiple for an atomic batch). "
                "Each `old_string` must match byte-for-byte (including whitespace) and "

@@ -26,7 +26,7 @@ void extract_from_tool_call(const std::string& tool_name,
     try {
         args = json::parse(raw_args);
     } catch (const json::exception&) {
-        return;  // malformed args — model hallucination, skip silently
+        return;  // malformed args -- model hallucination, skip silently
     }
     if (!args.is_object()) return;
 
@@ -46,7 +46,7 @@ void extract_from_tool_call(const std::string& tool_name,
     q.query          = args.value("query", "");
     q.pattern        = args.value("pattern", "");
 
-    // Skip empties — happens when the model called a search tool with the
+    // Skip empties -- happens when the model called a search tool with the
     // wrong arg shape (regex without `pattern`, semantic without `query`, ...).
     if (q.query.empty() && q.pattern.empty()) return;
     out.push_back(std::move(q));
@@ -108,7 +108,7 @@ curate_from_sessions(const fs::path& sessions_dir)
 
 std::string to_queries_json_template(const std::vector<CuratedQuery>& queries)
 {
-    // Deduplicate on (mode, normalised query) — sessions often repeat the same
+    // Deduplicate on (mode, normalised query) -- sessions often repeat the same
     // search verbatim across turns.
     std::set<std::pair<std::string, std::string>> seen;
 

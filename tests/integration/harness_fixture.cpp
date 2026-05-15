@@ -115,7 +115,7 @@ void init_integration_logging(const fs::path& locus_dir)
             spdlog::set_default_logger(logger);
             spdlog::flush_on(spdlog::level::warn);
         } catch (const spdlog::spdlog_ex& ex) {
-            // Logger already configured by another consumer — ignore.
+            // Logger already configured by another consumer -- ignore.
             (void)ex;
         }
     });
@@ -140,7 +140,7 @@ IntegrationHarness& IntegrationHarness::shared()
 {
     auto& slot = instance_slot();
     if (!slot) {
-        // Private ctor — use `new` then wrap.
+        // Private ctor -- use `new` then wrap.
         slot.reset(new IntegrationHarness());
     }
     return *slot;
@@ -178,12 +178,12 @@ IntegrationHarness::IntegrationHarness()
 
     llm_ = create_llm_client(llm_config_);
 
-    // Reachability gate — THE requirement: fail fast if LM Studio is not up.
+    // Reachability gate -- THE requirement: fail fast if LM Studio is not up.
     ModelInfo mi = llm_->query_model_info();
     if (mi.id.empty()) {
         throw std::runtime_error(
             "LM Studio not reachable at " + llm_config_.base_url +
-            " — start LM Studio and load a tool-calling model, or set "
+            " -- start LM Studio and load a tool-calling model, or set "
             "LOCUS_INT_TEST_ENDPOINT to the correct URL.");
     }
     model_id_ = mi.id;
@@ -191,14 +191,14 @@ IntegrationHarness::IntegrationHarness()
     llm_config_.context_limit =
         mi.context_length > 0 ? mi.context_length : 8192;
 
-    spdlog::info("Integration harness: LLM ok — model='{}', ctx={}",
+    spdlog::info("Integration harness: LLM ok -- model='{}', ctx={}",
                  llm_config_.model, llm_config_.context_limit);
 
     // Workspace (blocking initial index).
     workspace_ = std::make_unique<Workspace>(workspace_root_);
 
     const auto& st = workspace_->indexer().stats();
-    spdlog::info("Integration harness: index ready — {} files, {} symbols, {} headings",
+    spdlog::info("Integration harness: index ready -- {} files, {} symbols, {} headings",
                  st.files_total, st.symbols_total, st.headings_total);
 
     // Tool registry.
@@ -208,7 +208,7 @@ IntegrationHarness::IntegrationHarness()
     // Force every tool through the approval gate so the harness sees a
     // uniform on_tool_call_pending callback regardless of each tool's default
     // policy (read_file / search / list_directory / get_file_outline are
-    // auto-approve in normal operation — we override here so the test can
+    // auto-approve in normal operation -- we override here so the test can
     // observe every tool invocation). The harness's on_tool_call_pending
     // auto-approves synchronously, so there's no real approval round-trip.
     for (auto* tool : tools_->all()) {

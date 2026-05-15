@@ -21,13 +21,13 @@ inline wxColour text_fg()
     return is_dark() ? wxColour(220, 220, 220) : wxColour(0, 0, 0);
 }
 
-// Panel background — follow the OS "window" colour so panels blend with the frame.
+// Panel background -- follow the OS "window" colour so panels blend with the frame.
 inline wxColour panel_bg()
 {
     return wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW);
 }
 
-// Secondary / hint text colour — readable on either theme.
+// Secondary / hint text colour -- readable on either theme.
 inline wxColour muted_fg()
 {
     return wxSystemSettings::GetColour(wxSYS_COLOUR_GRAYTEXT);

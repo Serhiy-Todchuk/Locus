@@ -258,7 +258,7 @@ bool LocusApp::OnInit()
 
     // Seed LLM config from the user's startup args. Empty/zero fields are
     // filled in by LocusSession from .locus/config.json + the live model
-    // probe — see src/core/locus_session.cpp.
+    // probe -- see src/core/locus_session.cpp.
     LLMConfig seed;
     seed.base_url      = endpoint;
     seed.model         = model;
@@ -321,7 +321,7 @@ void LocusApp::open_workspace(const std::string& path)
     DeletePendingObjects();
 
     // ~LocusSession joins the agent thread, then drops tools / llm /
-    // workspace in reverse declaration order — same teardown sequence as
+    // workspace in reverse declaration order -- same teardown sequence as
     // the old hand-wired code.
     session_.reset();
 

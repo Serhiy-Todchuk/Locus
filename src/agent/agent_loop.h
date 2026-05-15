@@ -27,7 +27,7 @@ struct AgentStepResult {
 // Drives a single LLM call: builds the tool schema, streams tokens,
 // accumulates reasoning/text/tool-call fragments, records an activity
 // event, and returns the pieces that belong to the conversation. Does
-// not know how tools are executed — that's ToolDispatcher's job.
+// not know how tools are executed -- that's ToolDispatcher's job.
 class AgentLoop {
 public:
     AgentLoop(ILLMClient& llm,

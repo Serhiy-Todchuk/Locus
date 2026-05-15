@@ -23,7 +23,7 @@ namespace locus {
 static constexpr int k_flush_interval_ms = 33;  // ~30fps
 
 // ---------------------------------------------------------------------------
-// Prism.js — minimal bundle for syntax highlighting.
+// Prism.js -- minimal bundle for syntax highlighting.
 // We embed the core + common languages inline to avoid external file deps.
 // This is the CDN URL approach for now; a bundled copy can replace it later
 // if offline-only operation matters for the GUI too.
@@ -800,7 +800,7 @@ void ChatPanel::create_webview()
     // Block navigation to external URLs.
     webview_->Bind(wxEVT_WEBVIEW_NAVIGATING, &ChatPanel::on_webview_navigating, this);
 
-    // SetPage() is async in WebView2 — wait for loaded event before running JS.
+    // SetPage() is async in WebView2 -- wait for loaded event before running JS.
     webview_->Bind(wxEVT_WEBVIEW_LOADED, [this](wxWebViewEvent&) {
         if (page_ready_) return;  // only handle the first load
         page_ready_ = true;
@@ -835,7 +835,7 @@ void ChatPanel::create_input()
     // turn, and the agent's context-budget machinery handles the downstream
     // limits properly.
     input_->SetMaxLength(0);
-    // No SetHint() — wx's multiline+RICH2 hint seeds real text content on
+    // No SetHint() -- wx's multiline+RICH2 hint seeds real text content on
     // Windows rather than painting an overlay, so the "placeholder" becomes
     // editable and has to be manually deleted. Use a tooltip instead for
     // discoverability; the keystroke help lives in the status bar / footer.
@@ -912,7 +912,7 @@ void ChatPanel::create_footer()
 }
 
 // ---------------------------------------------------------------------------
-// Public API — called from LocusFrame event handlers
+// Public API -- called from LocusFrame event handlers
 // ---------------------------------------------------------------------------
 
 void ChatPanel::on_turn_start()
@@ -1013,7 +1013,7 @@ void ChatPanel::on_turn_complete()
             "'" + js_escape(wxString::FromUTF8(current_reasoning_)) + "'"));
     }
 
-    // Collapse reasoning block: "Thinking…" → "Thoughts".
+    // Collapse reasoning block: "Thinking..." -> "Thoughts".
     if (reasoning_id_ != 0) {
         run_script(wxString::Format(
             "finalizeReasoning(%d, 'Thoughts');", reasoning_id_));
@@ -1862,7 +1862,7 @@ wxString ChatPanel::active_slash_token() const
     if (v.empty() || v[0] != '/') return wxEmptyString;
 
     // If the cursor has moved past a whitespace character, the user is
-    // filling in arguments — suggestions should be hidden.
+    // filling in arguments -- suggestions should be hidden.
     wxString token;
     for (size_t i = 1; i < v.size(); ++i) {
         wxUniChar c = v[i];
@@ -1922,7 +1922,7 @@ void ChatPanel::update_slash_popup()
         slash_popup_shown_ = true;
         input_->SetFocus();
     } else {
-        // Already shown — reposition (size may have changed with filter).
+        // Already shown -- reposition (size may have changed with filter).
         slash_popup_->show_anchored(anchor, w);
     }
 }
@@ -2171,7 +2171,7 @@ void ChatPanel::on_webview_navigating(wxWebViewEvent& evt)
 {
     wxString url = evt.GetURL();
 
-    // Allow the initial SetPage() load — before page_ready_, let everything through.
+    // Allow the initial SetPage() load -- before page_ready_, let everything through.
     if (!page_ready_)
         return;
 

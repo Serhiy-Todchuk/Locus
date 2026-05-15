@@ -122,20 +122,20 @@ struct WorkspaceConfig {
     // Absent entries fall back to the tool's default (ITool::approval_policy()).
     std::unordered_map<std::string, ToolApprovalPolicy> tool_approval_policies;
 
-    // S3.L — token-cost guardrail. AgentCore logs the per-turn tool-manifest
+    // S3.L -- token-cost guardrail. AgentCore logs the per-turn tool-manifest
     // size at info level every turn; emits a warning when the manifest crosses
-    // this threshold. 4000 ≈ 12% of a 32K context — a reasonable "we've grown
+    // this threshold. 4000 ≈ 12% of a 32K context -- a reasonable "we've grown
     // too much" signal once M4 adds ~20 more tools.
     int tool_manifest_warn_tokens = 4000;
 
-    // S4.I — per-background-process output ring buffer cap. The reader thread
+    // S4.I -- per-background-process output ring buffer cap. The reader thread
     // appends stdout+stderr until this many bytes are buffered; older bytes
     // are dropped from the front (the LLM is told how many it missed). 256 KB
     // covers a verbose dev-server log between turns without paging the agent
     // thread, and is still cheap (a few processes × 256 KB is negligible).
     int process_output_buffer_kb = 256;
 
-    // S4.T — between-turn external file-change awareness. When true, AgentCore
+    // S4.T -- between-turn external file-change awareness. When true, AgentCore
     // snapshots indexed file mtimes at end of each assistant turn; on the next
     // user turn it computes the diff (excluding files the agent itself touched
     // that turn) and prepends a one-line note to the user message so the LLM
@@ -152,7 +152,7 @@ struct WorkspaceConfig {
     // for ~one fewer round trip per edit.
     bool require_read_before_edit = true;
 
-    // S4.R — workspace-scoped memory bank. When enabled, two tools land in the
+    // S4.R -- workspace-scoped memory bank. When enabled, two tools land in the
     // manifest (`add_memory`, `search_memory`), a slot is reserved in the
     // system prompt for pinned + recently-used entries, and `/memorize` is
     // accepted as a slash command. Disable to remove all three surfaces.
@@ -235,7 +235,7 @@ namespace capability_token_estimates {
 
 // Owns all workspace-level resources: config, database, file watcher, LOCUS.md.
 // One Workspace instance per open folder. Implements `IWorkspaceServices` so it
-// can be passed directly to `AgentCore` and tools — no adapter wrapper needed.
+// can be passed directly to `AgentCore` and tools -- no adapter wrapper needed.
 class Workspace : public IWorkspaceServices {
 public:
     // Opens a workspace at the given path. Creates .locus/ if absent.
@@ -299,7 +299,7 @@ private:
     fs::path locus_dir_;
     WorkspaceConfig config_;
     std::string locus_md_;
-    // Held first, released last — stops another Locus process from opening
+    // Held first, released last -- stops another Locus process from opening
     // this workspace (or a nested/ancestor one) while we own it.
     std::unique_ptr<WorkspaceLock> lock_;
     std::unique_ptr<Database> main_db_;
@@ -309,7 +309,7 @@ private:
     std::unique_ptr<Indexer> indexer_;
     std::unique_ptr<IndexQuery> query_;
     // shared_ptr so a process-wide hook (`set_embedder_provider`) can hand the
-    // same Embedder to multiple Workspace instances — primarily a test-suite
+    // same Embedder to multiple Workspace instances -- primarily a test-suite
     // optimisation; production unique-Workspace use is unaffected.
     std::shared_ptr<Embedder> embedder_;
     std::unique_ptr<EmbeddingWorker> embedding_worker_;
@@ -317,11 +317,11 @@ private:
     // Owned after `indexer_` so it stops + joins before the indexer is torn
     // down (the pump's background thread feeds events into the indexer).
     std::unique_ptr<WatcherPump> watcher_pump_;
-    // S4.I — long-running shell processes spawned by the agent. The dtor
+    // S4.I -- long-running shell processes spawned by the agent. The dtor
     // terminates every still-running child so workspace close never leaks
     // background processes.
     std::unique_ptr<ProcessRegistry> processes_;
-    // S4.R — workspace-scoped memory bank. Optional: null when
+    // S4.R -- workspace-scoped memory bank. Optional: null when
     // `WorkspaceConfig::memory_enabled` is false. Reuses the workspace
     // embedder and reranker via raw pointers stored at construction time;
     // hot-toggling those isn't supported (re-open the workspace).

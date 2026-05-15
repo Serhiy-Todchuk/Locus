@@ -30,7 +30,7 @@ QueryMetrics compute(const std::vector<std::string>&        retrieved,
                      const std::unordered_set<std::string>& relevant,
                      const std::vector<int>&                ks);
 
-// Aggregated metrics across many queries — element-wise mean. Empty-input
+// Aggregated metrics across many queries -- element-wise mean. Empty-input
 // produces an all-zero result.
 struct AggregateMetrics {
     std::vector<double> mean_recall_at_k;

@@ -25,7 +25,7 @@ public:
     ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws) override;
 };
 
-// -- S4.I — background processes -------------------------------------------
+// -- S4.I -- background processes -------------------------------------------
 
 class RunCommandBgTool : public ITool {
 public:
@@ -54,7 +54,7 @@ public:
                "everything new since the last read of this process_id; pass `since_offset=0` "
                "to read from the beginning. Returns the data, the next offset to pass back, "
                "the process status (running/exited/killed), and the exit code if it has "
-               "exited. Output is ring-buffered — extremely chatty processes may drop bytes.";
+               "exited. Output is ring-buffered -- extremely chatty processes may drop bytes.";
     }
     std::vector<ToolParam> params() const override {
         return {

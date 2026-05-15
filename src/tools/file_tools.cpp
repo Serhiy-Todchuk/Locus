@@ -91,7 +91,7 @@ ToolResult ReadFileTool::execute(const ToolCall& call, IWorkspaceServices& ws)
 
 std::string WriteFileTool::preview(const ToolCall& call) const
 {
-    // No workspace access from inside preview() — surface the intent as the
+    // No workspace access from inside preview() -- surface the intent as the
     // LLM declared it. The execute path is what actually enforces create-vs-
     // overwrite based on the real file state.
     std::string path = call.args.value("path", "");
@@ -122,7 +122,7 @@ ToolResult WriteFileTool::execute(const ToolCall& call, IWorkspaceServices& ws)
                             " (set overwrite=true to replace it, or use edit_file "
                             "for partial changes)");
 
-    // Make sure the containing directory exists — covers both fresh files and
+    // Make sure the containing directory exists -- covers both fresh files and
     // rewrites whose directory got removed since the path was chosen.
     std::error_code ec;
     fs::create_directories(full.parent_path(), ec);
@@ -305,7 +305,7 @@ ToolResult EditFileTool::execute(const ToolCall& call, IWorkspaceServices& ws)
     if (!slurp(full, buf))
         return error_result("Error: cannot open file for read: " + rel_path);
 
-    // Apply every edit to an in-memory buffer. Any failure → discard buffer,
+    // Apply every edit to an in-memory buffer. Any failure -> discard buffer,
     // file on disk is unchanged (atomicity). Later edits see earlier results.
     for (size_t i = 0; i < edits.size(); ++i) {
         const auto& e = edits[i];
@@ -320,7 +320,7 @@ ToolResult EditFileTool::execute(const ToolCall& call, IWorkspaceServices& ws)
                 : " (edit " + std::to_string(i + 1) + "/" +
                   std::to_string(edits.size()) + ")";
             return error_result(err + where +
-                                " — no changes written (edits are atomic)");
+                                " -- no changes written (edits are atomic)");
         }
     }
 

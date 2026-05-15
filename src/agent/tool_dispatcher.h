@@ -28,7 +28,7 @@ class MetricsAggregator;
 // append callback. Owns the decision condvar/mutex and is the sole reader
 // of the shared cancel flag when blocked on approval.
 //
-// The dispatcher does not touch ConversationHistory directly — callers pass
+// The dispatcher does not touch ConversationHistory directly -- callers pass
 // an `AppendFn` so the agent thread remains the only writer.
 class ToolDispatcher {
 public:
@@ -42,7 +42,7 @@ public:
                    MetricsAggregator* metrics = nullptr);
 
     // Look up, gate, execute, and inject one tool call.
-    // The unknown-tool case is handled here — a tool-error result is
+    // The unknown-tool case is handled here -- a tool-error result is
     // appended and an error event is emitted.
     void dispatch(const ToolCall& call, const AppendFn& append_result);
 

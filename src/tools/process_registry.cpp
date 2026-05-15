@@ -46,7 +46,7 @@ BackgroundProcess::BackgroundProcess(int id, std::string command, std::size_t bu
       sink_broker_(sink_broker)
 {
     // Reserve up front so the ring buffer never reallocates after the cap is
-    // hit — keeps the reader thread out of the allocator on hot output.
+    // hit -- keeps the reader thread out of the allocator on hot output.
     buffer_.reserve(buffer_cap_ > 0 ? buffer_cap_ : std::size_t{4096});
 }
 
@@ -107,7 +107,7 @@ void BackgroundProcess::append_locked(const char* data, std::size_t n)
         return;
     }
     if (n >= buffer_cap_) {
-        // The new chunk alone exceeds the cap — keep only its tail.
+        // The new chunk alone exceeds the cap -- keep only its tail.
         std::size_t keep = buffer_cap_;
         std::size_t drop_old = buffer_.size();
         bytes_dropped_ += drop_old + (n - keep);
@@ -159,7 +159,7 @@ BackgroundProcess::ReadResult BackgroundProcess::read_output(std::size_t since_o
 void BackgroundProcess::terminate()
 {
 #ifdef _WIN32
-    // Snapshot the job under lock. TerminateJobObject is async — the reader
+    // Snapshot the job under lock. TerminateJobObject is async -- the reader
     // thread will observe the pipe close and exit on its own.
     HANDLE job_handle = nullptr;
     {
@@ -261,7 +261,7 @@ void BackgroundProcess::reader_loop()
         append_locked(buf, bytes);
     }
 
-    // Pipe closed — child + descendants have all exited (or the job was
+    // Pipe closed -- child + descendants have all exited (or the job was
     // terminated). Capture the exit code if we weren't explicitly killed.
     HANDLE proc = static_cast<HANDLE>(process_);
     int    final_code = 0;

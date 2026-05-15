@@ -18,7 +18,7 @@ public:
 
 private:
     // total == 0 means the op is idle; total > 0 with done < total means
-    // running; total > 0 with done >= total means just finished — collapsed
+    // running; total > 0 with done >= total means just finished -- collapsed
     // to idle by the setter so compose() omits it.
     int indexing_done_   = 0;
     int indexing_total_  = 0;

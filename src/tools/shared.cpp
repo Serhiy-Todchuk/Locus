@@ -72,7 +72,7 @@ fs::path resolve_path(IWorkspaceServices& ws, const std::string& rel)
     std::error_code ec;
     fs::path full = fs::canonical(ws.root() / rel, ec);
     if (ec) {
-        // canonical failed (file may not exist yet) — try weakly_canonical
+        // canonical failed (file may not exist yet) -- try weakly_canonical
         full = fs::weakly_canonical(ws.root() / rel, ec);
         if (ec) return {};
     }

@@ -120,7 +120,7 @@ TEST_CASE("ProcessRegistry: ring buffer drops bytes on overflow", "[s4.i]")
     REQUIRE(r.has_value());
     // Cap is honored: stored slice never exceeds the ring buffer cap.
     REQUIRE(r->data.size() <= 64);
-    // Caller asked from byte 0; the registry has dropped older bytes — surface that.
+    // Caller asked from byte 0; the registry has dropped older bytes -- surface that.
     REQUIRE(r->dropped_before_window > 0);
     // next_offset is the running monotonic byte count; way past 64 here.
     REQUIRE(r->next_offset > 64);
@@ -151,7 +151,7 @@ TEST_CASE("ProcessRegistry: dtor terminates surviving processes", "[s4.i]")
         locus::ProcessRegistry reg(tmp_root(), 64 * 1024);
         id = reg.spawn("ping -n 60 -w 1000 127.0.0.1");
         REQUIRE(id > 0);
-        // Drop without explicitly stopping — dtor must not hang.
+        // Drop without explicitly stopping -- dtor must not hang.
     }
     // If we got here without timing out, the dtor terminated and joined OK.
     SUCCEED();

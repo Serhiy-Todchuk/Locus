@@ -51,7 +51,7 @@ bool icontains(std::string_view hay, std::string_view needle)
 }
 
 // Shell-style tokenizer: whitespace separates tokens, double quotes preserve
-// spaces. Mid-token quotes are spliced in (`a="b c"d` → `ab cd`). Throws
+// spaces. Mid-token quotes are spliced in (`a="b c"d` -> `ab cd`). Throws
 // SlashParseError on unterminated quote.
 std::vector<std::string> tokenize(std::string_view s)
 {
@@ -119,7 +119,7 @@ void assign_typed(nlohmann::json& args,
         else                          args[key] = value;
         return;
     }
-    // Unknown param name — pass through as string; the tool validates.
+    // Unknown param name -- pass through as string; the tool validates.
     args[key] = value;
 }
 

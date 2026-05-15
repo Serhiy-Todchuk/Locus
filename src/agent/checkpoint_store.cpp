@@ -17,7 +17,7 @@ namespace locus {
 namespace {
 
 // FNV-1a 64-bit. Cheap, dependency-free, plenty for "did the bytes change"
-// identification — not used for any security purpose.
+// identification -- not used for any security purpose.
 uint64_t fnv1a64(const char* data, size_t n)
 {
     constexpr uint64_t k_offset = 1469598103934665603ull;
@@ -164,7 +164,7 @@ bool CheckpointStore::snapshot_before(const std::string& session_id,
         if (entry.size_bytes > max_file_size_bytes_) {
             entry.skipped = true;
             spdlog::warn("CheckpointStore: skipping snapshot of '{}' "
-                         "({} bytes > {} byte limit) — undo via git instead",
+                         "({} bytes > {} byte limit) -- undo via git instead",
                          rel, entry.size_bytes, max_file_size_bytes_);
         } else {
             std::string bytes;
@@ -184,7 +184,7 @@ bool CheckpointStore::snapshot_before(const std::string& session_id,
         }
     }
 
-    // Append the new entry to the manifest (read-modify-write — IO is small).
+    // Append the new entry to the manifest (read-modify-write -- IO is small).
     nlohmann::json manifest;
     auto mpath = manifest_path(session_id, turn_id);
     if (fs::exists(mpath)) {
@@ -292,7 +292,7 @@ RestoreResult CheckpointStore::restore_turn(const std::string& session_id,
         }
 
         if (!e.existed) {
-            // File was created during the turn — undo by deleting it.
+            // File was created during the turn -- undo by deleting it.
             std::error_code ec;
             if (fs::exists(target, ec)) {
                 fs::remove(target, ec);

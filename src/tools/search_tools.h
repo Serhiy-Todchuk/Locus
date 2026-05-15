@@ -59,7 +59,7 @@ public:
 
 // The four individual search tools below remain available as direct `ITool`s
 // (e.g. for slash-command testing) but are NOT registered by
-// `register_builtin_tools()` since S3.L — the LLM sees a single `search` face.
+// `register_builtin_tools()` since S3.L -- the LLM sees a single `search` face.
 
 class SearchTextTool : public ITool {
 public:
@@ -114,7 +114,7 @@ public:
 };
 
 // Raw-content regex search. Runs in-process over indexed (non-binary) files via
-// `std::regex` (ECMAScript). Kept out of `register_builtin_tools()` — the LLM
+// `std::regex` (ECMAScript). Kept out of `register_builtin_tools()` -- the LLM
 // reaches it through `SearchTool`'s `mode=regex`. Exposed as a standalone
 // `ITool` so unit tests and the slash-command surface can invoke it directly,
 // matching the pattern used by the other per-mode tools.
@@ -123,7 +123,7 @@ public:
     std::string name()        const override { return "search_regex"; }
     std::string description() const override {
         return "Regex search over raw file content (ECMAScript syntax). "
-               "Unlike `search_text`, preserves punctuation and case — "
+               "Unlike `search_text`, preserves punctuation and case -- "
                "use for exact identifiers, operators, and TODO tags.";
     }
     std::vector<ToolParam> params() const override {

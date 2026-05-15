@@ -243,7 +243,7 @@ int main(int argc, char* argv[])
 
         // Bundle: workspace + LLM client + tool registry + agent core, started.
         // Destructor (end of try block) joins the agent thread before tearing
-        // anything down — same ordering as the old hand-wired path.
+        // anything down -- same ordering as the old hand-wired path.
         locus::LocusSession session(workspace_path, llm_cfg);
         auto& ws    = session.workspace();
         auto& agent = session.agent();
@@ -255,7 +255,7 @@ int main(int argc, char* argv[])
         // REPL.
         std::cout << "Locus ready. Type a message, or /quit to exit.\n\n";
 
-        // Enable bracketed paste — lets us receive multi-line pastes as a
+        // Enable bracketed paste -- lets us receive multi-line pastes as a
         // single message instead of each line being submitted separately.
         std::cout << "\x1b[?2004h" << std::flush;
 
@@ -380,7 +380,7 @@ int main(int argc, char* argv[])
         // the mode to whatever shell runs next.
         std::cout << "\x1b[?2004l" << std::flush;
 
-        // The session destructor will stop() the agent — but unregister the
+        // The session destructor will stop() the agent -- but unregister the
         // CLI first so it doesn't receive a final on_turn_complete from the
         // not-yet-joined agent thread after we've left this scope.
         agent.unregister_frontend(&cli);

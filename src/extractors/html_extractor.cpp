@@ -13,7 +13,7 @@ namespace locus {
 namespace {
 
 // Decode a tiny set of named entities + numeric &#NNN;/&#xNN; references.
-// We don't ship a full HTML entity table — this covers the common cases
+// We don't ship a full HTML entity table -- this covers the common cases
 // (text extraction, not rendering).
 std::string decode_entities(const std::string& in)
 {

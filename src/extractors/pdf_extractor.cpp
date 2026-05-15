@@ -40,7 +40,7 @@ void pdfium_release()
     }
 }
 
-// UTF-16LE (from PDFium) → UTF-8.
+// UTF-16LE (from PDFium) -> UTF-8.
 std::string utf16le_to_utf8(const std::vector<unsigned short>& u16, size_t len)
 {
     std::string out;

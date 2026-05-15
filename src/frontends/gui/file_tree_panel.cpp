@@ -255,7 +255,7 @@ void FileTreePanel::on_item_menu(wxTreeEvent& evt)
         show_in_explorer(rel_path);
         break;
     default:
-        break;  // wxID_NONE — user dismissed the menu
+        break;  // wxID_NONE -- user dismissed the menu
     }
 }
 
@@ -288,7 +288,7 @@ void FileTreePanel::show_in_explorer(const std::string& rel_path)
     abs = abs.lexically_normal();
     abs.make_preferred();  // forward slashes -> backslashes on Win32
 #ifdef _WIN32
-    // SHOpenFolderAndSelectItems is the recommended API for this — it handles
+    // SHOpenFolderAndSelectItems is the recommended API for this -- it handles
     // path normalization, quoting, and UNC paths internally. Passing a string
     // via `explorer.exe /select,...` is brittle: mixed separators cause it to
     // silently open the user's Documents folder instead.

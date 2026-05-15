@@ -1,0 +1,17 @@
+# Non-ASCII allow-list for the S5.P source-encoding lint.
+# Format: <workspace-relative-path>:<U+XXXX>
+#         or bare <workspace-relative-path> to exempt ALL non-ASCII in that file.
+#
+# Entries here suppress the build-time check in check_no_em_dashes.cmake.
+# Keep this list minimal -- each entry requires justification.
+
+# Plan-step status glyphs rendered inside WebView2's HTML (src/frontends/gui/chat_panel.cpp):
+#   U+2713 CHECK MARK (done)
+#   U+2717 BALLOT X (failed)
+#   U+29D7 BLACK HOURGLASS (in_progress)
+#   U+25CB WHITE CIRCLE (pending)
+# These are embedded in a JS string literal and rendered to the user; ASCII has no equivalent.
+src/frontends/gui/chat_panel.cpp:U+2713
+src/frontends/gui/chat_panel.cpp:U+2717
+src/frontends/gui/chat_panel.cpp:U+29D7
+src/frontends/gui/chat_panel.cpp:U+25CB

@@ -29,7 +29,7 @@ TEST_CASE("agent can read a known file via tool", "[integration][llm][smoke]")
 
     // The LLM must have invoked read_file somewhere in the turn. We don't
     // constrain which path flavor (CLAUDE.md, ./CLAUDE.md, CLAUDE.md with
-    // slashes) — just that a read_file call happened and produced a non-empty
+    // slashes) -- just that a read_file call happened and produced a non-empty
     // result.
     REQUIRE(r.tool_called("read_file"));
     const auto* res = r.find_result_for("read_file");
@@ -37,7 +37,7 @@ TEST_CASE("agent can read a known file via tool", "[integration][llm][smoke]")
     REQUIRE_FALSE(res->display.empty());
 
     // The final answer should reference something from CLAUDE.md's vocabulary.
-    // Keep the assertion loose — any of these words indicates the LLM read the
+    // Keep the assertion loose -- any of these words indicates the LLM read the
     // file rather than hallucinating.
     bool referenced =
         r.tokens.find("Locus") != std::string::npos ||

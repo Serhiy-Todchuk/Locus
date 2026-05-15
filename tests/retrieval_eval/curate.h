@@ -18,14 +18,14 @@ struct CuratedQuery {
 
 // Walk a sessions directory (.locus/sessions/*.json), parse each session, and
 // extract every search-tool invocation from assistant messages. Tool args are
-// stored as raw JSON strings on each ChatMessage::tool_calls entry — we parse
+// stored as raw JSON strings on each ChatMessage::tool_calls entry -- we parse
 // them here to recover the user-facing query text.
 //
 // Designed as the "activity-log replay" hook from S4.K: once a real user has
 // driven the agent for a while, drop the harvested list into queries.json and
 // hand-add expected_files to turn them into gold-standard queries.
 //
-// `sessions_dir` need not exist — returns empty on missing dir.
+// `sessions_dir` need not exist -- returns empty on missing dir.
 std::vector<CuratedQuery>
 curate_from_sessions(const fs::path& sessions_dir);
 

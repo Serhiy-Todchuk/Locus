@@ -36,7 +36,7 @@ void append_paragraph_text(const pugi::xml_node& p, std::string& out)
     visit(p);
 }
 
-// Extract heading level from paragraph style ("Heading1" → 1, etc.).
+// Extract heading level from paragraph style ("Heading1" -> 1, etc.).
 // Returns 0 if not a heading.
 int heading_level(const pugi::xml_node& p)
 {

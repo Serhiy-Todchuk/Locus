@@ -145,7 +145,7 @@ MetricsAggregator::Aggregates MetricsAggregator::aggregates() const
         a.tokens_per_second = (1000.0 * static_cast<double>(completion_total))
                               / static_cast<double>(a.stream_ms_total);
 
-    // Turn-time stats — only over turns that have ended.
+    // Turn-time stats -- only over turns that have ended.
     std::vector<long long> durations;
     durations.reserve(turns_.size());
     for (const auto& s : turns_) {
@@ -159,7 +159,7 @@ MetricsAggregator::Aggregates MetricsAggregator::aggregates() const
         std::vector<long long> sorted = durations;
         std::sort(sorted.begin(), sorted.end());
         a.max_turn_ms = sorted.back();
-        // p95: linear-interpolation-free lower-bound rank — fine for small N.
+        // p95: linear-interpolation-free lower-bound rank -- fine for small N.
         size_t idx = static_cast<size_t>(0.95 * (sorted.size() - 1) + 0.5);
         if (idx >= sorted.size()) idx = sorted.size() - 1;
         a.p95_turn_ms = sorted[idx];
@@ -320,7 +320,7 @@ nlohmann::json MetricsAggregator::to_json() const
 
 namespace {
 
-// Strip embedded commas/newlines from a CSV cell — the rendered values here
+// Strip embedded commas/newlines from a CSV cell -- the rendered values here
 // are tool names, error-free numbers, and short strings, so quoting suffices.
 std::string csv_cell(const std::string& s)
 {

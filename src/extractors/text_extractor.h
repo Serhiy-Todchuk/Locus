@@ -15,20 +15,20 @@ struct ExtractedHeading {
 
 // Result of extracting text from a file.  The indexer uses this to populate
 // FTS5 and headings tables.  If is_binary is true the file is logged and
-// skipped — text/headings are ignored.
+// skipped -- text/headings are ignored.
 struct ExtractionResult {
     std::string text;                           // plain text for FTS5
     std::vector<ExtractedHeading> headings;
     bool is_binary = false;                     // couldn't extract (encrypted, etc.)
 };
 
-// Pure interface.  Implementations live in src/extractors/ — one per format.
+// Pure interface.  Implementations live in src/extractors/ -- one per format.
 class ITextExtractor {
 public:
     virtual ~ITextExtractor() = default;
 
     // Extract readable text + headings from the file at abs_path.
-    // Implementations should NOT throw on recoverable failures — return
+    // Implementations should NOT throw on recoverable failures -- return
     // ExtractionResult{.is_binary = true} instead.
     virtual ExtractionResult extract(const std::filesystem::path& abs_path) = 0;
 };

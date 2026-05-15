@@ -32,7 +32,7 @@ TEST_CASE("full file lifecycle via agent + tools", "[integration][llm][fs]")
 
     // NOTE: each Catch2 SECTION re-runs the TEST_CASE body, so file state
     // persists across sections only via disk. We deliberately do NOT wipe the
-    // file here; sections are ordered: create → edit → index → delete.
+    // file here; sections are ordered: create -> edit -> index -> delete.
 
     SECTION("create via write_file") {
         PromptResult r = h.prompt(
@@ -41,7 +41,7 @@ TEST_CASE("full file lifecycle via agent + tools", "[integration][llm][fs]")
             "parsers based on context-free grammars are useful for language "
             "tooling. You MUST use the exact spelling `tree-sitter` (all "
             "lowercase, hyphenated) everywhere you refer to tree-sitter in "
-            "the text — do not capitalise it, do not write it as one word.");
+            "the text -- do not capitalise it, do not write it as one word.");
 
         REQUIRE_FALSE(r.timed_out);
         REQUIRE(r.errors.empty());
@@ -54,7 +54,7 @@ TEST_CASE("full file lifecycle via agent + tools", "[integration][llm][fs]")
     }
 
     SECTION("edit via edit_file with replace_all") {
-        // Precondition — the file from the create section must be on disk.
+        // Precondition -- the file from the create section must be on disk.
         // Write a known-content file if the previous section didn't run first.
         if (!fs::exists(abs_path)) {
             fs::create_directories(abs_path.parent_path());

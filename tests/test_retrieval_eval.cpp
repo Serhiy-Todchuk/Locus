@@ -1,5 +1,5 @@
 // Pure-math tests for the retrieval eval metrics. The full harness is
-// manual-only (locus_retrieval_eval) — these unit tests guard the metric
+// manual-only (locus_retrieval_eval) -- these unit tests guard the metric
 // logic so a refactor doesn't quietly invert recall or break nDCG.
 
 #include "../tests/retrieval_eval/metrics.h"
@@ -62,7 +62,7 @@ TEST_CASE("duplicate hit is not double-counted", "[s4.k][metrics]")
     auto m = compute(retrieved, relevant, {1, 3});
 
     CHECK(m.recall_at_k[0] == 1.0);
-    CHECK(m.recall_at_k[1] == 1.0);  // not 3.0 — bounded by relevant.size()
+    CHECK(m.recall_at_k[1] == 1.0);  // not 3.0 -- bounded by relevant.size()
     CHECK(m.mrr == 1.0);
 }
 
@@ -78,7 +78,7 @@ TEST_CASE("nDCG@10 perfect ordering is 1.0", "[s4.k][metrics]")
 TEST_CASE("nDCG@10 reversed ordering is between 0 and 1", "[s4.k][metrics]")
 {
     std::unordered_set<std::string> relevant = {"a.cpp", "b.cpp"};
-    // Hits at ranks 9 and 10 — late but inside the cutoff
+    // Hits at ranks 9 and 10 -- late but inside the cutoff
     std::vector<std::string> retrieved = {
         "x1.cpp", "x2.cpp", "x3.cpp", "x4.cpp",
         "x5.cpp", "x6.cpp", "x7.cpp", "x8.cpp",

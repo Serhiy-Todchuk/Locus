@@ -143,7 +143,7 @@ TEST_CASE("Compaction C: drop turns with tool calls", "[s0.7]")
 
     REQUIRE(h.size() == 6);
 
-    // Drop 1 turn — should remove user + assistant + tool result.
+    // Drop 1 turn -- should remove user + assistant + tool result.
     h.drop_oldest_turns(1);
 
     REQUIRE(h.size() == 3);  // system + user("Now explain") + assistant("Explanation")

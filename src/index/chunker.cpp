@@ -61,7 +61,7 @@ static void sliding_split(const std::vector<std::string>& lines,
 }
 
 // ---------------------------------------------------------------------------
-// chunk_code — split at symbol (function/class) boundaries
+// chunk_code -- split at symbol (function/class) boundaries
 // ---------------------------------------------------------------------------
 
 std::vector<Chunk> chunk_code(const std::string& content,
@@ -112,7 +112,7 @@ std::vector<Chunk> chunk_code(const std::string& content,
 }
 
 // ---------------------------------------------------------------------------
-// chunk_document — split at heading boundaries
+// chunk_document -- split at heading boundaries
 // ---------------------------------------------------------------------------
 
 std::vector<Chunk> chunk_document(const std::string& content,
@@ -159,7 +159,7 @@ std::vector<Chunk> chunk_document(const std::string& content,
 }
 
 // ---------------------------------------------------------------------------
-// chunk_sliding_window — generic fallback
+// chunk_sliding_window -- generic fallback
 // ---------------------------------------------------------------------------
 
 std::vector<Chunk> chunk_sliding_window(const std::string& content,

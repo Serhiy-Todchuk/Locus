@@ -67,7 +67,7 @@ std::vector<SheetInfo> list_sheets(const std::filesystem::path& xlsx_path)
         return out;
     }
 
-    // Build rId → target map from xl/_rels/workbook.xml.rels
+    // Build rId -> target map from xl/_rels/workbook.xml.rels
     std::string rels_xml;
     read_zip_entry(xlsx_path, "xl/_rels/workbook.xml.rels", rels_xml);
 
@@ -147,7 +147,7 @@ void append_sheet_text(const std::string& sheet_xml,
                     }
                 }
             } else {
-                // Number, bool, date, formula result — emit text as-is
+                // Number, bool, date, formula result -- emit text as-is
                 if (v) out += v.text().as_string();
             }
         }

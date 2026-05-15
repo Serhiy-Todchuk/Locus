@@ -13,7 +13,7 @@ using namespace locus;
 
 namespace {
 
-// Minimal ILLMClient that never streams — AgentCore is exercised here only
+// Minimal ILLMClient that never streams -- AgentCore is exercised here only
 // for its attached-context state and system-prompt composition; we never
 // actually start the agent thread, so no LLM call is made.
 class NullLLM : public ILLMClient {
@@ -59,7 +59,7 @@ AgentCore make_core()
         register_builtin_tools(reg);
         registered = true;
     }
-    // index/embedder/workspace deliberately null — outline lookup is skipped.
+    // index/embedder/workspace deliberately null -- outline lookup is skipped.
     static test::FakeWorkspaceServices services{std::filesystem::temp_directory_path()};
     WorkspaceMetadata meta;
     meta.root = services.root();

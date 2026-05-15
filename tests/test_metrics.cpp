@@ -75,7 +75,7 @@ TEST_CASE("MetricsAggregator: tool histogram counts by name", "[s4.s][metrics]")
 
     auto agg = m.aggregates();
     REQUIRE(agg.tool_calls_by_name.size() == 2);
-    // sorted descending — read_file (×2) first
+    // sorted descending -- read_file (×2) first
     REQUIRE(agg.tool_calls_by_name[0].first == "read_file");
     REQUIRE(agg.tool_calls_by_name[0].second == 2);
     REQUIRE(agg.tool_calls_by_name[1].first == "write_file");

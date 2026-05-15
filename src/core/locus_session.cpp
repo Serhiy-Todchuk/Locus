@@ -18,7 +18,7 @@ namespace {
 
 // Layer the workspace's persisted config underneath any seed values the caller
 // (CLI args, GUI startup args) supplied. Empty/zero seed fields adopt the
-// workspace-config value; non-empty seed fields win — that's the contract
+// workspace-config value; non-empty seed fields win -- that's the contract
 // described in the header.
 void merge_workspace_defaults(LLMConfig& cfg, const WorkspaceConfig& wc)
 {
@@ -68,7 +68,7 @@ LocusSession::LocusSession(const std::filesystem::path& ws_path,
                            LLMConfig                    seed_config)
     : llm_config_(std::move(seed_config))
 {
-    // 1. Workspace — owns the index, watcher, embedder. Throws on bad path
+    // 1. Workspace -- owns the index, watcher, embedder. Throws on bad path
     //    or when another Locus already holds the workspace lock.
     workspace_ = std::make_unique<Workspace>(ws_path);
 
@@ -90,7 +90,7 @@ LocusSession::LocusSession(const std::filesystem::path& ws_path,
     llm_ = create_llm_client(llm_config_);
 
     // 3. Probe the server for model id + context length and fill any gaps.
-    //    A missing server is non-fatal — context_limit falls back to 8192.
+    //    A missing server is non-fatal -- context_limit falls back to 8192.
     auto model_info = llm_->query_model_info();
     if (!model_info.id.empty() && llm_config_.model.empty()) {
         llm_config_.model = model_info.id;
@@ -110,7 +110,7 @@ LocusSession::LocusSession(const std::filesystem::path& ws_path,
         spdlog::info("Context limit: {}", llm_config_.context_limit);
     }
 
-    // 4. Tool registry — built-ins first, then MCP servers (S4.G).
+    // 4. Tool registry -- built-ins first, then MCP servers (S4.G).
     tools_ = std::make_unique<ToolRegistry>();
     register_builtin_tools(*tools_);
     spdlog::info("Tools: {} built-in registered", tools_->all().size());
@@ -152,14 +152,14 @@ LocusSession::LocusSession(const std::filesystem::path& ws_path,
         };
 
     // 6. Light the agent thread up. Frontends can register before or after
-    //    this call — `register_frontend` is thread-safe.
+    //    this call -- `register_frontend` is thread-safe.
     agent_->start();
 }
 
 LocusSession::~LocusSession()
 {
     // Stop the agent thread before any subsystem it touches goes away.
-    // unique_ptr destruction order then unwinds: agent → tools → llm →
+    // unique_ptr destruction order then unwinds: agent -> tools -> llm ->
     // workspace, mirroring the construction sequence.
     if (agent_)
         agent_->stop();

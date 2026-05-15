@@ -42,7 +42,7 @@ LocusFrame::LocusFrame(AgentCore& agent, Workspace& workspace, McpManager* mcp)
     // AUI manager
     aui_.SetManagedWindow(this);
 
-    // Menu bar — owned by MenuController; LocusFrame supplies action hooks.
+    // Menu bar -- owned by MenuController; LocusFrame supplies action hooks.
     MenuController::Hooks hooks;
     hooks.on_quit                  = [this] { Close(false); };
     hooks.on_open_workspace_dialog = [this] {
@@ -263,7 +263,7 @@ void LocusFrame::create_status_bar()
 {
     CreateStatusBar(2);
     // Right pane (background ops) wider than left pane (general status).
-    // Negative values are proportional — left takes 1 share, right takes 3.
+    // Negative values are proportional -- left takes 1 share, right takes 3.
     const int widths[] = { -1, -3 };
     SetStatusWidths(2, widths);
     SetStatusText("Ready", 0);
@@ -283,7 +283,7 @@ void LocusFrame::setup_aui_layout()
             spdlog::trace("File selected in tree: {}", path);
             SetStatusText(wxString::FromUTF8(path), 0);
         },
-        // Right-click → "Attach to context" hands the workspace-relative path
+        // Right-click -> "Attach to context" hands the workspace-relative path
         // to AgentCore; the chip update fans back via on_attached_context_changed.
         [this](const std::string& path) {
             agent_.set_attached_context({path, /*preview*/{}});
@@ -302,7 +302,7 @@ void LocusFrame::setup_aui_layout()
         [this]() { agent_.cancel_turn(); },
         [this]() {
             // Undo the most recent checkpointed turn. Surface the summary as
-            // a system note in chat — the same string the /undo command emits.
+            // a system note in chat -- the same string the /undo command emits.
             std::string summary = agent_.undo_turn();
             wxString html = "<pre>" + wxString::FromUTF8(summary) + "</pre>";
             chat_panel_->append_system_note(html);
@@ -315,7 +315,7 @@ void LocusFrame::setup_aui_layout()
             else if (decision == "reject")  agent_.reject_plan();
         });
 
-    // Chip "✕" → detach the pinned file from the conversation context.
+    // Chip "✕" -> detach the pinned file from the conversation context.
     chat_panel_->set_on_detach([this]() {
         agent_.clear_attached_context();
     });
@@ -393,12 +393,12 @@ void LocusFrame::setup_aui_layout()
                 wxString html =
                     "<span class=\"tool-name\">Slash commands</span><br>"
                     "<span class=\"tool-preview\">"
-                    "/help&nbsp;&nbsp;— show this help<br>"
-                    "/reset | /clear&nbsp;&nbsp;— reset conversation<br>"
-                    "/compact&nbsp;&nbsp;— compact context<br>"
-                    "/save&nbsp;&nbsp;— save session<br>"
-                    "/settings&nbsp;&nbsp;— open settings<br>"
-                    "/&lt;tool&gt; &lt;args&gt;&nbsp;&nbsp;— type a tool name"
+                    "/help&nbsp;&nbsp;-- show this help<br>"
+                    "/reset | /clear&nbsp;&nbsp;-- reset conversation<br>"
+                    "/compact&nbsp;&nbsp;-- compact context<br>"
+                    "/save&nbsp;&nbsp;-- save session<br>"
+                    "/settings&nbsp;&nbsp;-- open settings<br>"
+                    "/&lt;tool&gt; &lt;args&gt;&nbsp;&nbsp;-- type a tool name"
                     " to describe a call to the agent"
                     "</span>";
                 chat_panel_->append_system_note(html);
@@ -624,7 +624,7 @@ void LocusFrame::on_iconize(wxIconizeEvent& evt)
 
 void LocusFrame::on_aui_pane_close(wxAuiManagerEvent& evt)
 {
-    // User clicked the pane's X — mirror the change in the View menu.
+    // User clicked the pane's X -- mirror the change in the View menu.
     if (auto* pane = evt.GetPane(); pane && menu_) {
         if (pane->name == "sidebar")
             menu_->set_files_pane_visible(false);
@@ -637,7 +637,7 @@ void LocusFrame::on_aui_pane_close(wxAuiManagerEvent& evt)
 }
 
 // ---------------------------------------------------------------------------
-// Agent thread events — UI thread handlers
+// Agent thread events -- UI thread handlers
 // ---------------------------------------------------------------------------
 
 void LocusFrame::on_agent_turn_start(wxThreadEvent& /*evt*/)

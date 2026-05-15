@@ -44,7 +44,7 @@ struct RestoreResult {
 //   <session_id>/<turn_id>/files/<rel_path>  byte-identical pre-mutation copies
 //
 // Files larger than max_file_size_bytes() are recorded in the manifest with
-// `skipped=true` and no body — defer to git for those.
+// `skipped=true` and no body -- defer to git for those.
 //
 // Thread-safety: snapshot_before / finalize_turn / restore_turn / gc may be
 // called from any thread. The mutex serializes manifest IO; file IO under the
@@ -54,12 +54,12 @@ public:
     // checkpoints_dir is typically <workspace>/.locus/checkpoints/.
     explicit CheckpointStore(fs::path checkpoints_dir);
 
-    // 1 MB default — anything bigger is too costly to copy on every edit and
+    // 1 MB default -- anything bigger is too costly to copy on every edit and
     // is better handled by git (per the stage spec).
     void set_max_file_size_bytes(uint64_t v) { max_file_size_bytes_ = v; }
     uint64_t max_file_size_bytes() const { return max_file_size_bytes_; }
 
-    // Default 50 — keep the most-recent N turns per session, prune older.
+    // Default 50 -- keep the most-recent N turns per session, prune older.
     void set_max_turns_per_session(int n) { max_turns_per_session_ = n; }
     int max_turns_per_session() const { return max_turns_per_session_; }
 
@@ -72,7 +72,7 @@ public:
     // path) is a no-op so a tool that touches the same file twice doesn't
     // overwrite the original snapshot.
     //
-    // Returns true on success. Logs and returns false on filesystem errors —
+    // Returns true on success. Logs and returns false on filesystem errors --
     // the tool call should still proceed (we don't want checkpointing to
     // block real work).
     bool snapshot_before(const std::string& session_id,
@@ -115,7 +115,7 @@ private:
     fs::path manifest_path(const std::string& session_id, int turn_id) const;
     fs::path session_dir(const std::string& session_id) const;
 
-    // Lower-level helpers used by snapshot_before() — kept separate so they
+    // Lower-level helpers used by snapshot_before() -- kept separate so they
     // can be unit-tested in isolation.
     static std::string hash_file(const fs::path& p);
     static std::string make_relative(const fs::path& workspace_root,

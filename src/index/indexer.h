@@ -38,7 +38,7 @@ public:
     Indexer(const Indexer&) = delete;
     Indexer& operator=(const Indexer&) = delete;
 
-    // Full initial traversal — indexes every non-excluded file.
+    // Full initial traversal -- indexes every non-excluded file.
     void build_initial();
 
     // Process a batch of file-watcher events (incremental update).
@@ -82,11 +82,11 @@ public:
     // Called with chunk IDs after each file is chunked (for embedding queue).
     std::function<void(std::vector<int64_t>)> on_chunks_created;
 
-    // Activity hook — summary + detail, thread-safe handler required.
+    // Activity hook -- summary + detail, thread-safe handler required.
     // Fired after build_initial completes and after each process_events batch.
     std::function<void(const std::string&, const std::string&)> on_activity;
 
-    // Progress hook — fires per file while `build_initial` or `process_events`
+    // Progress hook -- fires per file while `build_initial` or `process_events`
     // is running. `done == total` signals end-of-batch. Fires on the thread
     // driving the indexer; handler must be thread-safe.
     std::function<void(int done, int total)> on_progress;
@@ -117,7 +117,7 @@ private:
                          std::vector<SymbolSpan>& out_spans);
 
     Database& main_db_;
-    Database* vectors_db_;  // nullable — null when semantic disabled
+    Database* vectors_db_;  // nullable -- null when semantic disabled
     fs::path root_;
     const WorkspaceConfig& config_;
     const ExtractorRegistry& extractors_;

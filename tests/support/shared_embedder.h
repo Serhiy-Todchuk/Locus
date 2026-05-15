@@ -13,7 +13,7 @@ namespace locus::test {
 // shared_embedder.cpp) routes every `enable_semantic_search()` call through
 // here, so the bge-small-en-v1.5 GGUF is mmap'd + initialised once per process
 // instead of once per `Workspace` ctor (38× in the suite). The shared instance
-// is destroyed at TestRunEnded — explicit lifetime, no leaked llama state.
+// is destroyed at TestRunEnded -- explicit lifetime, no leaked llama state.
 //
 // The first GUI/CLI run in the suite to actually require an embedder pays the
 // load cost (~600 ms for the small model on a 5800H); every subsequent
@@ -28,7 +28,7 @@ public:
     // testRunEnded so llama_backend cleanup runs before process exit.
     static void shutdown();
 
-    // Filename actually used to satisfy `get()` — exposed for log clarity in
+    // Filename actually used to satisfy `get()` -- exposed for log clarity in
     // tests that want to assert on the model identity.
     static const std::string& model_filename();
 };

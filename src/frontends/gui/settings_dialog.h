@@ -132,7 +132,7 @@ private:
     // this session. Default true.
     wxCheckBox*        require_read_before_edit_ctrl_ = nullptr;
 
-    // Tool approval controls — one choice per tool, same order as tool_names_.
+    // Tool approval controls -- one choice per tool, same order as tool_names_.
     std::vector<std::string> tool_names_;
     std::vector<wxChoice*>   approval_choices_;
     // Snapshot of the choice index before the user's last change. Used by the

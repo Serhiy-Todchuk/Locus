@@ -25,9 +25,9 @@ namespace locus {
 // Chat display + input panel. Center pane of the main frame.
 //
 // Layout (vertical):
-//   [wxWebView   — chat history, HTML/CSS rendered     ] (stretches)
-//   [wxTextCtrl  — multiline input, Enter=send         ] (fixed height)
-//   [footer bar  — context gauge + LOCUS.md chip       ] (fixed height)
+//   [wxWebView   -- chat history, HTML/CSS rendered     ] (stretches)
+//   [wxTextCtrl  -- multiline input, Enter=send         ] (fixed height)
+//   [footer bar  -- context gauge + LOCUS.md chip       ] (fixed height)
 //
 // Streaming: tokens are buffered and flushed to the WebView via a wxTimer
 // every 33ms (~30fps). md4c converts accumulated markdown to HTML on each
@@ -38,7 +38,7 @@ public:
     // on_send is called with the user's message text when Enter is pressed.
     // on_compact is called when the user clicks the manual compaction button.
     // on_stop is called when the user clicks Stop during generation.
-    // on_undo is called when the user clicks the Undo button — should revert
+    // on_undo is called when the user clicks the Undo button -- should revert
     // the most recent checkpointed turn. Disabled while a turn is streaming.
     // S4.D plan-mode callbacks. on_mode_pick is invoked when the user clicks
     // the Chat / Plan / Execute toggle. on_plan_decision is invoked when the

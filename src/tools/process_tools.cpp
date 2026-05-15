@@ -36,7 +36,7 @@ std::string RunCommandTool::preview(const ToolCall& call) const
 ToolResult RunCommandTool::execute(const ToolCall& call, IWorkspaceServices& ws)
 {
     std::string command = call.args.value("command", "");
-    // Default 30 minutes — matches Pi's bash tool. Long-enough builds, test
+    // Default 30 minutes -- matches Pi's bash tool. Long-enough builds, test
     // suites, and one-shot scripts complete without the agent having to
     // override the cap; truly long-running things (servers, watchers) still
     // belong on `run_command_bg`.
@@ -66,7 +66,7 @@ ToolResult RunCommandTool::execute(const ToolCall& call, IWorkspaceServices& ws)
 
     // Job object: kills the entire child tree on timeout. Without this,
     // `cmd /c ping ...` would launch ping as a grandchild, and TerminateProcess
-    // on cmd would orphan ping — its inherited write handle would keep our
+    // on cmd would orphan ping -- its inherited write handle would keep our
     // ReadFile loop blocked until ping naturally exited (~120s for `ping -n 120`).
     HANDLE job = CreateJobObjectA(nullptr, nullptr);
     if (!job) {
@@ -113,7 +113,7 @@ ToolResult RunCommandTool::execute(const ToolCall& call, IWorkspaceServices& ws)
     }
 
     if (!AssignProcessToJobObject(job, pi.hProcess)) {
-        // Failed to put the child in the job — kill it before it spawns
+        // Failed to put the child in the job -- kill it before it spawns
         // grandchildren we can't track.
         TerminateProcess(pi.hProcess, 1);
         CloseHandle(pi.hProcess);
@@ -205,7 +205,7 @@ namespace {
 ToolResult no_registry()
 {
     return error_result(
-        "Error: background processes are not available — this workspace has no process registry");
+        "Error: background processes are not available -- this workspace has no process registry");
 }
 
 const char* status_str(BackgroundProcess::Status s) { return to_string(s); }

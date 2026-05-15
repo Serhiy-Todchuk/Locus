@@ -64,7 +64,7 @@ ToolResult SearchTool::execute(const ToolCall& call, IWorkspaceServices& ws)
         return impl.execute(sub, ws);
     }
     if (mode == "symbols") {
-        // SearchSymbolsTool expects `name` rather than `query` — translate.
+        // SearchSymbolsTool expects `name` rather than `query` -- translate.
         if (!sub.args.contains("name") && sub.args.contains("query"))
             sub.args["name"] = sub.args["query"];
         SearchSymbolsTool impl;

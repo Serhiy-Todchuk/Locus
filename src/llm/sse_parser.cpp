@@ -48,7 +48,7 @@ void SseParser::finish()
 void SseParser::process_line(const std::string& line)
 {
     // SSE spec: lines starting with "data:" carry the payload.
-    // Empty lines are event separators — we ignore them since
+    // Empty lines are event separators -- we ignore them since
     // OpenAI-compatible APIs send one data: line per event.
     // Lines starting with ":" are comments (keep-alive).
     // Other fields (event:, id:, retry:) are ignored.
@@ -59,7 +59,7 @@ void SseParser::process_line(const std::string& line)
     if (line.size() >= 5 && line.compare(0, 5, "data:") == 0) {
         std::string payload = line.substr(5);
 
-        // Trim leading space (SSE spec: "data: value" → "value").
+        // Trim leading space (SSE spec: "data: value" -> "value").
         if (!payload.empty() && payload[0] == ' ')
             payload.erase(0, 1);
 

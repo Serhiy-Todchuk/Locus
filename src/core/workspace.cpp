@@ -67,7 +67,7 @@ Workspace::Workspace(const fs::path& root)
         throw std::runtime_error("Cannot create .locus/: " + ec.message());
     }
 
-    // Grab the workspace lock before touching any stateful subsystem — if
+    // Grab the workspace lock before touching any stateful subsystem -- if
     // another Locus instance owns this folder (or an ancestor of it), we
     // must fail cleanly before opening databases or starting threads.
     lock_ = std::make_unique<WorkspaceLock>(root_);
@@ -225,7 +225,7 @@ bool Workspace::enable_semantic_search()
 
     // Find models/<name> by walking up from the exe dir.  Supports both packaged
     // layout (models/ next to exe) and dev layout (exe in build/<cfg>/<cfg>/,
-    // models/ at repo root — up to 4 levels up).
+    // models/ at repo root -- up to 4 levels up).
     fs::path exe_dir = fs::current_path();
 #ifdef _WIN32
     {

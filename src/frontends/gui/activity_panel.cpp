@@ -92,7 +92,7 @@ ActivityPanel::ActivityPanel(wxWindow* parent, ILocusCore& core)
     // -- Tab 2: Metrics -------------------------------------------------------
     // The metrics tab works only when the core is an AgentCore (the only
     // implementation today). dynamic_cast falls back to nullptr so non-Agent
-    // wrappers won't crash — the Metrics tab just won't be added.
+    // wrappers won't crash -- the Metrics tab just won't be added.
     if (auto* agent = dynamic_cast<AgentCore*>(&core_)) {
         metrics_view_ = new MetricsView(notebook_, agent->metrics(), core_);
         notebook_->AddPage(metrics_view_, "Metrics");

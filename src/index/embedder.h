@@ -14,7 +14,7 @@ namespace fs = std::filesystem;
 // float32 embeddings.
 //
 // Embedding dimension is read from the GGUF (llama_model_n_embd); callers
-// must not assume a fixed size.  n_ctx defaults to 1024 — large enough for
+// must not assume a fixed size.  n_ctx defaults to 1024 -- large enough for
 // a typical 80-line code chunk, small enough to keep CPU embed latency
 // reasonable on commodity hardware.  bge-m3 supports up to 8192 if a future
 // caller needs it.

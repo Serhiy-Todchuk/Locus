@@ -20,7 +20,7 @@ constexpr int k_spark_height = 48;
 
 // Paint a row of vertical bars filling the panel width. `values` holds the
 // raw series; the maximum value is used as the y-axis ceiling. Empty series
-// renders an empty panel — no axes, no zero-baseline noise.
+// renders an empty panel -- no axes, no zero-baseline noise.
 void draw_sparkbars(wxPanel* panel,
                     const std::vector<long long>& values,
                     const wxColour& fill)
@@ -38,7 +38,7 @@ void draw_sparkbars(wxPanel* panel,
     if (max_v <= 0) return;
 
     int n = static_cast<int>(values.size());
-    // Clamp series to last 60 — older points compress until they're sub-pixel
+    // Clamp series to last 60 -- older points compress until they're sub-pixel
     // and the recent shape washes out.
     int start = std::max(0, n - 60);
     int shown = n - start;
@@ -96,11 +96,8 @@ MetricsView::MetricsView(wxWindow* parent, MetricsAggregator& metrics,
     sizer->Add(tools_text_, 1, wxALL | wxEXPAND, 6);
 
     auto* btn_row = new wxBoxSizer(wxHORIZONTAL);
-    // wxString::FromUTF8 -- the source contains the U+2026 ellipsis as raw
-    // UTF-8 bytes; the wxString(const char*) constructor would otherwise
-    // re-decode them through the C locale (CP-1252 on Windows -> mojibake).
-    auto* btn_json = new wxButton(this, wxID_ANY, wxString::FromUTF8("Export JSON…"));
-    auto* btn_csv  = new wxButton(this, wxID_ANY, wxString::FromUTF8("Export CSV…"));
+    auto* btn_json = new wxButton(this, wxID_ANY, "Export JSON...");
+    auto* btn_csv  = new wxButton(this, wxID_ANY, "Export CSV...");
     btn_json->Bind(wxEVT_BUTTON, &MetricsView::on_export_json, this);
     btn_csv->Bind (wxEVT_BUTTON, &MetricsView::on_export_csv,  this);
     btn_row->Add(btn_json, 0, wxRIGHT, 4);
@@ -175,7 +172,7 @@ void MetricsView::rebuild_text()
         } else {
             o << "\n";
             for (auto& [name, count] : agg.tool_calls_by_name) {
-                o << "  " << name << "  ×" << count << "\n";
+                o << "  " << name << "  x" << count << "\n";
             }
         }
         if (tools_text_) tools_text_->SetLabel(wxString::FromUTF8(o.str()));

@@ -13,9 +13,9 @@ class IWorkspaceServices;
 // -- Tool approval policy ---------------------------------------------------
 
 enum class ToolApprovalPolicy {
-    ask,           // "Ask Every Time" — show approval UI, require user decision
-    auto_approve,  // "Auto-Approve"   — execute immediately, no user prompt
-    deny           // "Deny"           — never execute, report rejection to the LLM
+    ask,           // "Ask Every Time" -- show approval UI, require user decision
+    auto_approve,  // "Auto-Approve"   -- execute immediately, no user prompt
+    deny           // "Deny"           -- never execute, report rejection to the LLM
 };
 
 inline const char* to_string(ToolApprovalPolicy p) {
@@ -50,9 +50,9 @@ inline const char* policy_display_name(ToolApprovalPolicy p) {
 // subsets (the plumbing shipped with S3.L; plan-mode lands in S4.D).
 enum class ToolMode {
     agent,     // normal interactive turn (chat); full tool catalog
-    plan,      // S4.D plan pass — only propose_plan is visible
-    execute,   // S4.D execute pass — full catalog + mark_step_done
-    subagent   // delegated subtask — role-specific subset
+    plan,      // S4.D plan pass -- only propose_plan is visible
+    execute,   // S4.D execute pass -- full catalog + mark_step_done
+    subagent   // delegated subtask -- role-specific subset
 };
 
 // -- Structs passed to/from tools -------------------------------------------
@@ -109,7 +109,7 @@ public:
                                IWorkspaceServices& ws) = 0;
 
     // Default approval policy for this tool. User-configured overrides in
-    // WorkspaceConfig take precedence — see AgentCore::resolve_policy().
+    // WorkspaceConfig take precedence -- see AgentCore::resolve_policy().
     virtual ToolApprovalPolicy approval_policy() const { return ToolApprovalPolicy::ask; }
 
     // Human-readable preview of what this call will do (shown in approval UI)

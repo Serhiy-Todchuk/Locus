@@ -59,7 +59,7 @@ std::string write_atomic(const std::filesystem::path& target,
 ToolResult error_result(const std::string& msg);
 
 // Process-wide "this file was read by the agent" tracker (S4.A).
-// Edit tools require the file to have been read first — mirrors the Claude
+// Edit tools require the file to have been read first -- mirrors the Claude
 // Code pattern that cuts hallucinated edits on local models. The set only
 // grows; canonical paths mean workspace switches don't collide.
 class ReadTracker {

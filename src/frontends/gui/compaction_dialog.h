@@ -23,7 +23,7 @@ struct CompactionChoice {
 // manually triggers compaction. Offers Strategy B (drop tool results) and
 // Strategy C (drop N oldest turns with preview).
 //
-// Strategy A (LLM summary) is listed but not yet functional — it requires
+// Strategy A (LLM summary) is listed but not yet functional -- it requires
 // an async LLM call which will be wired up in a future stage.
 class CompactionDialog : public wxDialog {
 public:

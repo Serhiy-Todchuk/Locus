@@ -122,7 +122,7 @@ void SlashPopup::show_anchored(const wxPoint& anchor_screen_pos, int anchor_widt
     if (pos.x < display.GetLeft()) pos.x = display.GetLeft();
 
     Move(pos);
-    Popup();  // nullptr focus target → keep focus where it was (input text ctrl)
+    Popup();  // nullptr focus target -> keep focus where it was (input text ctrl)
 }
 
 void SlashPopup::move_up()

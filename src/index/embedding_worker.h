@@ -16,7 +16,7 @@ class Embedder;
 
 // Background thread that reads chunk text from the DB, runs the embedder,
 // and writes vectors into chunk_vectors.  Designed for low-priority background
-// work — does not block the indexer or the UI.
+// work -- does not block the indexer or the UI.
 class EmbeddingWorker {
 public:
     EmbeddingWorker(Database& db, Embedder& embedder);
@@ -41,7 +41,7 @@ public:
     };
     Stats stats() const;
 
-    // Progress callback — fires on the worker thread.
+    // Progress callback -- fires on the worker thread.
     std::function<void(int done, int total)> on_progress;
 
 private:

@@ -27,7 +27,7 @@ namespace {
 // self-relaunch (avoiding an infinite fork loop).
 constexpr const char* k_console_child_flag = "--console-child";
 
-// True if stderr is bound to a real character device (a console) — as
+// True if stderr is bound to a real character device (a console) -- as
 // opposed to a pipe or disk file. Used to detect "no visible console"
 // launches (IDE Run, agent subprocess, redirected pipe) and trigger a
 // self-relaunch that forces CREATE_NEW_CONSOLE.
@@ -109,7 +109,7 @@ std::wstring quote_arg(const std::wstring& a)
 
 // Re-launch this process in a dedicated console window, wait for it, return
 // its exit code. Used when -console was requested but our stderr isn't a
-// real console (IDE / subprocess / pipe launch) — AllocConsole can't help
+// real console (IDE / subprocess / pipe launch) -- AllocConsole can't help
 // in that case (ACCESS_DENIED under some subprocess shells), but Windows
 // always honors CREATE_NEW_CONSOLE for a freshly-spawned child.
 int relaunch_in_new_console(int argc, char** argv)
@@ -204,7 +204,7 @@ private:
 
 CATCH_REGISTER_LISTENER(IntegrationSessionListener)
 
-// Custom main — Catch2 args plus our -console flag. -console mirrors all
+// Custom main -- Catch2 args plus our -console flag. -console mirrors all
 // trace-level log output to stderr so long runs are observable live instead
 // of only landing in .locus/integration_test.log.
 int main(int argc, char** argv)
@@ -220,7 +220,7 @@ int main(int argc, char** argv)
             console_logging = true;
 #ifdef _WIN32
         } else if (std::strcmp(argv[i], k_console_child_flag) == 0) {
-            console_child = true;  // consumed — not forwarded to Catch2
+            console_child = true;  // consumed -- not forwarded to Catch2
 #endif
         } else {
             forwarded.push_back(argv[i]);

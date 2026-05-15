@@ -17,7 +17,7 @@ public:
             {"question", "string", "The question to ask the user", true},
         };
     }
-    // Goes through the approval gate — the frontend shows the question
+    // Goes through the approval gate -- the frontend shows the question
     // and provides a response input. The user's answer is injected via
     // tool_decision(modify, {"question": "...", "response": "user answer"}).
     ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::ask; }

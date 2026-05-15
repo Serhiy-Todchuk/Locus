@@ -333,7 +333,7 @@ void Database::drop_legacy_semantic_tables()
     // `chunks` / `chunk_vectors`, drop them so schema stays in sync with the
     // new design.  vec0 virtual tables need the extension loaded to drop
     // cleanly; if it's not loaded here, the DROP on chunk_vectors will fail
-    // silently and leave the shadow tables — acceptable because main DB never
+    // silently and leave the shadow tables -- acceptable because main DB never
     // reads them anyway.
     sqlite3_stmt* check = nullptr;
     const char* sql =
