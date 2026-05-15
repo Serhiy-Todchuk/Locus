@@ -157,11 +157,7 @@ private:
     bool submit_current_input();
     void refresh_action_btn();
 
-    // Monotonic message div ID shared with ChatStreamRenderer by reference.
-    // Declared BEFORE the collaborator unique_ptrs so it outlives them on
-    // destruction (members tear down in reverse declaration order). The
-    // renderer's defaulted dtor doesn't dereference message_id_ today, but
-    // keeping this ordering protects against future renderer-dtor changes.
+    // Must precede the collaborator unique_ptrs: the renderer holds `int&` into this.
     int message_id_ = 0;
 
     // Collaborators (owned by unique_ptr so forward declarations above suffice).
