@@ -280,6 +280,7 @@ void TerminalPanel::process_lifecycle(const LifeEvent& ev)
             tab.stc->ClearAll();
             tab.stc->SetReadOnly(true);
             tab.stick_to_bottom = true;
+            write_command_header(tab, ev.command);
             set_tab_badge(find_tab_index(k_sync_id), tab);
             break;
         }
@@ -294,8 +295,10 @@ void TerminalPanel::process_lifecycle(const LifeEvent& ev)
             break;
         }
         case LifeKind::bg_start: {
+            bool fresh = tabs_.find(ev.id) == tabs_.end();
             Tab* tab = ensure_tab(ev.id, ev.command);
             tab->active = true;
+            if (fresh) write_command_header(*tab, ev.command);
             set_tab_badge(find_tab_index(ev.id), *tab);
             break;
         }
@@ -492,6 +495,19 @@ void TerminalPanel::write_styled(Tab& tab, const std::string& text,
         tab.stc->StartStyling(start_pos);
         tab.stc->SetStyling(end_pos - start_pos, id);
     }
+}
+
+void TerminalPanel::write_command_header(Tab& tab, const std::string& command)
+{
+    if (!tab.stc || command.empty()) return;
+    // Plain "> <command>" line in the tab's default style. The style table
+    // collapses every colored-fg-on-default-bg combination onto one clamped
+    // id, so trying to colorize this would either no-op or paint with an
+    // unrelated palette pair. A bare prefix is the safe, legible choice.
+    tab.stc->SetReadOnly(false);
+    AnsiStyle style;  // theme-default fg/bg
+    write_styled(tab, "> " + command + "\n", style);
+    tab.stc->SetReadOnly(true);
 }
 
 void TerminalPanel::on_tab_right_click(wxContextMenuEvent& /*evt*/)

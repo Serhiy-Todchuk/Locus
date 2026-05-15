@@ -110,6 +110,12 @@ private:
     void   trim_scrollback(Tab& tab);
     void   apply_ansi_event(Tab& tab, const AnsiEvent& ev);
     void   write_styled(Tab& tab, const std::string& text, const AnsiStyle& style);
+    // Print the executed command as the first line in a tab so the user
+    // can see what produced the output even when the tab title is
+    // truncated (or, in the sync "Run" tab, never carried the command at
+    // all). Called from process_lifecycle on sync_start and on the first
+    // bg_start for a given id.
+    void   write_command_header(Tab& tab, const std::string& command);
     void   ensure_style_table(wxStyledTextCtrl* stc);
     static int style_id_for(const AnsiStyle& s);
     void   on_tab_right_click(wxContextMenuEvent& evt);

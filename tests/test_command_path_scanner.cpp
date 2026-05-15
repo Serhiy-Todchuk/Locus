@@ -156,3 +156,20 @@ TEST_CASE("no false positive on flag-shaped tokens",
         "cmake --build build/release --config Release", ws);
     REQUIRE(flagged.empty());
 }
+
+TEST_CASE("Windows shell switches are not mistaken for unix paths",
+          "[s4.v][path-scanner]")
+{
+    auto ws = make_temp_ws("winswitch");
+    // `cd /d <path>` -- the canonical user-reported false positive.
+    // The drive-letter target IS workspace-internal so nothing should flag.
+    auto a = scan_outside_workspace_paths(
+        "cd /d " + ws.string() + " && python -m http.server 8000", ws);
+    REQUIRE(a.empty());
+
+    // Other common cmd switches.
+    REQUIRE(scan_outside_workspace_paths("cmd /c echo hi", ws).empty());
+    REQUIRE(scan_outside_workspace_paths("dir /a:rh /s", ws).empty());
+    REQUIRE(scan_outside_workspace_paths("findstr /v /n hello file.txt", ws).empty());
+    REQUIRE(scan_outside_workspace_paths("xcopy /e /h /y src dst", ws).empty());
+}

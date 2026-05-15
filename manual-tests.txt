@@ -18,3 +18,9 @@ CLAUDE.md to get project context, then propose what to change.
 9	Test symbol search using a very broad prefix (e.g., `get`) followed by narrowing down the results, or searching for a specific kind/language combination that might not exist.
 
 10  Create an app that render cornel box with global illumination using webgpu. Use multiple files for the project (not everything in one html)
+
+
+Start a python server for this folder so I an access html files through localhost
+Start "python -u -m http.server 8000" command as background process.
+run this exact command via run_command_bg:
+python -u -c "import sys; sys.stderr.write('TEST OUTPUT\n'); sys.stderr.flush(); import time; time.sleep(60)"

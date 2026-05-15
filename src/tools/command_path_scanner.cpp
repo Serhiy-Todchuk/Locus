@@ -66,6 +66,25 @@ bool starts_with_unix_abs(std::string_view tok)
     return tok.size() >= 1 && tok[0] == '/' && !starts_with_unc(tok);
 }
 
+// Windows cmd / PowerShell switches start with `/<letter>` and don't contain
+// any further path separator (`cd /d`, `cmd /c`, `xcopy /e`, `dir /a:rh`,
+// `findstr /v`, etc.). Real Unix-style paths almost always have multiple
+// segments (`/etc/passwd`, `/usr/bin/env`), so a slash-prefixed token with
+// no second separator is overwhelmingly a switch in a Windows shell context.
+// 16-char cap keeps the false-negative window small for any genuinely
+// single-segment Unix path that does sneak in (`/etc`, `/var`, `/opt`).
+bool looks_like_cmd_switch(std::string_view tok)
+{
+    if (tok.size() < 2 || tok[0] != '/') return false;
+    if (tok.size() > 16) return false;
+    char c = tok[1];
+    if (!std::isalpha(static_cast<unsigned char>(c)) && c != '?') return false;
+    for (size_t i = 2; i < tok.size(); ++i) {
+        if (tok[i] == '/' || tok[i] == '\\') return false;
+    }
+    return true;
+}
+
 bool contains_parent_segment(std::string_view tok)
 {
     // "..\foo", "../foo", "foo/../bar", "..\..\x". Reject the bare token
@@ -126,6 +145,11 @@ std::vector<std::string> scan_outside_workspace_paths(
             t.pop_back();
         }
         if (t.empty()) continue;
+
+        // `cd /d D:\foo`, `cmd /c ...`, etc. -- the `/d` token would
+        // otherwise hit the unix-abs branch and canonicalize to `<drive>:\d`,
+        // which is outside the workspace.
+        if (looks_like_cmd_switch(t)) continue;
 
         bool path_shape = starts_with_drive_letter(t)
                        || starts_with_unc(t)
