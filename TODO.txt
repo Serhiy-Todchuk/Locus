@@ -18,11 +18,11 @@
 
 - Background processes were disabled for the workspace, but agent still tried to use run_command_bg tool. How did it know that this tool exists. I thought the aim of having it disabled is context size saving thing, but it was still somewhere in manifest or system prompt.
 
-- I approved run_command tool:
-cd /d D:\\Projects\\AICodeAss && python -m http.server 8000
-but I saw nothing in terminal. Is it expected behavior?
+- Print run_command's and run_command_bg's command as a first line in it's terminal tab (now it is only at terminal tab header in case of background version, and totally not visible when in main terminal).
 
-- Print background process's command as a first line in it's terminal tab (now it is only at terminal tab header).
+- I asked agent to run command:
+"cd /d D:\\Projects\\AICodeAss && python -m http.server 8000"
+...for D:\Projects\AICodeAss workspace, but it warned me that there is path outside workspace: "/d".
 
 - Add "Reset to global defaults" button to every settings page.
 

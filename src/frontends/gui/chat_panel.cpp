@@ -2045,6 +2045,11 @@ wxString ChatPanel::user_text_to_html(const wxString& s)
     wxString norm = s;
     norm.Replace("\r\n", "\n", true);
     norm.Replace("\r",   "\n", true);
+    // Windows RichEdit (wxTE_RICH2) inserts U+000B (vertical tab) as a "soft
+    // return" on Shift+Enter, not \r\n. Without this it would reach the DOM
+    // raw and render as a control-character glyph under white-space: pre-wrap.
+    norm.Replace("\v", "\n", true);                                // U+000B VT
+    norm.Replace("\f", "\n", true);                                // U+000C FF
     norm.Replace(wxString::FromUTF8("\xC2\x85"),     "\n", true); // U+0085 NEL
     norm.Replace(wxString::FromUTF8("\xE2\x80\xA8"), "\n", true); // U+2028 LS
     norm.Replace(wxString::FromUTF8("\xE2\x80\xA9"), "\n", true); // U+2029 PS
