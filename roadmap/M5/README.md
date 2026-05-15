@@ -24,9 +24,20 @@
 | [S5.H](S5.H-edit-delete-branch.md) | Per-Message Edit / Delete + Branch & Rewind | Context |
 | [S5.K](S5.K-memory-bank-ui.md) | Memory Bank UI Viewer / Editor | UX |
 | [S5.N](S5.N-non-code-workspace-proof.md) | Non-Code Workspace Proof | Product / QA |
+| [S5.O](S5.O-tool-safety-hardening.md) | Tool & Filesystem Safety Hardening | Safety |
+| [S5.P](S5.P-source-encoding-audit.md) | Source Encoding Audit & Lint | Hygiene |
+| [S5.Q](S5.Q-large-file-decomposition.md) | Large File Decomposition (chat_panel & settings_dialog) | Refactor |
 | [S5.Z](S5.Z-misc-gaps.md) | Miscellaneous Smaller Gaps | Mixed |
 
 More stages will be added here as polish/UX/perf candidates surface. Letters are identity, not order -- listed top-down in execution order. S5.Z is the misc bucket at the end (mirrors [S4.V](../M4/S4.V-misc-gaps.md)) and is expected to grow.
+
+### Robustness cluster (S5.O - S5.Q)
+
+Three stages added 2026-05-15 in response to an external code-review pass. Independent of the context-management cluster; can land in parallel.
+
+- **S5.O** closes three latent safety holes in the tool layer (path containment, approval call-id keying, atomic `write_file`). Highest priority -- the bugs are real and the workspace boundary is what every file tool relies on.
+- **S5.P** sweeps em-dashes and other non-ASCII drift from source + adds a build-time lint to keep them out. The "no em-dashes" rule is in CLAUDE.md but is currently enforced by trust alone.
+- **S5.Q** breaks `chat_panel.cpp` (81 KB) and `settings_dialog.cpp` (61 KB) into cohesive sub-units so future polish work has a smaller blast radius. `agent_core.cpp` is intentionally excluded -- S5.J already pulled `LLMContext` out, and the rest is the indivisible agent-loop runner.
 
 ### Context-management cluster (S5.J + S5.D - S5.H, plus S5.I)
 
