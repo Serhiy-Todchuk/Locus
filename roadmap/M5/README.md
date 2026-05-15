@@ -8,26 +8,24 @@
 
 ## Stages (in execution order)
 
-| Stage | Title | Theme |
-|---|---|---|
-| + [S5.L](S5.L-ui-automation-driver.md) | UI Automation Test Driver | Testing / Infra |
-| + [S5.B](S5.B-terminal-panel.md) | Live Terminal Panel | UX |
-| + [S5.A](S5.A-capability-toggles.md) | Workspace Capability Toggles | UX / Tokens |
-| + [S5.M](S5.M-global-settings.md) | Global Settings Template + ~/.locus migration | UX / Config |
-| + [S5.C](S5.C-inline-diffs-in-chat.md) | Inline Code Diffs in Chat | UX |
-| + [S5.J](S5.J-llm-context-refactor.md) | LLMContext Class Refactor | Refactor |
-| + [S5.O](S5.O-tool-safety-hardening.md) | Tool & Filesystem Safety Hardening | Safety |
-| + [S5.P](S5.P-source-encoding-audit.md) | Source Encoding Audit & Lint | Hygiene |
-|   [S5.Q](S5.Q-large-file-decomposition.md) | Large File Decomposition (chat_panel & settings_dialog) | Refactor |
-|   [S5.D](S5.D-reserve-and-token-xray.md) | Reserve Enforcement + Token-Cost X-Ray | Context |
-|   [S5.E](S5.E-pin-and-tag.md) | Per-Message Pin / Tag System | Context |
-|   [S5.F](S5.F-compaction-v2.md) | Compaction v2 (Toolkit + Auto + History Archive) | Context |
-|   [S5.G](S5.G-chat-activity-restructure.md) | Chat / Activity Restructure | UX |
-|   [S5.I](S5.I-tabs-and-sessions.md) | Multi-Tab Conversations + Session Menu Redesign | UX |
-|   [S5.H](S5.H-edit-delete-branch.md) | Per-Message Edit / Delete + Branch & Rewind | Context |
-|   [S5.K](S5.K-memory-bank-ui.md) | Memory Bank UI Viewer / Editor | UX |
-|   [S5.N](S5.N-non-code-workspace-proof.md) | Non-Code Workspace Proof | Product / QA |
-|   [S5.Z](S5.Z-misc-gaps.md) | Miscellaneous Smaller Gaps | Mixed |
+- [x] **[S5.L](S5.L-ui-automation-driver.md)** -- UI Automation Test Driver -- _Testing / Infra_
+- [x] **[S5.B](S5.B-terminal-panel.md)** -- Live Terminal Panel -- _UX_
+- [x] **[S5.A](S5.A-capability-toggles.md)** -- Workspace Capability Toggles -- _UX / Tokens_
+- [x] **[S5.M](S5.M-global-settings.md)** -- Global Settings Template + ~/.locus migration -- _UX / Config_
+- [x] **[S5.C](S5.C-inline-diffs-in-chat.md)** -- Inline Code Diffs in Chat -- _UX_
+- [x] **[S5.J](S5.J-llm-context-refactor.md)** -- LLMContext Class Refactor -- _Refactor_
+- [x] **[S5.O](S5.O-tool-safety-hardening.md)** -- Tool & Filesystem Safety Hardening -- _Safety_
+- [x] **[S5.P](S5.P-source-encoding-audit.md)** -- Source Encoding Audit & Lint -- _Hygiene_
+- [ ] **[S5.Q](S5.Q-large-file-decomposition.md)** -- Large File Decomposition (chat_panel & settings_dialog) -- _Refactor_
+- [ ] **[S5.D](S5.D-reserve-and-token-xray.md)** -- Reserve Enforcement + Token-Cost X-Ray -- _Context_
+- [ ] **[S5.E](S5.E-pin-and-tag.md)** -- Per-Message Pin / Tag System -- _Context_
+- [ ] **[S5.F](S5.F-compaction-v2.md)** -- Compaction v2 (Toolkit + Auto + History Archive) -- _Context_
+- [ ] **[S5.G](S5.G-chat-activity-restructure.md)** -- Chat / Activity Restructure -- _UX_
+- [ ] **[S5.I](S5.I-tabs-and-sessions.md)** -- Multi-Tab Conversations + Session Menu Redesign -- _UX_
+- [ ] **[S5.H](S5.H-edit-delete-branch.md)** -- Per-Message Edit / Delete + Branch & Rewind -- _Context_
+- [ ] **[S5.K](S5.K-memory-bank-ui.md)** -- Memory Bank UI Viewer / Editor -- _UX_
+- [ ] **[S5.N](S5.N-non-code-workspace-proof.md)** -- Non-Code Workspace Proof -- _Product / QA_
+- [ ] **[S5.Z](S5.Z-misc-gaps.md)** -- Miscellaneous Smaller Gaps -- _Mixed_
 
 More stages will be added here as polish/UX/perf candidates surface. Letters are identity, not order -- listed top-down in execution order. S5.Z is the misc bucket at the end (mirrors [S4.V](../M4/S4.V-misc-gaps.md)) and is expected to grow.
 
