@@ -26,11 +26,11 @@ This file is the milestone index. Stage detail lives in each milestone's own doc
 
 | Milestone | Goal | Test workspaces unlocked |
 |---|---|---|
-| **[M0 -- CLI Prototype](roadmap/M0.md)** ✔ | Prove the hard parts work before any UI | WS1 (Locus project) |
-| **[M1 -- Desktop App](roadmap/M1.md)** ✔ | Usable standalone tool with wxWidgets UI | WS1 |
-| **[M2 -- Full Workspace Support](roadmap/M2.md)** ✔ | All 3 test workspaces functional | WS1, WS2 (Wikipedia), WS3 (Docs) |
-| **[M3 -- Refactoring](roadmap/M3/README.md)** ✔ | Pay down architectural debt before the next big feature push (split god-classes, regularize layering, document threading model) | WS1 |
-| **[M4 -- Agent Quality](roadmap/M4/README.md)** ✔ | Close the gap vs RooCode/Aider/Cline/OpenCode/Claude Code on the tech fundamentals of a coding agent (editing, verification, undo, planning, extensibility, retrieval quality) | WS1 |
+| **[M0 -- CLI Prototype](roadmap/M0.md)** done | Prove the hard parts work before any UI | WS1 (Locus project) |
+| **[M1 -- Desktop App](roadmap/M1.md)** done | Usable standalone tool with wxWidgets UI | WS1 |
+| **[M2 -- Full Workspace Support](roadmap/M2.md)** done | All 3 test workspaces functional | WS1, WS2 (Wikipedia), WS3 (Docs) |
+| **[M3 -- Refactoring](roadmap/M3/README.md)** done | Pay down architectural debt before the next big feature push (split god-classes, regularize layering, document threading model) | WS1 |
+| **[M4 -- Agent Quality](roadmap/M4/README.md)** done | Close the gap vs RooCode/Aider/Cline/OpenCode/Claude Code on the tech fundamentals of a coding agent (editing, verification, undo, planning, extensibility, retrieval quality) | WS1 |
 | **[M5 -- Polish, UX & Performance](roadmap/M5/README.md)** | Sand down the user-visible edges before multiplying frontends -- UX refinements, performance optimization, robustness, quality-of-life touches | WS1, WS2, WS3 |
 | **[M6 -- Connected](roadmap/M6/README.md)** | Remote access, VS Code shim, web frontend | All, from any device |
 
@@ -38,23 +38,23 @@ M0-M2 each live in a single milestone file (completed history). M3, M4, M5, M6 u
 
 ---
 
-## M0 -- CLI Prototype ✔
+## M0 -- CLI Prototype done
 
 Complete. Stage list and full task history in [roadmap/M0.md](roadmap/M0.md).
 
-## M1 -- Desktop App ✔
+## M1 -- Desktop App done
 
 Complete. Stage list and full task history in [roadmap/M1.md](roadmap/M1.md).
 
-## M2 -- Full Workspace Support ✔
+## M2 -- Full Workspace Support done
 
 Complete. Stage list and full task history in [roadmap/M2.md](roadmap/M2.md).
 
-## M3 -- Refactoring ✔
+## M3 -- Refactoring done
 
 Complete. All 12 stages landed -- god-classes split, `src/` layered consistently, threading model documented, ADR trail in place, tool catalog consolidated. Stage list and full task history: [roadmap/M3/README.md](roadmap/M3/README.md).
 
-## M4 -- Agent Quality ✔
+## M4 -- Agent Quality done
 
 Complete. Closed the gap against leading agents on the tech fundamentals -- diff-based editing, checkpoint/undo, retrieval (better embeddings + reranker + eval harness), background commands, telemetry, AST search, file-change awareness between turns, tool-call robustness across model families, stream decode completeness + max_tokens discipline, plan mode, MCP client, memory bank (Phase 1), git integration (gitignore + auto-commit), KV/prompt cache preservation, list_directory completeness, prompt templates, grammar coverage expansion, plus the S4.V miscellaneous-gaps cleanup (C symbol extractor + curated AST queries, `@`-mention file references, workspace tool-trust + outside-workspace path warnings, model-card presets, sampler controls, prompt/generation split in the context meter). Stage list and full task history: [roadmap/M4/README.md](roadmap/M4/README.md).
 
@@ -62,7 +62,7 @@ Complete. Closed the gap against leading agents on the tech fundamentals -- diff
 
 With the M4 engine in place, sand down the user-visible edges. UX refinements, performance optimization, robustness work, and quality-of-life touches that make the existing capability set feel fast, predictable, and discoverable. Lands before M6 so each new frontend in the Connected milestone inherits a well-shaped foundation.
 
-Progress: **S5.L (UI Automation Test Driver) ✔** -- ships a manual-only `locus_ui_tests` target driving `locus_gui.exe` via Windows UIA from JSON scripts; three demo scripts (smoke / settings_tour / chat_round_trip) all pass. See [roadmap/M5/S5.L-ui-automation-driver.md](roadmap/M5/S5.L-ui-automation-driver.md). **S5.B / S5.A / S5.M / S5.C ✔.** **S5.J (LLMContext refactor) ✔** -- the conversation's full LLM-facing state (history + system prompt + budget + file tracker + attached context + checkpoints + session ids) now lives on a single `LLMContext` class; `AgentCore` composes one as `ctx_` and is back to the agent-loop runner role. System prompt assembly moved into a new immutable `SystemPromptAssembly` type, turning the S4.F byte-stable invariant from discipline into a type-level guarantee. Tabs (S5.I), edit/delete/rewind (S5.H), composable compaction (S5.F), pin states (S5.E), and reserve enforcement (S5.D) all land on the surface this stage establishes.
+Progress: **S5.L (UI Automation Test Driver) done** -- ships a manual-only `locus_ui_tests` target driving `locus_gui.exe` via Windows UIA from JSON scripts; three demo scripts (smoke / settings_tour / chat_round_trip) all pass. See [roadmap/M5/S5.L-ui-automation-driver.md](roadmap/M5/S5.L-ui-automation-driver.md). **S5.B / S5.A / S5.M / S5.C done.** **S5.J (LLMContext refactor) done** -- the conversation's full LLM-facing state (history + system prompt + budget + file tracker + attached context + checkpoints + session ids) now lives on a single `LLMContext` class; `AgentCore` composes one as `ctx_` and is back to the agent-loop runner role. System prompt assembly moved into a new immutable `SystemPromptAssembly` type, turning the S4.F byte-stable invariant from discipline into a type-level guarantee. Tabs (S5.I), edit/delete/rewind (S5.H), composable compaction (S5.F), pin states (S5.E), and reserve enforcement (S5.D) all land on the surface this stage establishes. **S5.N (Non-Code Workspace Proof)** is now scheduled to turn the WS2/WS3 document/knowledge-base promise into a repeatable demo and QA artifact before M6 multiplies frontends.
 
 Stage list: [roadmap/M5/README.md](roadmap/M5/README.md).
 

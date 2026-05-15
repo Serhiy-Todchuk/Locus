@@ -8,7 +8,17 @@
 
 ## Project Status
 
-**Stage: M4 -- Agent Quality** (in progress; M0/M1/M2/M3 complete)
+**Current stage: M5 -- Polish, UX & Performance** (in progress)
+
+| Milestone | Status | Notes |
+|---|---|---|
+| M0 -- CLI Prototype | Complete | CLI, workspace, index, LLM client, tools, agent loop |
+| M1 -- Desktop App | Complete | wxWidgets GUI, chat, tool approval, settings, tray |
+| M2 -- Full Workspace Support | Complete | semantic search, document extraction, attachment flow |
+| M3 -- Refactoring | Complete | split agent/index/tools/GUI structure, threading docs, ADRs |
+| M4 -- Agent Quality | Complete | diff editing, undo, plan mode, MCP, memory, git, retrieval quality |
+| M5 -- Polish, UX & Performance | In progress | UI automation, terminal panel, capability toggles, global settings, inline diffs, LLMContext refactor landed; context-management polish still active |
+| M6 -- Connected | Planned | remote access, VS Code shim, web frontend, ZIM reader |
 
 Two binaries ship from the same codebase:
 
