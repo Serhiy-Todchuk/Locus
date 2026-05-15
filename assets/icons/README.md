@@ -8,6 +8,8 @@ Generated files:
 
 - `source/locus-icon.svg` - vector master for review and future edits.
 - `github/locus-github-front-1024.png` - large front-page/readme icon.
+- `github/locus-social-preview-1280x640.png` - GitHub repository social
+  preview image.
 - `windows/locus.ico` - Windows app icon bundle for Explorer and taskbar.
 - `macos/Locus.icns` - macOS app icon bundle for Finder and Dock.
 - `macos/Locus.iconset/` - source PNG iconset used for macOS packaging.
@@ -21,4 +23,5 @@ Regenerate with:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File assets\icons\generate_locus_icons.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File assets\icons\github\generate_social_preview.ps1
 ```
