@@ -36,6 +36,8 @@ add_executable(locus_tests
     test_capability_toggles.cpp
     test_global_config.cpp
     test_chat_diff_rendering.cpp
+    test_system_prompt_assembly.cpp
+    test_llm_context.cpp
     retrieval_eval/metrics.cpp
     support/shared_embedder.cpp
 )

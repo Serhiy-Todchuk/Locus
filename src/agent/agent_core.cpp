@@ -20,23 +20,6 @@
 
 namespace locus {
 
-// Generate a timestamp-based session id like SessionManager — keeps the on-
-// disk layout under .locus/checkpoints/<session_id>/ readable and sortable.
-static std::string make_session_id()
-{
-    auto now = std::chrono::system_clock::now();
-    auto t = std::chrono::system_clock::to_time_t(now);
-    std::tm tm{};
-#ifdef _WIN32
-    localtime_s(&tm, &t);
-#else
-    localtime_r(&t, &tm);
-#endif
-    std::ostringstream os;
-    os << std::put_time(&tm, "%Y-%m-%d_%H%M%S");
-    return os.str();
-}
-
 AgentCore::AgentCore(ILLMClient& llm,
                      IToolRegistry& tools,
                      IWorkspaceServices& services,
@@ -50,15 +33,11 @@ AgentCore::AgentCore(ILLMClient& llm,
     : llm_(llm)
     , tools_(tools)
     , services_(services)
-    , llm_config_(llm_config)
     , sessions_(sessions_dir)
 {
     // S4.R -- pre-render the always-in-context memory slot before the prompt
     // is assembled. Captured at session start so the resulting prompt stays
-    // byte-stable across the session (preserves the KV-cache invariant
-    // S4.F will later depend on). Entries added mid-session via
-    // /memorize or add_memory are still searchable via search_memory but
-    // don't auto-inject into the current session's prompt.
+    // byte-stable across the session (S4.F KV-cache invariant).
     std::string memory_section;
     if (auto* mem = services.memory()) {
         try { memory_section = mem->format_for_system_prompt(); }
@@ -66,62 +45,51 @@ AgentCore::AgentCore(ILLMClient& llm,
             spdlog::warn("MemoryStore: format_for_system_prompt failed: {}", e.what());
         }
     }
-    base_system_prompt_ = SystemPromptBuilder::build(
-        locus_md, ws_meta, tools, llm_config_.tool_format, memory_section);
-    system_prompt_ = base_system_prompt_;
+
+    // S5.J -- system prompt is an immutable SystemPromptAssembly value. Build
+    // once here and hand to LLMContext. There is no setter; a new prompt = a
+    // new assembly (and a new LLMContext) by design.
+    auto assembly = SystemPromptAssembly::build(
+        locus_md, ws_meta, tools, llm_config.tool_format, memory_section);
+
+    int sys_tokens = assembly.total_tokens();
+    spdlog::info("AgentCore: system prompt ~{} tokens, context limit {}",
+                 sys_tokens, llm_config.context_limit);
 
     activity_   = std::make_unique<ActivityLog>(frontends_);
-    budget_     = std::make_unique<ContextBudget>(llm_config_.context_limit, frontends_);
     metrics_    = std::make_unique<MetricsAggregator>();
-    loop_       = std::make_unique<AgentLoop>(llm_, tools_, services_,
-                                               *activity_, *budget_, frontends_,
-                                               cancel_requested_,
-                                               metrics_.get());
+
+    // LLMContext owns history + budget + tracker + checkpoints + attached.
+    // Constructor seeds the system message and the initial mtime snapshot.
+    ctx_ = std::make_unique<LLMContext>(services_, llm_config,
+                                         std::move(assembly),
+                                         frontends_, sessions_,
+                                         checkpoints_dir);
+
+    loop_ = std::make_unique<AgentLoop>(llm_, tools_, services_,
+                                         *activity_, ctx_->budget(), frontends_,
+                                         cancel_requested_,
+                                         metrics_.get());
     dispatcher_ = std::make_unique<ToolDispatcher>(tools_, services_, *activity_,
                                                    frontends_, cancel_requested_,
                                                    metrics_.get());
     slash_      = std::make_unique<SlashCommandDispatcher>(tools_, services_);
 
-    // S4.X -- prompt templates. The registry runs even when both dirs are
-    // empty -- a workspace can pick templates up later via /reload without
-    // re-opening. When neither dir was supplied we leave it null so the
-    // dispatcher's help / completion paths don't render an empty section.
+    // S4.X -- prompt templates.
     if (!project_prompts_dir.empty() || !global_prompts_dir.empty()) {
         prompt_templates_ = std::make_unique<PromptTemplateRegistry>(
             project_prompts_dir, global_prompts_dir);
         slash_->set_template_registry(prompt_templates_.get());
     }
 
-    // S4.T -- file-change tracker. Always allocated; the per-turn injection is
-    // gated by WorkspaceConfig::notify_external_changes. Take an initial
-    // snapshot so the first user turn diffs against "the world as it was when
-    // we started", not against an empty set (which would flood the prompt).
-    change_tracker_ = std::make_unique<FileChangeTracker>();
-    if (auto* idx = services_.index()) {
-        try { change_tracker_->snapshot(*idx); }
-        catch (const std::exception& e) {
-            spdlog::warn("FileChangeTracker: initial snapshot failed: {}", e.what());
-        }
-    }
-    dispatcher_->set_change_tracker(change_tracker_.get());
-
-    session_id_ = make_session_id();
-    turn_id_    = 0;
-    if (!checkpoints_dir.empty()) {
-        checkpoints_ = std::make_unique<CheckpointStore>(checkpoints_dir);
-        spdlog::info("AgentCore: checkpoints at {} (session '{}')",
-                     checkpoints_dir.string(), session_id_);
-    }
-
-    int sys_tokens = TokenCounter::estimate(system_prompt_);
-    spdlog::info("AgentCore: system prompt ~{} tokens, context limit {}",
-                 sys_tokens, llm_config_.context_limit);
-
-    history_.add({MessageRole::system, system_prompt_});
+    // S4.T -- wire the file-change tracker into the dispatcher so mutating
+    // tool calls record their paths (suppressing them from next turn's
+    // "files changed since last turn" notification).
+    dispatcher_->set_change_tracker(ctx_->change_tracker());
 
     activity_->emit(ActivityKind::system_prompt,
                     "System prompt assembled (~" + std::to_string(sys_tokens) + " tokens)",
-                    system_prompt_,
+                    ctx_->system_prompt().full_text(),
                     /*tokens_in=*/std::nullopt,
                     /*tokens_out=*/std::nullopt,
                     /*tokens_delta=*/sys_tokens);
@@ -145,64 +113,11 @@ void AgentCore::emit_index_event(const std::string& summary, const std::string& 
 }
 
 // -- Attached file context (S2.4 / S4.F) -------------------------------------
-//
-// S4.F: the attached-file block used to live appended to the system prompt
-// (see compose_system_prompt / refresh_system_prompt in pre-S4.F revisions).
-// Every attach/detach rewrote the in-history system message and torched the
-// LM Studio / llama.cpp prefix cache (2K+ tokens re-prefilled per turn).
-// Now the block is composed per-user-turn and prepended to the user message,
-// matching S4.T's "[Files changed since last turn: ...]" pattern -- the
-// system prompt stays byte-stable, and the attached-file context still
-// follows the conversation into history naturally.
-
-std::string AgentCore::compose_attached_context_block() const
-{
-    std::optional<AttachedContext> ctx;
-    {
-        std::lock_guard lock(attached_mutex_);
-        ctx = attached_context_;
-    }
-    if (!ctx) return {};
-
-    std::ostringstream ss;
-    ss << "[Attached file: " << ctx->file_path << "]\n";
-
-    if (auto* idx = services_.index()) {
-        try {
-            auto entries = idx->get_file_outline(ctx->file_path);
-            if (!entries.empty()) {
-                ss << "Outline:\n";
-                for (const auto& e : entries) {
-                    ss << "- L" << e.line << " ";
-                    if (e.type == OutlineEntry::Heading) {
-                        ss << std::string(static_cast<size_t>(std::max(1, e.level)), '#')
-                           << " " << e.text;
-                    } else {
-                        ss << "[" << (e.kind.empty() ? "symbol" : e.kind) << "] "
-                           << e.text;
-                        if (!e.signature.empty())
-                            ss << " " << e.signature;
-                    }
-                    ss << "\n";
-                }
-            }
-        } catch (const std::exception& ex) {
-            spdlog::warn("Attached-context outline lookup failed for '{}': {}",
-                         ctx->file_path, ex.what());
-        }
-    }
-    if (!ctx->preview.empty())
-        ss << "Preview: " << ctx->preview << "\n";
-    ss << "\n";
-    return ss.str();
-}
 
 void AgentCore::set_attached_context(AttachedContext ctx)
 {
-    {
-        std::lock_guard lock(attached_mutex_);
-        attached_context_ = ctx;
-    }
+    ctx_->set_attached_context(ctx);
+
     spdlog::info("AgentCore: attached context set to '{}'", ctx.file_path);
     activity_->emit(ActivityKind::index_event,
                     "Attached file: " + ctx.file_path,
@@ -217,12 +132,8 @@ void AgentCore::set_attached_context(AttachedContext ctx)
 
 void AgentCore::clear_attached_context()
 {
-    bool had_value = false;
-    {
-        std::lock_guard lock(attached_mutex_);
-        had_value = attached_context_.has_value();
-        attached_context_.reset();
-    }
+    bool had_value = ctx_->attached_context().has_value();
+    ctx_->clear_attached_context();
     if (!had_value) return;
 
     spdlog::info("AgentCore: attached context cleared");
@@ -235,8 +146,7 @@ void AgentCore::clear_attached_context()
 
 std::optional<AttachedContext> AgentCore::attached_context() const
 {
-    std::lock_guard lock(attached_mutex_);
-    return attached_context_;
+    return ctx_->attached_context();
 }
 
 // -- Plan mode (S4.D) --------------------------------------------------------
@@ -248,10 +158,6 @@ AgentMode AgentCore::mode() const
 
 void AgentCore::set_mode(AgentMode m)
 {
-    // Queued onto the agent thread for the same reason compact_context is:
-    // ConversationHistory's owner-thread fence (S3.I) bites if a foreign
-    // thread tries to mutate history while a turn is in flight, and changing
-    // mode may need to append a [mode change] system marker.
     pending_mode_.store(m, std::memory_order_relaxed);
     pending_mode_change_.store(true, std::memory_order_release);
     {
@@ -296,10 +202,6 @@ void AgentCore::apply_pending_mode_change()
     AgentMode prev = mode_.exchange(m, std::memory_order_acq_rel);
     if (m == prev) return;
 
-    // Switching INTO chat or back to plan from a different mode clears any
-    // half-finished plan -- the user is starting over. Switching FROM plan
-    // to execute is handled by approve_plan separately and must not reset
-    // current_plan_ here.
     if (m == AgentMode::chat || (m == AgentMode::plan && prev != AgentMode::plan)) {
         std::lock_guard lock(plan_mutex_);
         current_plan_.reset();
@@ -320,8 +222,6 @@ void AgentCore::apply_pending_plan_decision()
     bool reject  = pending_plan_reject_.exchange(false, std::memory_order_acq_rel);
     if (!approve && !reject) return;
 
-    // Snapshot the plan under lock, then operate without the lock to avoid
-    // contention if a frontend queries during the broadcast.
     Plan plan;
     bool have_plan = false;
     bool awaiting  = false;
@@ -340,7 +240,6 @@ void AgentCore::apply_pending_plan_decision()
     }
 
     if (reject) {
-        // Drop the plan; user will re-prompt. Stay in plan mode.
         {
             std::lock_guard lock(plan_mutex_);
             current_plan_.reset();
@@ -352,10 +251,6 @@ void AgentCore::apply_pending_plan_decision()
         return;
     }
 
-    // approve: switch to execute mode, then enqueue a synthetic user message
-    // that recaps the plan + tells the model to begin. The recap message is
-    // what triggers the next agent turn -- the user doesn't have to type
-    // anything to resume.
     AgentMode prev_mode = mode_.exchange(AgentMode::execute,
                                           std::memory_order_acq_rel);
     {
@@ -394,8 +289,6 @@ void AgentCore::apply_pending_plan_decision()
         });
     }
 
-    // Enqueue the recap as the next user message. process_message picks it
-    // up on the next agent_thread_func iteration and runs a normal turn.
     {
         std::lock_guard lock(queue_mutex_);
         message_queue_.push(std::move(recap));
@@ -464,24 +357,19 @@ void AgentCore::agent_thread_func()
         }
 
         // Drain pending control requests before the turn starts. Each takes
-        // the conversation owner scope while it runs (apply_pending_*
-        // routines may mutate history_).
+        // the conversation owner scope while it runs.
         {
-            ConversationOwnerScope owner_scope(history_);
+            ConversationOwnerScope owner_scope(ctx_->history());
             apply_pending_compaction();
             apply_pending_mode_change();
-            // Plan-approve may itself enqueue a synthetic message; the loop
-            // re-checks the queue on the next iteration.
             apply_pending_plan_decision();
         }
 
         if (!have_message)
-            continue;  // wake-up was for control only
+            continue;
 
-        // Gate the history to this thread for the duration of the turn. S3.I:
-        // inter-turn mutations (e.g. CLI REPL /reset) run with owner cleared.
         {
-            ConversationOwnerScope owner_scope(history_);
+            ConversationOwnerScope owner_scope(ctx_->history());
             process_message(message);
         }
 
@@ -546,9 +434,6 @@ void AgentCore::process_message(const std::string& content)
 
     frontends_.broadcast([](IFrontend& fe) { fe.on_turn_start(); });
 
-    // The "user-facing input" the rest of process_message works against may
-    // be the original text, or (S4.X) the body of a prompt template that
-    // the user invoked via `/<name>`.
     std::string user_input = content;
     {
         auto outcome = try_slash_command(content);
@@ -564,36 +449,29 @@ void AgentCore::process_message(const std::string& content)
         }
     }
 
-    // Bump the turn counter and arm the dispatcher to snapshot any mutating
-    // tool call. Slash commands above don't bump — they bypass the dispatcher.
-    ++turn_id_;
-    if (checkpoints_) {
-        dispatcher_->set_turn_context(checkpoints_.get(), session_id_, turn_id_);
-        checkpoints_->gc_session(session_id_);
+    // Bump turn counter + arm checkpoint snapshotting. Slash commands above
+    // don't bump -- they bypass the dispatcher.
+    int turn_id = ctx_->bump_turn_id();
+    if (auto* cps = ctx_->checkpoints()) {
+        dispatcher_->set_turn_context(cps, ctx_->session_id(), turn_id);
+        cps->gc_session(ctx_->session_id());
     }
-    metrics_->begin_turn(turn_id_);
+    metrics_->begin_turn(turn_id);
 
-    // S4.T -- compute "files changed since last assistant turn" and prepend a
-    // one-liner to the user message before it lands in history. The tracker's
-    // suppression set carries paths the agent itself touched last turn; reset
-    // it now so this turn's edits get recorded fresh.
-    // S4.F -- the attached-file outline rides the same prepend channel; it
-    // used to live in the system prompt but that killed the prefix cache on
-    // every attach/detach. Both prepends produce volatile-tail content that
-    // the cache already expects to invalidate.
+    // S4.T / S4.F volatile-tail prepends.
     std::string effective_content = user_input;
     {
-        std::string attached_block = compose_attached_context_block();
+        std::string attached_block = ctx_->compose_attached_context_block();
         if (!attached_block.empty())
             effective_content = attached_block + effective_content;
     }
     bool notify = true;
     if (auto* ws = services_.workspace())
         notify = ws->config().notify_external_changes;
-    if (notify && change_tracker_) {
+    if (notify && ctx_->change_tracker()) {
         if (auto* idx = services_.index()) {
             try {
-                auto diff = change_tracker_->diff_since_snapshot(*idx);
+                auto diff = ctx_->change_tracker()->diff_since_snapshot(*idx);
                 if (!diff.changed.empty() || !diff.deleted.empty()) {
                     std::ostringstream note;
                     note << "[Files changed since last turn:";
@@ -619,19 +497,19 @@ void AgentCore::process_message(const std::string& content)
                 spdlog::warn("FileChangeTracker: diff failed: {}", e.what());
             }
         }
-        change_tracker_->clear_agent_touched();
+        ctx_->change_tracker()->clear_agent_touched();
     }
 
-    history_.add({MessageRole::user, effective_content});
+    ctx_->add_message({MessageRole::user, effective_content});
 
     activity_->emit(ActivityKind::user_message,
                     "User message (" + std::to_string(user_input.size()) + " chars)",
                     user_input);
 
     frontends_.broadcast([&](IFrontend& fe) {
-        fe.on_context_meter(current_token_count(), llm_config_.context_limit,
-                            budget_->last_prompt_tokens(),
-                            budget_->last_completion_tokens());
+        fe.on_context_meter(ctx_->current_tokens(), ctx_->llm_config().context_limit,
+                            ctx_->budget().last_prompt_tokens(),
+                            ctx_->budget().last_completion_tokens());
     });
 
     int round = 0;
@@ -650,32 +528,25 @@ void AgentCore::process_message(const std::string& content)
         ++round;
         spdlog::trace("AgentCore: LLM round {}", round);
 
-        // Service queued control requests (compaction, mode change, plan
-        // decision) before the LLM round so they take effect mid-turn.
-        // Owner scope is held by the calling agent_thread_func.
         apply_pending_compaction();
         apply_pending_mode_change();
         apply_pending_plan_decision();
 
-        if (budget_->check_overflow(current_token_count()))
+        if (ctx_->budget().check_overflow(ctx_->current_tokens()))
             break;
 
-        // S4.D: map the user-facing AgentMode to the tool-catalog ToolMode.
-        // chat -> agent (full catalog, no plan tools);
-        // plan -> plan (propose_plan only);
-        // execute -> execute (full catalog + mark_step_done).
         ToolMode tool_mode = ToolMode::agent;
         switch (mode_.load(std::memory_order_acquire)) {
         case AgentMode::chat:    tool_mode = ToolMode::agent;   break;
         case AgentMode::plan:    tool_mode = ToolMode::plan;    break;
         case AgentMode::execute: tool_mode = ToolMode::execute; break;
         }
-        auto step = loop_->run_step(history_, tool_mode);
+        auto step = loop_->run_step(ctx_->history(), tool_mode);
 
         frontends_.broadcast([&](IFrontend& fe) {
-            fe.on_context_meter(current_token_count(), llm_config_.context_limit,
-                            budget_->last_prompt_tokens(),
-                            budget_->last_completion_tokens());
+            fe.on_context_meter(ctx_->current_tokens(), ctx_->llm_config().context_limit,
+                            ctx_->budget().last_prompt_tokens(),
+                            ctx_->budget().last_completion_tokens());
         });
 
         if (step.had_error) {
@@ -683,12 +554,8 @@ void AgentCore::process_message(const std::string& content)
             break;
         }
 
-        // Mid-stream Stop. Keep whatever partial text streamed before the
-        // abort in history (matches the visible chat state) and surface a
-        // one-line note so the user knows the turn ended on cancel rather
-        // than on a natural stop.
         if (cancel_requested_.load()) {
-            history_.add(std::move(step.assistant_msg));
+            ctx_->add_message(std::move(step.assistant_msg));
             spdlog::info("AgentCore: turn cancelled mid-stream");
             frontends_.broadcast([](IFrontend& fe) {
                 fe.on_error("Turn cancelled.");
@@ -696,7 +563,7 @@ void AgentCore::process_message(const std::string& content)
             break;
         }
 
-        history_.add(std::move(step.assistant_msg));
+        ctx_->add_message(std::move(step.assistant_msg));
 
         if (step.tool_calls.empty())
             break;
@@ -706,25 +573,15 @@ void AgentCore::process_message(const std::string& content)
                 spdlog::info("AgentCore: skipping remaining tool calls (cancelled)");
                 break;
             }
-            // S4.D: capture the dispatched tool result so we can react to
-            // plan tools (propose_plan, mark_step_done). The wrapper writes
-            // through to history exactly as before, then forwards a copy
-            // to observe_plan_tool_result.
             std::string captured_content;
             bool        captured_success = true;
             dispatcher_->dispatch(call, [&](ChatMessage m) {
                 captured_content = m.content;
-                // Tool messages don't carry an explicit success flag; the
-                // tools' own JSON encodes "ok" / "error" fields that
-                // observe_plan_tool_result inspects.
-                history_.add(std::move(m));
+                ctx_->add_message(std::move(m));
             });
             observe_plan_tool_result(call, captured_content, captured_success);
         }
 
-        // S4.D: in plan mode, once propose_plan fires we wait for the user's
-        // approve/reject decision. Don't keep looping the LLM -- the model's
-        // job is done until we hear back.
         {
             std::lock_guard lock(plan_mutex_);
             if (plan_awaiting_decision_)
@@ -743,35 +600,24 @@ void AgentCore::process_message(const std::string& content)
     metrics_->end_turn(turn_had_error);
 
     // Drop the turn context so any background activity past this point won't
-    // accidentally tag a snapshot to the just-finished turn. (Inter-turn
-    // mutations from outside the agent thread are rare, but we keep the
-    // window tight.) If the turn touched no files, drop the (still-empty)
-    // turn directory so /undo doesn't see phantom no-op turns.
-    if (checkpoints_) {
-        if (checkpoints_->entry_count(session_id_, turn_id_) == 0)
-            checkpoints_->drop_turn(session_id_, turn_id_);
+    // accidentally tag a snapshot to the just-finished turn.
+    if (auto* cps = ctx_->checkpoints()) {
+        if (cps->entry_count(ctx_->session_id(), turn_id) == 0)
+            cps->drop_turn(ctx_->session_id(), turn_id);
         dispatcher_->set_turn_context(nullptr, {}, 0);
     }
 
-    // S4.L -- per-turn auto-commit. Fire ONLY when:
-    //   * the workspace exposes a config with `git_auto_commit` true,
-    //   * at least one mutating tool ran (we read the change tracker's
-    //     agent-touched count -- it's still populated until next turn's
-    //     clear_agent_touched, so this captures THIS turn's writes), and
-    //   * the turn didn't end on an error (no point recording a half-finished
-    //     state in git -- the user can /undo or fix manually first).
-    // Failures inside auto_commit_after_turn surface as a single warning + an
-    // activity event; the agent never blocks on git.
+    // S4.L -- per-turn auto-commit.
     if (!turn_had_error
-        && change_tracker_
-        && change_tracker_->agent_touched_size() > 0)
+        && ctx_->change_tracker()
+        && ctx_->change_tracker()->agent_touched_size() > 0)
     {
         if (auto* ws = services_.workspace()) {
             const auto& cfg = ws->config();
             if (cfg.git_auto_commit) {
                 std::string assistant_text;
-                for (auto it = history_.messages().rbegin();
-                     it != history_.messages().rend(); ++it) {
+                for (auto it = ctx_->history().messages().rbegin();
+                     it != ctx_->history().messages().rend(); ++it) {
                     if (it->role == MessageRole::assistant && !it->content.empty()) {
                         assistant_text = it->content;
                         break;
@@ -805,18 +651,8 @@ void AgentCore::process_message(const std::string& content)
         }
     }
 
-    // S4.T -- refresh the mtime baseline for next turn's diff. Done after the
-    // assistant has finished so any writes the agent just made are part of
-    // the new baseline (the suppression set is cleared next turn anyway).
-    if (change_tracker_) {
-        if (auto* idx = services_.index()) {
-            try { change_tracker_->snapshot(*idx); }
-            catch (const std::exception& e) {
-                spdlog::warn("FileChangeTracker: end-of-turn snapshot failed: {}",
-                             e.what());
-            }
-        }
-    }
+    // S4.T -- refresh the mtime baseline for next turn's diff.
+    ctx_->snapshot_change_tracker();
 
     frontends_.broadcast([](IFrontend& fe) { fe.on_turn_complete(); });
     busy_.store(false);
@@ -855,12 +691,6 @@ void AgentCore::tool_decision(const std::string& call_id,
 
 void AgentCore::compact_context(CompactionStrategy strategy, int n)
 {
-    // Caller is the GUI thread (or CLI main thread). ConversationHistory's
-    // owner-thread fence (S3.I) bites if we mutate from here directly while a
-    // turn is in flight, so flag a request and let the agent thread drain it
-    // at a safe point (between rounds, or in the idle wait loop). queue_cv_
-    // is shared with message_queue_, so the wait predicate sees pending work
-    // immediately even if the queue itself is empty.
     pending_compact_strategy_.store(strategy, std::memory_order_relaxed);
     pending_compact_n_.store(n, std::memory_order_relaxed);
     pending_compact_.store(true, std::memory_order_release);
@@ -871,10 +701,6 @@ void AgentCore::compact_context(CompactionStrategy strategy, int n)
     spdlog::info("AgentCore: compaction queued (strategy={}, n={})",
                  strategy == CompactionStrategy::drop_tool_results
                      ? "drop_tool_results" : "drop_oldest", n);
-    // Surface the request in the activity log immediately so the user knows
-    // their click was registered -- the agent thread may not pick it up
-    // until the in-flight LLM stream returns (compaction can't mutate
-    // history_ while an LLM round is reading it).
     activity_->emit(ActivityKind::compaction,
                     std::string("Compaction queued (") +
                         (strategy == CompactionStrategy::drop_tool_results
@@ -886,10 +712,6 @@ void AgentCore::observe_plan_tool_result(const ToolCall& call,
                                           const std::string& result_content,
                                           bool /*result_success*/)
 {
-    // The plan tools encode their own success flag inside the result JSON
-    // ("ok": true / "error": "..."). We never trust the dispatcher's
-    // captured_success placeholder -- it doesn't reflect the tool's own
-    // validation outcome.
     if (call.tool_name != "propose_plan" && call.tool_name != "mark_step_done")
         return;
 
@@ -1022,28 +844,20 @@ void AgentCore::apply_pending_compaction()
     auto strategy = pending_compact_strategy_.load(std::memory_order_relaxed);
     int  n        = pending_compact_n_.load(std::memory_order_relaxed);
 
-    int before = history_.estimate_tokens();
+    int before = ctx_->history().estimate_tokens();
 
     switch (strategy) {
     case CompactionStrategy::drop_tool_results:
-        history_.drop_tool_results();
+        ctx_->compact_drop_tool_results();
         break;
     case CompactionStrategy::drop_oldest:
-        history_.drop_oldest_turns(n > 0 ? n : 3);
+        ctx_->compact_drop_oldest_turns(n > 0 ? n : 3);
         break;
     }
 
-    int after = history_.estimate_tokens();
+    int after = ctx_->history().estimate_tokens();
     spdlog::info("AgentCore: compaction freed ~{} tokens ({} -> {})",
                  before - after, before, after);
-
-    // Invalidate the cached server total -- it reflects the pre-compaction
-    // count and `current_token_count()` would otherwise keep showing the
-    // stale value until the next LLM round reports fresh usage. Clearing
-    // forces the meter to fall back to the (now trimmed) history estimate,
-    // so the UI immediately reflects the compaction.
-    budget_->set_server_total(0);
-    budget_->set_server_split(0, 0);
 
     activity_->emit(ActivityKind::compaction,
                     fmt::format("Compaction applied: freed ~{} tokens ({} -> {})",
@@ -1055,9 +869,9 @@ void AgentCore::apply_pending_compaction()
                         n, before, after));
 
     frontends_.broadcast([&](IFrontend& fe) {
-        fe.on_context_meter(current_token_count(), llm_config_.context_limit,
-                            budget_->last_prompt_tokens(),
-                            budget_->last_completion_tokens());
+        fe.on_context_meter(ctx_->current_tokens(), ctx_->llm_config().context_limit,
+                            ctx_->budget().last_prompt_tokens(),
+                            ctx_->budget().last_completion_tokens());
     });
 }
 
@@ -1065,16 +879,14 @@ void AgentCore::apply_pending_compaction()
 
 void AgentCore::reset_conversation()
 {
-    history_.clear();
-    // S4.F: the system prompt is byte-stable across the session (the attached-
-    // file block now rides on user messages, not here). On reset we just
-    // re-seed the same base_system_prompt_.
-    system_prompt_ = base_system_prompt_;
-    history_.add({MessageRole::system, system_prompt_});
-    budget_->reset();
+    // LLMContext handles: clear history + re-seed system prompt + reset
+    // budget + drop checkpoint session + roll a fresh session id +
+    // re-snapshot the file-change tracker.
+    ctx_->reset_for_new_conversation();
+
     metrics_->reset();
 
-    // S4.D -- reset mode + plan so a fresh conversation starts clean.
+    // S4.D -- reset mode + plan.
     AgentMode prev_mode = mode_.exchange(AgentMode::chat,
                                           std::memory_order_acq_rel);
     pending_mode_change_.store(false, std::memory_order_relaxed);
@@ -1092,34 +904,12 @@ void AgentCore::reset_conversation()
         });
     }
 
-    // Drop checkpoint history with the conversation; start a fresh session
-    // so the on-disk layout doesn't keep accumulating across resets.
-    if (checkpoints_) {
-        checkpoints_->drop_session(session_id_);
-        session_id_ = make_session_id();
-        turn_id_ = 0;
-    }
-
-    // S4.T -- baseline a fresh snapshot so we don't replay diffs that
-    // happened across the now-cleared session. clear_agent_touched is implied
-    // by the snapshot taking but be explicit.
-    if (change_tracker_) {
-        change_tracker_->clear_agent_touched();
-        if (auto* idx = services_.index()) {
-            try { change_tracker_->snapshot(*idx); }
-            catch (const std::exception& e) {
-                spdlog::warn("FileChangeTracker: reset snapshot failed: {}",
-                             e.what());
-            }
-        }
-    }
-
     spdlog::info("AgentCore: conversation reset");
 
     frontends_.broadcast([&](IFrontend& fe) {
-        fe.on_context_meter(current_token_count(), llm_config_.context_limit,
-                            budget_->last_prompt_tokens(),
-                            budget_->last_completion_tokens());
+        fe.on_context_meter(ctx_->current_tokens(), ctx_->llm_config().context_limit,
+                            ctx_->budget().last_prompt_tokens(),
+                            ctx_->budget().last_completion_tokens());
     });
     frontends_.broadcast([](IFrontend& fe) { fe.on_session_reset(); });
 }
@@ -1128,28 +918,26 @@ void AgentCore::reset_conversation()
 
 std::string AgentCore::undo_turn(int turn_id)
 {
-    if (!checkpoints_)
+    auto* cps = ctx_->checkpoints();
+    if (!cps)
         return "Undo unavailable: checkpoint store not configured for this workspace.";
 
-    // turn_id == 0 → resolve to the highest turn that actually has a manifest.
     int target = turn_id;
     if (target <= 0) {
-        auto turns = checkpoints_->list_turns(session_id_);
+        auto turns = cps->list_turns(ctx_->session_id());
         if (turns.empty())
             return "Nothing to undo: no checkpointed turns in this session.";
         target = turns.back().turn_id;
     }
 
-    auto info = checkpoints_->read_turn(session_id_, target);
+    auto info = cps->read_turn(ctx_->session_id(), target);
     if (!info)
         return "Nothing to undo: turn " + std::to_string(target) +
                " has no checkpoint.";
 
-    auto result = checkpoints_->restore_turn(session_id_, target,
-                                             services_.root());
-    // Drop the manifest so the same turn can't be undone twice and
-    // list_checkpoints() reflects the current state of the world.
-    checkpoints_->drop_turn(session_id_, target);
+    auto result = cps->restore_turn(ctx_->session_id(), target,
+                                    services_.root());
+    cps->drop_turn(ctx_->session_id(), target);
 
     std::ostringstream summary;
     summary << "Undo turn " << target << ": "
@@ -1170,50 +958,15 @@ std::string AgentCore::undo_turn(int turn_id)
 
 std::vector<TurnInfo> AgentCore::list_checkpoints() const
 {
-    if (!checkpoints_) return {};
-    return checkpoints_->list_turns(session_id_);
+    auto* cps = ctx_->checkpoints();
+    if (!cps) return {};
+    return cps->list_turns(ctx_->session_id());
 }
 
-// S5.C -- read the byte-for-byte pre-mutation snapshot for `rel_path` in the
-// current turn's checkpoint directory. The chat panel calls this from the UI
-// thread when a `write_file` or `delete_file` tool result arrives, so it can
-// render a real before/after diff in the chat history.
 std::optional<std::string> AgentCore::read_current_pre_mutation(
     const std::string& rel_path) const
 {
-    if (!checkpoints_ || session_id_.empty() || turn_id_ <= 0) return std::nullopt;
-
-    auto turn = checkpoints_->read_turn(session_id_, turn_id_);
-    if (!turn.has_value()) return std::nullopt;
-
-    // Normalise the requested path to forward-slash form -- the manifest
-    // stores rel paths that way regardless of host OS.
-    std::string needle = rel_path;
-    for (auto& c : needle) if (c == '\\') c = '/';
-
-    const CheckpointEntry* match = nullptr;
-    for (const auto& e : turn->entries) {
-        if (e.path == needle) { match = &e; break; }
-    }
-    if (!match) return std::nullopt;
-    // File didn't exist before mutation: caller treats nullopt as all-add.
-    if (!match->existed) return std::nullopt;
-    // Skipped (oversized) snapshot: no body on disk; treat as unknown.
-    if (match->skipped) return std::nullopt;
-
-    std::filesystem::path body = checkpoints_->root()
-                  / session_id_
-                  / std::to_string(turn_id_)
-                  / "files"
-                  / std::filesystem::path(needle);
-    std::error_code ec;
-    if (!std::filesystem::exists(body, ec)) return std::nullopt;
-
-    std::ifstream f(body, std::ios::binary);
-    if (!f.is_open()) return std::nullopt;
-    std::ostringstream ss;
-    ss << f.rdbuf();
-    return ss.str();
+    return ctx_->read_current_pre_mutation(rel_path);
 }
 
 // -- Metrics export (S4.S) ---------------------------------------------------
@@ -1263,37 +1016,23 @@ std::string AgentCore::save_session()
 {
     nlohmann::json extras;
     extras["metrics"] = metrics_->to_json();
-    auto id = sessions_.save(history_, extras);
-    spdlog::info("AgentCore: session saved as '{}'", id);
-    return id;
+    return ctx_->save_session(extras);
 }
 
 void AgentCore::load_session(const std::string& session_id)
 {
-    history_ = sessions_.load(session_id);
-    budget_->reset();
+    ctx_->load_session(session_id);
     metrics_->reset();
-    spdlog::info("AgentCore: loaded session '{}' ({} messages)",
-                 session_id, history_.size());
 
     frontends_.broadcast([&](IFrontend& fe) {
-        fe.on_context_meter(current_token_count(), llm_config_.context_limit,
-                            budget_->last_prompt_tokens(),
-                            budget_->last_completion_tokens());
+        fe.on_context_meter(ctx_->current_tokens(), ctx_->llm_config().context_limit,
+                            ctx_->budget().last_prompt_tokens(),
+                            ctx_->budget().last_completion_tokens());
     });
     frontends_.broadcast([](IFrontend& fe) { fe.on_session_reset(); });
 }
 
-// -- Token accounting --------------------------------------------------------
-
-int AgentCore::current_token_count() const
-{
-    return budget_->current(history_.estimate_tokens());
-}
-
 // -- Slash commands (direct tool invocation) ---------------------------------
-// Parsing + execution live in SlashCommandDispatcher (S3.J). AgentCore only
-// routes the output to frontends.
 
 AgentCore::SlashOutcome AgentCore::try_slash_command(const std::string& content)
 {
@@ -1304,15 +1043,12 @@ AgentCore::SlashOutcome AgentCore::try_slash_command(const std::string& content)
         SlashOutcome o; o.kind = SlashKind::not_a_slash; return o;
     };
 
-    // Built-in non-tool slash commands handled directly by AgentCore.
-    // /undo  → revert the last checkpointed turn (or a specific id).
     auto trim_left = [](std::string_view s) {
         while (!s.empty() && (s.front() == ' ' || s.front() == '\t')) s.remove_prefix(1);
         return std::string(s);
     };
     std::string s = trim_left(content);
     if (!s.empty() && s.front() == '/') {
-        // Split "/cmd rest"
         size_t end = s.find_first_of(" \t", 1);
         std::string cmd = s.substr(1, end == std::string::npos ? std::string::npos : end - 1);
         std::string rest = end == std::string::npos ? std::string{}
@@ -1346,7 +1082,6 @@ AgentCore::SlashOutcome AgentCore::try_slash_command(const std::string& content)
             o << "  turn time: avg=" << agg.avg_turn_ms << "ms"
               << " p95=" << agg.p95_turn_ms << "ms"
               << " max=" << agg.max_turn_ms << "ms\n";
-            // S4.F -- KV-cache + prefill signals.
             o << "  kv-cache: cached="    << agg.cached_tokens_total
               << "  ratio="    << std::fixed << std::setprecision(1)
               << (agg.cached_token_ratio * 100.0) << "%"
@@ -1377,9 +1112,6 @@ AgentCore::SlashOutcome AgentCore::try_slash_command(const std::string& content)
             return handled();
         }
         if (cmd == "reload") {
-            // S4.X -- re-scan project + global prompt template dirs. Hot-
-            // reload after editing a template; also a no-op safety net for
-            // tests that mutate the dirs after AgentCore was constructed.
             if (!prompt_templates_) {
                 frontends_.broadcast([&](IFrontend& fe) {
                     fe.on_error("Prompt templates are not configured for this workspace.");
@@ -1401,12 +1133,6 @@ AgentCore::SlashOutcome AgentCore::try_slash_command(const std::string& content)
             return handled();
         }
         if (cmd == "forget") {
-            // /forget <id> [--hard]
-            // Soft by default (moves to .deleted/ for 30-day retention); pass
-            // --hard to skip the trash and remove permanently. User-only --
-            // there is no model-side delete tool (the asymmetry is explicit:
-            // the agent grows memory, the user prunes it). Emits a
-            // memory_deleted activity event.
             auto* mem = services_.memory();
             if (!mem) {
                 frontends_.broadcast([&](IFrontend& fe) {
@@ -1416,13 +1142,11 @@ AgentCore::SlashOutcome AgentCore::try_slash_command(const std::string& content)
             }
             bool hard = false;
             std::string target_id = rest;
-            // Strip a trailing "--hard" flag if present (any position).
             auto strip_flag = [&](const std::string& flag) {
                 auto p = target_id.find(flag);
                 if (p == std::string::npos) return;
                 size_t end = p + flag.size();
                 target_id.erase(p, flag.size());
-                // Tidy up adjacent whitespace.
                 while (p < target_id.size()
                        && (target_id[p] == ' ' || target_id[p] == '\t')) {
                     target_id.erase(p, 1);
@@ -1438,7 +1162,6 @@ AgentCore::SlashOutcome AgentCore::try_slash_command(const std::string& content)
                 hard = true;
                 strip_flag("--hard");
             }
-            // Trim
             while (!target_id.empty()
                    && (target_id.front() == ' ' || target_id.front() == '\t'))
                 target_id.erase(target_id.begin());
@@ -1476,10 +1199,6 @@ AgentCore::SlashOutcome AgentCore::try_slash_command(const std::string& content)
             return handled();
         }
         if (cmd == "memorize") {
-            // /memorize [+tag1 +tag2 ...] [--pin] <content>
-            // Tags ('+...') and flags ('--pin') are consumed from the left
-            // until the first non-flag token; everything from there to end
-            // of input is the verbatim content (whitespace preserved).
             auto* mem = services_.memory();
             if (!mem) {
                 frontends_.broadcast([&](IFrontend& fe) {
@@ -1490,20 +1209,18 @@ AgentCore::SlashOutcome AgentCore::try_slash_command(const std::string& content)
 
             std::vector<std::string> tags;
             bool pinned = false;
-            std::string content;
+            std::string content_body;
 
             size_t i = 0;
             while (i < rest.size()) {
-                // Skip whitespace
                 while (i < rest.size() && (rest[i] == ' ' || rest[i] == '\t')) ++i;
                 if (i >= rest.size()) break;
                 if (rest[i] == '+') {
-                    // tag token
-                    size_t end = rest.find_first_of(" \t", i);
-                    if (end == std::string::npos) end = rest.size();
-                    std::string tag = rest.substr(i + 1, end - i - 1);
+                    size_t end_tok = rest.find_first_of(" \t", i);
+                    if (end_tok == std::string::npos) end_tok = rest.size();
+                    std::string tag = rest.substr(i + 1, end_tok - i - 1);
                     if (!tag.empty()) tags.push_back(std::move(tag));
-                    i = end;
+                    i = end_tok;
                     continue;
                 }
                 if (rest.compare(i, 5, "--pin") == 0
@@ -1513,11 +1230,10 @@ AgentCore::SlashOutcome AgentCore::try_slash_command(const std::string& content)
                     i += 5;
                     continue;
                 }
-                // First non-flag token: content is the remainder.
-                content = rest.substr(i);
+                content_body = rest.substr(i);
                 break;
             }
-            if (content.empty()) {
+            if (content_body.empty()) {
                 frontends_.broadcast([&](IFrontend& fe) {
                     fe.on_error("Usage: /memorize [+tag1 +tag2] [--pin] <content>");
                 });
@@ -1525,7 +1241,7 @@ AgentCore::SlashOutcome AgentCore::try_slash_command(const std::string& content)
             }
 
             try {
-                std::string id = mem->add(content, tags, pinned, "user");
+                std::string id = mem->add(content_body, tags, pinned, "user");
                 std::ostringstream tag_str;
                 for (size_t t = 0; t < tags.size(); ++t) {
                     if (t) tag_str << ",";
@@ -1537,7 +1253,7 @@ AgentCore::SlashOutcome AgentCore::try_slash_command(const std::string& content)
                 if (!tags.empty()) summary << " [" << tag_str.str() << "]";
                 std::ostringstream detail;
                 detail << "id: " << id << "\npinned: " << (pinned ? "true" : "false")
-                       << "\ntags: [" << tag_str.str() << "]\n\n" << content;
+                       << "\ntags: [" << tag_str.str() << "]\n\n" << content_body;
                 activity_->emit(ActivityKind::memory_added,
                                 summary.str(), detail.str());
 
@@ -1557,14 +1273,8 @@ AgentCore::SlashOutcome AgentCore::try_slash_command(const std::string& content)
         }
 
         // S4.X -- prompt-template lookup BEFORE handing off to the dispatcher.
-        // The dispatcher would otherwise surface "Unknown command" for a name
-        // that's only a template. Built-ins above + tools (resolved by the
-        // dispatcher) take precedence over templates by virtue of running
-        // first, so a template named `compact` can't shadow `/compact`.
         if (prompt_templates_ && !tools_.find(cmd)
             && prompt_templates_->has(cmd)) {
-            // Re-parse the input through SlashCommandParser to get
-            // positional + kwargs the way `expand()` expects them.
             std::vector<std::string>                     positional;
             std::unordered_map<std::string, std::string> kwargs;
             try {
@@ -1590,17 +1300,14 @@ AgentCore::SlashOutcome AgentCore::try_slash_command(const std::string& content)
                 return handled();
             }
 
-            // Token-budget guard: warn when the expanded template alone
-            // already eats more than half the context window. Cheap
-            // heuristic; the existing ContextBudget handles the hard limit.
-            if (llm_config_.context_limit > 0) {
+            if (ctx_->llm_config().context_limit > 0) {
                 int est = TokenCounter::estimate(expanded);
-                int half = llm_config_.context_limit / 2;
+                int half = ctx_->llm_config().context_limit / 2;
                 if (est > half) {
                     std::ostringstream w;
                     w << "warning: prompt template '/" << cmd << "' expanded to ~"
                       << est << " tokens (>" << half
-                      << ", half of context " << llm_config_.context_limit << ").";
+                      << ", half of context " << ctx_->llm_config().context_limit << ").";
                     std::string ws = w.str();
                     frontends_.broadcast(
                         [&](IFrontend& fe) { fe.on_error(ws); });

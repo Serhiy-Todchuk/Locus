@@ -62,7 +62,7 @@ Complete. Closed the gap against leading agents on the tech fundamentals -- diff
 
 With the M4 engine in place, sand down the user-visible edges. UX refinements, performance optimization, robustness work, and quality-of-life touches that make the existing capability set feel fast, predictable, and discoverable. Lands before M6 so each new frontend in the Connected milestone inherits a well-shaped foundation.
 
-Progress: **S5.L (UI Automation Test Driver) ✔** -- ships a manual-only `locus_ui_tests` target driving `locus_gui.exe` via Windows UIA from JSON scripts; three demo scripts (smoke / settings_tour / chat_round_trip) all pass. See [roadmap/M5/S5.L-ui-automation-driver.md](roadmap/M5/S5.L-ui-automation-driver.md).
+Progress: **S5.L (UI Automation Test Driver) ✔** -- ships a manual-only `locus_ui_tests` target driving `locus_gui.exe` via Windows UIA from JSON scripts; three demo scripts (smoke / settings_tour / chat_round_trip) all pass. See [roadmap/M5/S5.L-ui-automation-driver.md](roadmap/M5/S5.L-ui-automation-driver.md). **S5.B / S5.A / S5.M / S5.C ✔.** **S5.J (LLMContext refactor) ✔** -- the conversation's full LLM-facing state (history + system prompt + budget + file tracker + attached context + checkpoints + session ids) now lives on a single `LLMContext` class; `AgentCore` composes one as `ctx_` and is back to the agent-loop runner role. System prompt assembly moved into a new immutable `SystemPromptAssembly` type, turning the S4.F byte-stable invariant from discipline into a type-level guarantee. Tabs (S5.I), edit/delete/rewind (S5.H), composable compaction (S5.F), pin states (S5.E), and reserve enforcement (S5.D) all land on the surface this stage establishes.
 
 Stage list: [roadmap/M5/README.md](roadmap/M5/README.md).
 

@@ -370,6 +370,8 @@ add_library(locus_core STATIC
     src/mcp/mcp_manager.cpp
     src/agent/conversation.cpp
     src/agent/system_prompt.cpp
+    src/agent/system_prompt_assembly.cpp
+    src/agent/llm_context.cpp
     src/agent/activity_log.cpp
     src/agent/context_budget.cpp
     src/agent/metrics.cpp
