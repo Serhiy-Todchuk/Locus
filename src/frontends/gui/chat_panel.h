@@ -2,7 +2,6 @@
 
 #include "../../agent/agent_mode.h"
 #include "../../core/frontend.h"
-#include "mention_popup.h"
 #include "slash_popup.h"
 
 #include <wx/wx.h>
@@ -11,16 +10,19 @@
 
 #include <nlohmann/json.hpp>
 
-#include <chrono>
 #include <functional>
 #include <memory>
-#include <mutex>
 #include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
 namespace locus {
+
+class ChatFooterChips;
+class ChatLinkHandler;
+class ChatPopups;
+class ChatStreamRenderer;
 
 // Chat display + input panel. Center pane of the main frame.
 //
@@ -32,18 +34,21 @@ namespace locus {
 // Streaming: tokens are buffered and flushed to the WebView via a wxTimer
 // every 33ms (~30fps). md4c converts accumulated markdown to HTML on each
 // flush. Prism.js re-highlights code blocks on turn complete.
+//
+// Collaborators (each owns a coherent slice of state):
+//   ChatStreamRenderer -- token buffer, assistant/reasoning bubble state
+//   ChatFooterChips    -- context gauge, plan chip, commit chip
+//   ChatPopups         -- slash-command and @-mention autocomplete popups
+//   ChatLinkHandler    -- locus:// URL dispatch + plan_msg_ids mapping
 
 class ChatPanel : public wxPanel {
 public:
     // on_send is called with the user's message text when Enter is pressed.
     // on_compact is called when the user clicks the manual compaction button.
     // on_stop is called when the user clicks Stop during generation.
-    // on_undo is called when the user clicks the Undo button -- should revert
-    // the most recent checkpointed turn. Disabled while a turn is streaming.
-    // S4.D plan-mode callbacks. on_mode_pick is invoked when the user clicks
-    // the Chat / Plan / Execute toggle. on_plan_decision is invoked when the
-    // user clicks Approve or Reject on a plan bubble (decision == "approve"
-    // or "reject"; LocusFrame translates to AgentCore::approve_plan/reject).
+    // on_undo is called when the user clicks the Undo button.
+    // S4.D plan-mode callbacks. on_mode_pick invoked on Chat/Plan/Execute click.
+    // on_plan_decision invoked when Approve or Reject clicked in plan bubble.
     ChatPanel(wxWindow* parent,
               std::function<void(const std::string&)> on_send,
               std::function<void()> on_compact = nullptr,
@@ -51,6 +56,8 @@ public:
               std::function<void()> on_undo = nullptr,
               std::function<void(AgentMode)> on_mode_pick = nullptr,
               std::function<void(const std::string&)> on_plan_decision = nullptr);
+
+    ~ChatPanel();
 
     // -- Called by LocusFrame in response to agent events --
 
@@ -62,16 +69,11 @@ public:
     void on_error(const wxString& message);
 
     // Tool call / result display (shown inline in chat). The call_id is
-    // remembered so the eventual on_tool_result(call_id, ...) can attach
-    // the result to the *correct* tool-call DOM node, even if other
-    // messages (errors, reasoning blocks) intervened between call and
-    // result.
+    // remembered so on_tool_result can attach to the correct DOM node.
     //
-    // S5.C -- `args` is the raw tool-call args JSON. Cached against the
-    // call_id so on_tool_result can render an inline diff for successful
-    // edit_file / write_file / delete_file calls without re-plumbing the
-    // args through the second event. Pass an empty json (`{}`) when not
-    // relevant.
+    // S5.C -- `args` is the raw tool-call args JSON cached against the call_id
+    // so on_tool_result can render an inline diff for successful
+    // edit_file / write_file / delete_file calls.
     void on_tool_pending(const wxString& call_id,
                          const wxString& tool_name,
                          const wxString& preview,
@@ -80,39 +82,24 @@ public:
                         const wxString& display,
                         bool success);
 
-    // S5.C -- supplied by LocusFrame at construction or via this setter.
-    // Returns the pre-mutation snapshot for `rel_path` (workspace-relative,
-    // forward slashes) from the current turn's checkpoint, or nullopt when
-    // none exists. ChatPanel uses it to render write_file / delete_file
-    // diffs against the pre-mutation state.
+    // S5.C -- supplied by LocusFrame. Returns the pre-mutation snapshot for
+    // `rel_path` from the current turn's checkpoint, or nullopt when none exists.
     using FetchPreMutationFn =
         std::function<std::optional<std::string>(const std::string& rel_path)>;
     void set_pre_mutation_fetcher(FetchPreMutationFn fn) {
         pre_mutation_fetcher_ = std::move(fn);
     }
 
-    // S5.C / S5.Z -- runtime toggles surfaced by WorkspaceConfig.
-    // `context_lines` is the surrounding-context budget for the inline
-    // diff (default 4, 0 = del/add only). `collapse_threshold` folds any
-    // write_file diff rows past row N into a <details> (default 16,
-    // 0 = no collapse).
     void set_diff_options(bool show_diffs, int max_lines,
                           int context_lines = 4,
                           int collapse_threshold = 16) {
-        diff_show_                  = show_diffs;
-        diff_max_lines_             = max_lines > 0 ? max_lines : 200;
-        diff_context_lines_         = context_lines >= 0 ? context_lines : 4;
-        diff_collapse_threshold_    = collapse_threshold >= 0
-                                      ? collapse_threshold : 16;
+        diff_show_               = show_diffs;
+        diff_max_lines_          = max_lines > 0 ? max_lines : 200;
+        diff_context_lines_      = context_lines >= 0 ? context_lines : 4;
+        diff_collapse_threshold_ = collapse_threshold >= 0 ? collapse_threshold : 16;
     }
 
     // S4.D plan-mode display.
-    // on_mode_changed: flip the mode-switcher toggle to match `mode`.
-    // on_plan_proposed: render a structured plan bubble + remember plan id
-    //   for follow-up step advances.
-    // on_plan_step_advanced: flip the step's status glyph + class.
-    // on_plan_completed: lock the plan bubble (Approve/Reject hidden); fire
-    //   end-of-plan footer chip update.
     void on_mode_changed(AgentMode mode);
     void on_plan_proposed(const wxString& plan_json);
     void on_plan_step_advanced(const wxString& plan_id, int step_idx,
@@ -120,51 +107,28 @@ public:
                                 const wxString& notes);
     void on_plan_completed(const wxString& plan_id, bool success);
 
-    // S4.L -- a per-turn auto-commit just landed. Updates the footer chip
-    // with the short SHA + tooltip (full subject); the chip stays visible
-    // for ~30 s then fades.
+    // S4.L auto-commit chip.
     void on_auto_commit(const wxString& short_sha,
                         const wxString& branch,
                         const wxString& subject);
 
     // Footer updates.
-    // S4.V Task 8 -- `prompt_tokens` / `completion_tokens` carry the last
-    // server-reported split. 0 means "not yet reported" (e.g. the broadcast
-    // fires at session open before any LLM call); in that case the label
-    // collapses to the legacy "ctx: U/L (P%)" form.
     void set_context_meter(int used, int limit,
                            int prompt_tokens = 0, int completion_tokens = 0);
-
-    // S4.F live generation-token counter (footer, next to context meter).
-    // Updated ~150 ms throttled by AgentLoop while a stream is in flight.
-    // Reset to empty on turn complete; the post-turn context meter then
-    // carries the exact completion_tokens via on_context_meter.
     void set_generation_progress(int chars, int est_tokens);
 
-    // Attached-context chip (above input). Empty path hides it.
-    // on_detach is invoked when the user clicks the chip's "✕" to detach.
+    // Attached-context chip (above input).
     void set_attached_chip(const wxString& file_path);
     void set_on_detach(std::function<void()> cb);
 
-    // Slash-command suggestions shown when the user types '/' in the input.
-    // Items are typically CLI commands (reset, compact, ...) plus tool names.
+    // Slash-command suggestions.
     void set_slash_commands(std::vector<SlashItem> items);
 
-    // S4.V `@`-mention support. `set_mention_paths` seeds the autocomplete
-    // candidate list (workspace-relative paths captured once per session).
-    // `set_on_mention_attach` registers the submit-time callback fired when
-    // the user sends a message containing one or more `@<path>` tokens that
-    // resolve to indexed files -- LocusFrame wires this to
-    // `AgentCore::set_attached_context`. The path tokens stay in the user
-    // message so the LLM sees them verbatim.
+    // S4.V @-mention support.
     void set_mention_paths(std::vector<std::string> paths);
     void set_on_mention_attach(std::function<void(const std::string&)> cb);
 
-    // Dispatch callback for GUI slash commands. Invoked when the user sends
-    // a message that starts with '/' and the command name matches a known
-    // GUI command. Returns true if handled (input is cleared, message is
-    // NOT forwarded to the agent); false falls through to normal send.
-    // Signature: (command_name_without_slash, rest_of_text_after_command)
+    // GUI slash command dispatch (see original header for full contract).
     void set_on_slash_command(std::function<bool(const std::string&,
                                                  const std::string&)> cb);
 
@@ -176,135 +140,59 @@ private:
     void create_input();
     void create_footer();
 
-    // Build the initial HTML page loaded into the WebView.
     static std::string build_chat_html();
 
-    // Run JavaScript in the WebView. Wrapper for null-safety.
     void run_script(const wxString& js);
 
-    // Escape a string for safe embedding in a JS string literal.
     static wxString js_escape(const wxString& s);
-
-    // Encode user-typed plain text for safe injection into the chat HTML:
-    // HTML-escapes &/</>/" and converts every line-break flavour the input
-    // control might emit (\r\n, \r, \n, \v / U+000B VT -- RichEdit's soft
-    // return on Shift+Enter -- \f / U+000C FF, U+0085 NEL, U+2028 LS,
-    // U+2029 PS) to `<br>`. Without this Shift+Enter newlines render as a
-    // single space (the HTML behaviour for raw whitespace) or as a box
-    // glyph when the line-break code point isn't a member of the rendering
-    // font.
     static wxString user_text_to_html(const wxString& s);
 
-    // Timer callback: flush buffered tokens to the WebView.
     void on_flush_timer(wxTimerEvent& evt);
-
-    // Input key handler: Enter=send, Shift+Enter=newline.
     void on_input_key(wxKeyEvent& evt);
-
-    // Text change handler: show/hide/filter the slash-command popup.
     void on_input_text(wxCommandEvent& evt);
-
-    // WebView navigation guard (block external URLs).
     void on_webview_navigating(wxWebViewEvent& evt);
 
-    // Slash popup management.
-    // The token in the input that triggers suggestions (e.g. "read" when the
-    // user has typed "/read"). Empty if no such token at the cursor.
-    wxString active_slash_token() const;
-    void     update_slash_popup();
-    void     hide_slash_popup();
-    void     accept_slash_suggestion(const std::string& cmd_name);
-    bool     slash_popup_visible() const;
-
-    // S4.V `@`-mention popup management. Mirrors the slash flow but the
-    // trigger token is the `@<prefix>` immediately before the cursor (rather
-    // than the line-start `/<cmd>`). Returns the (start, prefix) pair that
-    // identifies the mention currently being typed; start == npos means no
-    // active mention.
-    struct ActiveMention {
-        size_t   start = std::string::npos;  // byte offset of '@' in input text
-        wxString prefix;                      // chars typed after '@' so far
-    };
-    ActiveMention active_mention_at_cursor() const;
-    void          update_mention_popup();
-    void          hide_mention_popup();
-    void          accept_mention_suggestion(const std::string& path);
-    bool          mention_popup_visible() const;
-
-    // Send the message to the agent (or dispatch as a GUI slash command).
-    // Called from Enter-key handling. Returns true if handled.
     bool submit_current_input();
-
-    // Re-render the ctx label from the cached usage values. Called from
-    // both set_context_meter (post-round / post-tool) and
-    // set_generation_progress (mid-stream live estimate). During streaming
-    // the rendered "out:" prefix is "~N" (estimate); once the server's
-    // usage callback fires it's the exact "N".
-    void refresh_ctx_label();
-
-    // S5.Z #3 -- recompute the action-button label + enabled state from
-    // `streaming_` and whether the input has text. Four states:
-    //   idle + empty  -> "Submit", disabled
-    //   idle + text   -> "Submit", click submits
-    //   streaming + empty -> "Stop", click interrupts
-    //   streaming + text  -> "Queue", click queues onto AgentCore
-    // Called from create_input/footer (initial), on_input_text (every key
-    // stroke), and the streaming-state transitions on turn_start /
-    // turn_complete / on_error / on_session_reset.
     void refresh_action_btn();
 
-    std::function<void(const std::string&)> on_send_;
-    std::function<void()> on_compact_;
-    std::function<void()> on_stop_;
-    std::function<void()> on_undo_;
-    std::function<void(AgentMode)> on_mode_pick_;
-    std::function<void(const std::string&)> on_plan_decision_;
-    std::function<bool(const std::string&, const std::string&)> on_slash_command_;
+    // Collaborators (owned by unique_ptr so forward declarations above suffice).
+    std::unique_ptr<ChatStreamRenderer> renderer_;
+    std::unique_ptr<ChatFooterChips>    footer_chips_;
+    std::unique_ptr<ChatPopups>         popups_;
+    std::unique_ptr<ChatLinkHandler>    link_handler_;
 
+    // Callbacks from LocusFrame.
+    std::function<void(const std::string&)> on_send_;
+    std::function<void()>                    on_compact_;
+    std::function<void()>                    on_stop_;
+    std::function<void()>                    on_undo_;
+    std::function<void(AgentMode)>           on_mode_pick_;
+    std::function<void(const std::string&)>  on_plan_decision_;
+    std::function<bool(const std::string&, const std::string&)> on_slash_command_;
+    std::function<void(const std::string&)>  on_mention_attach_;
+
+    // Core widgets.
     wxWebView*    webview_       = nullptr;
     wxTextCtrl*   input_         = nullptr;
-    wxGauge*      ctx_gauge_     = nullptr;
-    wxStaticText* ctx_label_     = nullptr;
     wxButton*     compact_btn_   = nullptr;
     wxButton*     stop_btn_      = nullptr;
     wxButton*     undo_btn_      = nullptr;
-    // S4.D mode switcher (above the input). Mutually exclusive toggles.
     wxToggleButton* mode_chat_btn_    = nullptr;
     wxToggleButton* mode_plan_btn_    = nullptr;
     wxToggleButton* mode_execute_btn_ = nullptr;
-    // S4.D plan-progress chip (next to context meter).
-    wxStaticText*   plan_chip_        = nullptr;
-    // S4.L auto-commit chip ("⌘ a1b2c3d") -- shown after each agent turn
-    // when WorkspaceConfig::git_auto_commit is on and a commit landed.
-    wxStaticText*   commit_chip_      = nullptr;
 
-    // Cached context-meter values (M5 polish). set_context_meter stores
-    // the post-round / post-tool values; set_generation_progress stores the
-    // mid-stream live estimate. refresh_ctx_label() composes the final
-    // label string -- "out:N" if exact, "out:~N" if live, omitted if 0.
-    int last_ctx_used_              = 0;
-    int last_ctx_limit_             = 0;
-    int last_ctx_prompt_            = 0;
-    int last_ctx_completion_        = 0;
-    int live_completion_estimate_   = 0;
-
-    // Attached-context chip row (sits between webview and input).
-    wxPanel*      attach_panel_  = nullptr;  // the row container
-    wxStaticText* attach_label_  = nullptr;  // "📎 path/to/file"
-    wxButton*     attach_close_  = nullptr;  // small "✕" to detach
+    // Attached-context chip row.
+    wxPanel*      attach_panel_  = nullptr;
+    wxStaticText* attach_label_  = nullptr;
+    wxButton*     attach_close_  = nullptr;
     std::function<void()> on_detach_;
 
-    wxTimer       flush_timer_;
+    wxTimer flush_timer_;
 
-    // call_id -> message_id mapping so on_tool_result attaches to the
-    // matching tool-pending message rather than whatever the latest
-    // addMsg incremented to (which might be an error or reasoning bubble).
+    // call_id -> message_id mapping for tool-pending / tool-result pairing.
     std::unordered_map<std::string, int> tool_call_msg_ids_;
 
-    // S5.C -- cached per call_id at on_tool_pending time so on_tool_result
-    // can render an inline diff without the args being threaded through a
-    // second event. Cleared after the result fires (or whenever the entry
-    // would otherwise leak).
+    // S5.C -- per call_id cache so on_tool_result can render inline diffs.
     struct PendingToolInfo {
         std::string    tool_name;
         nlohmann::json args;
@@ -312,74 +200,18 @@ private:
     std::unordered_map<std::string, PendingToolInfo> pending_tool_info_;
 
     FetchPreMutationFn pre_mutation_fetcher_;
-    bool               diff_show_         = true;
-    int                diff_max_lines_    = 200;
-    int                diff_context_lines_ = 4;
+    bool               diff_show_               = true;
+    int                diff_max_lines_          = 200;
+    int                diff_context_lines_      = 4;
     int                diff_collapse_threshold_ = 16;
 
-    // S4.D plan-id -> message_id so on_plan_step_advanced finds the right
-    // bubble. Cleared on session reset.
-    std::unordered_map<std::string, int> plan_msg_ids_;
-    // S4.D last seen plan summary for the footer chip ("3/7 building scene
-    // graph"). When empty, the chip is hidden.
-    std::string current_plan_id_;
-    int         current_plan_total_steps_   = 0;
-    int         current_plan_done_steps_    = 0;
-    std::string current_plan_step_label_;
-
-    // Token buffer (written from UI thread via on_token, read by timer).
-    std::string   token_buffer_;
-    std::string   current_response_;   // accumulated full response for md4c
-    std::string   reasoning_buffer_;   // pending chain-of-thought tokens
-    std::string   current_reasoning_;  // accumulated full reasoning text
-    int           message_id_ = 0;     // monotonic ID for message divs
-    int           assistant_id_ = 0;   // id of the assistant bubble for this turn
-    int           reasoning_id_ = 0;   // id of the <details> thought block for this turn
-    bool          streaming_  = false;  // true between turn_start and turn_complete
-
-    // Reentrancy guard for on_flush_timer. wxWebViewEdge::RunScript yields
-    // the event loop internally; when a single flush body's RunScripts take
-    // longer than the 33 ms timer interval, the timer fires again *during*
-    // the yield and we'd recurse into on_flush_timer until the stack
-    // explodes. The guard makes the second tick a no-op until the first
-    // returns. (The work isn't lost -- buffers stay populated, the next
-    // tick after the outer call returns picks them up.)
-    bool          in_flush_timer_ = false;
-
-    // "Thinking..." placeholder state. Local LLMs can prefill for 60+s with
-    // zero bytes on the wire, so the empty bubble + cursor alone looked dead.
-    // Holds until the first text or reasoning token clears it; the existing
-    // flush_timer drives the once-per-second elapsed-seconds update.
-    bool                                  waiting_for_first_token_ = false;
-    int                                   wait_ticks_ = 0;
-    std::chrono::steady_clock::time_point turn_start_time_;
+    // Monotonic message div ID shared with ChatStreamRenderer (passed by ref).
+    int message_id_ = 0;
 
     // WebView readiness: SetPage() is async in WebView2.
-    bool                         page_ready_ = false;
-    std::vector<wxString>        pending_scripts_;
-
-    // Reentrancy guard for `run_script` itself. wxWebViewEdge::RunScript
-    // calls wxYield internally, which pumps Win32 messages AND queued
-    // wxThreadEvents from the agent thread. Any of the agent-callback
-    // handlers (on_token / on_tool_pending / on_plan_proposed / ...) can
-    // call run_script themselves -- without this guard, that nested call
-    // would invoke another RunScript which itself yields, creating an
-    // unbounded recursion (observed on Win11 + dark-mode menu dispatch
-    // with the wxTimer driving the chain). When set, run_script queues
-    // the script onto `pending_scripts_` instead of calling RunScript;
-    // the outermost RunScript drains the queue once it returns.
-    bool                         in_run_script_ = false;
-
-    // Slash-command suggestions.
-    std::vector<SlashItem>       slash_commands_;
-    std::unique_ptr<SlashPopup>  slash_popup_;
-    bool                         slash_popup_shown_ = false;
-
-    // S4.V `@`-mention autocomplete.
-    std::vector<std::string>      mention_paths_;
-    std::unique_ptr<MentionPopup> mention_popup_;
-    bool                          mention_popup_shown_ = false;
-    std::function<void(const std::string&)> on_mention_attach_;
+    bool                  page_ready_     = false;
+    std::vector<wxString> pending_scripts_;
+    bool                  in_run_script_  = false;
 };
 
 } // namespace locus

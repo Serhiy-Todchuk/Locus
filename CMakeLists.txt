@@ -460,6 +460,10 @@ add_executable(locus_gui WIN32
     src/frontends/gui/activity_panel.cpp
     src/frontends/gui/metrics_view.cpp
     src/frontends/gui/chat_panel.cpp
+    src/frontends/gui/chat/chat_stream_renderer.cpp
+    src/frontends/gui/chat/chat_footer_chips.cpp
+    src/frontends/gui/chat/chat_popups.cpp
+    src/frontends/gui/chat/chat_link_handler.cpp
     src/frontends/gui/slash_popup.cpp
     src/frontends/gui/mention_popup.cpp
     src/frontends/gui/tool_approval_dialog.cpp
@@ -467,6 +471,11 @@ add_executable(locus_gui WIN32
     src/frontends/gui/compaction_dialog.cpp
     src/frontends/gui/file_tree_panel.cpp
     src/frontends/gui/settings_dialog.cpp
+    src/frontends/gui/settings/llm_settings_panel.cpp
+    src/frontends/gui/settings/index_settings_panel.cpp
+    src/frontends/gui/settings/capabilities_settings_panel.cpp
+    src/frontends/gui/settings/tool_approvals_settings_panel.cpp
+    src/frontends/gui/settings/mcp_settings_panel.cpp
     src/frontends/gui/markdown.cpp
     src/frontends/gui/autostart.cpp
     src/frontends/gui/terminal_panel.cpp
