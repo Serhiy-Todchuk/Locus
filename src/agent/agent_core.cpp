@@ -680,7 +680,7 @@ void AgentCore::tool_decision(const std::string& call_id,
                               ToolDecision decision,
                               const nlohmann::json& modified_args)
 {
-    dispatcher_->submit_decision(decision, modified_args);
+    dispatcher_->submit_decision(call_id, decision, modified_args);
     spdlog::trace("AgentCore: tool_decision for {} = {}",
                   call_id,
                   decision == ToolDecision::approve ? "approve" :

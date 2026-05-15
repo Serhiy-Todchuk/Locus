@@ -186,8 +186,14 @@ dispatch(call, append_result)
 `auto_approve` tools skip the `on_tool_call_pending` step entirely -- the frontend never sees
 an approval event, only `on_tool_result`. The dispatcher holds its own `decision_mutex_` /
 `decision_cv_`; `AgentCore::tool_decision` forwards the user choice via
-`submit_decision(decision, modified_args)`, and `cancel_turn()` calls `wake()` to release
-`decision_cv_` so the dispatcher can observe the shared `cancel_flag_` and unwind.
+`submit_decision(call_id, decision, modified_args)`, and `cancel_turn()` calls `wake()` to
+release `decision_cv_` so the dispatcher can observe the shared `cancel_flag_` and unwind.
+
+Decisions are keyed by `call_id` (S5.O) -- `pending_decisions_[call_id]` plus an
+`awaiting_dispatches_` set populated when a dispatch enters the approval wait. A submission
+whose `call_id` isn't currently being waited on is dropped with a warn-log rather than held
+indefinitely, so a stale UI click after the call already completed (or got cancelled) can
+never wake a different call's dispatch later.
 
 ---
 

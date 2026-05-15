@@ -2,9 +2,70 @@
 
 #include "core/workspace_services.h"
 
+#include <algorithm>
+#include <cstring>
+#include <fstream>
+
+#if defined(_WIN32)
+#  include <cwctype>
+#endif
+
 namespace locus::tools {
 
 namespace fs = std::filesystem;
+
+namespace {
+
+// Case-insensitive on Windows, case-sensitive elsewhere. Matches NTFS default
+// and the rest of the filesystem layer's effective behaviour. UNC and drive
+// letters are part of the first component so they're covered.
+bool components_equal(const fs::path& a, const fs::path& b)
+{
+#if defined(_WIN32)
+    const auto& sa = a.native();
+    const auto& sb = b.native();
+    if (sa.size() != sb.size()) return false;
+    for (size_t i = 0; i < sa.size(); ++i) {
+        if (std::towlower(static_cast<wint_t>(sa[i]))
+            != std::towlower(static_cast<wint_t>(sb[i])))
+            return false;
+    }
+    return true;
+#else
+    return a.native() == b.native();
+#endif
+}
+
+} // namespace
+
+bool is_inside(const fs::path& candidate, const fs::path& root)
+{
+    fs::path c = candidate.lexically_normal();
+    fs::path r = root.lexically_normal();
+
+    // Drop trailing empty component that lexically_normal leaves on paths
+    // ending in a separator ("D:/foo/" -> components {"D:", "/", "foo", ""}).
+    auto strip_trailing_empty = [](fs::path& p) {
+        if (!p.empty() && p.filename().empty())
+            p = p.parent_path();
+    };
+    strip_trailing_empty(c);
+    strip_trailing_empty(r);
+
+    auto cit = c.begin();
+    auto cend = c.end();
+    auto rit = r.begin();
+    auto rend = r.end();
+
+    while (rit != rend) {
+        if (cit == cend) return false;          // root deeper than candidate
+        if (!components_equal(*rit, *cit)) return false;
+        ++rit;
+        ++cit;
+    }
+    // Either equal paths (cit == cend) or candidate is strictly deeper.
+    return true;
+}
 
 fs::path resolve_path(IWorkspaceServices& ws, const std::string& rel)
 {
@@ -16,14 +77,37 @@ fs::path resolve_path(IWorkspaceServices& ws, const std::string& rel)
         if (ec) return {};
     }
 
-    // Ensure the resolved path is inside the workspace root
-    auto root_str = ws.root().string();
-    auto full_str = full.string();
-    if (full_str.size() < root_str.size() ||
-        full_str.compare(0, root_str.size(), root_str) != 0) {
-        return {};  // path traversal attempt
-    }
+    fs::path root = fs::canonical(ws.root(), ec);
+    if (ec) root = ws.root();
+
+    if (!is_inside(full, root))
+        return {};   // path traversal attempt
+
     return full;
+}
+
+std::string write_atomic(const fs::path& target, const std::string& content)
+{
+    fs::path tmp = target;
+    tmp += ".locus-tmp";
+    {
+        std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
+        if (!out.is_open())
+            return "cannot open temp file for write: " + tmp.string();
+        out.write(content.data(), static_cast<std::streamsize>(content.size()));
+        if (!out.good())
+            return "write failed on temp file: " + tmp.string();
+    }
+    std::error_code ec;
+    fs::rename(tmp, target, ec);
+    if (ec) {
+        // Fallback: rename can fail cross-device / with readers holding handles.
+        // Copy + remove tmp is the safety net.
+        fs::copy_file(tmp, target, fs::copy_options::overwrite_existing, ec);
+        fs::remove(tmp);
+        if (ec) return "rename/copy to target failed: " + ec.message();
+    }
+    return {};
 }
 
 std::string make_relative(IWorkspaceServices& ws, const fs::path& p)

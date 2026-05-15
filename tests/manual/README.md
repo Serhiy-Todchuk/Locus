@@ -39,3 +39,4 @@ numbered steps, expected results per step.
 | [tool-approval.md](tool-approval.md) | Tool approval modal (S5.Z #6) | Modal Approve/Reject/X-close round trip, edit_file diff view + Modify/Confirm, multiple sequential approvals in one turn, no leftover dock pane. |
 | [global-settings.md](global-settings.md) | Global settings template + ~/.locus (S5.M) | First-open seed from `~/.locus/config.json`, Save-as-defaults round-trip, Open Global Config menu, legacy %APPDATA% migration. |
 | [inline-diffs-in-chat.md](inline-diffs-in-chat.md) | Inline diffs in chat (S5.C) | `edit_file` per-edit hunks, `write_file` real before/after via dtl, `delete_file` one-line summary, line-cap truncation, failure suppression. |
+| [tool-safety.md](tool-safety.md) | Tool & filesystem safety hardening (S5.O) | Outside-workspace path rejection (sibling-prefix case), approval keyed by `call_id` (stale click drop), atomic `write_file` under forced kill. |

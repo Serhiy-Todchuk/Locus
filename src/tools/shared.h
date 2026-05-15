@@ -40,6 +40,22 @@ std::filesystem::path resolve_path(IWorkspaceServices& ws, const std::string& re
 
 std::string make_relative(IWorkspaceServices& ws, const std::filesystem::path& p);
 
+// Component-aware workspace containment check (S5.O). True iff `candidate`
+// equals `root` or sits strictly inside it; component-walk avoids the
+// "/foo" vs "/foo-bar" prefix false positive that a raw string compare
+// produces. On Windows the comparison is case-insensitive (NTFS default);
+// elsewhere it's exact. Both paths are lexically_normal'd first so trailing
+// slashes and "." segments don't shift the component count.
+bool is_inside(const std::filesystem::path& candidate,
+               const std::filesystem::path& root);
+
+// Atomic write: write to <target>.locus-tmp then rename over the target.
+// Keeps the file intact if the process is killed mid-write. Falls back to
+// copy_file when rename fails (different volume, reader holding a handle).
+// Returns an empty string on success, an error message otherwise.
+std::string write_atomic(const std::filesystem::path& target,
+                         const std::string& content);
+
 ToolResult error_result(const std::string& msg);
 
 // Process-wide "this file was read by the agent" tracker (S4.A).

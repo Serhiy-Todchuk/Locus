@@ -18,6 +18,7 @@ namespace fs = std::filesystem;
 using tools::error_result;
 using tools::ReadTracker;
 using tools::resolve_path;
+using tools::write_atomic;
 
 // -- ReadFileTool -----------------------------------------------------------
 
@@ -128,12 +129,12 @@ ToolResult WriteFileTool::execute(const ToolCall& call, IWorkspaceServices& ws)
     if (ec)
         return error_result("Error: cannot create directories: " + ec.message());
 
-    std::ofstream out(full, std::ios::trunc | std::ios::binary);
-    if (!out.is_open())
-        return error_result("Error: cannot write to file: " + rel_path);
-
-    out.write(content.data(), static_cast<std::streamsize>(content.size()));
-    out.close();
+    // S5.O -- atomic write so a crash between truncate and final flush leaves
+    // either the previous bytes or the new bytes on disk, never a half-written
+    // file. edit_file already uses the same helper.
+    std::string werr = write_atomic(full, content);
+    if (!werr.empty())
+        return error_result("Error: " + werr);
 
     // The agent just authored every byte on disk -- no point forcing a
     // read_file before a follow-up edit_file. Mark as seen so the guard
@@ -225,32 +226,6 @@ std::string apply_single_edit(std::string& buf,
 
     if (replace_all || count == 1) {
         buf = replace_all_occurrences(buf, old_s, new_s);
-    }
-    return {};
-}
-
-// Atomic write-back: write to <path>.locus-tmp then rename over the original.
-// Keeps the file intact if the process is killed mid-write.
-std::string write_atomic(const fs::path& target, const std::string& content)
-{
-    fs::path tmp = target;
-    tmp += ".locus-tmp";
-    {
-        std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
-        if (!out.is_open())
-            return "cannot open temp file for write: " + tmp.string();
-        out.write(content.data(), static_cast<std::streamsize>(content.size()));
-        if (!out.good())
-            return "write failed on temp file: " + tmp.string();
-    }
-    std::error_code ec;
-    fs::rename(tmp, target, ec);
-    if (ec) {
-        // Fallback: rename can fail cross-device / with readers holding handles.
-        // Copy + remove tmp is the safety net.
-        fs::copy_file(tmp, target, fs::copy_options::overwrite_existing, ec);
-        fs::remove(tmp);
-        if (ec) return "rename/copy to target failed: " + ec.message();
     }
     return {};
 }

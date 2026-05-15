@@ -13,6 +13,8 @@
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
 
 namespace locus {
 
@@ -44,8 +46,13 @@ public:
     // appended and an error event is emitted.
     void dispatch(const ToolCall& call, const AppendFn& append_result);
 
-    // Submit a user decision (called from any thread).
-    void submit_decision(ToolDecision decision,
+    // Submit a user decision (called from any thread). Keyed by `call_id`
+    // (S5.O) so a stale or late-delivered decision can never wake a tool
+    // call the user did not approve. If no dispatch is currently waiting on
+    // `call_id` the decision is held in the map for a brief window and
+    // dropped with a warn log when the matching call never arrives.
+    void submit_decision(const std::string& call_id,
+                         ToolDecision decision,
                          nlohmann::json modified_args = {});
 
     // Wake a dispatch that is blocked on approval (used by cancel).
@@ -76,10 +83,20 @@ private:
     std::atomic<bool>&  cancel_flag_;
     MetricsAggregator*  metrics_ = nullptr;
 
-    std::mutex                  decision_mutex_;
-    std::condition_variable     decision_cv_;
-    std::optional<ToolDecision> pending_decision_;
-    nlohmann::json              pending_modified_args_;
+    // S5.O -- per-call decision map. A dispatch in flight waits on the cv
+    // until its own `call.id` lands in `pending_decisions_`; any decision
+    // submitted for a call_id not currently being waited on is dropped with
+    // a warn-log (stale UI click after the call already completed). Only
+    // ids in `awaiting_dispatches_` are considered live waiters; the set is
+    // populated when `dispatch` enters the wait and erased after consume.
+    struct PendingDecision {
+        ToolDecision   decision;
+        nlohmann::json modified_args;
+    };
+    std::mutex                                       decision_mutex_;
+    std::condition_variable                          decision_cv_;
+    std::unordered_map<std::string, PendingDecision> pending_decisions_;
+    std::unordered_set<std::string>                  awaiting_dispatches_;
 
     // Per-turn checkpoint context (S4.B). Plain pointer because the store
     // lives at workspace scope; a null pointer disables checkpointing.

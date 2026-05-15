@@ -29,13 +29,25 @@ ToolDispatcher::ToolDispatcher(IToolRegistry& tools,
     , metrics_(metrics)
 {}
 
-void ToolDispatcher::submit_decision(ToolDecision decision,
+void ToolDispatcher::submit_decision(const std::string& call_id,
+                                     ToolDecision decision,
                                      nlohmann::json modified_args)
 {
     std::lock_guard lock(decision_mutex_);
-    pending_decision_ = decision;
-    pending_modified_args_ = std::move(modified_args);
-    decision_cv_.notify_one();
+    if (awaiting_dispatches_.find(call_id) == awaiting_dispatches_.end()) {
+        // Stale submission -- the dispatch for `call_id` already completed
+        // (or was cancelled, or never reached the approval gate). Dropping
+        // is safer than holding indefinitely; old click does nothing.
+        spdlog::warn(
+            "ToolDispatcher: dropping stale tool decision for call_id '{}'"
+            " (no dispatch currently awaiting)", call_id);
+        return;
+    }
+    pending_decisions_[call_id] =
+        PendingDecision{decision, std::move(modified_args)};
+    // notify_all -- multiple dispatches may be parked on this cv (future
+    // parallel-tool-call work). Each waiter re-checks its own call.id.
+    decision_cv_.notify_all();
 }
 
 void ToolDispatcher::wake()
@@ -229,11 +241,15 @@ void ToolDispatcher::dispatch(const ToolCall& call, const AppendFn& append_resul
         // decision now.
 
         std::unique_lock lock(decision_mutex_);
+        awaiting_dispatches_.insert(call.id);
         decision_cv_.wait(lock, [&] {
-            return pending_decision_.has_value() || cancel_flag_.load();
+            return pending_decisions_.find(call.id) != pending_decisions_.end()
+                   || cancel_flag_.load();
         });
 
-        if (cancel_flag_.load() && !pending_decision_.has_value()) {
+        auto it = pending_decisions_.find(call.id);
+        if (cancel_flag_.load() && it == pending_decisions_.end()) {
+            awaiting_dispatches_.erase(call.id);
             lock.unlock();
             ChatMessage cancelled;
             cancelled.role = MessageRole::tool;
@@ -246,10 +262,10 @@ void ToolDispatcher::dispatch(const ToolCall& call, const AppendFn& append_resul
             return;
         }
 
-        ToolDecision decision = *pending_decision_;
-        nlohmann::json mod_args = pending_modified_args_;
-        pending_decision_.reset();
-        pending_modified_args_ = {};
+        ToolDecision   decision = it->second.decision;
+        nlohmann::json mod_args = std::move(it->second.modified_args);
+        pending_decisions_.erase(it);
+        awaiting_dispatches_.erase(call.id);
         lock.unlock();
 
         if (decision == ToolDecision::reject) {

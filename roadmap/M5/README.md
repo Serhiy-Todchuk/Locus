@@ -16,6 +16,9 @@
 | [S5.M](S5.M-global-settings.md) done | Global Settings Template + ~/.locus migration | UX / Config |
 | [S5.C](S5.C-inline-diffs-in-chat.md) done | Inline Code Diffs in Chat | UX |
 | [S5.J](S5.J-llm-context-refactor.md) done | LLMContext Class Refactor | Refactor |
+| [S5.O](S5.O-tool-safety-hardening.md) done | Tool & Filesystem Safety Hardening | Safety |
+| [S5.P](S5.P-source-encoding-audit.md) | Source Encoding Audit & Lint | Hygiene |
+| [S5.Q](S5.Q-large-file-decomposition.md) | Large File Decomposition (chat_panel & settings_dialog) | Refactor |
 | [S5.D](S5.D-reserve-and-token-xray.md) | Reserve Enforcement + Token-Cost X-Ray | Context |
 | [S5.E](S5.E-pin-and-tag.md) | Per-Message Pin / Tag System | Context |
 | [S5.F](S5.F-compaction-v2.md) | Compaction v2 (Toolkit + Auto + History Archive) | Context |
@@ -24,9 +27,6 @@
 | [S5.H](S5.H-edit-delete-branch.md) | Per-Message Edit / Delete + Branch & Rewind | Context |
 | [S5.K](S5.K-memory-bank-ui.md) | Memory Bank UI Viewer / Editor | UX |
 | [S5.N](S5.N-non-code-workspace-proof.md) | Non-Code Workspace Proof | Product / QA |
-| [S5.O](S5.O-tool-safety-hardening.md) | Tool & Filesystem Safety Hardening | Safety |
-| [S5.P](S5.P-source-encoding-audit.md) | Source Encoding Audit & Lint | Hygiene |
-| [S5.Q](S5.Q-large-file-decomposition.md) | Large File Decomposition (chat_panel & settings_dialog) | Refactor |
 | [S5.Z](S5.Z-misc-gaps.md) | Miscellaneous Smaller Gaps | Mixed |
 
 More stages will be added here as polish/UX/perf candidates surface. Letters are identity, not order -- listed top-down in execution order. S5.Z is the misc bucket at the end (mirrors [S4.V](../M4/S4.V-misc-gaps.md)) and is expected to grow.
