@@ -91,10 +91,19 @@ public:
         pre_mutation_fetcher_ = std::move(fn);
     }
 
-    // S5.C -- runtime toggles surfaced by WorkspaceConfig.
-    void set_diff_options(bool show_diffs, int max_lines) {
-        diff_show_         = show_diffs;
-        diff_max_lines_    = max_lines > 0 ? max_lines : 200;
+    // S5.C / S5.Z -- runtime toggles surfaced by WorkspaceConfig.
+    // `context_lines` is the surrounding-context budget for the inline
+    // diff (default 4, 0 = del/add only). `collapse_threshold` folds any
+    // write_file diff rows past row N into a <details> (default 16,
+    // 0 = no collapse).
+    void set_diff_options(bool show_diffs, int max_lines,
+                          int context_lines = 4,
+                          int collapse_threshold = 16) {
+        diff_show_                  = show_diffs;
+        diff_max_lines_             = max_lines > 0 ? max_lines : 200;
+        diff_context_lines_         = context_lines >= 0 ? context_lines : 4;
+        diff_collapse_threshold_    = collapse_threshold >= 0
+                                      ? collapse_threshold : 16;
     }
 
     // S4.D plan-mode display.
@@ -294,6 +303,8 @@ private:
     FetchPreMutationFn pre_mutation_fetcher_;
     bool               diff_show_         = true;
     int                diff_max_lines_    = 200;
+    int                diff_context_lines_ = 4;
+    int                diff_collapse_threshold_ = 16;
 
     // S4.D plan-id -> message_id so on_plan_step_advanced finds the right
     // bubble. Cleared on session reset.

@@ -24,15 +24,26 @@ namespace locus {
 // Negative or zero is treated as "no cap" (defensive; production passes the
 // WorkspaceConfig::chat_diff_max_lines value).
 struct DiffRenderOptions {
-    int  max_lines = 200;
-    bool dark_mode = false;  // reserved -- v1 styling is theme-agnostic via CSS
+    int  max_lines     = 200;
+    // Lines of unchanged context shown before and after each change. 0 means
+    // "del + add only" (the pre-S5.Z behaviour). Default 4 matches `diff -u`.
+    int  context_lines = 4;
+    // Soft-collapse threshold (write_file only today). When the diff exceeds
+    // this many rendered rows, the first N stay inline and the remainder go
+    // inside a `<details>`/`<summary>` block. 0 disables collapsing.
+    int  collapse_threshold = 16;
+    bool dark_mode     = false;  // reserved -- v1 styling is theme-agnostic via CSS
 };
 
 // Render an `edit_file` call. Parses `args["edits"]` (an array of
 // `{old_string, new_string, replace_all?}`) and emits one hunk per edit.
 // Each hunk's `old_string` lines render as `del` and `new_string` lines as
-// `add`. No surrounding context (the args don't carry it; would require
-// re-reading the file, deferred to a future iteration).
+// `add`. When `old_content` is supplied (typically the S4.B pre-mutation
+// snapshot), the renderer locates each edit in the file and surrounds the
+// del/add lines with `context_lines` of unchanged ctx; line numbers come
+// from this content too. When `old_content` is nullopt the renderer
+// degrades to del/add-only (no line numbers, no context) -- matches the
+// pre-S5.Z behaviour.
 //
 // `path` is taken from `args["path"]` and embedded in the file header. When
 // `path` is missing the header degrades to `(unknown path)`.
@@ -40,8 +51,9 @@ struct DiffRenderOptions {
 // Returns an HTML fragment (no surrounding container -- caller wraps).
 // Returns the empty string when `args` is malformed / has no edits.
 std::string render_edit_file_diff_html(
-    const nlohmann::json&     args,
-    const DiffRenderOptions&  opts);
+    const nlohmann::json&             args,
+    const std::optional<std::string>& old_content,
+    const DiffRenderOptions&          opts);
 
 // Render a `write_file` call. Compares `old_content` (pre-mutation, from the
 // S4.B checkpoint snapshot) against `new_content` (the bytes the tool just

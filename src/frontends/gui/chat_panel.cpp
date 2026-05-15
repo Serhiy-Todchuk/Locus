@@ -167,32 +167,36 @@ body {
 }
 .tool-diff .diff-line {
     white-space: pre-wrap;
-    padding: 0 8px;
+    padding: 0;
     margin: 0;
     line-height: 1.4;
+    display: flex;
 }
-.tool-diff .diff-line.add {
-    background: #e6ffec;
-    color: #1a7f37;
+.tool-diff .diff-ln {
+    flex: 0 0 auto;
+    padding: 0 6px;
+    color: #8895a6;
+    background: #f0f3f6;
+    border-right: 1px solid #e1e7ed;
+    text-align: right;
+    user-select: none;
+    white-space: pre;
 }
-.tool-diff .diff-line.add::before {
-    content: "+ ";
-    color: #1a7f37;
+.tool-diff .diff-text {
+    flex: 1 1 auto;
+    padding: 0 8px;
+    white-space: pre-wrap;
 }
-.tool-diff .diff-line.del {
-    background: #ffebe9;
-    color: #b91c1c;
+.tool-diff .diff-line.add { background: #e6ffec; color: #1a7f37; }
+.tool-diff .diff-line.add .diff-text::before {
+    content: "+ "; color: #1a7f37;
 }
-.tool-diff .diff-line.del::before {
-    content: "- ";
-    color: #b91c1c;
+.tool-diff .diff-line.del { background: #ffebe9; color: #b91c1c; }
+.tool-diff .diff-line.del .diff-text::before {
+    content: "- "; color: #b91c1c;
 }
-.tool-diff .diff-line.ctx {
-    color: #6b7785;
-}
-.tool-diff .diff-line.ctx::before {
-    content: "  ";
-}
+.tool-diff .diff-line.ctx { color: #6b7785; }
+.tool-diff .diff-line.ctx .diff-text::before { content: "  "; }
 .tool-diff .diff-truncated {
     padding: 4px 8px;
     color: #6b7785;
@@ -200,6 +204,17 @@ body {
     border-top: 1px solid #e6eaef;
     background: #f5f7fa;
 }
+.tool-diff .diff-collapsed > summary {
+    cursor: pointer;
+    user-select: none;
+    padding: 4px 8px;
+    color: #4a6fa5;
+    background: #eef2f6;
+    border-top: 1px solid #e6eaef;
+    font-style: italic;
+}
+.tool-diff .diff-collapsed > summary:hover { color: #2952a3; }
+.tool-diff .diff-collapsed[open] > summary { border-bottom: 1px solid #e6eaef; }
 .tool-diff.diff-deleted .diff-file-header {
     background: #ffebe9;
     color: #b91c1c;
@@ -428,13 +443,27 @@ body {
         border-bottom-color: #3a3f4b;
     }
     .tool-diff .diff-line.add { background: #133723; color: #6fdc8c; }
-    .tool-diff .diff-line.add::before { color: #6fdc8c; }
+    .tool-diff .diff-line.add .diff-text::before { color: #6fdc8c; }
     .tool-diff .diff-line.del { background: #3b1c1c; color: #f48771; }
-    .tool-diff .diff-line.del::before { color: #f48771; }
+    .tool-diff .diff-line.del .diff-text::before { color: #f48771; }
     .tool-diff .diff-line.ctx { color: #888; }
+    .tool-diff .diff-ln {
+        background: #232938;
+        color: #6b7785;
+        border-right-color: #3a3f4b;
+    }
     .tool-diff .diff-truncated {
         background: #232938; color: #9ca3af;
         border-top-color: #3a3f4b;
+    }
+    .tool-diff .diff-collapsed > summary {
+        background: #232938;
+        color: #8aa9d6;
+        border-top-color: #3a3f4b;
+    }
+    .tool-diff .diff-collapsed > summary:hover { color: #b7cbe6; }
+    .tool-diff .diff-collapsed[open] > summary {
+        border-bottom-color: #3a3f4b;
     }
     .tool-diff.diff-deleted .diff-file-header {
         background: #3b1c1c; color: #f48771;
@@ -455,7 +484,10 @@ body {
 </style>
 </head><body>
 <div id="chat"></div>
-<script>
+)html";
+    // Split here to keep each raw-string literal under MSVC's 16380-byte
+    // single-literal cap. The total page is built by concatenation.
+    html += R"html(<script>
 function addMsg(id, cls, html) {
     var d = document.createElement('div');
     d.id = 'msg-' + id;
@@ -1352,10 +1384,17 @@ void ChatPanel::on_tool_result(const wxString& call_id,
 
         std::string diff_html;
         DiffRenderOptions opts;
-        opts.max_lines = diff_max_lines_;
+        opts.max_lines          = diff_max_lines_;
+        opts.context_lines      = diff_context_lines_;
+        opts.collapse_threshold = diff_collapse_threshold_;
 
         if (tool_name == "edit_file") {
-            diff_html = render_edit_file_diff_html(args, opts);
+            const std::string path = args.value("path", std::string{});
+            std::optional<std::string> old_content;
+            if (pre_mutation_fetcher_ && !path.empty()) {
+                old_content = pre_mutation_fetcher_(path);
+            }
+            diff_html = render_edit_file_diff_html(args, old_content, opts);
         } else if (tool_name == "write_file") {
             const std::string path = args.value("path", std::string{});
             std::string new_content = args.value("content", std::string{});

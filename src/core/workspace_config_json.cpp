@@ -113,6 +113,10 @@ WorkspaceConfig workspace_config_from_json(const json& j)
             cfg.chat_show_diffs = c["show_diffs"].get<bool>();
         if (c.contains("diff_max_lines"))
             cfg.chat_diff_max_lines = c["diff_max_lines"].get<int>();
+        if (c.contains("diff_context_lines"))
+            cfg.chat_diff_context_lines = c["diff_context_lines"].get<int>();
+        if (c.contains("diff_collapse_threshold"))
+            cfg.chat_diff_collapse_threshold = c["diff_collapse_threshold"].get<int>();
     }
 
     if (j.contains("capabilities") && j["capabilities"].is_object()) {
@@ -208,8 +212,10 @@ json workspace_config_to_json(const WorkspaceConfig& cfg)
             {"commit_prefix", cfg.git_commit_prefix}
         }},
         {"chat", {
-            {"show_diffs",     cfg.chat_show_diffs},
-            {"diff_max_lines", cfg.chat_diff_max_lines}
+            {"show_diffs",              cfg.chat_show_diffs},
+            {"diff_max_lines",          cfg.chat_diff_max_lines},
+            {"diff_context_lines",      cfg.chat_diff_context_lines},
+            {"diff_collapse_threshold", cfg.chat_diff_collapse_threshold}
         }},
         {"capabilities", {
             {"background_processes", cfg.capabilities.background_processes},

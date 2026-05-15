@@ -187,6 +187,15 @@ struct WorkspaceConfig {
     // a single huge file write blowing up the chat HTML.
     bool chat_show_diffs    = true;
     int  chat_diff_max_lines = 200;
+    // Lines of unchanged surrounding context shown before and after each
+    // change inside an inline diff. 0 collapses everything to just the
+    // add/del lines (the pre-S5.Z layout). Default 4 matches `diff -u`.
+    int  chat_diff_context_lines = 4;
+    // S5.Z #2 -- soft-collapse threshold for write_file diffs. Diffs longer
+    // than this many rows render the first N rows inline and fold the rest
+    // into a `<details>`/`<summary>` (native HTML toggle, no JS). 0 disables
+    // collapsing -- show every row inline.
+    int  chat_diff_collapse_threshold = 16;
 
     // S5.A -- workspace capability buckets. Each bucket gates a family of
     // tools (and sometimes a system-prompt slot) so the per-turn manifest

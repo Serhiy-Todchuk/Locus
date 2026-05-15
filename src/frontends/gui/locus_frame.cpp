@@ -345,7 +345,9 @@ void LocusFrame::setup_aui_layout()
             return agent_.read_current_pre_mutation(rel_path);
         });
     chat_panel_->set_diff_options(workspace_.config().chat_show_diffs,
-                                   workspace_.config().chat_diff_max_lines);
+                                   workspace_.config().chat_diff_max_lines,
+                                   workspace_.config().chat_diff_context_lines,
+                                   workspace_.config().chat_diff_collapse_threshold);
 
     // Slash-command suggestions: CLI-style commands + all registered tools.
     {
@@ -502,7 +504,9 @@ void LocusFrame::show_settings_dialog()
         // no restart required, the chat panel just reads them at next
         // tool_result.
         chat_panel_->set_diff_options(workspace_.config().chat_show_diffs,
-                                       workspace_.config().chat_diff_max_lines);
+                                       workspace_.config().chat_diff_max_lines,
+                                       workspace_.config().chat_diff_context_lines,
+                                       workspace_.config().chat_diff_collapse_threshold);
 
         spdlog::info("Settings saved to config.json");
     }
