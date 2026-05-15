@@ -3,6 +3,7 @@
 #include "chat/chat_link_handler.h"
 #include "chat/chat_popups.h"
 #include "chat/chat_stream_renderer.h"
+#include "chat/chat_util.h"
 #include "diff_renderer.h"
 #include "locus_accessible.h"
 #include "markdown.h"
@@ -975,7 +976,7 @@ void ChatPanel::on_plan_proposed(const wxString& plan_json)
     if (footer_chips_->on_plan_proposed(id, total, first_step)) Layout();
 
     run_script(wxString::Format("addPlanMsg(%d, '%s');",
-                                message_id_, js_escape(plan_json)));
+                                message_id_, chat_js_escape(plan_json)));
 }
 
 void ChatPanel::on_plan_step_advanced(const wxString& plan_id, int step_idx,
@@ -992,7 +993,7 @@ void ChatPanel::on_plan_step_advanced(const wxString& plan_id, int step_idx,
 
     run_script(wxString::Format(
         "updatePlanStep(%d, %d, '%s', '%s');",
-        msg_id, step_idx, js_escape(status), js_escape(notes)));
+        msg_id, step_idx, chat_js_escape(status), chat_js_escape(notes)));
 
     if (footer_chips_->on_plan_step_advanced(id_str, status)) Layout();
 }
@@ -1006,7 +1007,7 @@ void ChatPanel::on_plan_completed(const wxString& plan_id, bool success)
                                   : "Plan completed with failures.";
         run_script(wxString::Format(
             "setPlanDecided(%d, '%s');",
-            msg_id, js_escape(label)));
+            msg_id, chat_js_escape(label)));
     }
     if (footer_chips_->on_plan_completed(id_str, success)) Layout();
 }
@@ -1016,7 +1017,7 @@ void ChatPanel::on_error(const wxString& message)
     ++message_id_;
     run_script(wxString::Format(
         "addMsg(%d, 'msg-error', %s);",
-        message_id_, "'" + js_escape(message) + "'"));
+        message_id_, "'" + chat_js_escape(message) + "'"));
 }
 
 void ChatPanel::on_auto_commit(const wxString& short_sha,
@@ -1046,13 +1047,13 @@ void ChatPanel::on_tool_pending(const wxString& call_id,
     ++message_id_;
     tool_call_msg_ids_[std::string(call_id.utf8_string())] = message_id_;
 
-    wxString content = "<span class=\"tool-name\">" + js_escape(tool_name) + "</span>";
+    wxString content = "<span class=\"tool-name\">" + chat_js_escape(tool_name) + "</span>";
     if (!preview.empty())
-        content += "<br><span class=\"tool-preview\">" + js_escape(preview) + "</span>";
+        content += "<br><span class=\"tool-preview\">" + chat_js_escape(preview) + "</span>";
 
     run_script(wxString::Format(
         "addMsg(%d, 'msg-tool', %s);",
-        message_id_, "'" + js_escape(content) + "'"));
+        message_id_, "'" + chat_js_escape(content) + "'"));
 }
 
 void ChatPanel::on_tool_result(const wxString& call_id,
@@ -1126,7 +1127,7 @@ void ChatPanel::on_tool_result(const wxString& call_id,
                 "d.appendChild(w);"
                 "window.scrollTo(0,document.body.scrollHeight);}",
                 target_id,
-                "'" + js_escape(wxString::FromUTF8(diff_html)) + "'"));
+                "'" + chat_js_escape(wxString::FromUTF8(diff_html)) + "'"));
             if (tool_name == "edit_file"  ||
                 tool_name == "write_file" ||
                 tool_name == "delete_file") {
@@ -1157,7 +1158,7 @@ void ChatPanel::on_tool_result(const wxString& call_id,
         target_id,
         success ? "" : " tool-result-error",
         success ? "'Result'" : "'Error'",
-        "'" + js_escape(truncated) + "'"));
+        "'" + chat_js_escape(truncated) + "'"));
 }
 
 void ChatPanel::set_context_meter(int used, int limit,
@@ -1284,7 +1285,7 @@ bool ChatPanel::submit_current_input()
     ++message_id_;
     run_script(wxString::Format(
         "addMsg(%d, 'msg-user', %s);",
-        message_id_, "'" + js_escape(user_text_to_html(text)) + "'"));
+        message_id_, "'" + chat_js_escape(user_text_to_html(text)) + "'"));
 
     // S5.D -- per-message token chip: client-side heuristic estimate on the
     // raw user text (effective_content may be slightly larger due to attached-
@@ -1317,7 +1318,7 @@ void ChatPanel::append_system_note(const wxString& html)
     ++message_id_;
     run_script(wxString::Format(
         "addMsg(%d, 'msg-tool', %s);",
-        message_id_, "'" + js_escape(html) + "'"));
+        message_id_, "'" + chat_js_escape(html) + "'"));
 }
 
 void ChatPanel::set_mention_paths(std::vector<std::string> paths)
@@ -1402,24 +1403,6 @@ wxString ChatPanel::user_text_to_html(const wxString& s)
         case '"':  out += "&quot;"; break;
         case '\n': out += "<br>";   break;
         default:   out += ch;       break;
-        }
-    }
-    return out;
-}
-
-wxString ChatPanel::js_escape(const wxString& s)
-{
-    wxString out;
-    out.reserve(s.length() + 16);
-    for (auto ch : s) {
-        switch (ch.GetValue()) {
-        case '\\': out += "\\\\"; break;
-        case '\'': out += "\\'";  break;
-        case '\n': out += "\\n";  break;
-        case '\r': out += "\\r";  break;
-        case '\t': out += "\\t";  break;
-        case '<':  out += "\\x3C"; break;
-        default:   out += ch;      break;
         }
     }
     return out;

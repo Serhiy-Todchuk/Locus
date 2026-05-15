@@ -1,5 +1,6 @@
 #include "chat_stream_renderer.h"
 
+#include "chat_util.h"
 #include "../markdown.h"
 
 namespace locus {
@@ -81,7 +82,7 @@ void ChatStreamRenderer::end_turn()
         run_js_(wxString::Format(
             "setReasoningBody(%d, %s);",
             reasoning_id_,
-            "'" + js_escape(wxString::FromUTF8(current_reasoning_)) + "'"));
+            "'" + chat_js_escape(wxString::FromUTF8(current_reasoning_)) + "'"));
     }
 
     if (reasoning_id_ != 0) {
@@ -112,7 +113,7 @@ void ChatStreamRenderer::end_turn()
             std::string html = markdown_to_html(current_response_);
             run_js_(wxString::Format(
                 "setMsgHtml(%d, %s);",
-                assistant_id_, "'" + js_escape(wxString::FromUTF8(html)) + "'"));
+                assistant_id_, "'" + chat_js_escape(wxString::FromUTF8(html)) + "'"));
             run_js_(wxString::Format(
                 "removeClassFromMsg(%d, 'streaming-cursor');", assistant_id_));
         }
@@ -143,7 +144,7 @@ void ChatStreamRenderer::seal_bubble()
             run_js_(wxString::Format(
                 "setReasoningBody(%d, %s);",
                 reasoning_id_,
-                "'" + js_escape(wxString::FromUTF8(current_reasoning_)) + "'"));
+                "'" + chat_js_escape(wxString::FromUTF8(current_reasoning_)) + "'"));
         }
         run_js_(wxString::Format(
             "finalizeReasoning(%d, 'Thoughts');", reasoning_id_));
@@ -170,7 +171,7 @@ void ChatStreamRenderer::seal_bubble()
             run_js_(wxString::Format(
                 "setMsgHtml(%d, %s);",
                 assistant_id_,
-                "'" + js_escape(wxString::FromUTF8(html)) + "'"));
+                "'" + chat_js_escape(wxString::FromUTF8(html)) + "'"));
             run_js_(wxString::Format(
                 "removeClassFromMsg(%d, 'streaming-cursor');", assistant_id_));
         }
@@ -217,7 +218,7 @@ bool ChatStreamRenderer::flush()
         run_js_(wxString::Format(
             "setReasoningBody(%d, %s);",
             reasoning_id_,
-            "'" + js_escape(wxString::FromUTF8(current_reasoning_)) + "'"));
+            "'" + chat_js_escape(wxString::FromUTF8(current_reasoning_)) + "'"));
         did_work = true;
     }
 
@@ -228,29 +229,11 @@ bool ChatStreamRenderer::flush()
         run_js_(wxString::Format(
             "setMsgHtml(%d, %s);",
             assistant_id_,
-            "'" + js_escape(wxString::FromUTF8(html)) + "'"));
+            "'" + chat_js_escape(wxString::FromUTF8(html)) + "'"));
         did_work = true;
     }
 
     return did_work;
-}
-
-wxString ChatStreamRenderer::js_escape(const wxString& s)
-{
-    wxString out;
-    out.reserve(s.length() + 16);
-    for (auto ch : s) {
-        switch (ch.GetValue()) {
-        case '\\': out += "\\\\"; break;
-        case '\'': out += "\\'";  break;
-        case '\n': out += "\\n";  break;
-        case '\r': out += "\\r";  break;
-        case '\t': out += "\\t";  break;
-        case '<':  out += "\\x3C"; break;
-        default:   out += ch;      break;
-        }
-    }
-    return out;
 }
 
 } // namespace locus

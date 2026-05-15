@@ -53,8 +53,6 @@ public:
     int  current_assistant_id() const { return assistant_id_; }
 
 private:
-    static wxString js_escape(const wxString& s);
-
     RunJsFn run_js_;
     int&    message_id_;
 

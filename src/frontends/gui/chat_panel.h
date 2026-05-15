@@ -147,7 +147,6 @@ private:
 
     void run_script(const wxString& js);
 
-    static wxString js_escape(const wxString& s);
     static wxString user_text_to_html(const wxString& s);
 
     void on_flush_timer(wxTimerEvent& evt);
@@ -157,6 +156,13 @@ private:
 
     bool submit_current_input();
     void refresh_action_btn();
+
+    // Monotonic message div ID shared with ChatStreamRenderer by reference.
+    // Declared BEFORE the collaborator unique_ptrs so it outlives them on
+    // destruction (members tear down in reverse declaration order). The
+    // renderer's defaulted dtor doesn't dereference message_id_ today, but
+    // keeping this ordering protects against future renderer-dtor changes.
+    int message_id_ = 0;
 
     // Collaborators (owned by unique_ptr so forward declarations above suffice).
     std::unique_ptr<ChatStreamRenderer> renderer_;
@@ -207,9 +213,6 @@ private:
     int                diff_max_lines_          = 200;
     int                diff_context_lines_      = 4;
     int                diff_collapse_threshold_ = 16;
-
-    // Monotonic message div ID shared with ChatStreamRenderer (passed by ref).
-    int message_id_ = 0;
 
     // S5.D -- per-message token chip state.
     bool show_per_message_tokens_   = true;

@@ -38,8 +38,6 @@ public:
     void clear_plans();
 
 private:
-    static wxString js_escape(const wxString& s);
-
     RunJsFn    run_js_;
     DecisionFn on_plan_decision_;
 

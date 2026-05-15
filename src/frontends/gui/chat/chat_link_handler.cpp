@@ -1,5 +1,7 @@
 #include "chat_link_handler.h"
 
+#include "chat_util.h"
+
 #include <spdlog/spdlog.h>
 
 namespace locus {
@@ -30,7 +32,7 @@ bool ChatLinkHandler::handle_url(const wxString& url,
             if (it != plan_msg_ids_.end()) {
                 run_js_(wxString::Format(
                     "setPlanDecided(%d, '%s');",
-                    it->second, js_escape("Approved -- executing...")));
+                    it->second, chat_js_escape("Approved -- executing...")));
             }
         }
         if (on_plan_decision_) on_plan_decision_("approve");
@@ -43,7 +45,7 @@ bool ChatLinkHandler::handle_url(const wxString& url,
             if (it != plan_msg_ids_.end()) {
                 run_js_(wxString::Format(
                     "setPlanDecided(%d, '%s');",
-                    it->second, js_escape("Rejected.")));
+                    it->second, chat_js_escape("Rejected.")));
             }
         }
         if (on_plan_decision_) on_plan_decision_("reject");
@@ -56,24 +58,6 @@ bool ChatLinkHandler::handle_url(const wxString& url,
 void ChatLinkHandler::clear_plans()
 {
     plan_msg_ids_.clear();
-}
-
-wxString ChatLinkHandler::js_escape(const wxString& s)
-{
-    wxString out;
-    out.reserve(s.length() + 16);
-    for (auto ch : s) {
-        switch (ch.GetValue()) {
-        case '\\': out += "\\\\"; break;
-        case '\'': out += "\\'";  break;
-        case '\n': out += "\\n";  break;
-        case '\r': out += "\\r";  break;
-        case '\t': out += "\\t";  break;
-        case '<':  out += "\\x3C"; break;
-        default:   out += ch;      break;
-        }
-    }
-    return out;
 }
 
 } // namespace locus

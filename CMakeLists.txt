@@ -460,6 +460,7 @@ add_executable(locus_gui WIN32
     src/frontends/gui/activity_panel.cpp
     src/frontends/gui/metrics_view.cpp
     src/frontends/gui/chat_panel.cpp
+    src/frontends/gui/chat/chat_util.cpp
     src/frontends/gui/chat/chat_stream_renderer.cpp
     src/frontends/gui/chat/chat_footer_chips.cpp
     src/frontends/gui/chat/chat_popups.cpp
