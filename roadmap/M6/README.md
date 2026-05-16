@@ -16,6 +16,7 @@
 - [ ] **[S6.5](S6.5-web-frontend.md)** -- Web / Browser Frontend
 - [ ] **[S6.6](S6.6-vscode-shim.md)** -- VS Code Shim
 - [ ] **[S6.7](S6.7-skills.md)** -- Skills (On-Demand Capability Packs)
+- [ ] **[S6.8](S6.8-delta-history-archives.md)** -- Delta History Archives (replace S5.F snapshot chain with per-compaction deltas + chain walker)
 
 ## Dependencies
 
@@ -25,3 +26,4 @@
 - S6.6 (VS Code shim) requires S6.3's HTTP endpoints.
 - S6.2 (ZIM) is independent and can land any time.
 - S6.7 (skills) requires M4 [S4.G](../M4/S4.G-mcp.md) (MCP) and [S4.X](../M4/S4.X-prompt-templates.md) (Prompt Templates); the install CLI is unlocked further by S6.5 for the public skill registry.
+- S6.8 (delta archives) requires M5 [S5.F](../M5/S5.F-compaction-v2.md) (snapshot archive chain to migrate from) and is unlocked further by [S5.I](../M5/S5.I-tabs-and-sessions.md) (Manage Sessions dialog hosts the per-session archive viewer). Storage motivation strengthens with S6.4 / S6.5 (long-lived remote / cross-device sessions).
