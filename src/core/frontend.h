@@ -2,6 +2,7 @@
 
 #include "activity_event.h"
 #include "../agent/agent_mode.h"
+#include "../llm/llm_client.h"   // MessageRole
 #include "../tools/tool.h"
 
 #include <cstdint>
@@ -160,6 +161,23 @@ public:
     // the authoritative count -- frontends should reconcile on
     // `on_turn_complete`. Default no-op so existing frontends keep compiling.
     virtual void on_generation_progress(int /*chars*/, int /*est_tokens*/) {}
+
+    // S5.G -- a ChatMessage was just appended to ConversationHistory. Frontends
+    // build their dom-id -> history-id map here so per-message delete can route
+    // back to the right ConversationHistory entry. `role` is the message role
+    // (user / assistant / system / tool); `deletable` is true for messages the
+    // chat panel should let the user remove via the hover-reveal X (false for
+    // system prompts, tool results paired with tool_call assistants, and any
+    // other non-deletable shapes that AgentCore wants to keep). Default no-op.
+    virtual void on_history_message_added(int /*history_id*/,
+                                           MessageRole /*role*/,
+                                           bool /*deletable*/) {}
+
+    // S5.G -- a ChatMessage was removed from ConversationHistory by id. Fires
+    // on every successful delete_by_id (including ones the chat panel didn't
+    // initiate, so a CLI /forget-style hook would land here too). Frontends
+    // remove the matching DOM bubble.
+    virtual void on_history_message_deleted(int /*history_id*/) {}
 };
 
 // -- ILocusCore ---------------------------------------------------------------
@@ -236,6 +254,14 @@ public:
     // Reject the most recently proposed plan. Returns to plan mode so the
     // user can re-prompt; current_plan is cleared.
     virtual void reject_plan() {}
+
+    // S5.G -- per-message delete. Frontends call this with a stable history_id
+    // (as broadcast via IFrontend::on_history_message_added). The agent core
+    // routes the request onto its agent thread (so the ConversationOwnerScope
+    // discipline holds) and broadcasts on_history_message_deleted on success.
+    // Refuses the system message; refuses unknown ids. Default no-op so
+    // implementations that don't support delete (test stubs) compile clean.
+    virtual void delete_message(int /*history_id*/) {}
 };
 
 } // namespace locus

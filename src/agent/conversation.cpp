@@ -16,10 +16,12 @@ namespace locus {
 // during an active turn still trips the fence.
 ConversationHistory::ConversationHistory(const ConversationHistory& other)
     : messages_(other.messages_)
+    , next_history_id_(other.next_history_id_)
 {}
 
 ConversationHistory::ConversationHistory(ConversationHistory&& other) noexcept
     : messages_(std::move(other.messages_))
+    , next_history_id_(other.next_history_id_)
 {}
 
 ConversationHistory& ConversationHistory::operator=(const ConversationHistory& other)
@@ -27,6 +29,7 @@ ConversationHistory& ConversationHistory::operator=(const ConversationHistory& o
     if (this == &other) return *this;
     assert_owner_thread("operator=(copy)");
     messages_ = other.messages_;
+    next_history_id_ = other.next_history_id_;
     return *this;
 }
 
@@ -35,6 +38,7 @@ ConversationHistory& ConversationHistory::operator=(ConversationHistory&& other)
     if (this == &other) return *this;
     assert_owner_thread("operator=(move)");
     messages_ = std::move(other.messages_);
+    next_history_id_ = other.next_history_id_;
     return *this;
 }
 
@@ -46,6 +50,13 @@ void ConversationHistory::add(ChatMessage msg)
     // in TokenCounter::estimate so the value is stable for the message's lifetime.
     if (msg.token_estimate == 0)
         msg.token_estimate = TokenCounter::estimate_message(msg);
+    // S5.G -- assign a stable history_id only if the caller hasn't set one
+    // (e.g. test code constructing a message with a hand-picked id). Counter
+    // is monotonic and never re-uses after delete.
+    if (msg.history_id == 0)
+        msg.history_id = ++next_history_id_;
+    else
+        next_history_id_ = std::max(next_history_id_, msg.history_id);
     messages_.push_back(std::move(msg));
 }
 
@@ -53,6 +64,28 @@ void ConversationHistory::clear()
 {
     assert_owner_thread("clear");
     messages_.clear();
+    next_history_id_ = 0;
+}
+
+bool ConversationHistory::delete_by_id(int history_id)
+{
+    assert_owner_thread("delete_by_id");
+    if (history_id <= 0) return false;
+    auto it = std::find_if(messages_.begin(), messages_.end(),
+                           [history_id](const ChatMessage& m) {
+                               return m.history_id == history_id;
+                           });
+    if (it == messages_.end()) return false;
+    // System prompt (leading entry) is owned by AgentCore + must stay byte-stable
+    // for S4.F prefix-cache reuse. Refuse the delete here so the contract holds
+    // regardless of which caller asks.
+    if (it->role == MessageRole::system) {
+        spdlog::warn("ConversationHistory::delete_by_id: refusing to delete system message (id={})",
+                     history_id);
+        return false;
+    }
+    messages_.erase(it);
+    return true;
 }
 
 void ConversationHistory::replace_system_prompt(std::string content)
@@ -61,8 +94,10 @@ void ConversationHistory::replace_system_prompt(std::string content)
     if (!messages_.empty() && messages_.front().role == MessageRole::system) {
         messages_.front().content = std::move(content);
     } else {
-        messages_.insert(messages_.begin(),
-                         ChatMessage{MessageRole::system, std::move(content)});
+        ChatMessage sys{MessageRole::system, std::move(content)};
+        if (sys.history_id == 0)
+            sys.history_id = ++next_history_id_;
+        messages_.insert(messages_.begin(), std::move(sys));
     }
 }
 
@@ -146,6 +181,11 @@ ConversationHistory ConversationHistory::from_json(const nlohmann::json& j)
             // S5.D -- back-fill estimate for messages loaded from pre-S5.D sessions.
             if (msg.token_estimate == 0)
                 msg.token_estimate = TokenCounter::estimate_message(msg);
+            // S5.G -- re-walk and assign fresh history_ids. The wire format
+            // deliberately doesn't carry the id (LLM doesn't need it), and
+            // re-numbering on load means save -> close -> open survives even
+            // when an earlier session had deletes that left gaps.
+            msg.history_id = ++h.next_history_id_;
             h.messages_.push_back(std::move(msg));
         }
     }

@@ -56,6 +56,13 @@ struct ChatMessage {
     // pre-S5.D session files (estimate_message() re-computes on add/from_json).
     int token_estimate = 0;
 
+    // S5.G -- stable per-message id assigned by ConversationHistory::add(). Used
+    // by the chat panel's per-message delete (locus://delete-message/<id>) and
+    // by IFrontend::on_history_message_added. NOT serialized via to_json (the
+    // LLM wire format must stay clean); ConversationHistory::from_json re-walks
+    // and re-assigns monotonic ids so saved-and-loaded sessions get fresh ones.
+    int history_id = 0;
+
     nlohmann::json to_json() const;
     static ChatMessage from_json(const nlohmann::json& j);
 };

@@ -375,6 +375,83 @@ body {
     user-select: none;
     opacity: 0.8;
 }
+
+/* S5.G per-message delete X (hover-reveal). The .msg container is the
+   positioning context; the X uses absolute placement. Opacity transitions
+   so the chrome doesn't pop in -- soft reveal feels less aggressive. */
+.msg { position: relative; }
+.msg-delete-x {
+    position: absolute;
+    top: 4px;
+    right: 6px;
+    width: 20px;
+    height: 20px;
+    line-height: 18px;
+    text-align: center;
+    background: rgba(0, 0, 0, 0.10);
+    color: #6b7785;
+    text-decoration: none;
+    border-radius: 50%;
+    font-size: 14px;
+    opacity: 0;
+    transition: opacity 0.15s ease-in-out, background 0.15s ease-in-out;
+    user-select: none;
+}
+.msg:hover .msg-delete-x { opacity: 1; }
+.msg-delete-x:hover { background: rgba(185, 28, 28, 0.85); color: #fff; }
+
+/* S5.G system-prompt bubble (collapsed by default; expand for per-section
+   token breakdown + full prompt text). */
+.msg-system-prompt {
+    align-self: stretch;
+    background: #f5f7fa;
+    color: #3a444f;
+    border: 1px dashed #c8d0d8;
+    border-radius: 8px;
+    font-size: 12px;
+    max-width: 100%;
+    padding: 8px 12px;
+}
+.msg-system-prompt > summary {
+    cursor: pointer;
+    color: #4a5664;
+    font-weight: 600;
+    user-select: none;
+    list-style: none;
+}
+.msg-system-prompt > summary::-webkit-details-marker { display: none; }
+.msg-system-prompt > summary::before {
+    content: "> ";
+    color: #6b7785;
+}
+.msg-system-prompt[open] > summary::before { content: "v "; }
+.msg-system-prompt .sp-breakdown {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 8px 0 6px 0;
+}
+.msg-system-prompt .section-chip {
+    display: inline-block;
+    padding: 2px 8px;
+    background: #e6ecf2;
+    color: #4a5664;
+    border-radius: 10px;
+    font-size: 11px;
+}
+.msg-system-prompt .sp-body {
+    margin-top: 6px;
+    padding: 8px;
+    background: #ffffff;
+    border: 1px solid #d8dce0;
+    border-radius: 4px;
+    font-family: "Cascadia Code", "Consolas", monospace;
+    font-size: 11px;
+    white-space: pre-wrap;
+    max-height: 320px;
+    overflow-y: auto;
+    color: #2a3038;
+}
 .msg-reasoning {
     align-self: flex-start;
     background: transparent;
@@ -488,6 +565,31 @@ body {
         border-top-color: #444; color: #999;
     }
     .streaming-cursor::after { color: #4a9eff; }
+    /* S5.G dark-mode palette for delete-X and system-prompt bubble. */
+    .msg-delete-x {
+        background: rgba(255, 255, 255, 0.08);
+        color: #aab1bb;
+    }
+    .msg-delete-x:hover {
+        background: rgba(244, 135, 113, 0.85);
+        color: #1e1e1e;
+    }
+    .msg-system-prompt {
+        background: #232a36;
+        color: #c8cfd8;
+        border-color: #3a4250;
+    }
+    .msg-system-prompt > summary { color: #b8c0cc; }
+    .msg-system-prompt > summary::before { color: #8aa9d6; }
+    .msg-system-prompt .section-chip {
+        background: #2d3644;
+        color: #b8c0cc;
+    }
+    .msg-system-prompt .sp-body {
+        background: #1a1f28;
+        color: #c0c6cf;
+        border-color: #3a4250;
+    }
 }
 </style>
 </head><body>
@@ -520,6 +622,52 @@ function setMsgTokenChip(id, n) {
     var chip = d.querySelector('.token-chip');
     if (!chip) { chip = document.createElement('span'); chip.className = 'token-chip'; d.appendChild(chip); }
     chip.textContent = '(' + n + ' t)';
+}
+/* S5.G -- inject the hover-reveal X for a deletable bubble. msgId is the
+   dom message_id_ ChatPanel allocated when creating the bubble; historyId
+   is the stable ConversationHistory id the agent core uses for delete. The
+   href fires through wxEVT_WEBVIEW_NAVIGATING to ChatLinkHandler. */
+function addDeleteButton(msgId, historyId) {
+    var d = document.getElementById('msg-' + msgId);
+    if (!d) return;
+    if (d.querySelector('.msg-delete-x')) return;
+    var a = document.createElement('a');
+    a.className = 'msg-delete-x';
+    a.href = 'locus://delete-message/' + historyId;
+    a.textContent = '×';
+    a.title = 'Delete this message';
+    d.appendChild(a);
+}
+/* S5.G -- remove a bubble entirely (post-delete). */
+function removeMsg(id) {
+    var d = document.getElementById('msg-' + id);
+    if (d) d.remove();
+}
+/* S5.G -- collapsed system-prompt bubble at the top of the chat. Renders
+   the per-section token breakdown chips + full prompt text inside a
+   <details> element so it stays out of the way by default. breakdown is
+   { total: N, sections: [{label, tokens}, ...] }. */
+function addSystemPromptMsg(id, fullText, breakdown) {
+    var existing = document.getElementById('msg-' + id);
+    if (existing) existing.remove();
+    var d = document.createElement('details');
+    d.id = 'msg-' + id;
+    d.className = 'msg msg-system-prompt';
+    d.open = false;
+    var total = (breakdown && breakdown.total) ? breakdown.total : 0;
+    var html = '<summary>System prompt (' + total + ' tokens)</summary>';
+    html += '<div class="sp-breakdown">';
+    var sections = (breakdown && breakdown.sections) ? breakdown.sections : [];
+    for (var k = 0; k < sections.length; ++k) {
+        var s = sections[k];
+        html += '<span class="section-chip">' + escapeHtml(s.label) +
+                ': ' + s.tokens + '</span>';
+    }
+    html += '</div>';
+    html += '<pre class="sp-body">' + escapeHtml(fullText) + '</pre>';
+    d.innerHTML = html;
+    var chat = document.getElementById('chat');
+    chat.insertBefore(d, chat.firstChild);
 }
 function highlightAll() {
     if (typeof Prism !== 'undefined') Prism.highlightAll();
@@ -711,7 +859,20 @@ ChatPanel::ChatPanel(wxWindow* parent,
     // Link handler for locus:// URL dispatch.
     link_handler_ = std::make_unique<ChatLinkHandler>(
         [this](const wxString& js) { run_script(js); },
-        on_plan_decision_);
+        on_plan_decision_,
+        // S5.G -- per-message delete dispatch. Prompts the confirm dialog
+        // (modal on this panel) and routes the history_id to LocusFrame's
+        // on_delete_message_ closure (which calls AgentCore::delete_message).
+        [this](int history_id) {
+            if (!on_delete_message_) return;
+            int answer = wxMessageBox(
+                "Delete this message?\nSubsequent turns will no longer see it.",
+                "Delete message",
+                wxYES_NO | wxICON_QUESTION,
+                this);
+            if (answer != wxYES) return;
+            on_delete_message_(history_id);
+        });
 
     // S4.D mode switcher (Chat / Plan / Execute) -- mutually exclusive toggles.
     auto mk_toggle = [this](const wxString& label, AgentMode m,
@@ -937,6 +1098,9 @@ void ChatPanel::on_session_reset()
     message_id_ = 0;
     tool_call_msg_ids_.clear();
     pending_tool_info_.clear();
+    // S5.G -- reset chat-side delete bookkeeping.
+    history_to_dom_.clear();
+    last_user_dom_id_ = 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -1159,6 +1323,15 @@ void ChatPanel::on_tool_result(const wxString& call_id,
         success ? "" : " tool-result-error",
         success ? "'Result'" : "'Error'",
         "'" + chat_js_escape(truncated) + "'"));
+
+    // S5.G -- token chip on tool bubbles too. Estimate from the display text
+    // (the bulk of the tool message's content) + framing -- close enough to
+    // the ConversationHistory.tool_result message's token_estimate for the
+    // chat panel's purposes.
+    if (show_per_message_tokens_ && !display.empty()) {
+        int est = TokenCounter::estimate(display.ToStdString(wxConvUTF8)) + 4;
+        run_script(wxString::Format("setMsgTokenChip(%d, %d);", target_id, est));
+    }
 }
 
 void ChatPanel::set_context_meter(int used, int limit,
@@ -1173,6 +1346,72 @@ void ChatPanel::set_context_meter(int used, int limit,
 void ChatPanel::set_show_per_message_tokens(bool show)
 {
     show_per_message_tokens_ = show;
+}
+
+// ---------------------------------------------------------------------------
+// S5.G -- system-prompt bubble + per-message delete + add/delete hooks
+// ---------------------------------------------------------------------------
+
+void ChatPanel::set_system_prompt_bubble(const SystemPromptAssembly& assembly)
+{
+    // dom_id 0 is reserved for the system-prompt bubble. It lives outside the
+    // monotonic message_id_ counter so a session reset (which zeros
+    // message_id_) won't collide with this slot.
+    nlohmann::json breakdown;
+    breakdown["total"] = assembly.total_tokens();
+    nlohmann::json sections = nlohmann::json::array();
+    auto push_section = [&](const char* label, int tokens) {
+        if (tokens <= 0) return;
+        nlohmann::json s;
+        s["label"]  = label;
+        s["tokens"] = tokens;
+        sections.push_back(std::move(s));
+    };
+    push_section("Base",      assembly.base_tokens());
+    push_section("Metadata",  assembly.metadata_tokens());
+    push_section("LOCUS.md",  assembly.locus_md_tokens());
+    push_section("Memory",    assembly.memory_tokens());
+    push_section("Tools",     assembly.manifest_tokens());
+    push_section("Format",    assembly.format_addendum_tokens());
+    breakdown["sections"] = std::move(sections);
+
+    run_script(wxString::Format(
+        "addSystemPromptMsg(0, %s, %s);",
+        "'" + chat_js_escape(wxString::FromUTF8(assembly.full_text())) + "'",
+        chat_js_escape(wxString::FromUTF8(breakdown.dump()))));
+}
+
+void ChatPanel::on_history_message_added(int history_id, MessageRole role,
+                                          bool deletable)
+{
+    if (history_id <= 0) return;
+    int target_dom_id = 0;
+    if (role == MessageRole::user) {
+        target_dom_id = last_user_dom_id_;
+        last_user_dom_id_ = 0;
+    } else if (role == MessageRole::assistant) {
+        // The renderer holds the most recent assistant bubble (open or sealed).
+        // For deletable=false (tool_calls present) we'd still record nothing;
+        // the bubble doesn't get an X.
+        target_dom_id = renderer_ ? renderer_->current_assistant_id() : 0;
+    }
+    // system + tool roles aren't user-deletable; skip mapping.
+
+    if (target_dom_id <= 0 || !deletable) return;
+
+    history_to_dom_[history_id] = target_dom_id;
+    run_script(wxString::Format("addDeleteButton(%d, %d);",
+                                target_dom_id, history_id));
+}
+
+void ChatPanel::on_history_message_deleted(int history_id)
+{
+    if (history_id <= 0) return;
+    auto it = history_to_dom_.find(history_id);
+    if (it == history_to_dom_.end()) return;
+    int dom_id = it->second;
+    history_to_dom_.erase(it);
+    run_script(wxString::Format("removeMsg(%d);", dom_id));
 }
 
 void ChatPanel::set_generation_progress(int chars, int est_tokens)
@@ -1286,6 +1525,11 @@ bool ChatPanel::submit_current_input()
     run_script(wxString::Format(
         "addMsg(%d, 'msg-user', %s);",
         message_id_, "'" + chat_js_escape(user_text_to_html(text)) + "'"));
+
+    // S5.G -- remember this dom_id so the matching on_history_message_added
+    // (which fires once the agent thread has appended the user ChatMessage)
+    // can attach a delete X to the right bubble.
+    last_user_dom_id_ = message_id_;
 
     // S5.D -- per-message token chip: client-side heuristic estimate on the
     // raw user text (effective_content may be slightly larger due to attached-

@@ -99,6 +99,11 @@ public:
 
     void reset_conversation() override;
 
+    // S5.G -- per-message delete. Queues onto the agent thread so the
+    // ConversationOwnerScope discipline holds during the actual delete.
+    // Refuses the system message (delegated to ConversationHistory).
+    void delete_message(int history_id) override;
+
     std::string save_session() override;
     void load_session(const std::string& session_id) override;
 
@@ -181,6 +186,7 @@ private:
     void apply_pending_compaction();
     void apply_pending_mode_change();
     void apply_pending_plan_decision();
+    void apply_pending_deletes();
 
     void observe_plan_tool_result(const ToolCall& call,
                                   const std::string& result_content,
@@ -228,6 +234,11 @@ private:
     CompactionLayerSelection pending_pipeline_selection_;
     int                      pending_pipeline_target_  = 0;
     std::string              pending_pipeline_overrides_;
+
+    // S5.G -- pending per-message delete ids, queued from any thread, drained
+    // on the agent thread before each turn (and between turns when the queue
+    // is otherwise idle). Protected by queue_mutex_.
+    std::vector<int>         pending_delete_ids_;
 
     // S5.F -- pre-compaction history archive. One per session, owned by
     // AgentCore so the archive lifetime matches the agent.

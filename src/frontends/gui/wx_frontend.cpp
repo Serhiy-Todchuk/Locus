@@ -25,6 +25,8 @@ wxDEFINE_EVENT(EVT_AGENT_PLAN_STEP_ADVANCED,  wxThreadEvent);
 wxDEFINE_EVENT(EVT_AGENT_PLAN_COMPLETED,      wxThreadEvent);
 wxDEFINE_EVENT(EVT_AGENT_AUTO_COMMIT,         wxThreadEvent);
 wxDEFINE_EVENT(EVT_AGENT_GEN_PROGRESS,        wxThreadEvent);
+wxDEFINE_EVENT(EVT_AGENT_HISTORY_MSG_ADDED,   wxThreadEvent);
+wxDEFINE_EVENT(EVT_AGENT_HISTORY_MSG_DELETED, wxThreadEvent);
 
 WxFrontend::WxFrontend(wxEvtHandler* handler)
     : handler_(handler)
@@ -227,6 +229,25 @@ void WxFrontend::on_generation_progress(int chars, int est_tokens)
     auto* evt = new wxThreadEvent(EVT_AGENT_GEN_PROGRESS);
     evt->SetInt(chars);
     evt->SetExtraLong(est_tokens);
+    wxQueueEvent(handler_, evt);
+}
+
+void WxFrontend::on_history_message_added(int history_id, MessageRole role,
+                                           bool deletable)
+{
+    auto* evt = new wxThreadEvent(EVT_AGENT_HISTORY_MSG_ADDED);
+    evt->SetInt(history_id);
+    // Pack role + deletable into ExtraLong: low 8 bits = role, bit 8 = deletable.
+    long packed = static_cast<long>(static_cast<int>(role)) & 0xFF;
+    if (deletable) packed |= 0x100;
+    evt->SetExtraLong(packed);
+    wxQueueEvent(handler_, evt);
+}
+
+void WxFrontend::on_history_message_deleted(int history_id)
+{
+    auto* evt = new wxThreadEvent(EVT_AGENT_HISTORY_MSG_DELETED);
+    evt->SetInt(history_id);
     wxQueueEvent(handler_, evt);
 }
 

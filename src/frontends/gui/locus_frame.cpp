@@ -189,6 +189,9 @@ LocusFrame::LocusFrame(AgentCore& agent, Workspace& workspace, McpManager* mcp)
     Bind(EVT_AGENT_AUTO_COMMIT,         &LocusFrame::on_agent_auto_commit,        this);
     // S4.F live generation-progress chip.
     Bind(EVT_AGENT_GEN_PROGRESS,        &LocusFrame::on_agent_gen_progress,       this);
+    // S5.G history add / delete -> chat panel mapping + DOM removal.
+    Bind(EVT_AGENT_HISTORY_MSG_ADDED,   &LocusFrame::on_agent_history_msg_added,   this);
+    Bind(EVT_AGENT_HISTORY_MSG_DELETED, &LocusFrame::on_agent_history_msg_deleted, this);
 
     // Wire embedding worker progress to the WxFrontend thread bridge.
     if (workspace_.embedding_worker()) {
@@ -352,6 +355,18 @@ void LocusFrame::setup_aui_layout()
     // S5.D -- per-message token chips.
     chat_panel_->set_show_per_message_tokens(
         workspace_.config().ui_show_per_message_tokens);
+
+    // S5.G -- collapsed system-prompt bubble at the top of the chat. The
+    // assembly is byte-stable across a session (S4.F invariant), so this
+    // single call at construction is enough; on session reset the chat
+    // panel re-fires `set_system_prompt_bubble` via the same path.
+    chat_panel_->set_system_prompt_bubble(agent_.context().system_prompt());
+
+    // S5.G -- per-message delete: confirm dialog lives in ChatPanel; we
+    // route the history_id to AgentCore here.
+    chat_panel_->set_on_delete_message([this](int history_id) {
+        agent_.delete_message(history_id);
+    });
 
     // Slash-command suggestions: CLI-style commands + all registered tools.
     {
@@ -791,6 +806,10 @@ void LocusFrame::on_agent_session_reset(wxThreadEvent& /*evt*/)
 {
     SetStatusText("Conversation reset", 0);
     chat_panel_->on_session_reset();
+    // S5.G -- on_session_reset clears the entire chat (including the
+    // system-prompt bubble); re-render it from the current assembly so the
+    // new session still has the breakdown at the top.
+    chat_panel_->set_system_prompt_bubble(agent_.context().system_prompt());
     if (activity_panel_) activity_panel_->clear();
 }
 
@@ -913,6 +932,23 @@ void LocusFrame::on_agent_gen_progress(wxThreadEvent& evt)
     int chars      = evt.GetInt();
     int est_tokens = static_cast<int>(evt.GetExtraLong());
     chat_panel_->set_generation_progress(chars, est_tokens);
+}
+
+void LocusFrame::on_agent_history_msg_added(wxThreadEvent& evt)
+{
+    if (!chat_panel_) return;
+    int history_id = evt.GetInt();
+    long packed    = evt.GetExtraLong();
+    MessageRole role = static_cast<MessageRole>(packed & 0xFF);
+    bool deletable   = (packed & 0x100) != 0;
+    chat_panel_->on_history_message_added(history_id, role, deletable);
+}
+
+void LocusFrame::on_agent_history_msg_deleted(wxThreadEvent& evt)
+{
+    if (!chat_panel_) return;
+    int history_id = evt.GetInt();
+    chat_panel_->on_history_message_deleted(history_id);
 }
 
 } // namespace locus

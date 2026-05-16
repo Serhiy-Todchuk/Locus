@@ -1,7 +1,9 @@
 #pragma once
 
 #include "../../agent/agent_mode.h"
+#include "../../agent/system_prompt_assembly.h"
 #include "../../core/frontend.h"
+#include "../../llm/llm_client.h"   // MessageRole
 #include "slash_popup.h"
 
 #include <wx/wx.h>
@@ -120,6 +122,28 @@ public:
     void set_show_per_message_tokens(bool show);
     void set_generation_progress(int chars, int est_tokens);
 
+    // S5.G -- collapsed system-prompt bubble at the top of the chat. Renders
+    // the full prompt text + per-section breakdown chips. Owned by AgentCore;
+    // the chat panel just displays. Call once at construction (and on session
+    // reset). The bubble lives at dom_id=0 (a reserved slot outside the
+    // ChatPanel's monotonic message_id_ allocator).
+    void set_system_prompt_bubble(const SystemPromptAssembly& assembly);
+
+    // S5.G -- a ChatMessage was just appended to ConversationHistory. Used to
+    // map the most recent dom bubble of `role` to `history_id` and (when
+    // deletable) inject the hover-reveal X.
+    void on_history_message_added(int history_id, MessageRole role,
+                                   bool deletable);
+
+    // S5.G -- a ChatMessage was removed from ConversationHistory. Removes the
+    // matching dom bubble.
+    void on_history_message_deleted(int history_id);
+
+    // S5.G -- frame supplies the confirm-then-delete dispatch closure. Called
+    // by ChatLinkHandler when the user clicks the hover-reveal X.
+    using DeleteFn = std::function<void(int history_id)>;
+    void set_on_delete_message(DeleteFn fn) { on_delete_message_ = std::move(fn); }
+
     // Attached-context chip (above input).
     void set_attached_chip(const wxString& file_path);
     void set_on_detach(std::function<void()> cb);
@@ -213,6 +237,15 @@ private:
     // S5.D -- per-message token chip state.
     bool show_per_message_tokens_   = true;
     int  last_completion_tokens_    = 0;
+
+    // S5.G -- chat-side bookkeeping for per-message delete.
+    // Most recent user bubble dom_id (refreshed on every submit_current_input).
+    int last_user_dom_id_ = 0;
+    // history_id -> dom_id, populated on on_history_message_added and consumed
+    // on on_history_message_deleted so we can DOM-remove the right bubble.
+    std::unordered_map<int, int> history_to_dom_;
+    // Set by LocusFrame when ready to dispatch deletes through AgentCore.
+    DeleteFn on_delete_message_;
 
     // WebView readiness: SetPage() is async in WebView2.
     bool                  page_ready_     = false;

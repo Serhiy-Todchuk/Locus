@@ -35,14 +35,40 @@ void EmbeddingWorker::stop()
 
 void EmbeddingWorker::enqueue(std::vector<int64_t> chunk_ids)
 {
+    bool empty_before = false;
+    int  enqueued     = static_cast<int>(chunk_ids.size());
     {
         std::lock_guard<std::mutex> lock(queue_mutex_);
+        empty_before = pending_ids_.empty();
         for (auto id : chunk_ids) {
             pending_ids_.push(id);
         }
-        total_ += static_cast<int>(chunk_ids.size());
+        total_ += enqueued;
     }
     queue_cv_.notify_one();
+
+    // S5.G -- fire an activity row when a batch lands. Catches the "we just
+    // re-indexed ten files; the embedding queue is going to be busy" moment
+    // that was previously invisible between "indexing kicked off" and the
+    // periodic progress emits below.
+    if (enqueued > 0 && on_activity) {
+        int total = total_.load();
+        int done  = done_.load();
+        std::string summary = "Embedding queue: +" + std::to_string(enqueued) +
+                              " chunk(s) (" + std::to_string(done) +
+                              "/" + std::to_string(total) + ")";
+        std::string detail  = "queued=" + std::to_string(enqueued) +
+                              " done="  + std::to_string(done) +
+                              " total=" + std::to_string(total) +
+                              (empty_before ? " (resumed)" : "");
+        on_activity(summary, detail);
+    }
+}
+
+void EmbeddingWorker::set_activity_throttle(int chunks_per_event, int ms_per_event)
+{
+    activity_chunks_per_event_ = chunks_per_event;
+    activity_ms_per_event_     = ms_per_event;
 }
 
 std::vector<float> EmbeddingWorker::embed_query(const std::string& text) const
@@ -133,6 +159,41 @@ void EmbeddingWorker::thread_func()
 
         if (current_done % 100 == 0 || current_done == current_total) {
             spdlog::trace("Embedding progress: {}/{}", current_done, current_total);
+        }
+
+        // S5.G -- throttled activity-row emission. Two independent gates: every
+        // N chunks since last emit, OR every M ms since last emit. Drain also
+        // fires the last one so the row count matches the total.
+        if (on_activity) {
+            bool fire = false;
+            int  delta = current_done - last_activity_done_;
+            if (activity_chunks_per_event_ > 0 && delta >= activity_chunks_per_event_)
+                fire = true;
+            if (activity_ms_per_event_ > 0) {
+                auto now = std::chrono::steady_clock::now();
+                if (last_activity_time_.time_since_epoch().count() == 0)
+                    last_activity_time_ = now;
+                auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                              now - last_activity_time_).count();
+                if (ms >= activity_ms_per_event_)
+                    fire = true;
+            }
+            // Always emit on queue drain so the final state lands in the log.
+            if (current_done == current_total && delta > 0)
+                fire = true;
+
+            if (fire) {
+                std::string summary = "Embedding progress: " +
+                                      std::to_string(current_done) + "/" +
+                                      std::to_string(current_total) +
+                                      (current_done == current_total ? " (done)" : "");
+                std::string detail  = "delta=" + std::to_string(delta) +
+                                      " done="  + std::to_string(current_done) +
+                                      " total=" + std::to_string(current_total);
+                on_activity(summary, detail);
+                last_activity_done_ = current_done;
+                last_activity_time_ = std::chrono::steady_clock::now();
+            }
         }
     }
 

@@ -2,6 +2,7 @@
 
 #include "agent/prompt_templates.h"
 #include "agent/system_prompt.h"
+#include "index/embedding_worker.h"
 #include "index/index_query.h"
 #include "index/indexer.h"
 #include "mcp/mcp_manager.h"
@@ -151,6 +152,18 @@ LocusSession::LocusSession(const std::filesystem::path& ws_path,
             agent->emit_index_event(s, d);
         };
 
+    // S5.G -- coarse embedding-queue activity through the same channel. The
+    // worker's on_activity is independent of on_progress (used by the GUI's
+    // per-chunk progress chip in the file-tree panel); this is the audit row
+    // a user sees in the Activity log when a re-index batch is chewing through
+    // chunks. Throttled inside EmbeddingWorker (default 100 chunks / 5 s).
+    if (auto* ew = workspace_->embedding_worker()) {
+        ew->on_activity =
+            [agent = agent_.get()](const std::string& s, const std::string& d) {
+                agent->emit_index_event(s, d);
+            };
+    }
+
     // 6. Light the agent thread up. Frontends can register before or after
     //    this call -- `register_frontend` is thread-safe.
     agent_->start();
@@ -158,6 +171,14 @@ LocusSession::LocusSession(const std::filesystem::path& ws_path,
 
 LocusSession::~LocusSession()
 {
+    // Drop callbacks that capture agent_ first -- the embedding worker thread
+    // is still running until ~Workspace, and a chunk-completion firing
+    // on_activity after ~AgentCore would dereference a freed pointer.
+    if (workspace_) {
+        workspace_->indexer().on_activity = nullptr;
+        if (auto* ew = workspace_->embedding_worker())
+            ew->on_activity = nullptr;
+    }
     // Stop the agent thread before any subsystem it touches goes away.
     // unique_ptr destruction order then unwinds: agent -> tools -> llm ->
     // workspace, mirroring the construction sequence.

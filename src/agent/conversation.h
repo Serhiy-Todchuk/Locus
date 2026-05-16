@@ -27,6 +27,12 @@ public:
     // attached-context section of the system prompt is added or removed.
     void replace_system_prompt(std::string content);
 
+    // S5.G -- per-message delete. Returns true if a matching id was found and
+    // removed; false otherwise. Refuses to delete the leading system message
+    // (id=1) -- the system prompt is owned by AgentCore and must stay
+    // byte-stable across a session for S4.F prefix-cache reuse.
+    bool delete_by_id(int history_id);
+
     const std::vector<ChatMessage>& messages() const { return messages_; }
     size_t size() const { return messages_.size(); }
     bool   empty() const { return messages_.empty(); }
@@ -63,6 +69,11 @@ public:
 private:
     std::vector<ChatMessage>     messages_;
     std::atomic<std::thread::id> owner_thread_id_{};
+
+    // S5.G -- next id to assign on add(). Monotonic, never decremented even on
+    // delete -- the chat panel needs ids that don't get re-used after the user
+    // deletes a message in the middle of the history.
+    int                          next_history_id_ = 0;
 };
 
 // RAII helper: set ConversationHistory's owner thread to the caller for the

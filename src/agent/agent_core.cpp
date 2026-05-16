@@ -140,6 +140,47 @@ void AgentCore::emit_index_event(const std::string& summary, const std::string& 
     activity_->emit_index_event(summary, detail);
 }
 
+void AgentCore::delete_message(int history_id)
+{
+    if (history_id <= 0) {
+        spdlog::warn("AgentCore::delete_message: ignoring non-positive id {}", history_id);
+        return;
+    }
+    {
+        std::lock_guard lock(queue_mutex_);
+        pending_delete_ids_.push_back(history_id);
+    }
+    queue_cv_.notify_one();
+    spdlog::info("AgentCore: queued delete for history_id={}", history_id);
+}
+
+void AgentCore::apply_pending_deletes()
+{
+    std::vector<int> ids;
+    {
+        std::lock_guard lock(queue_mutex_);
+        ids.swap(pending_delete_ids_);
+    }
+    if (ids.empty()) return;
+    for (int id : ids) {
+        bool ok = ctx_->delete_message(id);
+        if (ok) {
+            activity_->emit(ActivityKind::index_event,
+                            "Deleted history message",
+                            "history_id=" + std::to_string(id));
+        } else {
+            spdlog::warn("AgentCore: delete_message({}) -- not found or refused", id);
+        }
+    }
+    // Update context-meter so the UI gauge reflects the freed tokens.
+    frontends_.broadcast([&](IFrontend& fe) {
+        fe.on_context_meter(ctx_->current_tokens(), ctx_->llm_config().context_limit,
+                            ctx_->budget().last_prompt_tokens(),
+                            ctx_->budget().last_completion_tokens(),
+                            ctx_->budget().reserve());
+    });
+}
+
 // -- Attached file context (S2.4 / S4.F) -------------------------------------
 
 void AgentCore::set_attached_context(AttachedContext ctx)
@@ -372,6 +413,7 @@ void AgentCore::agent_thread_func()
                        || pending_mode_change_.load(std::memory_order_acquire)
                        || pending_plan_approve_.load(std::memory_order_acquire)
                        || pending_plan_reject_.load(std::memory_order_acquire)
+                       || !pending_delete_ids_.empty()
                        || !running_.load();
             });
 
@@ -392,6 +434,7 @@ void AgentCore::agent_thread_func()
             apply_pending_compaction();
             apply_pending_mode_change();
             apply_pending_plan_decision();
+            apply_pending_deletes();
         }
 
         if (!have_message)
@@ -565,6 +608,7 @@ void AgentCore::process_message(const std::string& content)
         apply_pending_compaction();
         apply_pending_mode_change();
         apply_pending_plan_decision();
+        apply_pending_deletes();
 
         // S5.F -- auto-compact band. When usage crosses the configured
         // auto_threshold of effective_limit and auto_enabled is on, queue

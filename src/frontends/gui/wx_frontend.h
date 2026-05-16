@@ -33,6 +33,9 @@ wxDECLARE_EVENT(EVT_AGENT_PLAN_COMPLETED,    wxThreadEvent);
 wxDECLARE_EVENT(EVT_AGENT_AUTO_COMMIT,       wxThreadEvent);
 // S4.F generation-progress event (live token counter).
 wxDECLARE_EVENT(EVT_AGENT_GEN_PROGRESS,      wxThreadEvent);
+// S5.G history message add / delete (per-message delete UI).
+wxDECLARE_EVENT(EVT_AGENT_HISTORY_MSG_ADDED,   wxThreadEvent);
+wxDECLARE_EVENT(EVT_AGENT_HISTORY_MSG_DELETED, wxThreadEvent);
 
 // Thread bridge: IFrontend callbacks (fired on the agent thread) are
 // marshalled to the wxWidgets main thread via wxQueueEvent + wxThreadEvent.
@@ -77,6 +80,10 @@ public:
                          const std::string& subject) override;
     // S4.F
     void on_generation_progress(int chars, int est_tokens) override;
+    // S5.G
+    void on_history_message_added(int history_id, MessageRole role,
+                                   bool deletable) override;
+    void on_history_message_deleted(int history_id) override;
 
 private:
     wxEvtHandler* handler_;

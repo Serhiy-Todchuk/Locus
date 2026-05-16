@@ -61,8 +61,16 @@ LLMContext::LLMContext(IWorkspaceServices&                      services,
                      checkpoints_dir.string(), session_id_);
     }
 
-    // Seed the conversation with the system message.
+    // Seed the conversation with the system message. The broadcast notifies
+    // any already-registered frontends -- usually none at this point (the
+    // GUI frontend is wired later), so this is effectively informational.
     history_.add({MessageRole::system, prompt_.full_text()});
+    if (!history_.messages().empty()) {
+        const auto& sys = history_.messages().back();
+        frontends_.broadcast([&](IFrontend& fe) {
+            fe.on_history_message_added(sys.history_id, sys.role, /*deletable=*/false);
+        });
+    }
 
     // Take an initial file-change tracker snapshot so the first user turn
     // diffs against "the world as it was when we started", not an empty set.
@@ -184,11 +192,38 @@ std::string LLMContext::compose_attached_context_block() const
 void LLMContext::add_message(ChatMessage msg)
 {
     history_.add(std::move(msg));
+    // S5.G -- notify frontends so they can map the new history_id back to a
+    // chat bubble (only deletable shapes get the hover-reveal X). The system
+    // prompt + tool result messages are never user-deletable; assistant
+    // messages with tool_calls are paired with their tool results in the
+    // wire format -- deleting one without the other would invalidate the
+    // conversation, so they get deletable=false too.
+    if (history_.messages().empty()) return;
+    const auto& added = history_.messages().back();
+    bool deletable = (added.role == MessageRole::user) ||
+                     (added.role == MessageRole::assistant && added.tool_calls.empty());
+    frontends_.broadcast([&](IFrontend& fe) {
+        fe.on_history_message_added(added.history_id, added.role, deletable);
+    });
 }
 
 void LLMContext::replace_system_prompt_in_history(std::string content)
 {
     history_.replace_system_prompt(std::move(content));
+}
+
+bool LLMContext::delete_message(int history_id)
+{
+    bool ok = history_.delete_by_id(history_id);
+    if (!ok) return false;
+    // Drop cached server token totals -- they reflect a count that includes
+    // the just-deleted message. The next LLM round repopulates them.
+    budget_->set_server_total(0);
+    budget_->set_server_split(0, 0);
+    frontends_.broadcast([&](IFrontend& fe) {
+        fe.on_history_message_deleted(history_id);
+    });
+    return true;
 }
 
 // -- Compaction --------------------------------------------------------------
@@ -216,6 +251,12 @@ void LLMContext::reset_for_new_conversation()
     // S4.F: the system prompt is byte-stable across the session; re-seed
     // from the same assembly we already hold.
     history_.add({MessageRole::system, prompt_.full_text()});
+    if (!history_.messages().empty()) {
+        const auto& sys = history_.messages().back();
+        frontends_.broadcast([&](IFrontend& fe) {
+            fe.on_history_message_added(sys.history_id, sys.role, /*deletable=*/false);
+        });
+    }
     budget_->reset();
 
     // Drop checkpoint history with the conversation; start a fresh session
@@ -245,6 +286,18 @@ void LLMContext::load_session(const std::string& id)
     budget_->reset();
     spdlog::info("LLMContext: loaded session '{}' ({} messages)",
                  id, history_.size());
+    // S5.G -- re-announce every loaded message so a frontend connected after
+    // load builds its dom -> history map for hover-reveal delete. Order is
+    // history order; the chat panel's own re-rendering of loaded messages
+    // happens through a separate path (LocusFrame::on_agent_session_reset
+    // + re-render), so the added events here are purely for the delete map.
+    for (const auto& m : history_.messages()) {
+        bool deletable = (m.role == MessageRole::user) ||
+                         (m.role == MessageRole::assistant && m.tool_calls.empty());
+        frontends_.broadcast([&](IFrontend& fe) {
+            fe.on_history_message_added(m.history_id, m.role, deletable);
+        });
+    }
 }
 
 // -- Helpers -----------------------------------------------------------------

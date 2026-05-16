@@ -19,7 +19,7 @@
 - [x] **[S5.Q](S5.Q-large-file-decomposition.md)** -- Large File Decomposition (chat_panel & settings_dialog) -- _Refactor_
 - [x] **[S5.D](S5.D-reserve-and-token-xray.md)** -- Reserve Enforcement + Token-Cost X-Ray -- _Context_
 - [x] **[S5.F](S5.F-compaction-v2.md)** -- Compaction v2 (Toolkit + Auto + History Archive) -- _Context_
-- [ ] **[S5.G](S5.G-chat-activity-restructure.md)** -- Chat / Activity Restructure -- _UX_
+- [x] **[S5.G](S5.G-chat-activity-restructure.md)** -- Chat / Activity Restructure -- _UX_
 - [ ] **[S5.I](S5.I-tabs-and-sessions.md)** -- Multi-Tab Conversations + Session Menu Redesign -- _UX_
 - [ ] **[S5.K](S5.K-memory-bank-ui.md)** -- Memory Bank UI Viewer / Editor -- _UX_
 - [ ] **[S5.N](S5.N-non-code-workspace-proof.md)** -- Non-Code Workspace Proof -- _Product / QA_

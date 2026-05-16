@@ -19,8 +19,16 @@ class ChatLinkHandler {
 public:
     using DecisionFn = std::function<void(const std::string&)>;
     using RunJsFn    = std::function<void(const wxString&)>;
+    // S5.G -- per-message delete confirm-and-dispatch. The handler calls this
+    // with the history_id from the locus://delete-message/<id> URL after the
+    // user clicks the hover-reveal X. The frame implementation is responsible
+    // for the confirm dialog + AgentCore::delete_message wiring.
+    using DeleteFn   = std::function<void(int /*history_id*/)>;
 
-    ChatLinkHandler(RunJsFn run_js, DecisionFn on_plan_decision);
+    ChatLinkHandler(RunJsFn run_js, DecisionFn on_plan_decision,
+                    DeleteFn on_delete_message = nullptr);
+
+    void set_on_delete_message(DeleteFn fn) { on_delete_message_ = std::move(fn); }
 
     // Register a new plan bubble. Called from ChatPanel::on_plan_proposed.
     void register_plan(const std::string& plan_id, int msg_id);
@@ -40,6 +48,7 @@ public:
 private:
     RunJsFn    run_js_;
     DecisionFn on_plan_decision_;
+    DeleteFn   on_delete_message_;
 
     std::unordered_map<std::string, int> plan_msg_ids_;
 };

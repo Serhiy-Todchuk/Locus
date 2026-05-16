@@ -129,6 +129,11 @@ public:
     void add_message(ChatMessage msg);
     void replace_system_prompt_in_history(std::string content);
 
+    // S5.G -- per-message delete. Returns true when a matching id was found and
+    // removed; false otherwise. Broadcasts on_history_message_deleted on
+    // success. Refuses the system message (handled by ConversationHistory).
+    bool delete_message(int history_id);
+
     // -- Compaction ----------------------------------------------------------
 
     void compact_drop_tool_results();
