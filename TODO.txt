@@ -1,3 +1,4 @@
+- More broad about window.
 - Voice chat input
 - Add image attachment for LLM prompt
 - FastDebug
