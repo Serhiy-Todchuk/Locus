@@ -3,7 +3,6 @@
 - tokens per second counter per each turn? (decide after S5.G)
 - Shall we put all prompts (system, compaction, etc.) into app folder, or Locus global folder, as a text files, so user can see/edit them?
 - Add image attachment for LLM prompt
-- If user presses Stop - does it interupts a command the agent is currently running?
 - Voice chat input
 - FastDebug
 
