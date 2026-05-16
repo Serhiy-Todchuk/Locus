@@ -123,8 +123,9 @@ public:
     // -- Mutations (owner-thread-only) --------------------------------------
     //
     // These thin wrappers exist so callers can ignore the underlying
-    // ConversationHistory shape and so future S5.E / S5.H surface (pin
-    // states, edit/delete/rewind) can land here without touching tools.
+    // ConversationHistory shape and so future S5.G per-message delete
+    // (and any reactivated S5.H edit/rewind) can land here without
+    // touching tools.
     void add_message(ChatMessage msg);
     void replace_system_prompt_in_history(std::string content);
 
