@@ -42,6 +42,13 @@ struct ObservedPlanCompletion {
     bool        success = false;
 };
 
+// S5.G -- history add/delete event captures.
+struct ObservedHistoryAdd {
+    int         history_id;
+    MessageRole role;
+    bool        deletable;
+};
+
 // Test frontend that drives the approval gate synchronously, records every
 // callback, and signals turn completion via a condvar so the fixture can do
 // prompt / wait-for-turn / assert flows.
@@ -84,6 +91,12 @@ public:
     std::vector<ObservedPlanCompletion>   plan_completions()   const;
     std::vector<AgentMode>                mode_changes()       const;
 
+    // S5.G history event captures (thread-safe copies). adds covers every
+    // ChatMessage appended to ConversationHistory since the last
+    // reset_turn_state(); deletes is the parallel for on_history_message_deleted.
+    std::vector<ObservedHistoryAdd> history_adds()    const;
+    std::vector<int>                history_deletes() const;
+
     // Re-arm the turn-complete latch without clearing recorded state. Use
     // before triggering a follow-on turn (e.g. approve_plan auto-resume)
     // so wait_for_turn blocks for the *next* turn rather than returning
@@ -115,6 +128,10 @@ public:
                                 PlanStep::Status status,
                                 const std::string& notes) override;
     void on_plan_completed(const std::string& plan_id, bool success) override;
+    // S5.G
+    void on_history_message_added(int history_id, MessageRole role,
+                                   bool deletable) override;
+    void on_history_message_deleted(int history_id) override;
 
 private:
     ILocusCore* core_ = nullptr;
@@ -140,6 +157,10 @@ private:
     std::vector<ObservedPlanStepAdvance> plan_step_advances_;
     std::vector<ObservedPlanCompletion>  plan_completions_;
     std::vector<AgentMode>               mode_changes_;
+
+    // S5.G history event records (mutex_-guarded).
+    std::vector<ObservedHistoryAdd> history_adds_;
+    std::vector<int>                history_deletes_;
 };
 
 } // namespace locus::integration

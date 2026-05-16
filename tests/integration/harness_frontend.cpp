@@ -22,6 +22,9 @@ void HarnessFrontend::reset_turn_state()
         plan_step_advances_.clear();
         plan_completions_.clear();
         mode_changes_.clear();
+        // S5.G -- history event records.
+        history_adds_.clear();
+        history_deletes_.clear();
     }
     {
         std::lock_guard lock(turn_mutex_);
@@ -225,6 +228,33 @@ void HarnessFrontend::on_plan_completed(const std::string& plan_id, bool success
 {
     std::lock_guard lock(mutex_);
     plan_completions_.push_back({plan_id, success});
+}
+
+// -- S5.G history event captures --------------------------------------------
+
+std::vector<ObservedHistoryAdd> HarnessFrontend::history_adds() const
+{
+    std::lock_guard lock(mutex_);
+    return history_adds_;
+}
+
+std::vector<int> HarnessFrontend::history_deletes() const
+{
+    std::lock_guard lock(mutex_);
+    return history_deletes_;
+}
+
+void HarnessFrontend::on_history_message_added(int history_id, MessageRole role,
+                                                bool deletable)
+{
+    std::lock_guard lock(mutex_);
+    history_adds_.push_back({history_id, role, deletable});
+}
+
+void HarnessFrontend::on_history_message_deleted(int history_id)
+{
+    std::lock_guard lock(mutex_);
+    history_deletes_.push_back(history_id);
 }
 
 } // namespace locus::integration
