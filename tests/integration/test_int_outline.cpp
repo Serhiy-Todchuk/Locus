@@ -46,10 +46,10 @@ TEST_CASE("outline works on PDF sample (PDFium)", "[integration][llm][outline]")
 
 TEST_CASE("outline works on DOCX sample", "[integration][llm][outline]")
 {
-    // The Apache POI SampleDoc.docx has no explicit HeadingN styles so its
-    // outline is empty -- we only check that the extractor ran (tool produced
-    // a result with the path header) rather than asserting a specific marker.
-    check_outline_of("tests/sample_docs/sample.docx", "sample.docx");
+    // The Apache Tika testWORD.docx ships with a Title + Subtitle + Heading1..3
+    // hierarchy; the outline tool should surface those, so we assert on a real
+    // heading text rather than the path header.
+    check_outline_of("tests/sample_docs/sample.docx", "Heading Level 1");
 }
 
 TEST_CASE("outline works on XLSX sample", "[integration][llm][outline]")

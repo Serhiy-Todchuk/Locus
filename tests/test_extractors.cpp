@@ -50,7 +50,7 @@ TEST_CASE("PdfiumExtractor flags missing file", "[s2.3][pdf]")
     REQUIRE(r.is_binary);
 }
 
-TEST_CASE("DocxExtractor reads POI SampleDoc", "[s2.3][docx]")
+TEST_CASE("DocxExtractor reads Tika testWORD.docx", "[s2.3][docx]")
 {
     auto path = find_sample("sample.docx");
     REQUIRE(!path.empty());
@@ -60,6 +60,17 @@ TEST_CASE("DocxExtractor reads POI SampleDoc", "[s2.3][docx]")
 
     REQUIRE_FALSE(r.is_binary);
     REQUIRE(!r.text.empty());
+    // The Tika sample has Title + Subtitle + Heading1..3 styles -- assert the
+    // extractor surfaced at least the Heading1 text.
+    REQUIRE(!r.headings.empty());
+    bool found_heading_1 = false;
+    for (const auto& h : r.headings) {
+        if (h.text.find("Heading Level 1") != std::string::npos) {
+            found_heading_1 = true;
+            break;
+        }
+    }
+    REQUIRE(found_heading_1);
 }
 
 TEST_CASE("DocxExtractor flags non-zip file", "[s2.3][docx]")
