@@ -75,11 +75,11 @@ Output: `build/release/tests/integration/Release/locus_integration_tests.exe`
 ## Run
 
 ```
-# All scenarios
+# All scenarios (inline output)
 build\release\tests\integration\Release\locus_integration_tests.exe
 
-# One tag area at a time (recommended -- fast feedback) with live log stream
-build\release\tests\integration\Release\locus_integration_tests.exe "[smoke]" -console
+# One tag area at a time (recommended -- fast feedback)
+build\release\tests\integration\Release\locus_integration_tests.exe "[smoke]"
 build\release\tests\integration\Release\locus_integration_tests.exe "[search]"
 build\release\tests\integration\Release\locus_integration_tests.exe "[outline]"
 build\release\tests\integration\Release\locus_integration_tests.exe "[fs]"
@@ -90,6 +90,10 @@ build\release\tests\integration\Release\locus_integration_tests.exe "[slash]"
 build\release\tests\integration\Release\locus_integration_tests.exe "[undo]"
 build\release\tests\integration\Release\locus_integration_tests.exe "[metrics]"
 build\release\tests\integration\Release\locus_integration_tests.exe "[max_tokens]"
+
+# Pop a foreground console window when a human wants to watch the trace
+# stream live (see -console below).
+build\release\tests\integration\Release\locus_integration_tests.exe "[search]" -console
 
 # List registered tests
 build\release\tests\integration\Release\locus_integration_tests.exe --list-tests
@@ -109,17 +113,20 @@ CLI flags (parsed by our custom `main` before Catch2 sees the rest of argv):
 
 | Flag | Effect |
 |---|---|
-| `-console` | **Always pops a dedicated console window** (titled *"Locus Integration Tests"*) and streams every trace/info log line there in real time -- tool calls, LLM stream, FTS queries, SQL, embedding progress, the lot. If the exe was launched from a real console (cmd.exe, Windows Terminal), that console is used and stays visible afterwards. If launched from anything else (IDE Run, double-click, agent subprocess, a redirected pipe), the exe self-relaunches via `CreateProcessW(CREATE_NEW_CONSOLE)` so a fresh window pops regardless -- the parent process just waits on the child and propagates its exit code. The window closes as soon as tests finish -- for a post-mortem read `.locus/integration_test.log`, which captures the full trace unconditionally. |
+| `-console` | **Pops a dedicated console window** (titled *"Locus Integration Tests"*) and streams every trace/info log line there in real time -- tool calls, LLM stream, FTS queries, SQL, embedding progress, the lot. If the exe was launched from a real console (cmd.exe, Windows Terminal), that console is used and stays visible afterwards. If launched from anything else (IDE Run, double-click, agent subprocess), the exe self-relaunches via `CreateProcessW(CREATE_NEW_CONSOLE)` so a fresh window pops regardless -- the parent process just waits on the child and propagates its exit code. Caveat: stdout/stderr go to the new console, so a subprocess capture comes back empty -- use this only when a human is watching. |
 
-Without `-console`, stderr stays at warning-level only and the Catch2 output
-is summary-only. Logs always land in `<workspace>/.locus/integration_test.log`
-(rotating, full trace level) regardless of `-console`.
+Without `-console` (the default), Catch2 + warning-level log lines stream
+inline to stdout/stderr -- ideal when the runner needs to read failures
+back (CI, scripts, an AI assistant pumping the suite). Full trace lines
+always land in `<workspace>/.locus/integration_test.log` regardless.
 
 ### Guidance for Claude (AI assistant)
 
-When the user asks you to run the integration tests, **always pass `-console`**
-unless they explicitly say otherwise. The user wants to see what's happening
-in real time; the silent default is for headless / CI-style runs.
+Run **inline (no `-console`)** by default so failures stream back through the
+subprocess pipe and can be root-caused in the same turn. Filter llama.cpp
+boot noise with `| grep -vE "^llama_|^print_info|^load|^ggml_|^create_tensor|^repack|^graph_reserve|^set_abort"`
+when only Catch2 / harness lines matter. Reach for `-console` only when the
+user explicitly asks for the foreground pop-out so they can watch it live.
 
 ## Architecture
 
@@ -157,6 +164,14 @@ Design notes:
 - **Scratch directory.** Tests that create/modify files use
   `tests/integration_tmp/` (gitignored). Wiped at harness startup and shutdown
   -- aborted runs never leak state.
+- **Gitignore respect overridden in the harness.** The repo's `.gitignore`
+  lists `tests/integration_tmp/`, which would otherwise hide every scratch
+  file from the indexer (S4.L respects the workspace's gitignore by default).
+  The harness flips `workspace_->config().respect_gitignore = false` +
+  `indexer().reload_gitignore()` immediately after Workspace construction,
+  so any file written under the scratch dir during a test gets indexed and
+  surfaces through `IndexQuery` / `FileChangeTracker`. Process-local only --
+  the on-disk `.locus/config.json` is never rewritten by the harness.
 
 ## Writing a new scenario
 
@@ -190,6 +205,7 @@ Design notes:
 | Most assertions `tool_called(...)` fail | Loaded model doesn't support tool/function calling. Load one that does. |
 | `[fs]` edit section fails with *"'old_string' not found"* | LLM capitalised the word differently than the prompt prescribed. The prompt spells the exact casing -- extend it if your model drifts. |
 | `[outline]` DOCX shows 0 entries | Expected -- the Apache POI SampleDoc.docx has no explicit `HeadingN` styles. The test asserts the tool ran, not a specific heading. |
+| `[fs]` / `[file_change_awareness]` fail with no notes.md / s4t_external.txt in the index | The harness should be flipping `respect_gitignore=false` (see Design notes above). If you've tweaked harness ctor or moved tmp_dir somewhere else, verify the flip still runs before any test prompts. The repo's `.gitignore` excludes `tests/integration_tmp/`. |
 
 Full traces (tool args, LLM stream, FTS queries, embedding progress) are in
 `<workspace>/.locus/integration_test.log`.
