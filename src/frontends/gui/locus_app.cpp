@@ -361,7 +361,7 @@ bool LocusApp::spawn_session(const std::filesystem::path& ws_path,
         return false;
     }
 
-    frame_ = new LocusFrame(session_->agent(), session_->workspace(), session_->mcp());
+    frame_ = new LocusFrame(*session_);
     frame_->Show(true);
     return true;
 }

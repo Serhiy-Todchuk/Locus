@@ -292,10 +292,12 @@ void BackgroundProcess::reader_loop() {}
 
 // -- ProcessRegistry --------------------------------------------------------
 
-ProcessRegistry::ProcessRegistry(fs::path workspace_root, std::size_t buffer_cap_bytes)
+ProcessRegistry::ProcessRegistry(fs::path workspace_root, std::size_t buffer_cap_bytes,
+                                 ProcessSinkBroker* external_broker)
     : root_(std::move(workspace_root)),
       buffer_cap_(buffer_cap_bytes),
-      sink_broker_(std::make_unique<ProcessSinkBroker>())
+      owned_broker_(external_broker ? nullptr : std::make_unique<ProcessSinkBroker>()),
+      broker_ptr_(external_broker ? external_broker : owned_broker_.get())
 {}
 
 ProcessRegistry::~ProcessRegistry()
@@ -321,7 +323,7 @@ int ProcessRegistry::spawn(const std::string& command)
     {
         std::lock_guard l(mu_);
         id = next_id_++;
-        proc.reset(new BackgroundProcess(id, command, buffer_cap_, sink_broker_.get()));
+        proc.reset(new BackgroundProcess(id, command, buffer_cap_, broker_ptr_));
     }
 
     // spawn_win32 throws on failure; do not insert a half-constructed entry.
@@ -336,7 +338,7 @@ int ProcessRegistry::spawn(const std::string& command)
     // S5.B -- announce the new process to the terminal panel after the
     // entry is in the registry, so a tab-creation handler that immediately
     // queries `list()` sees the row.
-    if (sink_broker_) sink_broker_->emit_bg_started(id, command);
+    if (broker_ptr_) broker_ptr_->emit_bg_started(id, command);
     return id;
 #else
     (void)command;

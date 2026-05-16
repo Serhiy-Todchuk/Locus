@@ -242,6 +242,23 @@ struct WorkspaceConfig {
     // collapsing -- show every row inline.
     int  chat_diff_collapse_threshold = 16;
 
+    // S5.I -- saved-session lifecycle + auto-cleanup. Sessions accumulate in
+    // `.locus/sessions/` indefinitely; without cleanup a long-lived workspace
+    // ends up with hundreds of stale JSONs. A session is a cleanup candidate
+    // iff its `last_opened_at` is older than `delete_after_days` AND, by
+    // ordering on `last_opened_at`, it sits beyond the `keep_last_count`
+    // most-recently-opened CLOSED sessions. Currently-open tabs are always
+    // exempt (pin = being-open-in-a-tab).
+    struct Sessions {
+        bool auto_cleanup_enabled = true;
+        int  keep_last_count      = 10;
+        int  delete_after_days    = 21;
+        // S5.I -- when true, every open_tabs entry in workspace UI state is
+        // re-opened on workspace open. When false a single empty tab opens.
+        bool restore_last         = true;
+    };
+    Sessions sessions;
+
     // S5.A -- workspace capability buckets. Each bucket gates a family of
     // tools (and sometimes a system-prompt slot) so the per-turn manifest
     // only carries what the user asked for. `semantic_search` and

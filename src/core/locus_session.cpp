@@ -29,36 +29,19 @@ void merge_workspace_defaults(LLMConfig& cfg, const WorkspaceConfig& wc)
         cfg.model = wc.llm_model;
     if (cfg.context_limit <= 0 && wc.llm_context_limit > 0)
         cfg.context_limit = wc.llm_context_limit;
-    // max_tokens: same shape as context_limit -- workspace value wins
-    // when positive, default in LLMConfig (8192) holds otherwise.
     if (wc.llm_max_tokens > 0)
         cfg.max_tokens = wc.llm_max_tokens;
-    // Stall watchdog. Same shape as context_limit: workspace value wins
-    // when positive; the LLMConfig default (600s) holds otherwise.
     if (wc.llm_timeout_ms > 0)
         cfg.timeout_ms = wc.llm_timeout_ms;
-    // Temperature has a non-zero default (0.7) so we can't tell "user set it"
-    // from "default". Treat any non-default workspace value as an override.
     if (wc.llm_temperature > 0.0 && wc.llm_temperature != cfg.temperature)
         cfg.temperature = wc.llm_temperature;
-    // tool_format: caller seeds keep precedence (today the CLI/GUI never
-    // sets it, so the workspace value always wins). Default Auto in
-    // LLMConfig is the same as default "auto" in WorkspaceConfig, so we
-    // can unconditionally read from the workspace.
     if (cfg.tool_format == ToolFormat::Auto && !wc.llm_tool_format.empty())
         cfg.tool_format = tool_format_from_string(wc.llm_tool_format);
 
-    // S4.V Task 7 -- optional sampler overrides. Sentinel 0 in WorkspaceConfig
-    // means "don't override"; matching 0 default in LLMConfig means the
-    // request body skips the field entirely. So we only copy through when
-    // the workspace value is positive.
     if (wc.llm_top_p          > 0.0) cfg.top_p          = wc.llm_top_p;
     if (wc.llm_top_k          > 0)   cfg.top_k          = wc.llm_top_k;
     if (wc.llm_min_p          > 0.0) cfg.min_p          = wc.llm_min_p;
     if (wc.llm_repeat_penalty > 0.0) cfg.repeat_penalty = wc.llm_repeat_penalty;
-    // OpenAI penalties: forwarded whenever non-zero (negative values are
-    // legitimate -- they bias the model toward repetition, useful for pinned
-    // styles or consistent output).
     if (wc.llm_frequency_penalty != 0.0) cfg.frequency_penalty = wc.llm_frequency_penalty;
     if (wc.llm_presence_penalty  != 0.0) cfg.presence_penalty  = wc.llm_presence_penalty;
 }
@@ -69,29 +52,30 @@ LocusSession::LocusSession(const std::filesystem::path& ws_path,
                            LLMConfig                    seed_config)
     : llm_config_(std::move(seed_config))
 {
-    // 1. Workspace -- owns the index, watcher, embedder. Throws on bad path
-    //    or when another Locus already holds the workspace lock.
+    load_shared_resources(ws_path, llm_config_);
+}
+
+void LocusSession::load_shared_resources(const std::filesystem::path& ws_path,
+                                        LLMConfig                    /*seed_config*/)
+{
+    // 1. Workspace.
     workspace_ = std::make_unique<Workspace>(ws_path);
 
     if (!workspace_->locus_md().empty())
-        spdlog::info("LOCUS.md loaded ({} bytes)",
-                     workspace_->locus_md().size());
+        spdlog::info("LOCUS.md loaded ({} bytes)", workspace_->locus_md().size());
 
     auto& st = workspace_->indexer().stats();
     spdlog::info("Index: {} files ({} text, {} binary), {} symbols, {} headings",
                  st.files_total, st.files_indexed, st.files_binary,
                  st.symbols_total, st.headings_total);
 
-    // 2. Layer workspace config under the caller's seed values, then build
-    //    the LLM client.
+    // 2. LLM config / client.
     merge_workspace_defaults(llm_config_, workspace_->config());
     if (llm_config_.base_url.empty())
         llm_config_.base_url = "http://127.0.0.1:1234";
 
     llm_ = create_llm_client(llm_config_);
 
-    // 3. Probe the server for model id + context length and fill any gaps.
-    //    A missing server is non-fatal -- context_limit falls back to 8192.
     auto model_info = llm_->query_model_info();
     if (!model_info.id.empty() && llm_config_.model.empty()) {
         llm_config_.model = model_info.id;
@@ -100,90 +84,210 @@ LocusSession::LocusSession(const std::filesystem::path& ws_path,
     if (llm_config_.context_limit <= 0) {
         if (model_info.context_length > 0) {
             llm_config_.context_limit = model_info.context_length;
-            spdlog::info("Context limit (from server): {}",
-                         llm_config_.context_limit);
+            spdlog::info("Context limit (from server): {}", llm_config_.context_limit);
         } else {
             llm_config_.context_limit = 8192;
-            spdlog::info("Context limit (default): {}",
-                         llm_config_.context_limit);
+            spdlog::info("Context limit (default): {}", llm_config_.context_limit);
         }
     } else {
         spdlog::info("Context limit: {}", llm_config_.context_limit);
     }
 
-    // 4. Tool registry -- built-ins first, then MCP servers (S4.G).
+    // 3. Tool registry + MCP.
     tools_ = std::make_unique<ToolRegistry>();
     register_builtin_tools(*tools_);
     spdlog::info("Tools: {} built-in registered", tools_->all().size());
 
-    // 4b. MCP servers from .locus/mcp.json + global mcp.json. start_all()
-    //     blocks on each server's `initialize` handshake (default 10s)
-    //     before continuing to the agent. A server that fails to start
-    //     stays in the manager (visible in settings) but contributes no
-    //     tools.
     mcp_ = std::make_unique<McpManager>(*tools_, workspace_->root());
     mcp_->start_all();
-    if (mcp_->server_count() > 0) {
+    if (mcp_->server_count() > 0)
         spdlog::info("Tools: {} total after MCP registration", tools_->all().size());
-    }
 
-    // 5. Agent core. Sessions + checkpoints land in `.locus/`.
-    WorkspaceMetadata ws_meta;
-    ws_meta.root          = workspace_->root();
-    ws_meta.file_count    = static_cast<int>(st.files_total);
-    ws_meta.symbol_count  = static_cast<int>(st.symbols_total);
-    ws_meta.heading_count = static_cast<int>(st.headings_total);
+    // 4. Session manager (workspace-shared).
+    auto sessions_dir = workspace_->locus_dir() / "sessions";
+    sessions_         = std::make_unique<SessionManager>(sessions_dir);
 
-    auto sessions_dir         = workspace_->locus_dir() / "sessions";
-    auto checkpoints_dir      = workspace_->locus_dir() / "checkpoints";
-    auto project_prompts_dir  = workspace_->locus_dir() / "prompts";
-    auto global_prompts_dir   = PromptTemplateRegistry::default_global_dir();
-    agent_ = std::make_unique<AgentCore>(
-        *llm_, *tools_, *workspace_,
-        workspace_->locus_md(), ws_meta, llm_config_,
-        sessions_dir, checkpoints_dir,
-        project_prompts_dir, global_prompts_dir);
-
-    // Route indexer activity (file watcher batches, embedding progress) into
-    // the agent's event bus so frontends see it on the same channel as
-    // tool calls and LLM tokens.
-    workspace_->indexer().on_activity =
-        [agent = agent_.get()](const std::string& s, const std::string& d) {
-            agent->emit_index_event(s, d);
-        };
-
-    // S5.G -- coarse embedding-queue activity through the same channel. The
-    // worker's on_activity is independent of on_progress (used by the GUI's
-    // per-chunk progress chip in the file-tree panel); this is the audit row
-    // a user sees in the Activity log when a re-index batch is chewing through
-    // chunks. Throttled inside EmbeddingWorker (default 100 chunks / 5 s).
-    if (auto* ew = workspace_->embedding_worker()) {
-        ew->on_activity =
-            [agent = agent_.get()](const std::string& s, const std::string& d) {
-                agent->emit_index_event(s, d);
-            };
-    }
-
-    // 6. Light the agent thread up. Frontends can register before or after
-    //    this call -- `register_frontend` is thread-safe.
-    agent_->start();
+    checkpoints_dir_     = workspace_->locus_dir() / "checkpoints";
+    project_prompts_dir_ = workspace_->locus_dir() / "prompts";
+    global_prompts_dir_  = PromptTemplateRegistry::default_global_dir();
 }
 
 LocusSession::~LocusSession()
 {
-    // Drop callbacks that capture agent_ first -- the embedding worker thread
-    // is still running until ~Workspace, and a chunk-completion firing
-    // on_activity after ~AgentCore would dereference a freed pointer.
+    // Drop callbacks that capture the active tab's agent first -- the embedding
+    // worker thread is still running until ~Workspace, and a chunk-completion
+    // firing on_activity after a tab's AgentCore is gone would dereference a
+    // freed pointer.
     if (workspace_) {
         workspace_->indexer().on_activity = nullptr;
         if (auto* ew = workspace_->embedding_worker())
             ew->on_activity = nullptr;
     }
-    // Stop the agent thread before any subsystem it touches goes away.
-    // unique_ptr destruction order then unwinds: agent -> tools -> llm ->
-    // workspace, mirroring the construction sequence.
-    if (agent_)
-        agent_->stop();
+
+    // Tabs first -- each tab's destructor stops its agent thread. unique_ptr
+    // destruction order then unwinds tools -> mcp -> llm -> workspace.
+    tabs_.clear();
+}
+
+// -- Tabs --------------------------------------------------------------------
+
+int LocusSession::add_tab()
+{
+    int tab_id = next_tab_id_++;
+
+    auto tab = std::make_unique<LocusTab>(
+        tab_id,
+        *workspace_,
+        *llm_,
+        *tools_,
+        llm_config_,
+        sessions_->sessions_dir(),
+        checkpoints_dir_,
+        project_prompts_dir_,
+        global_prompts_dir_,
+        workspace_->process_sink(),
+        *sessions_);
+
+    // Re-wire the workspace's indexer / embedding callbacks onto the new tab's
+    // agent so file-watcher activity continues to land in the active surface.
+    // We route to the LAST-ADDED tab here so that newly-spawned tabs see fresh
+    // activity. The frontends_ broadcast on the activity log fans out from
+    // there to every registered IFrontend.
+    workspace_->indexer().on_activity =
+        [agent = &tab->agent()](const std::string& s, const std::string& d) {
+            agent->emit_index_event(s, d);
+        };
+    if (auto* ew = workspace_->embedding_worker()) {
+        ew->on_activity =
+            [agent = &tab->agent()](const std::string& s, const std::string& d) {
+                agent->emit_index_event(s, d);
+            };
+    }
+
+    tabs_.push_back(std::move(tab));
+    int index = static_cast<int>(tabs_.size()) - 1;
+    // Don't change `active_index_` -- the caller drives activation.
+    return index;
+}
+
+int LocusSession::add_tab_for_session(const std::string& session_id)
+{
+    int idx = add_tab();
+    try {
+        tabs_[idx]->load_session(session_id);
+    } catch (const std::exception& ex) {
+        spdlog::warn("LocusSession: failed to load session '{}' into tab: {}",
+                     session_id, ex.what());
+        // Leave the tab in place but empty; caller decides whether to close it.
+    }
+    return idx;
+}
+
+void LocusSession::set_active_tab(int index)
+{
+    if (index < 0 || index >= static_cast<int>(tabs_.size())) return;
+    active_index_ = index;
+    // Re-point the workspace's indexer / embedding activity callbacks at the
+    // newly-active tab so its activity log stays primary. (Frontends still
+    // receive events from every tab via their own WxFrontend instance; this
+    // routing decides who hears the indexer/embedder.)
+    auto* agent = &tabs_[index]->agent();
+    workspace_->indexer().on_activity =
+        [agent](const std::string& s, const std::string& d) {
+            agent->emit_index_event(s, d);
+        };
+    if (auto* ew = workspace_->embedding_worker()) {
+        ew->on_activity =
+            [agent](const std::string& s, const std::string& d) {
+                agent->emit_index_event(s, d);
+            };
+    }
+}
+
+std::string LocusSession::peek_close_session_id(int index) const
+{
+    if (index < 0 || index >= static_cast<int>(tabs_.size())) return {};
+    if (!tabs_[index]->has_user_message()) return {};
+    return tabs_[index]->session_id();
+}
+
+void LocusSession::close_tab(int index)
+{
+    if (index < 0 || index >= static_cast<int>(tabs_.size())) return;
+
+    // Persist non-empty tabs before tear-down so the Saved Sessions submenu
+    // sees them. Empty tabs (no user message ever sent) vanish silently --
+    // lazy session-file creation means nothing was on disk yet.
+    if (tabs_[index]->has_user_message())
+        tabs_[index]->persist();
+
+    tabs_.erase(tabs_.begin() + index);
+
+    // Workspace must never be tab-less. If the user just closed the last tab,
+    // open a fresh empty one in its place.
+    if (tabs_.empty()) {
+        add_tab();
+        active_index_ = 0;
+    } else if (active_index_ >= static_cast<int>(tabs_.size())) {
+        active_index_ = static_cast<int>(tabs_.size()) - 1;
+    } else if (active_index_ > index) {
+        --active_index_;
+    }
+
+    // Re-point activity routing to whichever tab is active now.
+    set_active_tab(active_index_);
+}
+
+void LocusSession::delete_tab(int index)
+{
+    if (index < 0 || index >= static_cast<int>(tabs_.size())) return;
+
+    std::string sid = tabs_[index]->session_id();
+
+    tabs_.erase(tabs_.begin() + index);
+
+    if (!sid.empty())
+        sessions_->remove(sid);
+
+    if (tabs_.empty()) {
+        add_tab();
+        active_index_ = 0;
+    } else if (active_index_ >= static_cast<int>(tabs_.size())) {
+        active_index_ = static_cast<int>(tabs_.size()) - 1;
+    } else if (active_index_ > index) {
+        --active_index_;
+    }
+
+    set_active_tab(active_index_);
+}
+
+int LocusSession::find_tab_by_session(const std::string& session_id) const
+{
+    if (session_id.empty()) return -1;
+    for (size_t i = 0; i < tabs_.size(); ++i) {
+        if (tabs_[i]->session_id() == session_id)
+            return static_cast<int>(i);
+    }
+    return -1;
+}
+
+std::unordered_set<std::string> LocusSession::open_session_ids() const
+{
+    std::unordered_set<std::string> ids;
+    for (auto& t : tabs_) {
+        if (!t->session_id().empty()) ids.insert(t->session_id());
+    }
+    return ids;
+}
+
+std::vector<std::string> LocusSession::persist_all_tabs()
+{
+    std::vector<std::string> ids;
+    for (auto& t : tabs_) {
+        auto id = t->persist();
+        if (!id.empty()) ids.push_back(id);
+    }
+    return ids;
 }
 
 } // namespace locus

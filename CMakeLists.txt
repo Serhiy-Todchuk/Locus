@@ -311,6 +311,8 @@ add_library(locus_core STATIC
     src/core/watcher_pump.cpp
     src/core/workspace_lock.cpp
     src/core/locus_session.cpp
+    src/core/locus_tab.cpp
+    src/core/workspace_ui_state.cpp
     src/core/database.cpp
     src/core/file_watcher.cpp
     src/core/global_config.cpp
@@ -472,6 +474,7 @@ add_executable(locus_gui WIN32
     src/frontends/gui/tool_approval_dialog.cpp
     src/frontends/gui/ask_user_dialog.cpp
     src/frontends/gui/compaction_dialog.cpp
+    src/frontends/gui/manage_sessions_dialog.cpp
     src/frontends/gui/file_tree_panel.cpp
     src/frontends/gui/settings_dialog.cpp
     src/frontends/gui/settings/llm_settings_panel.cpp

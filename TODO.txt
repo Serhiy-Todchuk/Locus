@@ -1,9 +1,6 @@
 - use app icons
-- sample.docx has no heading
-- tokens per second counter per each turn? (decide after S5.G)
-- Shall we put all prompts (system, compaction, etc.) into app folder, or Locus global folder, as a text files, so user can see/edit them?
-- Add image attachment for LLM prompt
 - Voice chat input
+- Add image attachment for LLM prompt
 - FastDebug
 
 Have you added integration test and UI automation test (if needed)?

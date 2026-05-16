@@ -28,27 +28,36 @@ wxDEFINE_EVENT(EVT_AGENT_GEN_PROGRESS,        wxThreadEvent);
 wxDEFINE_EVENT(EVT_AGENT_HISTORY_MSG_ADDED,   wxThreadEvent);
 wxDEFINE_EVENT(EVT_AGENT_HISTORY_MSG_DELETED, wxThreadEvent);
 
-WxFrontend::WxFrontend(wxEvtHandler* handler)
-    : handler_(handler)
+WxFrontend::WxFrontend(wxEvtHandler* handler, int tab_id)
+    : handler_(handler), tab_id_(tab_id)
 {
+}
+
+// Tiny helper: every posted event carries the tab_id via wxEvent::SetId so
+// the frame can route to the right ChatPanel without inspecting the source
+// WxFrontend instance. tab_id 0 is the legacy "no tab routing" shape.
+static inline wxThreadEvent* new_evt(wxEventType type, int tab_id)
+{
+    auto* evt = new wxThreadEvent(type);
+    evt->SetId(tab_id);
+    return evt;
 }
 
 void WxFrontend::on_turn_start()
 {
-    auto* evt = new wxThreadEvent(EVT_AGENT_TURN_START);
-    wxQueueEvent(handler_, evt);
+    wxQueueEvent(handler_, new_evt(EVT_AGENT_TURN_START, tab_id_));
 }
 
 void WxFrontend::on_token(std::string_view token)
 {
-    auto* evt = new wxThreadEvent(EVT_AGENT_TOKEN);
+    auto* evt = new_evt(EVT_AGENT_TOKEN, tab_id_);
     evt->SetString(wxString::FromUTF8(token.data(), token.size()));
     wxQueueEvent(handler_, evt);
 }
 
 void WxFrontend::on_reasoning_token(std::string_view token)
 {
-    auto* evt = new wxThreadEvent(EVT_AGENT_REASONING_TOKEN);
+    auto* evt = new_evt(EVT_AGENT_REASONING_TOKEN, tab_id_);
     evt->SetString(wxString::FromUTF8(token.data(), token.size()));
     wxQueueEvent(handler_, evt);
 }
@@ -58,13 +67,7 @@ void WxFrontend::on_tool_call_pending(const ToolCall& call,
                                       bool needs_approval,
                                       const std::vector<std::string>& safety_warnings)
 {
-    auto* evt = new wxThreadEvent(EVT_AGENT_TOOL_PENDING);
-    // Pack tool name, call id, args JSON, preview, and approval flag into
-    // the event payload. The approval flag lets the frame skip popping the
-    // approval panel for auto-approved calls (which still need to render in
-    // chat -- the dispatcher fires this for ALL calls, not just gated ones).
-    // safety_warnings (S4.V Task 5) carries flagged outside-workspace path
-    // tokens; the approval panel renders them as a yellow banner.
+    auto* evt = new_evt(EVT_AGENT_TOOL_PENDING, tab_id_);
     nlohmann::json payload;
     payload["id"]              = call.id;
     payload["tool"]            = call.tool_name;
@@ -80,7 +83,7 @@ void WxFrontend::on_tool_result(const std::string& call_id,
                                 const std::string& display,
                                 bool success)
 {
-    auto* evt = new wxThreadEvent(EVT_AGENT_TOOL_RESULT);
+    auto* evt = new_evt(EVT_AGENT_TOOL_RESULT, tab_id_);
     nlohmann::json payload;
     payload["call_id"] = call_id;
     payload["display"] = display;
@@ -91,20 +94,14 @@ void WxFrontend::on_tool_result(const std::string& call_id,
 
 void WxFrontend::on_turn_complete()
 {
-    auto* evt = new wxThreadEvent(EVT_AGENT_TURN_COMPLETE);
-    wxQueueEvent(handler_, evt);
+    wxQueueEvent(handler_, new_evt(EVT_AGENT_TURN_COMPLETE, tab_id_));
 }
 
 void WxFrontend::on_context_meter(int used_tokens, int limit,
                                    int prompt_tokens, int completion_tokens,
                                    int reserve_tokens)
 {
-    // S4.V Task 8 -- prompt / completion split is packed into the event
-    // string payload (wxThreadEvent only exposes Int + ExtraLong for
-    // primitives, both already in use for used / limit).
-    // S5.D -- reserve_tokens also packed so the footer gauge can color against
-    // effective_limit (limit - reserve) rather than the raw limit.
-    auto* evt = new wxThreadEvent(EVT_AGENT_CONTEXT_METER);
+    auto* evt = new_evt(EVT_AGENT_CONTEXT_METER, tab_id_);
     evt->SetInt(used_tokens);
     evt->SetExtraLong(limit);
     nlohmann::json payload;
@@ -117,7 +114,7 @@ void WxFrontend::on_context_meter(int used_tokens, int limit,
 
 void WxFrontend::on_compaction_needed(int used_tokens, int limit)
 {
-    auto* evt = new wxThreadEvent(EVT_AGENT_COMPACTION);
+    auto* evt = new_evt(EVT_AGENT_COMPACTION, tab_id_);
     evt->SetInt(used_tokens);
     evt->SetExtraLong(limit);
     wxQueueEvent(handler_, evt);
@@ -125,20 +122,19 @@ void WxFrontend::on_compaction_needed(int used_tokens, int limit)
 
 void WxFrontend::on_session_reset()
 {
-    auto* evt = new wxThreadEvent(EVT_AGENT_SESSION_RESET);
-    wxQueueEvent(handler_, evt);
+    wxQueueEvent(handler_, new_evt(EVT_AGENT_SESSION_RESET, tab_id_));
 }
 
 void WxFrontend::on_error(const std::string& message)
 {
-    auto* evt = new wxThreadEvent(EVT_AGENT_ERROR);
+    auto* evt = new_evt(EVT_AGENT_ERROR, tab_id_);
     evt->SetString(wxString::FromUTF8(message));
     wxQueueEvent(handler_, evt);
 }
 
 void WxFrontend::on_embedding_progress(int done, int total)
 {
-    auto* evt = new wxThreadEvent(EVT_AGENT_EMBEDDING_PROGRESS);
+    auto* evt = new_evt(EVT_AGENT_EMBEDDING_PROGRESS, tab_id_);
     evt->SetInt(done);
     evt->SetExtraLong(total);
     wxQueueEvent(handler_, evt);
@@ -146,7 +142,7 @@ void WxFrontend::on_embedding_progress(int done, int total)
 
 void WxFrontend::on_indexing_progress(int done, int total)
 {
-    auto* evt = new wxThreadEvent(EVT_AGENT_INDEXING_PROGRESS);
+    auto* evt = new_evt(EVT_AGENT_INDEXING_PROGRESS, tab_id_);
     evt->SetInt(done);
     evt->SetExtraLong(total);
     wxQueueEvent(handler_, evt);
@@ -154,7 +150,7 @@ void WxFrontend::on_indexing_progress(int done, int total)
 
 void WxFrontend::on_activity(const ActivityEvent& event)
 {
-    auto* evt = new wxThreadEvent(EVT_AGENT_ACTIVITY);
+    auto* evt = new_evt(EVT_AGENT_ACTIVITY, tab_id_);
     evt->SetPayload(event);
     wxQueueEvent(handler_, evt);
 }
@@ -162,8 +158,7 @@ void WxFrontend::on_activity(const ActivityEvent& event)
 void WxFrontend::on_attached_context_changed(
     const std::optional<AttachedContext>& ctx)
 {
-    auto* evt = new wxThreadEvent(EVT_AGENT_ATTACHED_CONTEXT);
-    // Empty string means "detached"; otherwise carry the workspace-relative path.
+    auto* evt = new_evt(EVT_AGENT_ATTACHED_CONTEXT, tab_id_);
     evt->SetString(ctx ? wxString::FromUTF8(ctx->file_path) : wxString{});
     wxQueueEvent(handler_, evt);
 }
@@ -172,17 +167,14 @@ void WxFrontend::on_attached_context_changed(
 
 void WxFrontend::on_mode_changed(AgentMode mode)
 {
-    auto* evt = new wxThreadEvent(EVT_AGENT_MODE_CHANGED);
+    auto* evt = new_evt(EVT_AGENT_MODE_CHANGED, tab_id_);
     evt->SetInt(static_cast<int>(mode));
     wxQueueEvent(handler_, evt);
 }
 
 void WxFrontend::on_plan_proposed(const Plan& plan)
 {
-    auto* evt = new wxThreadEvent(EVT_AGENT_PLAN_PROPOSED);
-    // Pack the plan as JSON so the LocusFrame handler doesn't need to know
-    // about Plan's internal layout. plan_to_json is the single point of
-    // truth for the wire format.
+    auto* evt = new_evt(EVT_AGENT_PLAN_PROPOSED, tab_id_);
     evt->SetString(wxString::FromUTF8(plan_to_json(plan).dump()));
     wxQueueEvent(handler_, evt);
 }
@@ -191,7 +183,7 @@ void WxFrontend::on_plan_step_advanced(const std::string& plan_id, int step_idx,
                                         PlanStep::Status status,
                                         const std::string& notes)
 {
-    auto* evt = new wxThreadEvent(EVT_AGENT_PLAN_STEP_ADVANCED);
+    auto* evt = new_evt(EVT_AGENT_PLAN_STEP_ADVANCED, tab_id_);
     nlohmann::json j;
     j["plan_id"]  = plan_id;
     j["step_idx"] = step_idx;
@@ -203,7 +195,7 @@ void WxFrontend::on_plan_step_advanced(const std::string& plan_id, int step_idx,
 
 void WxFrontend::on_plan_completed(const std::string& plan_id, bool success)
 {
-    auto* evt = new wxThreadEvent(EVT_AGENT_PLAN_COMPLETED);
+    auto* evt = new_evt(EVT_AGENT_PLAN_COMPLETED, tab_id_);
     nlohmann::json j;
     j["plan_id"] = plan_id;
     j["success"] = success;
@@ -215,7 +207,7 @@ void WxFrontend::on_auto_commit(const std::string& short_sha,
                                  const std::string& branch,
                                  const std::string& subject)
 {
-    auto* evt = new wxThreadEvent(EVT_AGENT_AUTO_COMMIT);
+    auto* evt = new_evt(EVT_AGENT_AUTO_COMMIT, tab_id_);
     nlohmann::json j;
     j["short_sha"] = short_sha;
     j["branch"]    = branch;
@@ -226,7 +218,7 @@ void WxFrontend::on_auto_commit(const std::string& short_sha,
 
 void WxFrontend::on_generation_progress(int chars, int est_tokens)
 {
-    auto* evt = new wxThreadEvent(EVT_AGENT_GEN_PROGRESS);
+    auto* evt = new_evt(EVT_AGENT_GEN_PROGRESS, tab_id_);
     evt->SetInt(chars);
     evt->SetExtraLong(est_tokens);
     wxQueueEvent(handler_, evt);
@@ -235,9 +227,8 @@ void WxFrontend::on_generation_progress(int chars, int est_tokens)
 void WxFrontend::on_history_message_added(int history_id, MessageRole role,
                                            bool deletable)
 {
-    auto* evt = new wxThreadEvent(EVT_AGENT_HISTORY_MSG_ADDED);
+    auto* evt = new_evt(EVT_AGENT_HISTORY_MSG_ADDED, tab_id_);
     evt->SetInt(history_id);
-    // Pack role + deletable into ExtraLong: low 8 bits = role, bit 8 = deletable.
     long packed = static_cast<long>(static_cast<int>(role)) & 0xFF;
     if (deletable) packed |= 0x100;
     evt->SetExtraLong(packed);
@@ -246,7 +237,7 @@ void WxFrontend::on_history_message_added(int history_id, MessageRole role,
 
 void WxFrontend::on_history_message_deleted(int history_id)
 {
-    auto* evt = new wxThreadEvent(EVT_AGENT_HISTORY_MSG_DELETED);
+    auto* evt = new_evt(EVT_AGENT_HISTORY_MSG_DELETED, tab_id_);
     evt->SetInt(history_id);
     wxQueueEvent(handler_, evt);
 }

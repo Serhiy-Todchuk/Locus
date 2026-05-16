@@ -13,71 +13,105 @@
 #include "tool_approval_dialog.h"
 #include "ui_state.h"
 #include "wx_frontend.h"
-#include "../../agent/agent_core.h"
+#include "../../core/locus_session.h"
 #include "../../core/workspace.h"
 
 #include <wx/wx.h>
 #include <wx/aui/aui.h>
+#include <wx/aui/auibook.h>
 
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace locus {
 
+class LocusTab;
 class McpManager;
 
-// Main application window. Owns the AUI layout with three panes:
-//   left:   file tree with index status
-//   center: chat panel (wxWebView + input + footer)
-//   right:  detail panel (placeholder)
-//
-// Also owns the system tray icon and the WxFrontend thread bridge.
+// Main application window. Owns the AUI layout with three workspace-shared
+// panes (file tree / activity / terminal) plus a center `wxAuiNotebook`
+// of per-tab `ChatPanel`s -- one tab per `LocusTab` in the `LocusSession`.
+// Workspace-shared subsystems sit on the LocusSession; tab-scoped state
+// (chat panel, per-tab WxFrontend) lives on a `TabUi` value in `tabs_ui_`.
 class LocusFrame : public wxFrame {
 public:
-    LocusFrame(AgentCore& agent, Workspace& workspace, McpManager* mcp = nullptr);
+    explicit LocusFrame(LocusSession& session);
     ~LocusFrame() override;
 
     LocusFrame(const LocusFrame&) = delete;
     LocusFrame& operator=(const LocusFrame&) = delete;
 
-    // Drop every reference into AgentCore + Workspace (frontend registration,
+    // Drop every reference into the session (frontend registration,
     // indexer / embedding-worker callbacks). Idempotent. Call this BEFORE
-    // tearing down the LocusSession the frame was constructed against -- the
-    // destructor cannot do it safely on its own because wxWindow::Destroy()
-    // queues deletion for an idle event that may fire after session_.reset()
-    // has freed the Workspace, leaving `workspace_` / `agent_` dangling.
-    // After this returns, ~LocusFrame is safe to run regardless of session
-    // state. The destructor calls this too for the normal-shutdown path
-    // (where the frame is destroyed before OnExit and the session is alive).
+    // tearing down the LocusSession the frame was constructed against.
     void detach_from_session();
 
 private:
     void create_status_bar();
     void setup_aui_layout();
-    // Apply window position / size / maximized state from saved_ui_state_.
-    // No-op when the saved values are missing or off-screen.
     void apply_saved_window_geometry();
 
-    // Toggle visibility of a managed AUI pane by name. The View menu's
-    // checkboxes are kept in sync via MenuController::set_*_pane_visible.
-    void toggle_pane(const wxString& pane_name, bool show);
+    // Tab-shell helpers.
+    struct TabUi {
+        int                          tab_id = 0;     // matches LocusTab::tab_id
+        LocusTab*                    tab    = nullptr;
+        ChatPanel*                   chat   = nullptr;
+        std::unique_ptr<WxFrontend>  frontend;       // registered with the tab's agent
+        // S5.I tab status badge (computed each event so we don't recompute
+        // every render).
+        bool busy             = false;
+        bool awaiting_decision = false;
+        bool ctx_over_warn   = false;
+        bool ctx_over_auto   = false;
+    };
 
-    // Show the compaction dialog and apply the chosen strategy.
+    // Build a `ChatPanel` + `WxFrontend` for `tab` and add it to the notebook
+    // at the end. Returns the matching TabUi entry.
+    TabUi& install_tab_ui(LocusTab& tab, const wxString& tab_title);
+
+    // Tear down the TabUi at index `nb_index` (notebook page index). Removes
+    // the ChatPanel from the notebook, unregisters the WxFrontend, erases
+    // the entry from tabs_ui_. The caller is responsible for the matching
+    // LocusSession::close_tab / delete_tab.
+    void teardown_tab_ui(int nb_index);
+
+    // Repaint a tab's title with status indicators.
+    void refresh_tab_title(int tab_id);
+    wxString compose_tab_label(const TabUi& ui) const;
+
+    // Lookup helpers.
+    TabUi* find_tab_ui(int tab_id);
+    int    notebook_index_for_tab_id(int tab_id) const;
+    int    notebook_index_for_chat(const ChatPanel* chat) const;
+    TabUi& active_tab_ui();
+    LocusTab& active_tab();
+
+    // Tab-shell action handlers.
+    void on_new_tab();
+    void on_close_active_tab();
+    void on_rename_active_tab();
+    void on_notebook_page_changed(wxAuiNotebookEvent& evt);
+    void on_notebook_page_close(wxAuiNotebookEvent& evt);   // X button
+    void on_notebook_tab_right_up(wxAuiNotebookEvent& evt); // context menu
+
+    // Session-menu hooks.
+    void on_open_saved_session(const std::string& session_id);
+    void on_delete_saved_session(const std::string& session_id);
+    void on_manage_sessions(bool prefilter_cleanup);
+
+    // Compaction / settings dialogs.
     void show_compaction_dialog();
-
-    // Show the settings dialog and apply changes.
     void show_settings_dialog();
-
-    // Update file tree index stats from current workspace.
     void refresh_index_stats();
 
-    // Event handlers: window lifecycle
+    // Window lifecycle.
     void on_close(wxCloseEvent& evt);
     void on_iconize(wxIconizeEvent& evt);
     void on_aui_pane_close(wxAuiManagerEvent& evt);
 
-    // Event handlers: agent thread events (via WxFrontend)
+    // Agent thread events (via WxFrontend). All route by tab_id (evt.GetId()).
     void on_agent_turn_start(wxThreadEvent& evt);
     void on_agent_token(wxThreadEvent& evt);
     void on_agent_reasoning_token(wxThreadEvent& evt);
@@ -92,51 +126,51 @@ private:
     void on_agent_indexing_progress(wxThreadEvent& evt);
     void on_agent_activity(wxThreadEvent& evt);
     void on_agent_attached_context(wxThreadEvent& evt);
-    // S4.D
     void on_agent_mode_changed(wxThreadEvent& evt);
     void on_agent_plan_proposed(wxThreadEvent& evt);
     void on_agent_plan_step_advanced(wxThreadEvent& evt);
     void on_agent_plan_completed(wxThreadEvent& evt);
-    // S4.L
     void on_agent_auto_commit(wxThreadEvent& evt);
-    // S4.F
     void on_agent_gen_progress(wxThreadEvent& evt);
-    // S5.G
     void on_agent_history_msg_added(wxThreadEvent& evt);
     void on_agent_history_msg_deleted(wxThreadEvent& evt);
 
-    // Push the current ops_status_ composition into status bar pane 1.
     void refresh_ops_status();
 
-    // Core references (not owned)
-    AgentCore&   agent_;
-    Workspace&   workspace_;
-    McpManager*  mcp_ = nullptr;  // null when no servers configured
+    // Wire callbacks/slash items into a newly-constructed ChatPanel. Pulled
+    // out so install_tab_ui can call it without massive duplication.
+    void configure_chat_panel(ChatPanel* chat, LocusTab& tab);
 
-    // Saved window + AUI layout from a previous session. Loaded in the ctor
-    // before AUI panes are wired up; applied in two phases (perspective
-    // before aui_.Update(), geometry after).
-    UiState                            saved_ui_state_;
+    // Workspace-level resources, owned by LocusSession.
+    LocusSession& session_;
+    Workspace&    workspace_;
+    McpManager*   mcp_ = nullptr;
 
-    // Owned
-    wxAuiManager                       aui_;
-    std::unique_ptr<LocusTray>         tray_;
-    std::unique_ptr<WxFrontend>        wx_frontend_;
-    std::unique_ptr<MenuController>    menu_;
-    OpsStatusView                      ops_status_;
+    // Saved window + AUI layout from a previous session.
+    UiState saved_ui_state_;
 
-    // Pane panels.
-    FileTreePanel*     file_tree_panel_ = nullptr;  // file tree + index status (S1.6)
-    ChatPanel*         chat_panel_     = nullptr;   // chat UI (S1.3)
-    // Tool approval is a self-dismissing modal (ToolApprovalDialog) -- no
-    // owned panel field. S5.Z #6 removed the always-docked AUI pane.
-    ActivityPanel*     activity_panel_ = nullptr;   // activity log (S2.2)
-    TerminalPanel*     terminal_panel_ = nullptr;   // live terminal (S5.B)
+    // AUI manager + notebook (tabs of ChatPanels live inside the notebook).
+    wxAuiManager      aui_;
+    wxAuiNotebook*    notebook_ = nullptr;
 
-    // Set true once detach_from_session() has run. Guards both the destructor
-    // (to avoid touching freed agent_ / workspace_ refs after a workspace
-    // switch) and any queued wxThreadEvent handlers that touch the session.
-    bool               session_detached_ = false;
+    // System tray + menu.
+    std::unique_ptr<LocusTray>      tray_;
+    std::unique_ptr<MenuController> menu_;
+    OpsStatusView                   ops_status_;
+
+    // Workspace-shared panels.
+    FileTreePanel* file_tree_panel_ = nullptr;
+    ActivityPanel* activity_panel_  = nullptr;
+    TerminalPanel* terminal_panel_  = nullptr;
+
+    // Tab UI state, keyed by tab_id (== LocusTab::tab_id).
+    std::unordered_map<int, TabUi> tabs_ui_;
+
+    // Workspace-shared bridge for indexer/embedding-worker progress events
+    // (not tied to any specific tab). Posts wxThreadEvents with tab_id=0.
+    std::unique_ptr<WxFrontend> shared_bridge_;
+
+    bool session_detached_ = false;
 
     wxDECLARE_EVENT_TABLE();
 };

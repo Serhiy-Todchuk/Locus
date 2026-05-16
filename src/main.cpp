@@ -245,6 +245,8 @@ int main(int argc, char* argv[])
         // Destructor (end of try block) joins the agent thread before tearing
         // anything down -- same ordering as the old hand-wired path.
         locus::LocusSession session(workspace_path, llm_cfg);
+        // S5.I -- CLI is single-tab; auto-create one and treat it as active.
+        session.set_active_tab(session.add_tab());
         auto& ws    = session.workspace();
         auto& agent = session.agent();
 

@@ -141,6 +141,9 @@ TEST_CASE("MCP echo tool round-trips via the agent loop",
         cfg.timeout_ms  = 120000;
 
         LocusSession session(root, cfg);
+        // S5.I -- LocusSession no longer auto-creates a tab; integration
+        // tests are single-tab.
+        session.set_active_tab(session.add_tab());
 
         // The mock server's `echo` tool is namespaced as mcp:mock:echo. It
         // must be visible in the registry after LocusSession ctor returns.

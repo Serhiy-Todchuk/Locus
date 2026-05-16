@@ -180,6 +180,18 @@ WorkspaceConfig workspace_config_from_json(const json& j)
         cfg.capabilities.memory_bank     = cfg.memory_enabled;
     }
 
+    if (j.contains("sessions") && j["sessions"].is_object()) {
+        auto& s = j["sessions"];
+        if (s.contains("auto_cleanup_enabled"))
+            cfg.sessions.auto_cleanup_enabled = s["auto_cleanup_enabled"].get<bool>();
+        if (s.contains("keep_last_count") && s["keep_last_count"].is_number_integer())
+            cfg.sessions.keep_last_count = s["keep_last_count"].get<int>();
+        if (s.contains("delete_after_days") && s["delete_after_days"].is_number_integer())
+            cfg.sessions.delete_after_days = s["delete_after_days"].get<int>();
+        if (s.contains("restore_last"))
+            cfg.sessions.restore_last = s["restore_last"].get<bool>();
+    }
+
     if (j.contains("tool_approvals") && j["tool_approvals"].is_object()) {
         for (auto it = j["tool_approvals"].begin();
              it != j["tool_approvals"].end(); ++it) {
@@ -278,6 +290,12 @@ json workspace_config_to_json(const WorkspaceConfig& cfg)
         }},
         {"ui", {
             {"show_per_message_tokens", cfg.ui_show_per_message_tokens}
+        }},
+        {"sessions", {
+            {"auto_cleanup_enabled", cfg.sessions.auto_cleanup_enabled},
+            {"keep_last_count",      cfg.sessions.keep_last_count},
+            {"delete_after_days",    cfg.sessions.delete_after_days},
+            {"restore_last",         cfg.sessions.restore_last}
         }}
     };
 }

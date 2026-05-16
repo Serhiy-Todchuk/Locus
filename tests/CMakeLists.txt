@@ -42,6 +42,7 @@ add_executable(locus_tests
     test_reserve_enforcement.cpp
     test_compaction_pipeline.cpp
     test_chat_activity_restructure.cpp
+    test_tabs_and_sessions.cpp
     test_source_hygiene.cpp
     retrieval_eval/metrics.cpp
     support/shared_embedder.cpp

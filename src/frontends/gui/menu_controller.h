@@ -6,6 +6,7 @@
 
 #include <functional>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 namespace locus {
@@ -24,12 +25,17 @@ public:
         // workspace state itself.
         std::function<void()>                       on_open_workspace_folder;
         std::function<void()>                       on_settings;
-        std::function<void()>                       on_reset_conversation;
         std::function<void()>                       on_compact;
-        std::function<void()>                       on_save_session;
-        std::function<void()>                       on_clear_sessions;
-        std::function<void(std::string)>            on_load_session;
-        std::function<void(std::string)>            on_delete_session;
+        // S5.I -- replaces Reset Conversation (no longer exists -- open a new
+        // tab instead) and Save Session (continuous auto-save).
+        std::function<void()>                       on_new_tab;          // Ctrl+T
+        std::function<void()>                       on_close_active_tab; // Ctrl+W
+        std::function<void()>                       on_rename_active_tab;
+        std::function<void(std::string)>            on_load_session;     // Open Saved Sessions ▶ X ▶ Open
+        std::function<void(std::string)>            on_rename_session;   // Open Saved Sessions ▶ X ▶ Rename
+        std::function<void(std::string)>            on_delete_session;   // Open Saved Sessions ▶ X ▶ Delete
+        std::function<void()>                       on_manage_sessions;  // Session ▶ Manage Sessions...
+        std::function<void()>                       on_cleanup_sessions; // Session ▶ Clean Up Old Sessions...
         std::function<void(bool show)>              on_toggle_files_pane;
         std::function<void(bool show)>              on_toggle_activity_pane;
         // S5.B -- Terminal panel toggle (Ctrl+`).
@@ -39,6 +45,10 @@ public:
         // list to rebuild the Saved Sessions submenu so newly-saved sessions
         // appear without restarting the app.
         std::function<std::vector<SessionInfo>()>   provide_sessions;
+        // S5.I -- ids currently open in tabs. The controller filters these
+        // out of the Saved Sessions submenu so each session appears in at
+        // most one place at any time.
+        std::function<std::unordered_set<std::string>()> provide_open_ids;
     };
 
     MenuController(wxFrame* frame, Hooks hooks);
@@ -61,6 +71,7 @@ public:
 private:
     void on_session_open(wxCommandEvent& evt);
     void on_session_delete(wxCommandEvent& evt);
+    void on_session_rename(wxCommandEvent& evt);
 
     wxFrame*  frame_;
     Hooks     hooks_;
@@ -71,7 +82,7 @@ private:
     wxMenuItem* view_terminal_item_ = nullptr;
 
     // Session IDs currently shown in the Saved Sessions submenu, indexed by
-    // the offset from ID_MENU_SESSION_OPEN_BASE / _DELETE_BASE.
+    // the offset from ID_MENU_SESSION_OPEN_BASE / _DELETE_BASE / _RENAME_BASE.
     std::vector<std::string> sessions_in_menu_;
 };
 

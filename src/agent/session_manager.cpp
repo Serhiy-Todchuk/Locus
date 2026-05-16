@@ -7,12 +7,54 @@
 #include <chrono>
 #include <fstream>
 #include <iomanip>
+#include <random>
 #include <sstream>
 #include <stdexcept>
+#include <system_error>
 
 namespace locus {
 
 using json = nlohmann::json;
+
+// -- Time helpers -------------------------------------------------------------
+
+long long now_epoch_seconds()
+{
+    return std::chrono::duration_cast<std::chrono::seconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+}
+
+namespace {
+
+// Best-effort title derivation from a message preview. Used on legacy sessions
+// (no `title` field) and on the first save of a brand-new tab.
+std::string derive_title_from_preview(const std::string& preview)
+{
+    std::string title;
+    title.reserve(preview.size());
+    for (char c : preview) {
+        if (c == '\n' || c == '\r' || c == '\t') {
+            if (!title.empty() && title.back() != ' ') title.push_back(' ');
+        } else {
+            title.push_back(c);
+        }
+    }
+    // Trim
+    auto not_space = [](unsigned char c) { return c != ' '; };
+    auto first = std::find_if(title.begin(), title.end(), not_space);
+    auto last  = std::find_if(title.rbegin(), title.rend(), not_space).base();
+    if (first >= last) return {};
+    title.assign(first, last);
+    if (title.size() > 60) {
+        title.resize(57);
+        title += "...";
+    }
+    return title;
+}
+
+} // namespace
+
+// -- Construction -------------------------------------------------------------
 
 SessionManager::SessionManager(const fs::path& sessions_dir)
     : sessions_dir_(sessions_dir)
@@ -36,8 +78,16 @@ std::string SessionManager::generate_id()
     localtime_r(&time_t, &tm);
 #endif
 
+    // 4-char hex suffix avoids same-second collisions when two tabs save
+    // their first user message concurrently. Random rather than monotonic
+    // because the SessionManager has no shared counter across instances.
+    static thread_local std::mt19937 rng{std::random_device{}()};
+    std::uniform_int_distribution<int> dist(0, 0xFFFF);
+    int suffix = dist(rng);
+
     std::ostringstream oss;
-    oss << std::put_time(&tm, "%Y-%m-%d_%H%M%S");
+    oss << std::put_time(&tm, "%Y-%m-%d_%H%M%S")
+        << '_' << std::hex << std::setw(4) << std::setfill('0') << suffix;
     return oss.str();
 }
 
@@ -63,22 +113,49 @@ void SessionManager::save(const std::string& id,
     j["estimated_tokens"] = history.estimate_tokens();
     j["messages"] = history.to_json();
 
-    // Merge top-level extras (e.g. "metrics") in last so saved metadata can
-    // co-exist with future session-level fields without schema bumps.
+    // S5.I -- created_at preserved on overwrite; last_opened_at bumped to now.
+    long long now_s = now_epoch_seconds();
+    long long created_at = now_s;
+    std::error_code ec;
+    if (fs::exists(path, ec)) {
+        try {
+            std::ifstream existing(path);
+            if (existing.is_open()) {
+                json prev = json::parse(existing, nullptr, /*allow_exceptions=*/false);
+                if (prev.is_object() && prev.contains("created_at") &&
+                    prev["created_at"].is_number_integer())
+                    created_at = prev["created_at"].get<long long>();
+            }
+        } catch (...) {
+            // Treat unreadable existing file as a fresh save.
+        }
+    }
+    j["created_at"]     = created_at;
+    j["last_opened_at"] = now_s;
+
+    // Extract first user message for preview.
+    std::string preview;
+    for (auto& msg : history.messages()) {
+        if (msg.role == MessageRole::user) {
+            preview = msg.content.substr(0, 120);
+            if (msg.content.size() > 120) preview += "...";
+            break;
+        }
+    }
+    j["first_user_message"] = preview;
+
+    // Merge top-level extras (e.g. "metrics", "title") in last so saved
+    // metadata can co-exist with future session-level fields without schema
+    // bumps. Caller supplies `title` here when the tab title is already known.
     if (extras.is_object()) {
         for (auto it = extras.begin(); it != extras.end(); ++it)
             j[it.key()] = it.value();
     }
 
-    // Extract first user message for preview.
-    for (auto& msg : history.messages()) {
-        if (msg.role == MessageRole::user) {
-            auto preview = msg.content.substr(0, 120);
-            if (msg.content.size() > 120) preview += "...";
-            j["first_user_message"] = preview;
-            break;
-        }
-    }
+    // Default title from the first user message if none was supplied.
+    if (!j.contains("title") || (j["title"].is_string() &&
+                                  j["title"].get<std::string>().empty()))
+        j["title"] = derive_title_from_preview(preview);
 
     std::ofstream f(path);
     if (!f.is_open()) {
@@ -122,20 +199,60 @@ SessionInfo SessionManager::read_session_info(const fs::path& path)
     SessionInfo info;
     info.file_path = path.string();
     info.id = path.stem().string();
-    info.timestamp = info.id;  // ID is the timestamp
+    info.timestamp = info.id;  // ID is the timestamp-prefixed string
+
+    std::error_code ec;
+    auto sz = fs::file_size(path, ec);
+    info.size_bytes = ec ? 0 : static_cast<long long>(sz);
+
+    // S5.I -- a session can also have a sibling `<id>/` directory holding the
+    // S5.F pre-compaction history archive snapshots. Sum its bytes so the
+    // Manage Sessions dialog reports total on-disk footprint, not just the
+    // live JSON file.
+    auto archive_dir = path.parent_path() / info.id;
+    if (fs::is_directory(archive_dir, ec)) {
+        std::error_code walk_ec;
+        for (auto& entry : fs::recursive_directory_iterator(archive_dir,
+                fs::directory_options::skip_permission_denied, walk_ec)) {
+            if (walk_ec) break;
+            if (!entry.is_regular_file(walk_ec)) continue;
+            auto fsz = fs::file_size(entry.path(), walk_ec);
+            if (!walk_ec) info.size_bytes += static_cast<long long>(fsz);
+        }
+    }
+
+    // For legacy fields default to file mtime so the cleanup heuristic still
+    // works on pre-S5.I session files. fs::last_write_time clock is not
+    // necessarily system_clock, but the conversion below is good enough for
+    // a "days old" cutoff -- we only care about coarse ordering.
+    long long file_mtime = 0;
+    auto ft = fs::last_write_time(path, ec);
+    if (!ec) {
+        auto sctp = std::chrono::time_point_cast<std::chrono::system_clock::duration>(
+            ft - decltype(ft)::clock::now() + std::chrono::system_clock::now());
+        file_mtime = std::chrono::duration_cast<std::chrono::seconds>(
+            sctp.time_since_epoch()).count();
+    }
 
     try {
         std::ifstream f(path);
         if (!f.is_open()) return info;
 
         json j = json::parse(f);
-        info.message_count = j.value("message_count", 0);
-        info.estimated_tokens = j.value("estimated_tokens", 0);
-        info.first_user_message = j.value("first_user_message", "");
+        info.message_count     = j.value("message_count",       0);
+        info.estimated_tokens  = j.value("estimated_tokens",    0);
+        info.first_user_message = j.value("first_user_message", std::string{});
+        info.title             = j.value("title",               std::string{});
+        info.created_at        = j.value("created_at",          file_mtime);
+        info.last_opened_at    = j.value("last_opened_at",      file_mtime);
     } catch (const json::exception& e) {
         spdlog::warn("SessionManager: cannot read session info from {}: {}",
                      path.string(), e.what());
     }
+
+    // Fallback title: derived from first user message preview.
+    if (info.title.empty())
+        info.title = derive_title_from_preview(info.first_user_message);
 
     return info;
 }
@@ -153,9 +270,12 @@ std::vector<SessionInfo> SessionManager::list() const
         sessions.push_back(read_session_info(entry.path()));
     }
 
-    // Sort newest-first (ID is a timestamp string, lexicographic sort works).
+    // Sort by last_opened_at desc (newest open first). Fall back to id when
+    // timestamps tie so the order is deterministic across calls.
     std::sort(sessions.begin(), sessions.end(),
               [](const SessionInfo& a, const SessionInfo& b) {
+                  if (a.last_opened_at != b.last_opened_at)
+                      return a.last_opened_at > b.last_opened_at;
                   return a.id > b.id;
               });
 
@@ -167,12 +287,106 @@ std::vector<SessionInfo> SessionManager::list() const
 
 bool SessionManager::remove(const std::string& id)
 {
-    auto path = sessions_dir_ / (id + ".json");
+    auto path        = sessions_dir_ / (id + ".json");
+    auto archive_dir = sessions_dir_ / id;
+
     std::error_code ec;
-    bool removed = fs::remove(path, ec);
-    if (removed)
-        spdlog::info("SessionManager: removed session '{}'", id);
-    return removed;
+    bool removed_file = fs::remove(path, ec);
+
+    // S5.I -- a session can also have a sibling `<id>/` directory holding the
+    // S5.F pre-compaction history archives. Remove it too in the same
+    // operation; partial cleanup (file removed but archives left behind) would
+    // make the cleanup heuristic believe the session is gone while the
+    // workspace silently keeps growing.
+    std::error_code ec_dir;
+    auto removed_archives = fs::remove_all(archive_dir, ec_dir);  // 0 on missing
+
+    if (removed_file)
+        spdlog::info("SessionManager: removed session '{}' (+{} archive file(s))",
+                     id, static_cast<unsigned long long>(removed_archives));
+    else if (removed_archives > 0)
+        spdlog::info("SessionManager: removed orphaned archive dir for '{}' "
+                     "({} file(s))", id,
+                     static_cast<unsigned long long>(removed_archives));
+
+    return removed_file || removed_archives > 0;
+}
+
+// -- Patch helpers ------------------------------------------------------------
+
+bool SessionManager::patch_field(const std::string& id,
+                                 const std::string& key,
+                                 const nlohmann::json& value)
+{
+    auto path = sessions_dir_ / (id + ".json");
+    if (!fs::exists(path))
+        return false;
+
+    json j;
+    {
+        std::ifstream f(path);
+        if (!f.is_open()) {
+            spdlog::warn("SessionManager: cannot read {} for patch", path.string());
+            return false;
+        }
+        try {
+            j = json::parse(f);
+        } catch (const json::exception& e) {
+            spdlog::warn("SessionManager: parse error patching {}: {}",
+                         path.string(), e.what());
+            return false;
+        }
+    }
+    j[key] = value;
+
+    std::ofstream f(path);
+    if (!f.is_open()) {
+        spdlog::error("SessionManager: cannot write {} for patch", path.string());
+        return false;
+    }
+    f << j.dump(2) << '\n';
+    return true;
+}
+
+bool SessionManager::bump_last_opened_at(const std::string& id)
+{
+    return patch_field(id, "last_opened_at", now_epoch_seconds());
+}
+
+bool SessionManager::rename(const std::string& id, const std::string& new_title)
+{
+    return patch_field(id, "title", new_title);
+}
+
+// -- Cleanup ------------------------------------------------------------------
+
+std::vector<std::string> SessionManager::cleanup_candidates(
+    int keep_last_count,
+    int delete_after_days,
+    const std::unordered_set<std::string>& currently_open) const
+{
+    std::vector<SessionInfo> all = list();
+
+    // Drop currently-open sessions from the candidate pool entirely.
+    all.erase(std::remove_if(all.begin(), all.end(),
+        [&](const SessionInfo& s) {
+            return currently_open.count(s.id) > 0;
+        }), all.end());
+
+    // `all` is sorted last_opened_at desc. Skip the top keep_last_count rows;
+    // those are explicitly protected by the "small workspace" clause.
+    int skip = keep_last_count > 0 ? keep_last_count : 0;
+    long long cutoff = now_epoch_seconds()
+        - static_cast<long long>(delete_after_days) * 24LL * 3600LL;
+
+    std::vector<std::string> out;
+    for (size_t i = static_cast<size_t>(skip); i < all.size(); ++i) {
+        if (all[i].last_opened_at <= cutoff)
+            out.push_back(all[i].id);
+    }
+    // Oldest-first so the dialog can show them in deletion order.
+    std::reverse(out.begin(), out.end());
+    return out;
 }
 
 } // namespace locus

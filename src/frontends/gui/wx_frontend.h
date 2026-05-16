@@ -40,10 +40,18 @@ wxDECLARE_EVENT(EVT_AGENT_HISTORY_MSG_DELETED, wxThreadEvent);
 // Thread bridge: IFrontend callbacks (fired on the agent thread) are
 // marshalled to the wxWidgets main thread via wxQueueEvent + wxThreadEvent.
 // The target wxEvtHandler (typically LocusFrame) binds these events.
+//
+// S5.I -- each posted event carries `tab_id` via the wxEvent::SetId slot so
+// the frame's handlers can route to the right tab's ChatPanel. Pre-S5.I
+// callers that don't care about tabs construct with `tab_id = 0` and ignore
+// the field.
 class WxFrontend : public IFrontend {
 public:
     // handler receives all posted events. Must outlive this object.
-    explicit WxFrontend(wxEvtHandler* handler);
+    // tab_id is stamped onto every posted wxThreadEvent via SetId().
+    explicit WxFrontend(wxEvtHandler* handler, int tab_id = 0);
+
+    int tab_id() const { return tab_id_; }
 
     void on_turn_start() override;
     void on_token(std::string_view token) override;
@@ -87,6 +95,7 @@ public:
 
 private:
     wxEvtHandler* handler_;
+    int           tab_id_;
 };
 
 } // namespace locus

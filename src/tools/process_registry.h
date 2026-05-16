@@ -112,7 +112,12 @@ private:
 // workspace closes.
 class ProcessRegistry {
 public:
-    ProcessRegistry(fs::path workspace_root, std::size_t buffer_cap_bytes);
+    // `external_broker` is non-owning. When null the registry owns an
+    // internal broker (the legacy single-workspace shape). When non-null
+    // (S5.I per-tab registries) the registry uses the workspace-shared
+    // broker so every tab's bg processes feed into the same TerminalPanel.
+    ProcessRegistry(fs::path workspace_root, std::size_t buffer_cap_bytes,
+                    ProcessSinkBroker* external_broker = nullptr);
     ~ProcessRegistry();
 
     ProcessRegistry(const ProcessRegistry&)            = delete;
@@ -150,13 +155,19 @@ public:
 
     // S5.B -- attach (or detach) the terminal-panel sink. The broker is also
     // exposed to RunCommandTool via `IWorkspaceServices::process_sink()` so
-    // synchronous shell calls land in the same panel.
-    ProcessSinkBroker* sink_broker() { return sink_broker_.get(); }
+    // synchronous shell calls land in the same panel. May be an internally-
+    // owned broker (single-workspace shape) or an external one supplied by
+    // the workspace (S5.I per-tab registries).
+    ProcessSinkBroker* sink_broker() { return broker_ptr_; }
 
 private:
     fs::path                            root_;
     std::size_t                         buffer_cap_;
-    std::unique_ptr<ProcessSinkBroker>  sink_broker_;
+    // Owned only when no external broker was supplied; null otherwise.
+    std::unique_ptr<ProcessSinkBroker>  owned_broker_;
+    // Always points at the active broker (owned_broker_.get() when we
+    // synthesise one, otherwise the external pointer the caller gave us).
+    ProcessSinkBroker*                  broker_ptr_;
 
     std::mutex   mu_;
     int          next_id_ = 1;
