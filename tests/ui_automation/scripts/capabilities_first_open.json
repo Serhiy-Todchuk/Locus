@@ -43,9 +43,9 @@
       "args": { "automation_id": "locus.chat.panel", "timeout_ms": 15000 }
     },
     { "op": "screenshot", "args": { "name": "03_main_window_loaded" } },
-    { "op": "quit", "args": { "wait_ms": 5000 } },
+    { "op": "quit", "args": { "wait_ms": 8000 } },
 
-    { "op": "sleep", "args": { "ms": 500 } },
+    { "op": "sleep", "args": { "ms": 1500 } },
 
     { "op": "launch" },
     {

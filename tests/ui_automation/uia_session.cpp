@@ -239,12 +239,41 @@ Element UiaSession::wait_for_window(const std::string& title_prefix, int timeout
         GetWindowThreadProcessId(hwnd, &pid);
         if (pid != c.pid) return TRUE;
         if (!IsWindowVisible(hwnd)) return TRUE;
-        // Top-level only: skip windows owned by another of our windows.
-        if (GetWindow(hwnd, GW_OWNER) != nullptr) return TRUE;
+
+        // Window class filter: drop pure transient popups (menus, tooltips,
+        // combo dropdowns). Modal wxDialogs are class "wxWindowNR" /
+        // "wxWindowClassNR" (or similar) with a caption -- they're owned
+        // by the parent frame but ARE the surface we want to address here.
+        wchar_t cls[64] = { 0 };
+        GetClassNameW(hwnd, cls, 63);
+        std::wstring cs = cls;
+        if (cs == L"#32768"           // menu
+         || cs == L"tooltips_class32" // tooltip
+         || cs == L"ComboLBox"        // combo dropdown
+         || cs == L"Internet Explorer_Hidden") {
+            return TRUE;
+        }
+
+        // Window-style filter: keep only windows with a real caption OR no
+        // owner (excludes WS_POPUP popups that snuck past the class check).
+        LONG style = GetWindowLongW(hwnd, GWL_STYLE);
+        bool has_caption = (style & WS_CAPTION) != 0;
+        bool has_owner   = GetWindow(hwnd, GW_OWNER) != nullptr;
+        if (has_owner && !has_caption) return TRUE;
+
         wchar_t title[512] = { 0 };
         GetWindowTextW(hwnd, title, 511);
         std::wstring t = title;
-        if (c.prefix.empty() || t.rfind(c.prefix, 0) == 0) {
+        // Prefer the prefix-matching window over an unrelated owned dialog
+        // that doesn't match (e.g. an obsolete tooltip lingering on screen).
+        // When prefix is empty, require non-owned to preserve old semantics
+        // for "find the main frame" callers.
+        if (c.prefix.empty()) {
+            if (has_owner) return TRUE;
+            c.match = hwnd;
+            return FALSE;
+        }
+        if (t.rfind(c.prefix, 0) == 0) {
             c.match = hwnd;
             return FALSE;  // stop
         }
@@ -372,7 +401,13 @@ Element UiaSession::find_in_root(IUIAutomationElement* root, const FindQuery& q)
     for (auto* c : conds) c->Release();
 
     IUIAutomationElement* found = nullptr;
-    TreeScope scope = q.deep ? TreeScope_Subtree : TreeScope_Children;
+    // Include TreeScope_Element so the root window itself is eligible -- a
+    // wxDialog calls SetName() on its own root, and Children-only scope
+    // misses it. TreeScope_Subtree already includes Element + Descendants;
+    // we add Element to the shallow case explicitly.
+    TreeScope scope = q.deep
+        ? TreeScope_Subtree
+        : (TreeScope)(TreeScope_Children | TreeScope_Element);
     HRESULT hr = root->FindFirst(scope, combined, &found);
     if (combined) combined->Release();
 
