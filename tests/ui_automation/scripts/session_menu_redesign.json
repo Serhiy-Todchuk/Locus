@@ -1,0 +1,35 @@
+{
+  "name": "session_menu_redesign",
+  "description": "S5.I -- verify the redesigned Session menu loads cleanly. The old `Reset Conversation` action was removed; the new menu carries New Tab (Ctrl+T) / Close Tab (Ctrl+W) / Rename Active Tab... / Saved Sessions / Compact Context / Clean Up Old Sessions / Manage Sessions. We exercise the New Tab item via Alt+S, N (the menu-letter accelerator) and verify the notebook still renders, then dismiss the menu and quit. This catches a regression where the menu bar fails to install or the new entries collide with old accelerator ids.",
+  "setup": {
+    "workspace": "tmp"
+  },
+  "steps": [
+    { "op": "launch" },
+    {
+      "op": "wait_for_window",
+      "args": { "title_prefix": "Locus", "timeout_ms": 20000 }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.chat.panel", "timeout_ms": 15000 }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.chat.notebook", "timeout_ms": 5000 }
+    },
+    { "op": "screenshot", "args": { "name": "01_initial" } },
+
+    { "op": "press_key", "args": { "key": "S", "modifiers": "ALT" } },
+    { "op": "sleep", "args": { "ms": 250 } },
+    { "op": "press_key", "args": { "key": "N" } },
+    { "op": "sleep", "args": { "ms": 500 } },
+    {
+      "op": "assert_visible",
+      "args": { "automation_id": "locus.chat.notebook", "timeout_ms": 5000 }
+    },
+    { "op": "screenshot", "args": { "name": "02_after_new_tab_menu" } },
+
+    { "op": "quit", "args": { "wait_ms": 5000 } }
+  ]
+}

@@ -1,4 +1,6 @@
 #include "manage_sessions_dialog.h"
+#include "locus_accessible.h"
+#include "ui_names.h"
 
 #include <wx/msgdlg.h>
 #include <wx/sizer.h>
@@ -35,6 +37,9 @@ ManageSessionsDialog::ManageSessionsDialog(wxWindow* parent,
 {
     for (auto& id : preselect_ids) preselect_.insert(std::move(id));
 
+    SetName(ui_names::kManageSessionsDialog);
+    gui::apply_locus_accessible_name(this);
+
     auto* sizer = new wxBoxSizer(wxVERTICAL);
 
     if (mode_ == Mode::cleanup) {
@@ -55,6 +60,8 @@ ManageSessionsDialog::ManageSessionsDialog(wxWindow* parent,
     list_ = new wxListView(this, wxID_ANY,
                             wxDefaultPosition, wxDefaultSize,
                             wxLC_REPORT | wxLC_HRULES);
+    list_->SetName(ui_names::kManageSessionsList);
+    gui::apply_locus_accessible_name(list_);
     list_->AppendColumn("Title",     wxLIST_FORMAT_LEFT,  280);
     list_->AppendColumn("Messages",  wxLIST_FORMAT_RIGHT,  80);
     list_->AppendColumn("Last opened", wxLIST_FORMAT_LEFT, 140);
@@ -65,11 +72,19 @@ ManageSessionsDialog::ManageSessionsDialog(wxWindow* parent,
     populate();
 
     auto* btns = new wxBoxSizer(wxHORIZONTAL);
-    btns->Add(new wxButton(this, ID_BTN_OPEN,   "Open in New Tab"), 0, wxRIGHT, 6);
-    btns->Add(new wxButton(this, ID_BTN_RENAME, "Rename..."),       0, wxRIGHT, 6);
-    btns->Add(new wxButton(this, ID_BTN_DELETE, "Delete Selected..."), 0);
+    auto* btn_open   = new wxButton(this, ID_BTN_OPEN,   "Open in New Tab");
+    auto* btn_rename = new wxButton(this, ID_BTN_RENAME, "Rename...");
+    auto* btn_delete = new wxButton(this, ID_BTN_DELETE, "Delete Selected...");
+    auto* btn_close  = new wxButton(this, ID_BTN_CLOSE,  "Close");
+    btn_open  ->SetName(ui_names::kManageSessionsBtnOpen);   gui::apply_locus_accessible_name(btn_open);
+    btn_rename->SetName(ui_names::kManageSessionsBtnRename); gui::apply_locus_accessible_name(btn_rename);
+    btn_delete->SetName(ui_names::kManageSessionsBtnDelete); gui::apply_locus_accessible_name(btn_delete);
+    btn_close ->SetName(ui_names::kManageSessionsBtnClose);  gui::apply_locus_accessible_name(btn_close);
+    btns->Add(btn_open,   0, wxRIGHT, 6);
+    btns->Add(btn_rename, 0, wxRIGHT, 6);
+    btns->Add(btn_delete, 0);
     btns->AddStretchSpacer(1);
-    btns->Add(new wxButton(this, ID_BTN_CLOSE,  "Close"),           0);
+    btns->Add(btn_close,  0);
     sizer->Add(btns, 0, wxALL | wxEXPAND, 12);
 
     SetSizer(sizer);

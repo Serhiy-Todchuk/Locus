@@ -122,8 +122,47 @@ LocusFrame::LocusFrame(LocusSession& session)
     menu_ = std::make_unique<MenuController>(this, std::move(hooks));
     menu_->install();
 
+    // -- Add tabs to the LocusSession BEFORE setup_aui_layout, which reads
+    // -- session_.active_tab() for the ActivityPanel binding. UI installation
+    // -- happens in the second pass below once the notebook widget exists.
+    auto wui = load_workspace_ui_state(workspace_.locus_dir());
+    int  restore_active = 0;
+    bool restored_any   = false;
+    if (workspace_.config().sessions.restore_last && !wui.open_tabs.empty()) {
+        for (size_t i = 0; i < wui.open_tabs.size(); ++i) {
+            const auto& ot = wui.open_tabs[i];
+            try {
+                int idx = session_.add_tab_for_session(ot.session_id);
+                if (idx >= 0) {
+                    if (ot.active) restore_active = idx;
+                    restored_any = true;
+                }
+            } catch (const std::exception& ex) {
+                spdlog::warn("Tab restore: skipping '{}': {}", ot.session_id, ex.what());
+            }
+        }
+    }
+    if (!restored_any) {
+        session_.add_tab();
+    }
+    session_.set_active_tab(
+        (restore_active >= 0 && restore_active < session_.tab_count())
+            ? restore_active : 0);
+
     create_status_bar();
     setup_aui_layout();
+
+    // -- Pass 2: install per-tab ChatPanel + WxFrontend now that the notebook
+    // -- widget exists. Iterate the LocusSession tabs in order so notebook
+    // -- pages line up with tab indices.
+    for (int i = 0; i < session_.tab_count(); ++i) {
+        auto& tab = session_.tab(i);
+        install_tab_ui(tab, wxString::FromUTF8(tab.title().empty() ? "New tab" : tab.title()));
+    }
+    if (notebook_ && session_.active_index() >= 0
+                  && session_.active_index() < static_cast<int>(notebook_->GetPageCount())) {
+        notebook_->SetSelection(session_.active_index());
+    }
 
     if (!saved_ui_state_.aui_perspective.empty()) {
         if (aui_.LoadPerspective(
@@ -141,41 +180,6 @@ LocusFrame::LocusFrame(LocusSession& session)
     apply_saved_window_geometry();
 
     tray_ = std::make_unique<LocusTray>(this);
-
-    // -- Tab restoration / fresh tab ----------------------------------------
-    auto wui = load_workspace_ui_state(workspace_.locus_dir());
-    int restore_active = 0;
-    bool restored_any = false;
-    if (workspace_.config().sessions.restore_last && !wui.open_tabs.empty()) {
-        for (size_t i = 0; i < wui.open_tabs.size(); ++i) {
-            const auto& ot = wui.open_tabs[i];
-            try {
-                int idx = session_.add_tab_for_session(ot.session_id);
-                if (idx >= 0) {
-                    // Install UI for this restored tab.
-                    auto& tab = session_.tab(idx);
-                    install_tab_ui(tab, wxString::FromUTF8(tab.title()));
-                    if (ot.active) restore_active = idx;
-                    restored_any = true;
-                }
-            } catch (const std::exception& ex) {
-                spdlog::warn("Tab restore: skipping '{}': {}", ot.session_id, ex.what());
-            }
-        }
-    }
-    if (!restored_any) {
-        int idx = session_.add_tab();
-        auto& tab = session_.tab(idx);
-        install_tab_ui(tab, "New tab");
-    }
-    if (restore_active >= 0 && restore_active < session_.tab_count()) {
-        session_.set_active_tab(restore_active);
-        if (notebook_)
-            notebook_->SetSelection(restore_active);
-    } else {
-        session_.set_active_tab(0);
-        if (notebook_) notebook_->SetSelection(0);
-    }
 
     // -- Workspace-shared bridge for indexer / embedding worker callbacks ---
     shared_bridge_ = std::make_unique<WxFrontend>(this, /*tab_id=*/0);
@@ -295,6 +299,8 @@ void LocusFrame::setup_aui_layout()
     notebook_ = new wxAuiNotebook(this, wxID_ANY,
         wxDefaultPosition, wxDefaultSize,
         wxAUI_NB_DEFAULT_STYLE | wxAUI_NB_WINDOWLIST_BUTTON);
+    notebook_->SetName(ui_names::kChatNotebook);
+    gui::apply_locus_accessible_name(notebook_);
 
     activity_panel_ = new ActivityPanel(this, session_.active_tab().agent());
 

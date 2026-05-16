@@ -69,19 +69,25 @@ void MenuController::install()
 
     // -- Session menu (S5.I redesign) ----------------------------------------
     auto* session_menu = new wxMenu;
-    session_menu->Append(ID_MENU_NEW_TAB,    "New Tab\tCtrl+T");
-    session_menu->Append(ID_MENU_CLOSE_TAB,  "Close Tab\tCtrl+W");
-    session_menu->Append(ID_MENU_RENAME_TAB, "Rename Active Tab...");
+    // S5.I -- per-letter mnemonics so the UIA driver (and keyboard users) can
+    // navigate to any entry without arrow-key bouncing. Letters chosen to be
+    // unique within the Session menu so a single Alt-shortcut activates the
+    // intended item: N(ew) / C(lose) / R(ename) / S(aved) / Co(m)pact /
+    // (U)p Old / Mana(g)e. The Manage mnemonic deliberately uses `&g` because
+    // `m` already belongs to Co&mpact.
+    session_menu->Append(ID_MENU_NEW_TAB,    "&New Tab\tCtrl+T");
+    session_menu->Append(ID_MENU_CLOSE_TAB,  "&Close Tab\tCtrl+W");
+    session_menu->Append(ID_MENU_RENAME_TAB, "&Rename Active Tab...");
     session_menu->AppendSeparator();
     sessions_menu_ = new wxMenu;
     rebuild_sessions_menu(hooks_.provide_sessions ? hooks_.provide_sessions()
                                                   : std::vector<SessionInfo>{});
-    session_menu->AppendSubMenu(sessions_menu_, "Saved Sessions");
+    session_menu->AppendSubMenu(sessions_menu_, "&Saved Sessions");
     session_menu->AppendSeparator();
-    session_menu->Append(ID_MENU_COMPACT,           "Compact Context");
+    session_menu->Append(ID_MENU_COMPACT,           "Co&mpact Context");
     session_menu->AppendSeparator();
-    session_menu->Append(ID_MENU_CLEANUP_SESSIONS,  "Clean Up Old Sessions...");
-    session_menu->Append(ID_MENU_MANAGE_SESSIONS,   "Manage Sessions...");
+    session_menu->Append(ID_MENU_CLEANUP_SESSIONS,  "Clean &Up Old Sessions...");
+    session_menu->Append(ID_MENU_MANAGE_SESSIONS,   "Mana&ge Sessions...");
 
     session_menu->Bind(wxEVT_MENU_OPEN, [this](wxMenuEvent& e) {
         if (hooks_.provide_sessions)

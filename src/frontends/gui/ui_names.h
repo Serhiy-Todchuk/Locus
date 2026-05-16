@@ -37,6 +37,17 @@ inline constexpr const char* kChatMentionPopup   = "locus.chat.mention_popup";
 inline constexpr const char* kActivityPanel    = "locus.activity.panel";
 inline constexpr const char* kActivityNotebook = "locus.activity.notebook";
 
+// --- Multi-tab chat notebook (S5.I) ---------------------------------------
+inline constexpr const char* kChatNotebook    = "locus.chat.notebook";
+
+// --- Manage Sessions dialog (S5.I) ----------------------------------------
+inline constexpr const char* kManageSessionsDialog    = "locus.manage_sessions.dialog";
+inline constexpr const char* kManageSessionsList      = "locus.manage_sessions.list";
+inline constexpr const char* kManageSessionsBtnOpen   = "locus.manage_sessions.btn_open";
+inline constexpr const char* kManageSessionsBtnRename = "locus.manage_sessions.btn_rename";
+inline constexpr const char* kManageSessionsBtnDelete = "locus.manage_sessions.btn_delete";
+inline constexpr const char* kManageSessionsBtnClose  = "locus.manage_sessions.btn_close";
+
 // --- Terminal panel (S5.B) ------------------------------------------------
 inline constexpr const char* kTerminalPanel    = "locus.terminal.panel";
 inline constexpr const char* kTerminalNotebook = "locus.terminal.notebook";

@@ -233,7 +233,9 @@
       "Bash(build/release/tests/Release/locus_tests.exe \"[s5.m]\")",
       "Bash(python scan_nonascii.py)",
       "Bash(python -c \"print\\('no script'\\)\")",
-      "Bash(build/release/tests/Release/locus_tests.exe \"[s5.f]\")"
+      "Bash(build/release/tests/Release/locus_tests.exe \"[s5.f]\")",
+      "WebFetch(domain:api.github.com)",
+      "Bash(curl -sSLI \"https://raw.githubusercontent.com/python-openxml/python-docx/master/tests/test_files/test.docx\")"
     ]
   }
 }

@@ -652,9 +652,20 @@ bool UiaSession::press_key(const std::string& key_name, const std::string& modif
         {"F11",       VK_F11},
         {"F12",       VK_F12},
     }};
+    // Letter / digit fallback: single character mapped to its VK code.
+    // ASCII 'A'..'Z' / '0'..'9' map to VK codes of the same value. Lower-case
+    // input is uppercased before lookup so scripts can write "t" or "T".
+    WORD letter_vk = 0;
+    if (key_name.size() == 1) {
+        char c = static_cast<char>(std::toupper(
+            static_cast<unsigned char>(key_name[0])));
+        if ((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'))
+            letter_vk = static_cast<WORD>(c);
+    }
+
     auto it = std::find_if(keys.begin(), keys.end(),
         [&](const auto& p) { return p.first == key_name; });
-    if (it == keys.end()) {
+    if (it == keys.end() && letter_vk == 0) {
         set_error("press_key: unknown key '" + key_name + "'");
         return false;
     }
@@ -693,9 +704,10 @@ bool UiaSession::press_key(const std::string& key_name, const std::string& modif
         in.ki.wVk = m;
         inputs.push_back(in);
     }
+    WORD vk = (it != keys.end()) ? it->second : letter_vk;
     INPUT down{};
     down.type   = INPUT_KEYBOARD;
-    down.ki.wVk = it->second;
+    down.ki.wVk = vk;
     inputs.push_back(down);
     INPUT up = down;
     up.ki.dwFlags = KEYEVENTF_KEYUP;

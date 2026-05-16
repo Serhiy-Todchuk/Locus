@@ -1,0 +1,63 @@
+{
+  "name": "manage_sessions_open",
+  "description": "S5.I -- exercise the auto-cleanup-at-workspace-open hook + the ManageSessionsDialog. Seeds the workspace with three old (60-day-old) saved sessions plus an `auto_cleanup_enabled=true` config with `keep_last_count=0` so every seeded session is a cleanup candidate. The LocusFrame ctor's CallAfter-posted cleanup hook then pops the ManageSessionsDialog in cleanup mode with the rows pre-selected; the script verifies the dialog (matched via its title) + list + four buttons are reachable, then dismisses via the Close button. Note: wxDialog's SetName is overridden by the Win32 window title at the top-level, so the dialog is found via name='Manage Sessions' rather than its automation_id.",
+  "setup": {
+    "workspace": "tmp",
+    "sessions_config": {
+      "auto_cleanup_enabled": true,
+      "keep_last_count": 0,
+      "delete_after_days": 1
+    },
+    "sessions_seed": [
+      { "id": "seed_a", "title": "An old session A", "last_opened_at": -5184000 },
+      { "id": "seed_b", "title": "An old session B", "last_opened_at": -5270400 },
+      { "id": "seed_c", "title": "An old session C", "last_opened_at": -5356800 }
+    ]
+  },
+  "steps": [
+    { "op": "launch" },
+    {
+      "op": "wait_for_window",
+      "args": { "title_prefix": "Locus", "timeout_ms": 20000 }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.chat.panel", "timeout_ms": 15000 }
+    },
+
+    {
+      "op": "find",
+      "args": { "name": "Manage Sessions", "control_type": "window", "timeout_ms": 10000 }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.manage_sessions.list", "timeout_ms": 5000 }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.manage_sessions.btn_open", "timeout_ms": 5000 }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.manage_sessions.btn_rename", "timeout_ms": 5000 }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.manage_sessions.btn_delete", "timeout_ms": 5000 }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.manage_sessions.btn_close", "timeout_ms": 5000 }
+    },
+    { "op": "screenshot", "args": { "name": "01_dialog_open" } },
+
+    {
+      "op": "click",
+      "args": { "automation_id": "locus.manage_sessions.btn_close", "timeout_ms": 5000 }
+    },
+    { "op": "sleep", "args": { "ms": 500 } },
+    { "op": "screenshot", "args": { "name": "02_dialog_closed" } },
+
+    { "op": "quit", "args": { "wait_ms": 5000 } }
+  ]
+}

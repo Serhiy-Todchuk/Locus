@@ -144,6 +144,22 @@ ScriptResult ScriptRunner::run()
                 {"run_command",    "auto"},
                 {"run_command_bg", "auto"}
             };
+            // S5.I -- scripts can override session cleanup thresholds; the
+            // default is "off" so existing scripts don't get an unexpected
+            // dialog at launch.
+            cfg["sessions"]["auto_cleanup_enabled"] = false;
+            cfg["sessions"]["restore_last"]        = false;
+            if (script_.contains("setup") && script_["setup"].is_object()) {
+                const auto& setup = script_["setup"];
+                if (setup.contains("sessions_config") &&
+                    setup["sessions_config"].is_object())
+                {
+                    for (auto it = setup["sessions_config"].begin();
+                              it != setup["sessions_config"].end(); ++it) {
+                        cfg["sessions"][it.key()] = it.value();
+                    }
+                }
+            }
             // Scripts can override / extend the pre-seed via
             // setup.tool_approvals_override -- used by tool_approval_dialog.json
             // to flip write_file back to "ask" so the approval gate fires.
@@ -164,6 +180,52 @@ ScriptResult ScriptRunner::run()
         } catch (const std::exception& ex) {
             // Best-effort -- a missing config just means the script hangs
             // on the approval panel, which is loud enough.
+            (void)ex;
+        }
+
+        // S5.I -- optional `setup.sessions_seed`: list of fake saved-session
+        // entries to drop into <ws>/.locus/sessions/ before launching the GUI.
+        // Each entry is an object with:
+        //   id              session id (filename stem, defaults to a
+        //                   timestamp-prefixed slug if omitted)
+        //   title           tab title to persist
+        //   last_opened_at  unix epoch seconds (used by cleanup criteria);
+        //                   may be a negative number meaning "N seconds ago"
+        // Lets the auto-cleanup-at-workspace-open script exercise the
+        // ManageSessionsDialog without driving the menu via UIA.
+        try {
+            if (script_.contains("setup") && script_["setup"].is_object() &&
+                script_["setup"].contains("sessions_seed") &&
+                script_["setup"]["sessions_seed"].is_array())
+            {
+                auto sessions_dir = workspace_dir / ".locus" / "sessions";
+                std::error_code ec2;
+                std::filesystem::create_directories(sessions_dir, ec2);
+                long long now_s =
+                    std::chrono::duration_cast<std::chrono::seconds>(
+                        std::chrono::system_clock::now().time_since_epoch()).count();
+                int counter = 0;
+                for (const auto& entry : script_["setup"]["sessions_seed"]) {
+                    if (!entry.is_object()) continue;
+                    std::string id = entry.value("id",
+                        std::string("seed_") + std::to_string(++counter));
+                    std::string title = entry.value("title", id);
+                    long long when = entry.value("last_opened_at", now_s);
+                    if (when < 0) when = now_s + when;  // negative = relative
+                    Json j;
+                    j["id"]                = id;
+                    j["message_count"]     = 1;
+                    j["estimated_tokens"]  = 100;
+                    j["messages"]          = Json::array();
+                    j["first_user_message"] = title;
+                    j["title"]             = title;
+                    j["created_at"]        = when;
+                    j["last_opened_at"]    = when;
+                    std::ofstream sf(sessions_dir / (id + ".json"));
+                    sf << j.dump(2) << '\n';
+                }
+            }
+        } catch (const std::exception& ex) {
             (void)ex;
         }
     }

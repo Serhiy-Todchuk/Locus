@@ -25,6 +25,7 @@ add_executable(locus_integration_tests
     test_int_memory.cpp
     test_int_prompt_templates.cpp
     test_int_history_delete.cpp
+    test_int_tabs_and_sessions.cpp
 )
 
 target_include_directories(locus_integration_tests PRIVATE
