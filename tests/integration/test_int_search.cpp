@@ -103,7 +103,17 @@ TEST_CASE("hybrid search returns RRF-merged results", "[integration][llm][search
 
     REQUIRE_FALSE(r.timed_out);
     REQUIRE(r.tool_called("search"));
-    REQUIRE(search_result_mentions(r, "file_tools"));
+
+    // S5.O lifted `write_atomic` out of file_tools.cpp into the shared
+    // helper module (src/tools/shared.cpp), keeping the call sites in
+    // file_tools.cpp. Either surfacing in the hybrid result is good enough
+    // -- the assertion is "the right region of the code lights up", not "a
+    // specific filename".
+    bool mentioned =
+        search_result_mentions(r, "shared.cpp")    ||
+        search_result_mentions(r, "shared.h")      ||
+        search_result_mentions(r, "file_tools");
+    REQUIRE(mentioned);
 }
 
 // -- Regex mode (S4.P) ------------------------------------------------------

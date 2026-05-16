@@ -45,7 +45,26 @@ void WatcherPump::stop()
 void WatcherPump::flush_now()
 {
     std::unique_lock<std::mutex> lock(mutex_);
-    drain_locked();
+
+    // Bypass the 200 ms debounce on explicit flushes: callers (tests, end-of-
+    // session shutdown, pre-prompt sync) want every queued event in this
+    // call, not whatever passed the debounce window. push_raw's
+    // pending_[key] = pe semantics still coalesce rapid edits per path.
+    std::vector<FileEvent> drained;
+    size_t n = watcher_.drain_all(drained);
+    if (n > 0) {
+        auto now = std::chrono::steady_clock::now();
+        if (!group_active_) {
+            group_start_  = now;
+            group_active_ = true;
+        }
+        last_event_time_ = now;
+        pending_.insert(pending_.end(),
+                        std::make_move_iterator(drained.begin()),
+                        std::make_move_iterator(drained.end()));
+        spdlog::trace("WatcherPump: flush_now +{} events (pending {})",
+                      n, pending_.size());
+    }
     if (!pending_.empty())
         flush_locked(lock);
 }

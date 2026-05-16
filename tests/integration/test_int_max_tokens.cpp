@@ -89,9 +89,12 @@ TEST_CASE("LMStudioClient surfaces finish_reason=length as a clear on_error",
 {
     auto& h = harness();
 
-    // 200 tokens is small enough to truncate any non-trivial generation, big
-    // enough that the model gets to start producing visible text first (so we
-    // can confirm we're not erroring at zero-output).
+    // 200 tokens is small enough to truncate any non-trivial generation,
+    // big enough that the model produces SOME output before being cut off
+    // -- visible text on non-reasoning models, or a partial <think> block
+    // on reasoning models. The truncation-warning assertion below is what
+    // we're actually testing; the non-empty check just guards against
+    // zero-output regressions.
     auto client = make_constrained_client(h, /*max_tokens=*/200);
 
     std::vector<ChatMessage> msgs;
@@ -116,10 +119,13 @@ TEST_CASE("LMStudioClient surfaces finish_reason=length as a clear on_error",
     StreamRecorder rec;
     client->stream_completion(msgs, /*tools=*/{}, rec.make_callbacks());
 
-    // Stream finished cleanly (no transport failure) and we got SOME text
-    // before being cut off.
+    // Stream finished cleanly (no transport failure) and we got SOME output
+    // (visible text on non-reasoning models, reasoning bytes on thinking
+    // models) before being cut off.
     REQUIRE(rec.completed);
-    REQUIRE_FALSE(rec.text.empty());
+    INFO("text bytes=" << rec.text.size()
+         << " reasoning bytes=" << rec.reasoning.size());
+    REQUIRE_FALSE((rec.text.empty() && rec.reasoning.empty()));
 
     // The fix: an `on_error` MUST fire with a recognisable truncation
     // message. The exact phrasing is verbose so the user can copy-paste

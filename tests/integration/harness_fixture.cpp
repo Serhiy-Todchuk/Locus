@@ -197,6 +197,19 @@ IntegrationHarness::IntegrationHarness()
     // Workspace (blocking initial index).
     workspace_ = std::make_unique<Workspace>(workspace_root_);
 
+    // The repo's .gitignore excludes tests/integration_tmp/ -- the harness
+    // writes its scratch files there and the indexer needs to see them.
+    // Turn gitignore respect off for the test session and reload so the
+    // already-merged patterns get cleared. This only affects the live
+    // process; .locus/config.json on disk is untouched (we never save it
+    // from the harness).
+    if (workspace_->config().respect_gitignore) {
+        workspace_->config().respect_gitignore = false;
+        workspace_->indexer().reload_gitignore();
+        spdlog::info("Integration harness: disabled .gitignore respect for "
+                     "scratch-dir visibility (tests/integration_tmp).");
+    }
+
     const auto& st = workspace_->indexer().stats();
     spdlog::info("Integration harness: index ready -- {} files, {} symbols, {} headings",
                  st.files_total, st.symbols_total, st.headings_total);
@@ -292,16 +305,25 @@ PromptResult IntegrationHarness::prompt(const std::string& text,
 
 void IntegrationHarness::wait_for_index_idle(std::chrono::milliseconds timeout)
 {
+    // efsw on Windows can take a couple of hundred milliseconds to surface a
+    // file-change event after the syscall returns. We pump aggressively so a
+    // freshly-written file is indexed before we hand control back to the
+    // caller. flush_now() bypasses the watcher's 200 ms debounce, so each
+    // iteration consumes whatever has arrived since the previous one without
+    // waiting for the coalesce window.
+    //
+    // Min ~1.2 s covers the slow-efsw cases observed on Windows under AV
+    // load; capped at `timeout` so a buggy indexer can't stall the suite.
+    const auto deadline   = std::chrono::steady_clock::now() + timeout;
+    const auto min_total  = std::chrono::milliseconds(1200);
+    const auto floor_end  = std::chrono::steady_clock::now() + min_total;
     workspace_->watcher_pump().flush_now();
-    // After flush_now returns, the synchronous path has handed pending events
-    // to the indexer. The indexer runs on the pump thread, so by the time
-    // flush_now returns the batch has been fully processed. Keep a short tail
-    // sleep in case more events were added concurrently by a prior tool call.
-    const auto deadline = std::chrono::steady_clock::now() + timeout;
-    for (int i = 0; i < 3; ++i) {
+    for (int i = 0; i < 24; ++i) {
+        auto now = std::chrono::steady_clock::now();
+        if (now > deadline) break;
+        if (i >= 8 && now > floor_end) break;
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
         workspace_->watcher_pump().flush_now();
-        if (std::chrono::steady_clock::now() > deadline) break;
     }
 }
 

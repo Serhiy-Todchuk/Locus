@@ -45,8 +45,15 @@ public:
     // Stop watching.
     void stop();
 
-    // Drain all pending events into `out`. Returns count drained.
+    // Drain pending events whose age has exceeded the 200 ms debounce
+    // window. Background pumps call this on every tick.
     size_t drain(std::vector<FileEvent>& out);
+
+    // Drain every pending event regardless of age. Used by `flush_now()`
+    // callers (tests, end-of-session shutdown) where waiting for the
+    // debounce serves no purpose -- the latest event per path is still
+    // returned because `push_raw` overwrites pending_[key].
+    size_t drain_all(std::vector<FileEvent>& out);
 
     // Called by the efsw listener callback (internal use).
     void push_raw(FileAction action, const fs::path& dir, const std::string& filename,

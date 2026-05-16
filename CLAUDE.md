@@ -280,19 +280,20 @@ Need LM Studio at `http://127.0.0.1:1234` with a tool-calling model loaded
 (min: Gemma 4 E4B @ 8k context).
 
 ```
-# Always pass -console when running on user request -- it pops a dedicated trace
-# console window. Without it stderr stays at warning-level only.
-build/release/tests/integration/Release/locus_integration_tests.exe -console
+# Run inline -- stdout / stderr come back through the subprocess pipe so
+# Claude sees results immediately. Filter llama.cpp boot noise with grep
+# when only the Catch2 / harness lines matter.
+build/release/tests/integration/Release/locus_integration_tests.exe
 
 # One tag area
-build/release/tests/integration/Release/locus_integration_tests.exe "[smoke]" -console
-build/release/tests/integration/Release/locus_integration_tests.exe "[search]" -console
+build/release/tests/integration/Release/locus_integration_tests.exe "[smoke]"
+build/release/tests/integration/Release/locus_integration_tests.exe "[search]"
 # (also: [outline] [fs] [shell] [bg] [ask_user] [slash] [file_change_awareness] [undo] [metrics] [max_tokens] [plan] [mcp])
 ```
 
-When you launch with `-console` from Bash/subprocess, captured stdout looks empty
-(stdout is redirected into the new window). For pass/fail rely on the exit code;
-for post-mortem detail point the user at `<workspace>/.locus/integration_test.log`.
+For a foreground-console pop-out when running locally for a human to watch,
+add `-console` -- the exe redirects stdout/stderr into the new window, so a
+subprocess capture comes back empty in that mode. Default is inline.
 
 ### Retrieval eval (manual)
 
@@ -519,8 +520,7 @@ No accumulated debt, no "we'll debug it later."
 **Integration tests (`tests/integration/`, manual, LLM-driven):**
 - **Update them whenever any user-observable agent behaviour changes** -- that includes tools, extractors, the agent loop, the approval gate, the slash-command dispatcher (built-in slashes too: `/undo`, `/metrics`, `/export_metrics`, `/compact`, `/save`), the LLM stream decoder (`finish_reason` / refusal / mid-stream errors / tool-call validation), checkpoint and undo behaviour, telemetry surfaces (`MetricsAggregator`, `/metrics`, `/export_metrics`), and conversation/session state transitions. Schema changes, new tool, retired tool, changed arg shape, new extractor, new approval path, new slash command, new stream-decode event, new max_tokens / context-limit / timeout behaviour all need matching test coverage in the relevant `test_int_*.cpp`. Add a new `TEST_CASE` tagged `[integration][llm][<topic>]`; don't silently skip. If a feature can be exercised without an LLM round-trip (slash-only, deterministic), it still belongs in this suite tagged `[integration]` (drop `[llm]`) so the manual sweep runs it.
 - **Do NOT run them by default.** They need a live LLM, take minutes, and are not part of the per-stage verification protocol above. Only run when explicitly asked ("run the integration tests", "run [search] integration").
-- **When running on request, always pass `-console`.** The flag pops a dedicated console window and streams trace-level logs there live. The user wants to SEE the run (tool calls, LLM stream, SQL, FTS), not a silent 5-minute wait ending in a pass/fail summary. Omit `-console` only if the user explicitly asks for silent mode.
-- **Consequence of `-console` when you launch via Bash/subprocess:** the exe redirects its stdout/stderr into the new window, so your captured output will look empty. The subprocess call still completes cleanly when tests finish (no pause). For pass/fail, rely on the exit code; for post-mortem detail point the user at `<workspace>/.locus/integration_test.log`.
+- **Run inline (no `-console`).** stdout / stderr come back through the subprocess pipe so Claude can read failures immediately and root-cause without hunting through `.locus/integration_test.log`. Use a `grep -vE` filter to suppress the llama.cpp boot block when only Catch2 / harness lines matter. `-console` only when a human at the desktop wants the foreground console pop-out; in that mode the subprocess capture comes back empty (stdout is redirected into the new window).
 - **Minimum verified model: Gemma 4 E4B @ 8k context.** Larger / more capable models are fine. Any model without tool-calling support will fail most cases.
 - See [tests/integration/README.md](tests/integration/README.md) for the full run matrix, env vars, and harness design notes.
 

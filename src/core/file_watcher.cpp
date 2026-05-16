@@ -99,7 +99,23 @@ void FileWatcher::push_raw(FileAction action, const fs::path& dir,
                             const std::string& old_filename)
 {
     fs::path abs_path = fs::path(dir) / filename;
-    fs::path rel_path = fs::relative(abs_path, root_);
+
+    // fs::relative canonicalises both sides, which on Windows opens the file
+    // and can fail with "Access is denied" when the file is briefly locked
+    // by antivirus, transiently missing (delete races a watcher callback),
+    // or sitting under a junction. The no-throw overload + lexical fallback
+    // keeps the event flowing -- the indexer downstream will resolve the
+    // path against the workspace on its own.
+    std::error_code ec;
+    fs::path rel_path = fs::relative(abs_path, root_, ec);
+    if (ec || rel_path.empty()) {
+        rel_path = abs_path.lexically_relative(root_);
+        if (rel_path.empty() || rel_path == fs::path(".")) {
+            spdlog::trace("File watcher: dropping unresolvable {}/{}",
+                          dir.string(), filename);
+            return;
+        }
+    }
 
     if (is_excluded(rel_path)) {
         // Log each excluded path at most once -- otherwise SQLite WAL flushes
@@ -156,6 +172,23 @@ size_t FileWatcher::drain(std::vector<FileEvent>& out)
         }
     }
 
+    return count;
+}
+
+size_t FileWatcher::drain_all(std::vector<FileEvent>& out)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    size_t count = 0;
+    for (auto& [key, pe] : pending_) {
+        FileEvent ev;
+        ev.action   = pe.action;
+        ev.path     = pe.path;
+        ev.old_path = pe.old_path;
+        out.push_back(std::move(ev));
+        ++count;
+    }
+    pending_.clear();
     return count;
 }
 
