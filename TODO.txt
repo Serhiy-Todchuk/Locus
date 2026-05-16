@@ -1,10 +1,13 @@
 - use app icons
 - sample.docx has no heading
-- use monospace font for chat?
 - merge statistics/activity log with chat window (decide after S5.G)
 - tokens per second counter per each turn? (decide after S5.G)
-- FastDebug
+- Shall we put all prompts (system, compaction, etc.) into app folder, or Locus global folder, as a text files, so user can see/edit them?
 - Add image attachment for LLM prompt
+- Voice chat input
+- FastDebug
 
+Have you added integration test and UI automation test (if needed)?
+Run integration tests (no -console) and then AUI tests
 Short commit message?
 Wrap up — update docs/comments, then we're done.

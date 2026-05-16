@@ -232,7 +232,8 @@
       "Bash(build/release/tests/Release/locus_tests.exe)",
       "Bash(build/release/tests/Release/locus_tests.exe \"[s5.m]\")",
       "Bash(python scan_nonascii.py)",
-      "Bash(python -c \"print\\('no script'\\)\")"
+      "Bash(python -c \"print\\('no script'\\)\")",
+      "Bash(build/release/tests/Release/locus_tests.exe \"[s5.f]\")"
     ]
   }
 }

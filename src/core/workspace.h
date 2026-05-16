@@ -184,6 +184,42 @@ struct WorkspaceConfig {
     // When context_limit is 0 (auto-detect not yet done), reserve is 0.
     int  compaction_reserve_tokens   = -1;
 
+    // S5.F -- composable compaction. The compaction pipeline runs a fixed-order
+    // cascade of layers (drop-redundant-tool-results, strip-large-tool-bodies,
+    // drop-old-reasoning, drop-oldest-turns, LLM-summary). Each layer is
+    // independently toggleable; layer 5 (mechanical drop) is off in the auto
+    // cascade so the user gets a faithful summary first when 1-3 don't free
+    // enough.
+    //
+    // Three-state progressive trigger (against effective_limit = limit - reserve):
+    //   warn_threshold     (default 0.70) -> footer chip turns yellow,
+    //                                        inline hint in chat
+    //   auto_threshold     (default 0.85) -> cascade fires automatically,
+    //                                        user notified after the fact
+    //   reserve breach (S5.D, ratio 1.0) -> agent loop refuses; user must
+    //                                       compact manually
+    struct Compaction {
+        bool   auto_enabled    = true;
+        double warn_threshold  = 0.70;
+        double auto_threshold  = 0.85;
+
+        // Per-layer knobs (snapshot copied into the pipeline at run time).
+        int    strip_threshold_tokens                = 1000;
+        int    older_than_turns                      = 3;
+        int    keep_recent_turns                     = 3;
+        int    summary_max_tokens                    = 1024;
+        int    archive_keep_count                    = 5;
+        int    preserve_short_user_msgs_max_tokens   = 500;
+        int    preserve_short_tool_calls_max_tokens  = 500;
+
+        // Free-form Pi-style appendix to the layer-6 summary prompt. Empty by
+        // default; users add things like "preserve all file paths and test
+        // commands" here. Per-run /compact instructions override this for one
+        // invocation only.
+        std::string custom_summary_instructions;
+    };
+    Compaction compaction;
+
     // S5.D -- per-message token chip in chat. When true, each bubble shows a
     // small grey "(N t)" estimate. Off-switch for users who find it noisy.
     bool ui_show_per_message_tokens  = true;

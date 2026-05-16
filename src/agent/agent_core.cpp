@@ -1,6 +1,8 @@
 #include "agent_core.h"
 
 #include "auto_commit.h"
+#include "compaction_pipeline.h"
+#include "history_archive.h"
 #include "index/index_query.h"
 #include "llm/token_counter.h"
 #include "../tools/tool_registry.h"
@@ -19,6 +21,27 @@
 #include <utility>
 
 namespace locus {
+
+namespace {
+
+// S5.F -- snapshot the workspace compaction config into a per-run selection.
+// AgentCore uses this from three places (legacy strategy shim, auto-compact
+// trigger in the round loop, /compact slash command) so it lives at file
+// scope.
+CompactionLayerSelection selection_from_config(const WorkspaceConfig::Compaction& c)
+{
+    CompactionLayerSelection sel;
+    sel.strip_threshold_tokens                = c.strip_threshold_tokens;
+    sel.older_than_turns                      = c.older_than_turns;
+    sel.keep_recent_turns                     = c.keep_recent_turns;
+    sel.preserve_short_user_msgs_max_tokens   = c.preserve_short_user_msgs_max_tokens;
+    sel.preserve_short_tool_calls_max_tokens  = c.preserve_short_tool_calls_max_tokens;
+    sel.summary_max_tokens                    = c.summary_max_tokens;
+    sel.custom_summary_instructions           = c.custom_summary_instructions;
+    return sel;
+}
+
+} // namespace
 
 AgentCore::AgentCore(ILLMClient& llm,
                      IToolRegistry& tools,
@@ -86,6 +109,11 @@ AgentCore::AgentCore(ILLMClient& llm,
     // tool calls record their paths (suppressing them from next turn's
     // "files changed since last turn" notification).
     dispatcher_->set_change_tracker(ctx_->change_tracker());
+
+    // S5.F -- pre-compaction history archive lives under the same sessions
+    // directory the SessionManager uses, but inside a per-session sub-folder
+    // so the live `<id>.json` and the chained archives stay distinct.
+    history_archive_ = std::make_unique<HistoryArchive>(sessions_dir);
 
     activity_->emit(ActivityKind::system_prompt,
                     "System prompt assembled (~" + std::to_string(sys_tokens) + " tokens)",
@@ -340,6 +368,7 @@ void AgentCore::agent_thread_func()
             queue_cv_.wait(lock, [&] {
                 return !message_queue_.empty()
                        || pending_compact_.load(std::memory_order_acquire)
+                       || pending_pipeline_
                        || pending_mode_change_.load(std::memory_order_acquire)
                        || pending_plan_approve_.load(std::memory_order_acquire)
                        || pending_plan_reject_.load(std::memory_order_acquire)
@@ -537,6 +566,45 @@ void AgentCore::process_message(const std::string& content)
         apply_pending_mode_change();
         apply_pending_plan_decision();
 
+        // S5.F -- auto-compact band. When usage crosses the configured
+        // auto_threshold of effective_limit and auto_enabled is on, queue
+        // the cascade (1+2+3+6, layer 5 reserved for explicit user invocation)
+        // and apply it immediately so the next round runs with a leaner history.
+        if (auto* ws = services_.workspace()) {
+            const auto& cc = ws->config().compaction;
+            // Only consider the auto band when the LLM context window is
+            // actually known (auto-detected > 0). Otherwise effective_limit
+            // collapses to 1 and a 2-K system prompt looks like 200000% usage.
+            int  raw_limit = ctx_->llm_config().context_limit;
+            if (cc.auto_enabled && raw_limit > 0) {
+                int eff  = ctx_->effective_limit();
+                int used = ctx_->current_tokens();
+                if (eff > 0 && used > 0) {
+                    double ratio = static_cast<double>(used) / eff;
+                    if (ratio >= cc.auto_threshold) {
+                        CompactionLayerSelection sel = selection_from_config(cc);
+                        sel.drop_redundant_tool_results = true;
+                        sel.strip_large_tool_bodies     = true;
+                        sel.drop_old_reasoning          = true;
+                        sel.drop_oldest_turns           = false;
+                        sel.llm_summary                 = true;
+                        int target = static_cast<int>(eff * cc.warn_threshold);
+                        if (target <= 0) target = eff / 2;
+                        spdlog::warn("AgentCore: auto-compact firing ({} / {} = {:.0f}% of effective_limit, threshold {:.0f}%)",
+                                     used, eff, ratio * 100, cc.auto_threshold * 100);
+                        {
+                            std::lock_guard lock(queue_mutex_);
+                            pending_pipeline_           = true;
+                            pending_pipeline_selection_ = sel;
+                            pending_pipeline_target_    = target;
+                            pending_pipeline_overrides_.clear();
+                        }
+                        apply_pending_compaction();
+                    }
+                }
+            }
+        }
+
         if (ctx_->budget().check_overflow(ctx_->current_tokens()))
             break;
 
@@ -714,6 +782,25 @@ void AgentCore::compact_context(CompactionStrategy strategy, int n)
                     "Will apply between LLM rounds or at end of turn.");
 }
 
+void AgentCore::run_compaction(const CompactionLayerSelection& selection,
+                                int target_tokens,
+                                const std::string& custom_instructions_override)
+{
+    {
+        std::lock_guard lock(queue_mutex_);
+        pending_pipeline_           = true;
+        pending_pipeline_selection_ = selection;
+        pending_pipeline_target_    = target_tokens;
+        pending_pipeline_overrides_ = custom_instructions_override;
+    }
+    queue_cv_.notify_one();
+    spdlog::info("AgentCore: pipeline compaction queued (target={}, override='{}')",
+                 target_tokens, custom_instructions_override);
+    activity_->emit(ActivityKind::compaction,
+                    "Pipeline compaction queued",
+                    "Will apply between LLM rounds or at end of turn.");
+}
+
 void AgentCore::observe_plan_tool_result(const ToolCall& call,
                                           const std::string& result_content,
                                           bool /*result_success*/)
@@ -844,6 +931,132 @@ void AgentCore::observe_plan_tool_result(const ToolCall& call,
 
 void AgentCore::apply_pending_compaction()
 {
+    // Drain new-pipeline request first; it supersedes legacy strategies.
+    bool                     have_pipeline = false;
+    CompactionLayerSelection pipeline_sel;
+    int                      pipeline_target = 0;
+    std::string              pipeline_overrides;
+    {
+        std::lock_guard lock(queue_mutex_);
+        if (pending_pipeline_) {
+            have_pipeline       = true;
+            pipeline_sel        = std::move(pending_pipeline_selection_);
+            pipeline_target     = pending_pipeline_target_;
+            pipeline_overrides  = std::move(pending_pipeline_overrides_);
+            pending_pipeline_   = false;
+        }
+    }
+
+    if (have_pipeline) {
+        if (!pipeline_overrides.empty())
+            pipeline_sel.custom_summary_instructions = pipeline_overrides;
+
+        // Default target = under warn_threshold of effective_limit.
+        if (pipeline_target <= 0) {
+            int eff = ctx_->effective_limit();
+            double thr = 0.70;
+            if (auto* ws = services_.workspace())
+                thr = ws->config().compaction.warn_threshold;
+            pipeline_target = static_cast<int>(eff * thr);
+            if (pipeline_target <= 0) pipeline_target = eff > 0 ? eff / 2 : 1;
+        }
+
+        // Archive before mutating (chained backups).
+        int archive_keep = 5;
+        if (auto* ws = services_.workspace())
+            archive_keep = ws->config().compaction.archive_keep_count;
+        std::filesystem::path archive_path;
+        if (history_archive_) {
+            archive_path = history_archive_->snapshot(
+                ctx_->session_id(), ctx_->history());
+            history_archive_->gc(ctx_->session_id(), archive_keep);
+        }
+        int counter = 0;
+        if (!archive_path.empty()) {
+            counter = HistoryArchive::counter_from_filename(
+                archive_path.filename().string());
+        }
+
+        int before_tokens = ctx_->history().estimate_tokens();
+        auto result = CompactionPipeline::run(
+            ctx_->history(), pipeline_sel, pipeline_target,
+            &llm_, ctx_->llm_config());
+
+        // Invalidate the budget's cached server total so the meter recomputes
+        // against the new heuristic.
+        ctx_->budget().set_server_total(0);
+        ctx_->budget().set_server_split(0, 0);
+
+        // Insert the footnote at index 1 (right after the system message) so
+        // the volatile-tail rule from S4.F isn't broken. Only when an archive
+        // was actually written.
+        if (counter > 0) {
+            std::string note = "[Earlier context compacted; full pre-compaction "
+                               "history archived at " +
+                               HistoryArchive::footnote_relative_path(
+                                   ctx_->session_id(), counter) + "]";
+            ChatMessage fn;
+            fn.role    = MessageRole::user;
+            fn.content = note;
+            fn.token_estimate = TokenCounter::estimate_message(fn);
+
+            // Splice in at index 1 (after the system prompt). We rebuild the
+            // history vector to keep ConversationHistory's owner-thread fence
+            // happy.
+            std::vector<ChatMessage> rebuilt;
+            const auto& msgs = ctx_->history().messages();
+            rebuilt.reserve(msgs.size() + 1);
+            for (std::size_t i = 0; i < msgs.size(); ++i) {
+                rebuilt.push_back(msgs[i]);
+                if (i == 0) rebuilt.push_back(fn);
+            }
+            ctx_->history().clear();
+            for (auto& m : rebuilt) ctx_->history().add(std::move(m));
+        }
+
+        int after_tokens = ctx_->history().estimate_tokens();
+        spdlog::info("AgentCore: pipeline compaction {} -> {} (target {}, reached={})",
+                     before_tokens, after_tokens, pipeline_target,
+                     result.reached_target ? "yes" : "no");
+
+        std::ostringstream summary;
+        summary << "Compaction applied: freed ~"
+                << (before_tokens - after_tokens) << " tokens ("
+                << before_tokens << " -> " << after_tokens << ")";
+        if (!archive_path.empty())
+            summary << "  archive=" << archive_path.filename().string();
+
+        std::ostringstream detail;
+        detail << "Pipeline result:\n";
+        detail << "  before:  " << result.before_tokens << "\n";
+        detail << "  after:   " << result.after_tokens << "\n";
+        detail << "  target:  " << result.target_tokens
+               << "  (" << (result.reached_target ? "reached" : "not reached") << ")\n";
+        for (const auto& lr : result.layers) {
+            detail << "  - " << lr.name
+                   << ": " << lr.tokens_freed << " tokens freed, "
+                   << lr.messages_touched << " message(s) touched";
+            if (!lr.detail.empty()) detail << "  (" << lr.detail << ")";
+            detail << "\n";
+        }
+        if (!archive_path.empty())
+            detail << "Archive: " << archive_path.string() << "\n";
+
+        activity_->emit(ActivityKind::compaction,
+                        summary.str(), detail.str());
+        std::string user_msg = summary.str() +
+            (archive_path.empty() ? "" : "\nArchive: " + archive_path.string());
+        frontends_.broadcast([&](IFrontend& fe) { fe.on_token(user_msg + "\n"); });
+
+        frontends_.broadcast([&](IFrontend& fe) {
+            fe.on_context_meter(ctx_->current_tokens(), ctx_->llm_config().context_limit,
+                                ctx_->budget().last_prompt_tokens(),
+                                ctx_->budget().last_completion_tokens(),
+                                ctx_->budget().reserve());
+        });
+        return;
+    }
+
     if (!pending_compact_.exchange(false, std::memory_order_acq_rel))
         return;
 
@@ -1117,6 +1330,33 @@ AgentCore::SlashOutcome AgentCore::try_slash_command(const std::string& content)
         if (cmd == "export_metrics") {
             std::string fmt = rest.empty() ? "json" : rest;
             std::string msg = export_metrics(fmt);
+            frontends_.broadcast([&](IFrontend& fe) { fe.on_token(msg); });
+            return handled();
+        }
+        if (cmd == "compact") {
+            CompactionLayerSelection sel;
+            if (auto* ws = services_.workspace()) {
+                sel = selection_from_config(ws->config().compaction);
+            }
+            sel.drop_redundant_tool_results = true;
+            sel.strip_large_tool_bodies     = true;
+            sel.drop_old_reasoning          = true;
+            sel.drop_oldest_turns           = false;
+            sel.llm_summary                 = true;
+
+            std::string override = rest;
+            while (!override.empty()
+                   && (override.front() == ' ' || override.front() == '\t'))
+                override.erase(override.begin());
+            while (!override.empty()
+                   && (override.back() == ' ' || override.back() == '\t'))
+                override.pop_back();
+
+            run_compaction(sel, /*target=*/0, override);
+            std::string msg = "/compact: cascade queued"
+                              + std::string(override.empty() ? "" :
+                                            " (custom instructions: " + override + ")")
+                              + "\n";
             frontends_.broadcast([&](IFrontend& fe) { fe.on_token(msg); });
             return handled();
         }

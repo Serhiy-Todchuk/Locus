@@ -382,7 +382,9 @@ add_library(locus_core STATIC
     src/agent/agent_core.cpp
     src/agent/session_manager.cpp
     src/agent/checkpoint_store.cpp
+    src/agent/compaction_pipeline.cpp
     src/agent/file_change_tracker.cpp
+    src/agent/history_archive.cpp
     src/agent/auto_commit.cpp
     src/agent/mention_parser.cpp
     src/frontends/cli/cli_frontend.cpp

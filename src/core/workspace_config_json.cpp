@@ -123,6 +123,31 @@ WorkspaceConfig workspace_config_from_json(const json& j)
         auto& c = j["compaction"];
         if (c.contains("reserve_tokens"))
             cfg.compaction_reserve_tokens = c["reserve_tokens"].get<int>();
+        if (c.contains("auto_enabled"))
+            cfg.compaction.auto_enabled = c["auto_enabled"].get<bool>();
+        if (c.contains("warn_threshold"))
+            cfg.compaction.warn_threshold = c["warn_threshold"].get<double>();
+        if (c.contains("auto_threshold"))
+            cfg.compaction.auto_threshold = c["auto_threshold"].get<double>();
+        if (c.contains("strip_threshold_tokens"))
+            cfg.compaction.strip_threshold_tokens = c["strip_threshold_tokens"].get<int>();
+        if (c.contains("older_than_turns"))
+            cfg.compaction.older_than_turns = c["older_than_turns"].get<int>();
+        if (c.contains("keep_recent_turns"))
+            cfg.compaction.keep_recent_turns = c["keep_recent_turns"].get<int>();
+        if (c.contains("summary_max_tokens"))
+            cfg.compaction.summary_max_tokens = c["summary_max_tokens"].get<int>();
+        if (c.contains("archive_keep_count"))
+            cfg.compaction.archive_keep_count = c["archive_keep_count"].get<int>();
+        if (c.contains("preserve_short_user_msgs_max_tokens"))
+            cfg.compaction.preserve_short_user_msgs_max_tokens =
+                c["preserve_short_user_msgs_max_tokens"].get<int>();
+        if (c.contains("preserve_short_tool_calls_max_tokens"))
+            cfg.compaction.preserve_short_tool_calls_max_tokens =
+                c["preserve_short_tool_calls_max_tokens"].get<int>();
+        if (c.contains("custom_summary_instructions"))
+            cfg.compaction.custom_summary_instructions =
+                c["custom_summary_instructions"].get<std::string>();
     }
 
     if (j.contains("ui")) {
@@ -238,7 +263,18 @@ json workspace_config_to_json(const WorkspaceConfig& cfg)
         }},
         {"tool_approvals", approvals},
         {"compaction", {
-            {"reserve_tokens", cfg.compaction_reserve_tokens}
+            {"reserve_tokens", cfg.compaction_reserve_tokens},
+            {"auto_enabled",                       cfg.compaction.auto_enabled},
+            {"warn_threshold",                     cfg.compaction.warn_threshold},
+            {"auto_threshold",                     cfg.compaction.auto_threshold},
+            {"strip_threshold_tokens",             cfg.compaction.strip_threshold_tokens},
+            {"older_than_turns",                   cfg.compaction.older_than_turns},
+            {"keep_recent_turns",                  cfg.compaction.keep_recent_turns},
+            {"summary_max_tokens",                 cfg.compaction.summary_max_tokens},
+            {"archive_keep_count",                 cfg.compaction.archive_keep_count},
+            {"preserve_short_user_msgs_max_tokens",  cfg.compaction.preserve_short_user_msgs_max_tokens},
+            {"preserve_short_tool_calls_max_tokens", cfg.compaction.preserve_short_tool_calls_max_tokens},
+            {"custom_summary_instructions",        cfg.compaction.custom_summary_instructions}
         }},
         {"ui", {
             {"show_per_message_tokens", cfg.ui_show_per_message_tokens}

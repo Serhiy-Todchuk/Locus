@@ -40,3 +40,4 @@ numbered steps, expected results per step.
 | [global-settings.md](global-settings.md) | Global settings template + ~/.locus (S5.M) | First-open seed from `~/.locus/config.json`, Save-as-defaults round-trip, Open Global Config menu, legacy %APPDATA% migration. |
 | [inline-diffs-in-chat.md](inline-diffs-in-chat.md) | Inline diffs in chat (S5.C) | `edit_file` per-edit hunks, `write_file` real before/after via dtl, `delete_file` one-line summary, line-cap truncation, failure suppression. |
 | [tool-safety.md](tool-safety.md) | Tool & filesystem safety hardening (S5.O) | Outside-workspace path rejection (sibling-prefix case), approval keyed by `call_id` (stale click drop), atomic `write_file` under forced kill. |
+| [compaction.md](compaction.md) | Compaction v2 (S5.F) | Manual Compact dialog (layer checkboxes + live preview), `/compact [instructions]` slash, auto-compact band + heuristics + history-archive chain + footnote. |

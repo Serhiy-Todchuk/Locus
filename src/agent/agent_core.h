@@ -4,9 +4,11 @@
 #include "agent_loop.h"
 #include "agent_mode.h"
 #include "checkpoint_store.h"
+#include "compaction_pipeline.h"
 #include "context_budget.h"
 #include "conversation.h"
 #include "file_change_tracker.h"
+#include "history_archive.h"
 #include "llm_context.h"
 #include "metrics.h"
 #include "core/workspace_services.h"
@@ -83,6 +85,18 @@ public:
                        const nlohmann::json& modified_args = {}) override;
 
     void compact_context(CompactionStrategy strategy, int n = 0) override;
+
+    // S5.F -- composable compaction. Run the layer cascade with the given
+    // selection and per-run target. `target_tokens` defaults to 0 = "drop
+    // under warn_threshold of effective_limit" using the workspace config.
+    // Per-run `custom_instructions_override` replaces the workspace's
+    // `compaction.custom_summary_instructions` for this run only (used by
+    // the `/compact <instructions>` slash command). Queued onto the agent
+    // thread; returns immediately.
+    void run_compaction(const CompactionLayerSelection& selection,
+                        int target_tokens = 0,
+                        const std::string& custom_instructions_override = "");
+
     void reset_conversation() override;
 
     std::string save_session() override;
@@ -207,6 +221,17 @@ private:
     std::atomic<CompactionStrategy> pending_compact_strategy_{
         CompactionStrategy::drop_tool_results};
     std::atomic<int>             pending_compact_n_{0};
+
+    // S5.F -- new pipeline request (set when run_compaction() is called from
+    // any thread). Protected by queue_mutex_.
+    bool                     pending_pipeline_{false};
+    CompactionLayerSelection pending_pipeline_selection_;
+    int                      pending_pipeline_target_  = 0;
+    std::string              pending_pipeline_overrides_;
+
+    // S5.F -- pre-compaction history archive. One per session, owned by
+    // AgentCore so the archive lifetime matches the agent.
+    std::unique_ptr<HistoryArchive> history_archive_;
 
     // Sync-mode completion signal.
     std::mutex               sync_mutex_;

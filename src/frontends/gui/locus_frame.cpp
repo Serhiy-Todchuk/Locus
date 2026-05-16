@@ -462,12 +462,14 @@ void LocusFrame::show_compaction_dialog()
     int used  = static_cast<int>(agent_.history().estimate_tokens());
     int limit = agent_.context_limit();
 
-    CompactionDialog dlg(this, used, limit, agent_.history());
+    CompactionDialog dlg(this, used, limit, agent_.history(),
+                          workspace_.config().compaction);
     if (dlg.ShowModal() == wxID_OK) {
         auto choice = dlg.result();
         if (choice.made) {
-            agent_.compact_context(choice.strategy, choice.drop_n);
-            SetStatusText("Context compacted", 0);
+            agent_.run_compaction(choice.selection, /*target=*/0,
+                                   choice.custom_instructions);
+            SetStatusText("Context compaction queued", 0);
         }
     }
 }

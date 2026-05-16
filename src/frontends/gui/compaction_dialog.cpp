@@ -6,23 +6,32 @@
 #include "../../llm/token_counter.h"
 
 #include <algorithm>
+#include <sstream>
 
 namespace locus {
 
 enum {
-    ID_RADIO_B = wxID_HIGHEST + 400,
-    ID_RADIO_C,
-    ID_TURNS_SLIDER,
+    ID_LAYER1 = wxID_HIGHEST + 400,
+    ID_LAYER2,
+    ID_LAYER3,
+    ID_LAYER5,
+    ID_LAYER6,
+    ID_STRIP_THRESHOLD,
+    ID_OLDER_THAN,
+    ID_KEEP_RECENT,
+    ID_SUMMARY_TOKENS,
 };
 
 CompactionDialog::CompactionDialog(wxWindow* parent,
                                    int used_tokens,
                                    int limit_tokens,
-                                   const ConversationHistory& history)
+                                   const ConversationHistory& history,
+                                   const WorkspaceConfig::Compaction& cfg)
     : wxDialog(parent, wxID_ANY, "Compact Context",
-               wxDefaultPosition, wxSize(520, 480),
+               wxDefaultPosition, wxSize(620, 620),
                wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER)
     , history_(history)
+    , cfg_(cfg)
     , used_tokens_(used_tokens)
     , limit_tokens_(limit_tokens)
 {
@@ -31,9 +40,7 @@ CompactionDialog::CompactionDialog(wxWindow* parent,
 
     create_controls(used_tokens, limit_tokens);
     layout();
-
     update_preview();
-    update_token_counts();
 
     Centre();
 }
@@ -42,7 +49,6 @@ void CompactionDialog::create_controls(int used_tokens, int limit_tokens)
 {
     int pct = (limit_tokens > 0) ? (used_tokens * 100 / limit_tokens) : 0;
 
-    // Header.
     before_label_ = new wxStaticText(this, wxID_ANY,
         wxString::Format("Current: %d / %d tokens (%d%%)",
                          used_tokens, limit_tokens, pct));
@@ -50,82 +56,145 @@ void CompactionDialog::create_controls(int used_tokens, int limit_tokens)
     bold_font.SetWeight(wxFONTWEIGHT_BOLD);
     before_label_->SetFont(bold_font);
 
-    after_label_ = new wxStaticText(this, wxID_ANY, "After compaction: --");
-    freed_label_ = new wxStaticText(this, wxID_ANY, "Freed: --");
+    after_label_   = new wxStaticText(this, wxID_ANY, "After:  --");
+    freed_label_   = new wxStaticText(this, wxID_ANY, "Freed:  --");
     freed_label_->SetForegroundColour(wxColour(76, 175, 80));
+    layer_summary_ = new wxStaticText(this, wxID_ANY, "");
 
-    // Strategy B: drop tool results.
-    radio_b_ = new wxRadioButton(this, ID_RADIO_B,
-        "Drop tool results  (keep conversation flow, strip tool output)",
-        wxDefaultPosition, wxDefaultSize, wxRB_GROUP);
-    radio_b_->SetValue(true);
-    radio_b_->SetName(ui_names::kCompactionStrategyB);
-    gui::apply_locus_accessible_name(radio_b_);
+    // Per-layer checkboxes. Defaults mirror the auto-compact cascade
+    // (1+2+3+6); layer 5 (mechanical drop) is off so the user gets a
+    // faithful summary first.
+    cb_layer1_ = new wxCheckBox(this, ID_LAYER1,
+        "Drop redundant tool results  (None)");
+    cb_layer1_->SetValue(true);
+    cb_layer1_->SetName(ui_names::kCompactionStrategyB);  // re-use existing automation id
+    gui::apply_locus_accessible_name(cb_layer1_);
 
-    // Strategy C: drop oldest turns.
-    radio_c_ = new wxRadioButton(this, ID_RADIO_C,
-        "Drop oldest turns  (remove N oldest exchanges)");
-    radio_c_->SetName(ui_names::kCompactionStrategyC);
-    gui::apply_locus_accessible_name(radio_c_);
+    cb_layer2_ = new wxCheckBox(this, ID_LAYER2,
+        "Strip large tool bodies  (Low -- header retained)");
+    cb_layer2_->SetValue(true);
 
-    // Turns slider (for strategy C).
-    // history includes system message at [0], so user turns ≈ (size - 1) / 2.
-    int max_turns = std::max(2, static_cast<int>(history_.size()) / 2);
-    int initial = std::min(3, max_turns - 1);
-    turns_slider_ = new wxSlider(this, ID_TURNS_SLIDER, initial, 1, max_turns,
-                                 wxDefaultPosition, wxDefaultSize,
-                                 wxSL_HORIZONTAL | wxSL_LABELS);
-    turns_slider_->Enable(false);  // disabled until radio C is selected
-    turns_slider_->SetName(ui_names::kCompactionTurnsSlider);
-    gui::apply_locus_accessible_name(turns_slider_);
+    cb_layer3_ = new wxCheckBox(this, ID_LAYER3,
+        "Drop reasoning from older turns  (None for replay)");
+    cb_layer3_->SetValue(true);
 
-    // Preview list (for strategy C).
-    preview_list_ = new wxListBox(this, wxID_ANY,
-        wxDefaultPosition, wxSize(-1, 120));
-    preview_list_->Enable(false);
-    preview_list_->SetName(ui_names::kCompactionPreviewList);
-    gui::apply_locus_accessible_name(preview_list_);
+    cb_layer5_ = new wxCheckBox(this, ID_LAYER5,
+        "Drop oldest turn pairs  (Mechanical -- escalation only)");
+    cb_layer5_->SetValue(false);
+    cb_layer5_->SetName(ui_names::kCompactionStrategyC);
+    gui::apply_locus_accessible_name(cb_layer5_);
 
-    // Buttons.
-    btn_ok_ = new wxButton(this, wxID_OK, "Compact");
+    cb_layer6_ = new wxCheckBox(this, ID_LAYER6,
+        "LLM summary of dropped span  (Lossy; costs one LLM call)");
+    cb_layer6_->SetValue(true);
+
+    // Per-layer knobs.
+    sp_strip_threshold_ = new wxSpinCtrl(this, ID_STRIP_THRESHOLD, "",
+        wxDefaultPosition, wxSize(90, -1), wxSP_ARROW_KEYS,
+        50, 16000, cfg_.strip_threshold_tokens);
+    sp_older_than_turns_ = new wxSpinCtrl(this, ID_OLDER_THAN, "",
+        wxDefaultPosition, wxSize(90, -1), wxSP_ARROW_KEYS,
+        0, 50, cfg_.older_than_turns);
+    sp_keep_recent_ = new wxSpinCtrl(this, ID_KEEP_RECENT, "",
+        wxDefaultPosition, wxSize(90, -1), wxSP_ARROW_KEYS,
+        0, 50, cfg_.keep_recent_turns);
+    sp_keep_recent_->SetName(ui_names::kCompactionTurnsSlider);
+    gui::apply_locus_accessible_name(sp_keep_recent_);
+
+    sp_summary_tokens_ = new wxSpinCtrl(this, ID_SUMMARY_TOKENS, "",
+        wxDefaultPosition, wxSize(90, -1), wxSP_ARROW_KEYS,
+        128, 8192, cfg_.summary_max_tokens);
+
+    tx_custom_instructions_ = new wxTextCtrl(this, wxID_ANY,
+        wxString::FromUTF8(cfg_.custom_summary_instructions),
+        wxDefaultPosition, wxSize(-1, 60), wxTE_MULTILINE);
+    tx_custom_instructions_->SetName(ui_names::kCompactionPreviewList);
+    gui::apply_locus_accessible_name(tx_custom_instructions_);
+
+    btn_ok_     = new wxButton(this, wxID_OK, "Compact");
     btn_cancel_ = new wxButton(this, wxID_CANCEL, "Cancel");
 
-    // Events.
-    radio_b_->Bind(wxEVT_RADIOBUTTON, &CompactionDialog::on_strategy_changed, this);
-    radio_c_->Bind(wxEVT_RADIOBUTTON, &CompactionDialog::on_strategy_changed, this);
-    turns_slider_->Bind(wxEVT_SLIDER, &CompactionDialog::on_slider_changed, this);
+    auto rebind = [&](wxWindow* w) {
+        if (auto* cb = dynamic_cast<wxCheckBox*>(w))
+            cb->Bind(wxEVT_CHECKBOX, &CompactionDialog::on_any_changed, this);
+        if (auto* sp = dynamic_cast<wxSpinCtrl*>(w))
+            sp->Bind(wxEVT_SPINCTRL, &CompactionDialog::on_any_changed, this);
+    };
+    rebind(cb_layer1_); rebind(cb_layer2_); rebind(cb_layer3_);
+    rebind(cb_layer5_); rebind(cb_layer6_);
+    rebind(sp_strip_threshold_); rebind(sp_older_than_turns_);
+    rebind(sp_keep_recent_); rebind(sp_summary_tokens_);
+
     btn_ok_->Bind(wxEVT_BUTTON, &CompactionDialog::on_ok, this);
 }
 
 void CompactionDialog::layout()
 {
     auto* sizer = new wxBoxSizer(wxVERTICAL);
-
     sizer->Add(before_label_, 0, wxEXPAND | wxALL, 10);
 
-    // Strategy B.
-    sizer->Add(radio_b_, 0, wxLEFT | wxRIGHT | wxTOP, 10);
+    auto* layers = new wxStaticBoxSizer(wxVERTICAL, this, "Layers");
+    layers->Add(cb_layer1_, 0, wxLEFT | wxRIGHT | wxTOP, 6);
+    layers->Add(cb_layer2_, 0, wxLEFT | wxRIGHT | wxTOP, 6);
+    {
+        auto* row = new wxBoxSizer(wxHORIZONTAL);
+        row->AddSpacer(24);
+        row->Add(new wxStaticText(this, wxID_ANY,
+                                  "Strip threshold (tokens):"),
+                 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
+        row->Add(sp_strip_threshold_, 0, wxALIGN_CENTER_VERTICAL);
+        layers->Add(row, 0, wxLEFT | wxRIGHT, 6);
+    }
+    layers->Add(cb_layer3_, 0, wxLEFT | wxRIGHT | wxTOP, 6);
+    {
+        auto* row = new wxBoxSizer(wxHORIZONTAL);
+        row->AddSpacer(24);
+        row->Add(new wxStaticText(this, wxID_ANY,
+                                  "Older than (turns):"),
+                 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
+        row->Add(sp_older_than_turns_, 0, wxALIGN_CENTER_VERTICAL);
+        layers->Add(row, 0, wxLEFT | wxRIGHT, 6);
+    }
+    layers->Add(cb_layer5_, 0, wxLEFT | wxRIGHT | wxTOP, 6);
+    {
+        auto* row = new wxBoxSizer(wxHORIZONTAL);
+        row->AddSpacer(24);
+        row->Add(new wxStaticText(this, wxID_ANY, "Keep recent (turns):"),
+                 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
+        row->Add(sp_keep_recent_, 0, wxALIGN_CENTER_VERTICAL);
+        layers->Add(row, 0, wxLEFT | wxRIGHT, 6);
+    }
+    layers->Add(cb_layer6_, 0, wxLEFT | wxRIGHT | wxTOP, 6);
+    {
+        auto* row = new wxBoxSizer(wxHORIZONTAL);
+        row->AddSpacer(24);
+        row->Add(new wxStaticText(this, wxID_ANY,
+                                  "Summary max tokens:"),
+                 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
+        row->Add(sp_summary_tokens_, 0, wxALIGN_CENTER_VERTICAL);
+        layers->Add(row, 0, wxLEFT | wxRIGHT, 6);
+    }
+    sizer->Add(layers, 0, wxEXPAND | wxLEFT | wxRIGHT, 10);
+
     sizer->AddSpacer(8);
 
-    // Strategy C.
-    sizer->Add(radio_c_, 0, wxLEFT | wxRIGHT, 10);
-
-    auto* c_box = new wxStaticBoxSizer(wxVERTICAL, this, "Turns to drop");
-    c_box->Add(turns_slider_, 0, wxEXPAND | wxALL, 4);
-    c_box->Add(preview_list_, 1, wxEXPAND | wxALL, 4);
-    sizer->Add(c_box, 1, wxEXPAND | wxLEFT | wxRIGHT, 10);
+    auto* instr = new wxStaticBoxSizer(wxVERTICAL, this,
+        "Custom summary instructions (Pi-style; applied to layer 6 this run)");
+    instr->Add(tx_custom_instructions_, 1, wxEXPAND | wxALL, 4);
+    sizer->Add(instr, 0, wxEXPAND | wxLEFT | wxRIGHT, 10);
 
     sizer->AddSpacer(8);
 
-    // Token counts.
+    auto* preview = new wxStaticBoxSizer(wxVERTICAL, this, "Preview");
     auto* counts = new wxBoxSizer(wxHORIZONTAL);
     counts->Add(after_label_, 1, wxALIGN_CENTER_VERTICAL);
     counts->Add(freed_label_, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, 12);
-    sizer->Add(counts, 0, wxEXPAND | wxLEFT | wxRIGHT, 10);
+    preview->Add(counts, 0, wxEXPAND | wxALL, 4);
+    preview->Add(layer_summary_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 4);
+    sizer->Add(preview, 0, wxEXPAND | wxLEFT | wxRIGHT, 10);
 
     sizer->AddSpacer(8);
 
-    // Buttons.
     auto* btn_sizer = new wxBoxSizer(wxHORIZONTAL);
     btn_sizer->AddStretchSpacer();
     btn_sizer->Add(btn_cancel_, 0, wxRIGHT, 4);
@@ -139,101 +208,119 @@ void CompactionDialog::layout()
 // Events
 // ---------------------------------------------------------------------------
 
-void CompactionDialog::on_strategy_changed(wxCommandEvent& /*evt*/)
-{
-    bool is_c = radio_c_->GetValue();
-    turns_slider_->Enable(is_c);
-    preview_list_->Enable(is_c);
-
-    update_preview();
-    update_token_counts();
-}
-
-void CompactionDialog::on_slider_changed(wxCommandEvent& /*evt*/)
+void CompactionDialog::on_any_changed(wxCommandEvent& /*evt*/)
 {
     update_preview();
-    update_token_counts();
 }
 
 void CompactionDialog::on_ok(wxCommandEvent& /*evt*/)
 {
-    choice_.made = true;
-    if (radio_b_->GetValue()) {
-        choice_.strategy = CompactionStrategy::drop_tool_results;
-    } else {
-        choice_.strategy = CompactionStrategy::drop_oldest;
-        choice_.drop_n = turns_slider_->GetValue();
-    }
+    choice_.made                = true;
+    choice_.selection           = snapshot_selection();
+    choice_.custom_instructions = tx_custom_instructions_
+        ? tx_custom_instructions_->GetValue().ToStdString()
+        : std::string{};
     EndModal(wxID_OK);
 }
 
 // ---------------------------------------------------------------------------
-// Preview and token estimates
+// Preview
 // ---------------------------------------------------------------------------
+
+CompactionLayerSelection CompactionDialog::snapshot_selection() const
+{
+    CompactionLayerSelection sel;
+    sel.drop_redundant_tool_results = cb_layer1_ && cb_layer1_->GetValue();
+    sel.strip_large_tool_bodies     = cb_layer2_ && cb_layer2_->GetValue();
+    sel.drop_old_reasoning          = cb_layer3_ && cb_layer3_->GetValue();
+    sel.drop_oldest_turns           = cb_layer5_ && cb_layer5_->GetValue();
+    sel.llm_summary                 = cb_layer6_ && cb_layer6_->GetValue();
+    sel.strip_threshold_tokens      = sp_strip_threshold_
+        ? sp_strip_threshold_->GetValue() : cfg_.strip_threshold_tokens;
+    sel.older_than_turns            = sp_older_than_turns_
+        ? sp_older_than_turns_->GetValue() : cfg_.older_than_turns;
+    sel.keep_recent_turns           = sp_keep_recent_
+        ? sp_keep_recent_->GetValue() : cfg_.keep_recent_turns;
+    sel.summary_max_tokens          = sp_summary_tokens_
+        ? sp_summary_tokens_->GetValue() : cfg_.summary_max_tokens;
+    sel.preserve_short_user_msgs_max_tokens   = cfg_.preserve_short_user_msgs_max_tokens;
+    sel.preserve_short_tool_calls_max_tokens  = cfg_.preserve_short_tool_calls_max_tokens;
+    return sel;
+}
 
 void CompactionDialog::update_preview()
 {
-    preview_list_->Clear();
+    if (!after_label_) return;
 
-    if (!radio_c_->GetValue()) return;
+    auto sel = snapshot_selection();
+    int freed = 0;
+    int layer_lines = 0;
+    std::ostringstream layer_text;
 
-    int n = turns_slider_->GetValue();
-    auto& msgs = history_.messages();
-
-    // Show which messages would be dropped (skip system message at index 0).
-    int dropped = 0;
-    for (size_t i = 1; i < msgs.size() && dropped < n * 2; ++i) {
-        auto& m = msgs[i];
-        if (m.role == MessageRole::system) continue;
-
-        wxString role = wxString::FromUTF8(to_string(m.role));
-        wxString preview = wxString::FromUTF8(m.content.substr(0, 60));
-        if (m.content.size() > 60) preview += "...";
-
-        // Replace newlines for single-line display.
-        preview.Replace("\n", " ");
-
-        preview_list_->Append(wxString::Format("[%s] %s", role, preview));
-        ++dropped;
+    if (sel.drop_redundant_tool_results) {
+        // Quick: count duplicate tool results.
+        ++layer_lines;
+        layer_text << "Layer 1: drop redundant tool results -- "
+                   << "(applies if duplicates exist)\n";
     }
-}
+    if (sel.strip_large_tool_bodies) {
+        int local = 0;
+        for (auto& m : history_.messages()) {
+            if (m.role == MessageRole::tool && !m.content.empty()) {
+                int t = TokenCounter::estimate(m.content);
+                if (t > sel.strip_threshold_tokens)
+                    local += (t - 30);  // header keeps a few tokens
+            }
+        }
+        freed += local;
+        ++layer_lines;
+        layer_text << "Layer 2: strip tool bodies > "
+                   << sel.strip_threshold_tokens << " tokens -> ~"
+                   << local << " freed\n";
+    }
+    if (sel.drop_old_reasoning) {
+        int local = 0;
+        for (auto& m : history_.messages()) {
+            if (m.role != MessageRole::assistant) continue;
+            auto p = m.content.find("<think>");
+            if (p == std::string::npos) continue;
+            auto e = m.content.find("</think>", p);
+            if (e == std::string::npos) continue;
+            local += TokenCounter::estimate(m.content.substr(p, e - p + 8));
+        }
+        freed += local;
+        ++layer_lines;
+        layer_text << "Layer 3: drop <think> blocks -> ~" << local << " freed\n";
+    }
+    if (sel.drop_oldest_turns) {
+        auto cands = CompactionPipeline::drop_candidates(history_.messages(), sel);
+        int local = 0;
+        for (const auto& s : cands) {
+            for (auto i = s.begin; i < s.end; ++i)
+                local += TokenCounter::estimate_message(history_.messages()[i]);
+        }
+        freed += local;
+        ++layer_lines;
+        layer_text << "Layer 5: drop oldest turn pairs -> ~"
+                   << local << " freed (" << cands.size() << " span(s))\n";
+    }
+    if (sel.llm_summary) {
+        ++layer_lines;
+        layer_text << "Layer 6: LLM summary -> replaces dropped span with one "
+                   << "assistant message (cost ~"
+                   << sel.summary_max_tokens << " tokens)\n";
+    }
+    (void)layer_lines;
 
-void CompactionDialog::update_token_counts()
-{
-    int freed = estimate_freed_tokens();
-    int after = std::max(0, used_tokens_ - freed);
-    int after_pct = (limit_tokens_ > 0) ? (after * 100 / limit_tokens_) : 0;
+    int after_total = std::max(0, used_tokens_ - freed);
+    int after_pct = (limit_tokens_ > 0) ? (after_total * 100 / limit_tokens_) : 0;
 
     after_label_->SetLabel(
-        wxString::Format("After: ~%d tokens (%d%%)", after, after_pct));
+        wxString::Format("After:  ~%d tokens (%d%%)", after_total, after_pct));
     freed_label_->SetLabel(
-        wxString::Format("Freed: ~%d tokens", freed));
-}
-
-int CompactionDialog::estimate_freed_tokens() const
-{
-    auto& msgs = history_.messages();
-
-    if (radio_b_->GetValue()) {
-        // Strategy B: estimate tokens in tool-result messages.
-        int freed = 0;
-        for (auto& m : msgs) {
-            if (m.role == MessageRole::tool && !m.content.empty())
-                freed += TokenCounter::estimate(m.content);
-        }
-        return freed;
-    }
-
-    // Strategy C: estimate tokens in the N oldest turns.
-    int n = turns_slider_->GetValue();
-    int freed = 0;
-    int dropped = 0;
-    for (size_t i = 1; i < msgs.size() && dropped < n * 2; ++i) {
-        if (msgs[i].role == MessageRole::system) continue;
-        freed += TokenCounter::estimate(msgs[i].content);
-        ++dropped;
-    }
-    return freed;
+        wxString::Format("Freed:  ~%d tokens", freed));
+    layer_summary_->SetLabel(wxString::FromUTF8(layer_text.str()));
+    Layout();
 }
 
 } // namespace locus
