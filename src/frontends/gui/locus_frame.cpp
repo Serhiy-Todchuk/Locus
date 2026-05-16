@@ -1,4 +1,5 @@
 #include "locus_frame.h"
+#include "app_icons.h"
 #include "locus_accessible.h"
 #include "locus_app.h"
 #include "manage_sessions_dialog.h"
@@ -46,6 +47,7 @@ LocusFrame::LocusFrame(LocusSession& session)
     , mcp_(session.mcp())
 {
     SetName(ui_names::kMainFrame);
+    SetIcon(gui::app_icon(32));
     gui::apply_locus_accessible_name(this);
 
     saved_ui_state_ = load_ui_state();
@@ -114,6 +116,7 @@ LocusFrame::LocusFrame(LocusSession& session)
         info.SetVersion("0.1.0");
         info.SetDescription("Local LLM Agent Assistant");
         info.SetCopyright("MIT License");
+        info.SetIcon(gui::app_icon(256));
         wxAboutBox(info, this);
     };
     hooks.provide_sessions = [this] { return session_.sessions().list(); };
@@ -1116,6 +1119,16 @@ void LocusFrame::on_agent_indexing_progress(wxThreadEvent& evt)
     int total = static_cast<int>(evt.GetExtraLong());
     ops_status_.set_indexing(done, total);
     refresh_ops_status();
+    if (tray_) {
+        const bool agent_busy = std::any_of(
+            tabs_ui_.begin(), tabs_ui_.end(),
+            [](const auto& entry) { return entry.second.busy; });
+        if (!agent_busy) {
+            tray_->set_state(total > 0 && done < total
+                ? LocusTray::State::indexing
+                : LocusTray::State::idle);
+        }
+    }
     if (total > 0 && done >= total) {
         refresh_index_stats();
         if (file_tree_panel_) file_tree_panel_->rebuild();

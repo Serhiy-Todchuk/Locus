@@ -453,7 +453,21 @@ find_package(wxWidgets CONFIG REQUIRED COMPONENTS core base aui stc webview)
 find_package(unofficial-webview2 CONFIG REQUIRED)
 find_package(md4c CONFIG REQUIRED)
 
+set(LOCUS_GUI_WINDOWS_RESOURCES)
+if(WIN32)
+    configure_file(
+        src/frontends/gui/locus_gui.rc.in
+        ${CMAKE_CURRENT_BINARY_DIR}/locus_gui.rc
+        @ONLY
+    )
+    list(APPEND LOCUS_GUI_WINDOWS_RESOURCES
+        ${CMAKE_CURRENT_BINARY_DIR}/locus_gui.rc
+    )
+endif()
+
 add_executable(locus_gui WIN32
+    ${LOCUS_GUI_WINDOWS_RESOURCES}
+    src/frontends/gui/app_icons.cpp
     src/frontends/gui/locus_app.cpp
     src/frontends/gui/locus_frame.cpp
     src/frontends/gui/locus_tray.cpp

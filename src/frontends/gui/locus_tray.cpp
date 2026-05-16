@@ -1,7 +1,6 @@
 #include "locus_tray.h"
+#include "app_icons.h"
 #include "locus_frame.h"
-
-#include <wx/artprov.h>
 
 namespace locus {
 
@@ -24,22 +23,24 @@ void LocusTray::set_state(State s)
 {
     state_ = s;
 
-    // Use a simple text icon via wxICON_INFORMATION / etc.
-    // Real icons (ICO resource) will come in a later stage.
     wxIcon icon;
     wxString tooltip;
 
     switch (s) {
     case State::idle:
-        icon = wxArtProvider::GetIcon(wxART_INFORMATION, wxART_OTHER, wxSize(16, 16));
+        icon = gui::tray_idle_icon();
         tooltip = "Locus - idle";
         break;
+    case State::indexing:
+        icon = gui::tray_indexing_icon();
+        tooltip = "Locus - indexing...";
+        break;
     case State::active:
-        icon = wxArtProvider::GetIcon(wxART_EXECUTABLE_FILE, wxART_OTHER, wxSize(16, 16));
+        icon = gui::tray_active_icon();
         tooltip = "Locus - working...";
         break;
     case State::error:
-        icon = wxArtProvider::GetIcon(wxART_ERROR, wxART_OTHER, wxSize(16, 16));
+        icon = gui::tray_error_icon();
         tooltip = "Locus - error";
         break;
     }

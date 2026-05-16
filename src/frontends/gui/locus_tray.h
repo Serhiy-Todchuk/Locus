@@ -8,12 +8,12 @@ namespace locus {
 class LocusFrame;
 
 // System tray icon with state display and right-click menu.
-// States: idle, active (agent working), error.
+// States: idle, indexing, active (agent working), error.
 class LocusTray : public wxTaskBarIcon {
 public:
     explicit LocusTray(LocusFrame* frame);
 
-    enum class State { idle, active, error };
+    enum class State { idle, indexing, active, error };
     void set_state(State s);
 
 protected:

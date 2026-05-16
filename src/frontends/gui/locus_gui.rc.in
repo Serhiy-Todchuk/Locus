@@ -1,0 +1,5 @@
+locus_app ICON "@CMAKE_SOURCE_DIR@/assets/icons/windows/locus.ico"
+locus_tray_idle ICON "@CMAKE_SOURCE_DIR@/assets/icons/tray/locus-tray-idle.ico"
+locus_tray_active ICON "@CMAKE_SOURCE_DIR@/assets/icons/tray/locus-tray-active.ico"
+locus_tray_indexing ICON "@CMAKE_SOURCE_DIR@/assets/icons/tray/locus-tray-indexing.ico"
+locus_tray_error ICON "@CMAKE_SOURCE_DIR@/assets/icons/tray/locus-tray-error.ico"
