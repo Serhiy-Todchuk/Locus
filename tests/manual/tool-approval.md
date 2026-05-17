@@ -1,6 +1,6 @@
 ## Manual Test Plan -- Tool Approval Modal
 
-**Feature:** S5.Z #6. The tool-approval surface is a modal dialog
+**Feature:** S5.Z #3. The tool-approval surface is a modal dialog
 (`ToolApprovalDialog`) that appears centred over the frame only when a
 tool call needs a decision, then disappears entirely on response. There
 is no permanent dock pane.
@@ -57,7 +57,7 @@ default for `edit_file` / `write_file` / `delete_file` / `run_command` /
 2. When the modal opens for `edit_file`, the args pane should show a
    coloured unified diff (red `-` lines, green `+` lines, header line
    per edit) instead of raw JSON. This is the existing S4.A diff
-   renderer, unchanged by S5.Z #6.
+   renderer, unchanged by S5.Z #3.
 3. Press **M** (or click Modify). The pane flips to editable JSON.
    The Approve button label changes to `Confirm (Enter)`.
 4. Edit the JSON -- e.g. change the comment string to `// hi`.
