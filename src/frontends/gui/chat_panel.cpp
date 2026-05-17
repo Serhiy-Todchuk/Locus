@@ -1110,6 +1110,7 @@ void ChatPanel::on_session_reset()
     // S5.G -- reset chat-side delete bookkeeping.
     history_to_dom_.clear();
     last_user_dom_id_ = 0;
+    pending_tool_history_id_ = 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -1250,6 +1251,14 @@ void ChatPanel::on_tool_result(const wxString& call_id,
     if (it != tool_call_msg_ids_.end()) {
         target_id = it->second;
         tool_call_msg_ids_.erase(it);
+    }
+
+    // Pair the tool message's history_id (parked by on_history_message_added
+    // which fires immediately before this) with its dom bubble id, so a
+    // pair-delete on the parent assistant can find and remove this row.
+    if (pending_tool_history_id_ > 0) {
+        history_to_dom_[pending_tool_history_id_] = target_id;
+        pending_tool_history_id_ = 0;
     }
 
     // S5.C -- inline diff for successful edit_file / write_file / delete_file.
@@ -1394,17 +1403,23 @@ void ChatPanel::on_history_message_added(int history_id, MessageRole role,
                                           bool deletable)
 {
     if (history_id <= 0) return;
+    // Tool messages: park the history_id so on_tool_result can pair it with
+    // the dom_id created in on_tool_call_pending.  Pair-delete needs the
+    // tool history_id -> dom_id mapping so the dom rows actually disappear
+    // when the assistant pair-delete is triggered.
+    if (role == MessageRole::tool) {
+        pending_tool_history_id_ = history_id;
+        return;
+    }
     int target_dom_id = 0;
     if (role == MessageRole::user) {
         target_dom_id = last_user_dom_id_;
         last_user_dom_id_ = 0;
     } else if (role == MessageRole::assistant) {
         // The renderer holds the most recent assistant bubble (open or sealed).
-        // For deletable=false (tool_calls present) we'd still record nothing;
-        // the bubble doesn't get an X.
         target_dom_id = renderer_ ? renderer_->current_assistant_id() : 0;
     }
-    // system + tool roles aren't user-deletable; skip mapping.
+    // system role isn't user-deletable; skip mapping.
 
     if (target_dom_id <= 0 || !deletable) return;
 
@@ -1471,8 +1486,9 @@ void ChatPanel::render_loaded_history(const ConversationHistory& history)
                 "addMsg(%d, 'msg-assistant', %s);",
                 message_id_,
                 "'" + chat_js_escape(wxString::FromUTF8(body)) + "'"));
-            bool deletable = msg.tool_calls.empty();
-            if (deletable && msg.history_id > 0) {
+            // Assistants with content are deletable; the X on an assistant
+            // that has tool_calls triggers a pair-delete inside LLMContext.
+            if (msg.history_id > 0) {
                 history_to_dom_[msg.history_id] = message_id_;
                 run_script(wxString::Format("addDeleteButton(%d, %d);",
                                             message_id_, msg.history_id));
@@ -1503,6 +1519,11 @@ void ChatPanel::render_loaded_history(const ConversationHistory& history)
                 "addMsg(%d, 'msg-tool', %s);",
                 message_id_,
                 "'" + chat_js_escape(head + body) + "'"));
+            // Map the tool history_id -> dom_id so pair-delete can remove
+            // this row when the parent assistant is deleted.
+            if (msg.history_id > 0) {
+                history_to_dom_[msg.history_id] = message_id_;
+            }
             if (show_per_message_tokens_ && msg.token_estimate > 0) {
                 run_script(wxString::Format(
                     "setMsgTokenChip(%d, %d);", message_id_, msg.token_estimate));

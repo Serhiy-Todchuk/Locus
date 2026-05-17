@@ -33,6 +33,14 @@ public:
     // byte-stable across a session for S4.F prefix-cache reuse.
     bool delete_by_id(int history_id);
 
+    // Delete an assistant message that has tool_calls AND every matching
+    // tool-result message in one pass. The pair must be removed together --
+    // an orphan tool_call (or orphan tool result) breaks the next API
+    // round-trip. Returns the list of removed history_ids (assistant first,
+    // then each tool-result id in original-order). Returns empty if
+    // `history_id` doesn't refer to an assistant-with-tool_calls message.
+    std::vector<int> delete_tool_call_pair(int history_id);
+
     const std::vector<ChatMessage>& messages() const { return messages_; }
     size_t size() const { return messages_.size(); }
     bool   empty() const { return messages_.empty(); }

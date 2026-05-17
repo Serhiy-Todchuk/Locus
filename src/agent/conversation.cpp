@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cassert>
 #include <sstream>
+#include <unordered_set>
 
 namespace locus {
 
@@ -86,6 +87,45 @@ bool ConversationHistory::delete_by_id(int history_id)
     }
     messages_.erase(it);
     return true;
+}
+
+std::vector<int> ConversationHistory::delete_tool_call_pair(int history_id)
+{
+    assert_owner_thread("delete_tool_call_pair");
+    if (history_id <= 0) return {};
+
+    auto it = std::find_if(messages_.begin(), messages_.end(),
+                           [history_id](const ChatMessage& m) {
+                               return m.history_id == history_id;
+                           });
+    if (it == messages_.end()) return {};
+    if (it->role != MessageRole::assistant || it->tool_calls.empty()) return {};
+
+    std::unordered_set<std::string> call_ids;
+    for (const auto& tc : it->tool_calls) {
+        if (!tc.id.empty()) call_ids.insert(tc.id);
+    }
+
+    std::vector<int> deleted;
+    deleted.reserve(1 + call_ids.size());
+    deleted.push_back(history_id);
+    for (const auto& m : messages_) {
+        if (m.role == MessageRole::tool &&
+            call_ids.count(m.tool_call_id) > 0) {
+            deleted.push_back(m.history_id);
+        }
+    }
+
+    messages_.erase(
+        std::remove_if(messages_.begin(), messages_.end(),
+                       [&](const ChatMessage& m) {
+                           if (m.history_id == history_id) return true;
+                           return m.role == MessageRole::tool &&
+                                  call_ids.count(m.tool_call_id) > 0;
+                       }),
+        messages_.end());
+
+    return deleted;
 }
 
 void ConversationHistory::replace_system_prompt(std::string content)

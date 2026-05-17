@@ -250,6 +250,11 @@ private:
     // S5.G -- chat-side bookkeeping for per-message delete.
     // Most recent user bubble dom_id (refreshed on every submit_current_input).
     int last_user_dom_id_ = 0;
+    // Set by on_history_message_added(role=tool); consumed by on_tool_result
+    // to bridge the tool history_id with its dom bubble (allocated earlier in
+    // on_tool_call_pending).  Needed so tool-call pair-delete can DOM-remove
+    // the tool rows alongside the parent assistant.
+    int pending_tool_history_id_ = 0;
     // history_id -> dom_id, populated on on_history_message_added and consumed
     // on on_history_message_deleted so we can DOM-remove the right bubble.
     std::unordered_map<int, int> history_to_dom_;

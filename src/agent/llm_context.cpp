@@ -200,8 +200,13 @@ void LLMContext::add_message(ChatMessage msg)
     // conversation, so they get deletable=false too.
     if (history_.messages().empty()) return;
     const auto& added = history_.messages().back();
+    // Deletable bubbles get the hover-reveal X. Assistant-with-tool_calls is
+    // deletable too (the X triggers a pair-delete of the assistant + every
+    // matching tool result, routed through delete_message below). Empty-content
+    // assistants get no bubble in the UI so deletability there is moot.
+    // Tool-result + system messages are never deletable on their own.
     bool deletable = (added.role == MessageRole::user) ||
-                     (added.role == MessageRole::assistant && added.tool_calls.empty());
+                     (added.role == MessageRole::assistant && !added.content.empty());
     frontends_.broadcast([&](IFrontend& fe) {
         fe.on_history_message_added(added.history_id, added.role, deletable);
     });
@@ -214,15 +219,34 @@ void LLMContext::replace_system_prompt_in_history(std::string content)
 
 bool LLMContext::delete_message(int history_id)
 {
-    bool ok = history_.delete_by_id(history_id);
-    if (!ok) return false;
+    // Pair-delete if the target is an assistant message with tool_calls --
+    // deleting one side without the other leaves orphan tool_calls / tool
+    // results that break the next LLM round.
+    const auto& msgs = history_.messages();
+    auto it = std::find_if(msgs.begin(), msgs.end(),
+                           [history_id](const ChatMessage& m) {
+                               return m.history_id == history_id;
+                           });
+    if (it == msgs.end()) return false;
+
+    std::vector<int> deleted;
+    if (it->role == MessageRole::assistant && !it->tool_calls.empty()) {
+        deleted = history_.delete_tool_call_pair(history_id);
+        if (deleted.empty()) return false;
+    } else {
+        if (!history_.delete_by_id(history_id)) return false;
+        deleted.push_back(history_id);
+    }
+
     // Drop cached server token totals -- they reflect a count that includes
-    // the just-deleted message. The next LLM round repopulates them.
+    // the just-deleted message(s). The next LLM round repopulates them.
     budget_->set_server_total(0);
     budget_->set_server_split(0, 0);
-    frontends_.broadcast([&](IFrontend& fe) {
-        fe.on_history_message_deleted(history_id);
-    });
+    for (int id : deleted) {
+        frontends_.broadcast([&](IFrontend& fe) {
+            fe.on_history_message_deleted(id);
+        });
+    }
     return true;
 }
 
@@ -293,7 +317,7 @@ void LLMContext::load_session(const std::string& id)
     // + re-render), so the added events here are purely for the delete map.
     for (const auto& m : history_.messages()) {
         bool deletable = (m.role == MessageRole::user) ||
-                         (m.role == MessageRole::assistant && m.tool_calls.empty());
+                         (m.role == MessageRole::assistant && !m.content.empty());
         frontends_.broadcast([&](IFrontend& fe) {
             fe.on_history_message_added(m.history_id, m.role, deletable);
         });
