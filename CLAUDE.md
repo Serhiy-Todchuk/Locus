@@ -40,10 +40,8 @@ data into context, and keeps the user in full transparent control of every step.
 
 Write laconically. Engineers, not book writers. Narrow wording, no padding -- but don't lose useful info.
 
-- Use present tense. Describe what exists now, not the path that got there. Avoid "shipped", "landed", "done in stage X" inside descriptions.
 - Don't restate what per-stage docs (`roadmap/<milestone>/<stage>.md`), `git log`, the Code Map below, or `architecture/` already cover. Link, don't copy.
 - After completing a stage, the CLAUDE.md update is a one-line list edit (add the stage code to the done list). The narrative belongs in the per-stage doc, not here.
-- Same applies to source comments: default to none, only when WHY is non-obvious.
 
 ---
 
@@ -56,6 +54,16 @@ Write laconically. Engineers, not book writers. Narrow wording, no padding -- bu
 **M3 -- Refactoring -- complete.** S3.A through S3.L done. Per-stage detail in [roadmap/M3/](roadmap/M3/).
 
 Note: M3 is Refactoring (not Agent Quality). Renumbering trail: original M3 -> M4 (Agent Quality), original M4 -> M6 (Connected), new M5 (Polish, UX & Performance) inserted. Roadmap index: [roadmap.md](roadmap.md).
+
+### Key invariants
+
+Cross-cutting constraints that no single file owns. Easy to break silently by a refactor in a neighbouring file.
+
+- **Byte-stable system prompt** (S4.F). `messages[0]` is byte-identical across a session so LM Studio / llama.cpp prefix-cache survives. Attached files + file-change notes prepend to the user message per turn, never splice into system. `SystemPromptAssembly` enforces immutability at the type level. Canary: per-round `LLM POST: sys_hash=<hex>` log.
+- **Single-writer history** (S3.I, S5.J). Only the agent thread writes `LLMContext::history()`. `AgentLoop` returns appendable results; `ToolDispatcher` appends via a callback running on the agent thread. `ConversationOwnerScope` is the RAII fence.
+- **Index is never written by the LLM.** Index updates flow only from the file watcher into `Indexer`. No tool mutates `index.db` / `vectors.db`. Adding a tool that touches the index breaks a core principle.
+- **Workspace teardown order.** `LocusSession` member declaration order matters: `mcp_` declared after `tools_` so `tools_` (which holds `McpTool` entries) destructs first, before the `McpClient` instances those entries borrow. `Workspace` dtor terminates `ProcessRegistry` before closing the watcher. Adding a subsystem requires checking these dependencies.
+- **Atomic mutating writes** (S5.O). `edit_file` / `write_file` route through `write_atomic` (temp file + rename, copy fallback for cross-volume). Direct `std::ofstream` to the target reintroduces the half-written-file bug on process kill.
 
 ---
 
@@ -487,7 +495,7 @@ No accumulated debt, no "we'll debug it later."
 
 **After every completed stage/task -- mandatory bookkeeping:**
 1. Update `roadmap.md`: mark completed tasks `[x]`, add done to the stage header
-2. Add the completed stage code to the relevant milestone line in `CLAUDE.md`'s "Current Stage" section. **Do NOT write a new per-stage paragraph** -- see "Doc Conventions" above. Update the file's Code Map row(s) only when its responsibilities actually changed.
+2. Add the completed stage code to the milestone line in `CLAUDE.md`'s "Current Stage" section. If the stage introduces a load-bearing cross-cutting invariant (the kind of thing a refactor in a neighbouring file could silently break), add a one-liner to "Key invariants". Update Code Map row(s) when a file's responsibilities actually changed. Per-stage narrative belongs in the per-stage doc, not CLAUDE.md -- but a sharp invariant note here is fine.
 3. **ADRs are rare.** Only write one if the stage crossed a system boundary
    (technology swap, subsystem reshape, ownership/threading/data-format change) **and**
    rejected a reasonable alternative for a non-obvious reason **and** that reasoning
