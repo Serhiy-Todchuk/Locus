@@ -324,6 +324,7 @@ AgentStepResult AgentLoop::run_step(const ConversationHistory& history,
         std::string detail;
         if (!accumulated_reasoning.empty()) {
             detail += "[thinking]\n" + accumulated_reasoning + "\n\n";
+            detail += "[response]\n";
         }
         detail += accumulated_text;
         if (!tool_call_requests.empty()) {

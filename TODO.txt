@@ -1,4 +1,4 @@
-- More broad about window.
+- More broad About window - put some information there.
 - Voice chat input
 - Add image attachment for LLM prompt
 - FastDebug
@@ -7,4 +7,4 @@ Have you added integration test and UI automation test (if needed)?
 Run integration tests and then AUI tests. The PC is yours until done.
 Run unit tests then integration tests and then AUI tests
 Short commit message?
-Wrap up — update docs/comments, then we're done.
+Wrap up - update docs/comments, then we're done.
