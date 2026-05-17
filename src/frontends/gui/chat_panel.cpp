@@ -1507,18 +1507,32 @@ void ChatPanel::render_loaded_history(const ConversationHistory& history)
                 it != call_id_to_tool.end()) {
                 tool_name = it->second;
             }
+            // Bubble head: just the tool-name span. The result body is
+            // appended below via DOM construction so its textContent goes
+            // through exactly one JS-string decode -- matches the live
+            // on_tool_result path. Building inline HTML here would force a
+            // second chat_js_escape pass on already-escaped content, turning
+            // newlines into literal backslash-n.
             wxString head = "<span class=\"tool-name\">"
                           + chat_js_escape(wxString::FromUTF8(tool_name))
                           + "</span>";
-            wxString body = "<details class=\"tool-result-details\">"
-                            "<summary>Result</summary>"
-                            "<pre>"
-                          + chat_js_escape(wxString::FromUTF8(msg.content))
-                          + "</pre></details>";
             run_script(wxString::Format(
                 "addMsg(%d, 'msg-tool', %s);",
                 message_id_,
-                "'" + chat_js_escape(head + body) + "'"));
+                "'" + chat_js_escape(head) + "'"));
+            run_script(wxString::Format(
+                "var d=document.getElementById('msg-%d');"
+                "if(d){var det=document.createElement('details');"
+                "det.className='tool-result-details';"
+                "var sum=document.createElement('summary');"
+                "sum.textContent='Result';"
+                "det.appendChild(sum);"
+                "var pre=document.createElement('pre');"
+                "pre.className='tool-result';pre.textContent=%s;"
+                "det.appendChild(pre);"
+                "d.appendChild(det);}",
+                message_id_,
+                "'" + chat_js_escape(wxString::FromUTF8(msg.content)) + "'"));
             // Map the tool history_id -> dom_id so pair-delete can remove
             // this row when the parent assistant is deleted.
             if (msg.history_id > 0) {
