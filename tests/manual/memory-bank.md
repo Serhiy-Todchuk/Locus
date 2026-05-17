@@ -12,10 +12,12 @@ panel, activity panel, and reading `.locus/locus.log`.
 
 **Estimated time:** ~15 minutes for the full plan; ~5 minutes for Tests 1+2.
 
-**Phase note:** The Settings -> *Memory Bank* tab and the chat right-click
-*Save as memory* are deferred to Phase 2 and are not yet present. Verify
-everything below through the chat input, the activity panel, and the
-on-disk `.locus/memory/` folder.
+**Phase note:** The chat right-click *Save as memory* is deferred. The
+docked **View > Memory Bank** panel ([S5.K](../../roadmap/M5/S5.K-memory-bank-ui.md))
+is the rich curation surface and has its own test plan in
+[memory-bank-panel.md](memory-bank-panel.md). This file covers the data
+layer: verify everything below through the chat input (`/memorize`,
+`/forget`), the activity panel, and the on-disk `.locus/memory/` folder.
 
 ---
 

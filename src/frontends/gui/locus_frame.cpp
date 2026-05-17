@@ -108,6 +108,10 @@ LocusFrame::LocusFrame(LocusSession& session)
     hooks.on_toggle_activity_pane = [this](bool show) {
         if (auto& p = aui_.GetPane("activity"); p.IsOk()) { p.Show(show); aui_.Update(); }
     };
+    hooks.on_toggle_memory_bank_pane = [this](bool show) {
+        if (auto& p = aui_.GetPane("memory_bank"); p.IsOk()) { p.Show(show); aui_.Update(); }
+        if (show && memory_bank_panel_) memory_bank_panel_->refresh();
+    };
     hooks.on_toggle_terminal_pane = [this](bool show) {
         if (auto& p = aui_.GetPane("terminal"); p.IsOk()) {
             p.Show(show);
@@ -189,9 +193,10 @@ LocusFrame::LocusFrame(LocusSession& session)
                 wxString::FromUTF8(saved_ui_state_.aui_perspective),
                 /*update=*/false)) {
             if (menu_) {
-                menu_->set_files_pane_visible   (aui_.GetPane("sidebar") .IsShown());
-                menu_->set_activity_pane_visible(aui_.GetPane("activity").IsShown());
-                menu_->set_terminal_pane_visible(aui_.GetPane("terminal").IsShown());
+                menu_->set_files_pane_visible   (aui_.GetPane("sidebar")    .IsShown());
+                menu_->set_activity_pane_visible(aui_.GetPane("activity")   .IsShown());
+                menu_->set_terminal_pane_visible(aui_.GetPane("terminal")   .IsShown());
+                menu_->set_memory_bank_pane_visible(aui_.GetPane("memory_bank").IsShown());
             }
         }
     }
@@ -258,6 +263,7 @@ LocusFrame::LocusFrame(LocusSession& session)
     }
 
     refresh_index_stats();
+    update_memory_bank_menu_state();
     Centre();
     spdlog::info("LocusFrame created with {} tab(s)", session_.tab_count());
 
@@ -377,6 +383,16 @@ void LocusFrame::setup_aui_layout()
     aui_.AddPane(terminal_panel_, wxAuiPaneInfo()
         .Name("terminal").Caption("Terminal")
         .Bottom().MinSize(-1, 160).BestSize(-1, 240)
+        .CloseButton(true).PinButton(true)
+        .Hide());
+
+    // S5.K -- Memory Bank panel. Default hidden; toggled via View > Memory Bank
+    // (Ctrl+M). When the workspace has no MemoryStore (capability off), the
+    // panel still constructs in a disabled state and the menu item is greyed.
+    memory_bank_panel_ = new MemoryBankPanel(this, workspace_.memory());
+    aui_.AddPane(memory_bank_panel_, wxAuiPaneInfo()
+        .Name("memory_bank").Caption("Memory Bank")
+        .Right().MinSize(360, -1).BestSize(520, -1)
         .CloseButton(true).PinButton(true)
         .Hide());
 }
@@ -931,6 +947,7 @@ void LocusFrame::show_settings_dialog()
                                        workspace_.config().chat_diff_context_lines,
                                        workspace_.config().chat_diff_collapse_threshold);
         }
+        update_memory_bank_menu_state();
         spdlog::info("Settings saved to config.json");
     }
 }
@@ -1023,6 +1040,8 @@ void LocusFrame::on_aui_pane_close(wxAuiManagerEvent& evt)
             menu_->set_files_pane_visible(false);
         else if (pane->name == "activity")
             menu_->set_activity_pane_visible(false);
+        else if (pane->name == "memory_bank")
+            menu_->set_memory_bank_pane_visible(false);
         else if (pane->name == "terminal") {
             menu_->set_terminal_pane_visible(false);
             // S5.R -- manual hide of the terminal pane wins: mark the
@@ -1248,12 +1267,31 @@ void LocusFrame::refresh_ops_status()
     SetStatusText(ops_status_.compose(), 1);
 }
 
+void LocusFrame::update_memory_bank_menu_state()
+{
+    if (!menu_) return;
+    bool can_use = workspace_.memory() != nullptr
+                && workspace_.config().capabilities.memory_bank;
+    menu_->set_memory_bank_item_enabled(can_use);
+    if (!can_use && memory_bank_panel_) {
+        if (auto& p = aui_.GetPane("memory_bank"); p.IsOk() && p.IsShown()) {
+            p.Show(false);
+            aui_.Update();
+            menu_->set_memory_bank_pane_visible(false);
+        }
+    }
+    if (memory_bank_panel_) {
+        memory_bank_panel_->set_store(can_use ? workspace_.memory() : nullptr);
+    }
+}
+
 void LocusFrame::on_agent_activity(wxThreadEvent& evt)
 {
     // Activity is workspace-shared; route to the single panel regardless of
     // source tab.
     auto ev = evt.GetPayload<ActivityEvent>();
     if (activity_panel_) activity_panel_->append(ev);
+    if (memory_bank_panel_) memory_bank_panel_->on_activity_event(ev);
 }
 
 void LocusFrame::on_agent_attached_context(wxThreadEvent& evt)

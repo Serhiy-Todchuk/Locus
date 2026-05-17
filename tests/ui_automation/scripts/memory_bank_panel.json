@@ -1,0 +1,70 @@
+{
+  "name": "memory_bank_panel",
+  "description": "S5.K -- Ctrl+M toggles the View > Memory Bank AUI pane. Panel is hidden by default; once shown, its widget + the key toolbar controls (search box, source / tag dropdowns, pinned-only checkbox, show-deleted checkbox, list, detail editor) are addressable through UIA. Screenshot the populated panel, toggle off, quit. No LLM, no agent traffic -- pure UI wiring.",
+  "setup": {
+    "workspace": "tmp"
+  },
+  "steps": [
+    { "op": "launch" },
+    {
+      "op": "wait_for_window",
+      "args": { "title_prefix": "Locus", "timeout_ms": 20000 }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.chat.panel", "timeout_ms": 15000 }
+    },
+    { "op": "screenshot", "args": { "name": "01_baseline" } },
+
+    { "op": "press_key", "args": { "key": "M", "modifiers": "CTRL" } },
+    { "op": "sleep", "args": { "ms": 400 } },
+
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.memory_bank.panel", "timeout_ms": 5000 }
+    },
+    {
+      "op": "assert_visible",
+      "args": { "automation_id": "locus.memory_bank.panel", "timeout_ms": 5000 }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.memory_bank.search", "timeout_ms": 5000 }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.memory_bank.source_choice", "timeout_ms": 5000 }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.memory_bank.tag_choice", "timeout_ms": 5000 }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.memory_bank.pinned_only", "timeout_ms": 5000 }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.memory_bank.show_deleted", "timeout_ms": 5000 }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.memory_bank.list", "timeout_ms": 5000 }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.memory_bank.delete_btn", "timeout_ms": 5000 }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.memory_bank.pin_btn", "timeout_ms": 5000 }
+    },
+    { "op": "screenshot", "args": { "name": "02_memory_bank_shown" } },
+
+    { "op": "press_key", "args": { "key": "M", "modifiers": "CTRL" } },
+    { "op": "sleep", "args": { "ms": 400 } },
+    { "op": "screenshot", "args": { "name": "03_memory_bank_hidden" } },
+
+    { "op": "quit", "args": { "wait_ms": 5000 } }
+  ]
+}

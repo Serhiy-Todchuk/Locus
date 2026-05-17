@@ -88,6 +88,22 @@ inline constexpr const char* kSettingsMcpRestartBtn   = "locus.settings.mcp.rest
 inline constexpr const char* kSettingsMcpOpenJsonBtn  = "locus.settings.mcp.open_json_btn";
 inline constexpr const char* kSettingsMcpTrustCheck   = "locus.settings.mcp.trust_check";
 
+// --- Memory Bank panel (S5.K) ---------------------------------------------
+inline constexpr const char* kMemoryBankPanel        = "locus.memory_bank.panel";
+inline constexpr const char* kMemoryBankList         = "locus.memory_bank.list";
+inline constexpr const char* kMemoryBankDetail       = "locus.memory_bank.detail";
+inline constexpr const char* kMemoryBankSearch       = "locus.memory_bank.search";
+inline constexpr const char* kMemoryBankSourceChoice = "locus.memory_bank.source_choice";
+inline constexpr const char* kMemoryBankTagChoice    = "locus.memory_bank.tag_choice";
+inline constexpr const char* kMemoryBankPinnedOnly   = "locus.memory_bank.pinned_only";
+inline constexpr const char* kMemoryBankShowDeleted  = "locus.memory_bank.show_deleted";
+inline constexpr const char* kMemoryBankClearBtn     = "locus.memory_bank.clear_btn";
+inline constexpr const char* kMemoryBankDeleteBtn    = "locus.memory_bank.delete_btn";
+inline constexpr const char* kMemoryBankPinBtn       = "locus.memory_bank.pin_btn";
+inline constexpr const char* kMemoryBankTagBtn       = "locus.memory_bank.tag_btn";
+inline constexpr const char* kMemoryBankSaveBtn      = "locus.memory_bank.save_btn";
+inline constexpr const char* kMemoryBankRestoreBtn   = "locus.memory_bank.restore_btn";
+
 // --- Capabilities first-open dialog (S5.A) --------------------------------
 inline constexpr const char* kCapabilitiesDialog    = "locus.capabilities.dialog";
 inline constexpr const char* kCapabilityBg          = "locus.capabilities.cb_background";

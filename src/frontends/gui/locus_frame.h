@@ -4,6 +4,7 @@
 #include "chat_panel.h"
 #include "compaction_dialog.h"
 #include "file_tree_panel.h"
+#include "memory_bank_panel.h"
 #include "locus_tray.h"
 #include "menu_controller.h"
 #include "ops_status_view.h"
@@ -176,6 +177,11 @@ private:
 
     void refresh_ops_status();
 
+    // S5.K -- sync the View > Memory Bank menu item enabled state with the
+    // `capabilities.memory_bank` flag + presence of a MemoryStore. Called
+    // on construction and after every Settings change.
+    void update_memory_bank_menu_state();
+
     // Wire callbacks/slash items into a newly-constructed ChatPanel. Pulled
     // out so install_tab_ui can call it without massive duplication.
     void configure_chat_panel(ChatPanel* chat, LocusTab& tab);
@@ -198,9 +204,10 @@ private:
     OpsStatusView                   ops_status_;
 
     // Workspace-shared panels.
-    FileTreePanel* file_tree_panel_ = nullptr;
-    ActivityPanel* activity_panel_  = nullptr;
-    TerminalPanel* terminal_panel_  = nullptr;
+    FileTreePanel*    file_tree_panel_   = nullptr;
+    ActivityPanel*    activity_panel_    = nullptr;
+    TerminalPanel*    terminal_panel_    = nullptr;
+    MemoryBankPanel*  memory_bank_panel_ = nullptr;
 
     // Tab UI state, keyed by tab_id (== LocusTab::tab_id).
     std::unordered_map<int, TabUi> tabs_ui_;

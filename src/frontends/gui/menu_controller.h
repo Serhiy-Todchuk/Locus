@@ -40,6 +40,8 @@ public:
         std::function<void(bool show)>              on_toggle_activity_pane;
         // S5.B -- Terminal panel toggle (Ctrl+`).
         std::function<void(bool show)>              on_toggle_terminal_pane;
+        // S5.K -- Memory Bank panel toggle (Ctrl+M).
+        std::function<void(bool show)>              on_toggle_memory_bank_pane;
         std::function<void()>                       on_about;
         // Called when the Session menu opens -- controller uses the returned
         // list to rebuild the Saved Sessions submenu so newly-saved sessions
@@ -67,6 +69,8 @@ public:
     void set_files_pane_visible(bool visible);
     void set_activity_pane_visible(bool visible);
     void set_terminal_pane_visible(bool visible);
+    void set_memory_bank_pane_visible(bool visible);
+    void set_memory_bank_item_enabled(bool enabled);
 
 private:
     void on_session_open(wxCommandEvent& evt);
@@ -77,9 +81,10 @@ private:
     Hooks     hooks_;
     wxMenu*   recent_menu_   = nullptr;
     wxMenu*   sessions_menu_ = nullptr;
-    wxMenuItem* view_files_item_    = nullptr;
-    wxMenuItem* view_activity_item_ = nullptr;
-    wxMenuItem* view_terminal_item_ = nullptr;
+    wxMenuItem* view_files_item_       = nullptr;
+    wxMenuItem* view_activity_item_    = nullptr;
+    wxMenuItem* view_terminal_item_    = nullptr;
+    wxMenuItem* view_memory_bank_item_ = nullptr;
 
     // Session IDs currently shown in the Saved Sessions submenu, indexed by
     // the offset from ID_MENU_SESSION_OPEN_BASE / _DELETE_BASE / _RENAME_BASE.

@@ -22,7 +22,7 @@
 - [x] **[S5.G](S5.G-chat-activity-restructure.md)** -- Chat / Activity Restructure -- _UX_
 - [x] **[S5.I](S5.I-tabs-and-sessions.md)** -- Multi-Tab Conversations + Session Menu Redesign -- _UX_
 - [x] **[S5.R](S5.R-per-tab-terminal.md)** -- Per-Tab Terminal Panel -- _UX_
-- [ ] **[S5.K](S5.K-memory-bank-ui.md)** -- Memory Bank UI Viewer / Editor -- _UX_
+- [x] **[S5.K](S5.K-memory-bank-ui.md)** -- Memory Bank UI Viewer / Editor -- _UX_
 - [ ] **[S5.N](S5.N-non-code-workspace-proof.md)** -- Non-Code Workspace Proof -- _Product / QA_
 - [ ] **[S5.Z](S5.Z-misc-gaps.md)** -- Miscellaneous Smaller Gaps -- _Mixed_
 

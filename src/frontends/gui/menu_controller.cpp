@@ -31,6 +31,7 @@ namespace {
         ID_MENU_VIEW_FILES,
         ID_MENU_VIEW_ACTIVITY,
         ID_MENU_VIEW_TERMINAL,
+        ID_MENU_VIEW_MEMORY_BANK,
         ID_MENU_NEW_TAB,
         ID_MENU_CLOSE_TAB,
         ID_MENU_RENAME_TAB,
@@ -96,12 +97,14 @@ void MenuController::install()
     });
 
     auto* view_menu = new wxMenu;
-    view_files_item_    = view_menu->AppendCheckItem(ID_MENU_VIEW_FILES,    "Files Panel");
-    view_activity_item_ = view_menu->AppendCheckItem(ID_MENU_VIEW_ACTIVITY, "Activity Panel");
-    view_terminal_item_ = view_menu->AppendCheckItem(ID_MENU_VIEW_TERMINAL, "Terminal\tCtrl+`");
+    view_files_item_       = view_menu->AppendCheckItem(ID_MENU_VIEW_FILES,    "Files Panel");
+    view_activity_item_    = view_menu->AppendCheckItem(ID_MENU_VIEW_ACTIVITY, "Activity Panel");
+    view_terminal_item_    = view_menu->AppendCheckItem(ID_MENU_VIEW_TERMINAL, "Terminal\tCtrl+`");
+    view_memory_bank_item_ = view_menu->AppendCheckItem(ID_MENU_VIEW_MEMORY_BANK, "Memory Bank\tCtrl+M");
     view_files_item_->Check(true);
     view_activity_item_->Check(true);
     view_terminal_item_->Check(false);
+    view_memory_bank_item_->Check(false);
 
     auto* help_menu = new wxMenu;
     help_menu->Append(ID_MENU_ABOUT, "About...");
@@ -210,6 +213,10 @@ void MenuController::install()
         if (hooks_.on_toggle_terminal_pane) hooks_.on_toggle_terminal_pane(e.IsChecked());
     }, ID_MENU_VIEW_TERMINAL);
 
+    frame_->Bind(wxEVT_MENU, [this](wxCommandEvent& e) {
+        if (hooks_.on_toggle_memory_bank_pane) hooks_.on_toggle_memory_bank_pane(e.IsChecked());
+    }, ID_MENU_VIEW_MEMORY_BANK);
+
     // Saved Sessions per-entry handlers.
     frame_->Bind(wxEVT_MENU, &MenuController::on_session_open,   this,
                  ID_MENU_SESSION_OPEN_BASE,
@@ -315,6 +322,16 @@ void MenuController::set_activity_pane_visible(bool visible)
 void MenuController::set_terminal_pane_visible(bool visible)
 {
     if (view_terminal_item_) view_terminal_item_->Check(visible);
+}
+
+void MenuController::set_memory_bank_pane_visible(bool visible)
+{
+    if (view_memory_bank_item_) view_memory_bank_item_->Check(visible);
+}
+
+void MenuController::set_memory_bank_item_enabled(bool enabled)
+{
+    if (view_memory_bank_item_) view_memory_bank_item_->Enable(enabled);
 }
 
 void MenuController::on_session_open(wxCommandEvent& evt)

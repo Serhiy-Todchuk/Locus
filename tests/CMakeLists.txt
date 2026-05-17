@@ -24,6 +24,7 @@ add_executable(locus_tests
     test_plan_mode.cpp
     test_mcp.cpp
     test_memory_store.cpp
+    test_memory_bank_filter.cpp
     test_gitignore.cpp
     test_auto_commit.cpp
     test_list_directory_tool.cpp

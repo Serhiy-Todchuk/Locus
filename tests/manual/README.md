@@ -28,6 +28,7 @@ numbered steps, expected results per step.
 |---|---|---|
 | [mcp.md](mcp.md) | MCP servers (Model Context Protocol) | Loading `.locus/mcp.json`, Settings panel, trust toggle, restart, error paths, end-to-end LLM call. |
 | [memory-bank.md](memory-bank.md) | Memory Bank | `/memorize` + `/forget` round-trip, on-disk YAML format, persistence + auto-injected prompt slot, `add_memory` approval pane, `memory.enabled=false` kill switch. |
+| [memory-bank-panel.md](memory-bank-panel.md) | Memory Bank Panel (S5.K) | View > Memory Bank (Ctrl+M) dockable panel: list / filter / edit / bulk-ops / soft-delete / restore round-trip, live updates from `/memorize` + `/forget`, capability-toggle off-switch. |
 | [plan-mode.md](plan-mode.md) | Plan mode | Chat / Plan / Execute switcher, plan bubble Approve/Reject, multi-tool execute stress test. |
 | [gitignore.md](gitignore.md) | `.gitignore` respect | Root + nested patterns excluded from index, mid-session `.gitignore` edit reload, `respect_gitignore=false` off-switch. |
 | [auto-commit.md](auto-commit.md) | Per-turn auto-commit | Happy path on current branch, dedicated agent branch (auto-create), no-git fallback (silent no-op), commit failure surfacing. |

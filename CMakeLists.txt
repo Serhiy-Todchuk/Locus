@@ -318,6 +318,7 @@ add_library(locus_core STATIC
     src/core/global_config.cpp
     src/core/global_paths.cpp
     src/core/memory_store.cpp
+    src/core/memory_filter.cpp
     src/index/indexer.cpp
     src/index/index_query.cpp
     src/index/chunker.cpp
@@ -492,6 +493,7 @@ add_executable(locus_gui WIN32
     src/frontends/gui/compaction_dialog.cpp
     src/frontends/gui/manage_sessions_dialog.cpp
     src/frontends/gui/file_tree_panel.cpp
+    src/frontends/gui/memory_bank_panel.cpp
     src/frontends/gui/settings_dialog.cpp
     src/frontends/gui/settings/llm_settings_panel.cpp
     src/frontends/gui/settings/index_settings_panel.cpp
