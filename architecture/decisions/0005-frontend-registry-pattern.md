@@ -17,7 +17,7 @@ simultaneous consumers:
 
 - **CLI + GUI coexisting during development.** Two frontends attached to the same agent so
   the CLI could log what the GUI was showing.
-- **External clients via `CrowServer` (M5).** The Crow server is itself an `IFrontend` that
+- **External clients via a Crow adapter (M6).** The adapter is itself an `IFrontend` that
   fans out to N WebSocket clients. The agent should not know or care how many remote
   browsers, VS Code shims, or mobile apps are listening.
 - **Late-joining frontends.** Mid-session attach (a browser opens while the agent is already
@@ -55,7 +55,7 @@ Properties:
 - `AgentCore` and its collaborators (`AgentLoop`, `ToolDispatcher`, `ActivityLog`,
   `ContextBudget`) hold one `FrontendRegistry&` and do not know how many frontends exist.
   Adding or removing frontends does not touch core code.
-- The Crow server becomes "just another frontend" that happens to fan out to WebSockets.
+- The Crow adapter becomes "just another frontend" that happens to fan out to WebSockets.
   The C++ direct path (wxWidgets, CLI) and the network path use the exact same
   `IFrontend` contract and the same registry.
 - Frontend bugs stay local. A `wxQueueEvent` failure, a broken socket, a UTF-8 decode

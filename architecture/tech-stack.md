@@ -10,7 +10,8 @@
 
 **Decided.** C++ is the right choice for Locus core:
 - User's native language -- fastest iteration, deepest control
-- All key dependencies (SQLite, Tree-sitter, libzim, pdfium) are C/C++ native
+- Key dependencies such as SQLite, Tree-sitter, llama.cpp, pdfium, miniz, and
+  pugixml are C/C++ native.
 - Zero runtime overhead, instant startup, minimal memory footprint
 - Direct control over threading, memory, and performance-critical paths
 - vcpkg handles dependencies cleanly on Windows
@@ -40,23 +41,24 @@ UI thread via `wxQueueEvent()` + custom `wxThreadEvent` types. See [overview.md]
 
 ## 3. Frontend Architecture
 
-Three C++ frontends, all implementing `IFrontend` and linking `locus_core`:
+Two C++ frontends are implemented today. Both implement `IFrontend` and link
+`locus_core`:
 
 | Frontend | Location | Purpose |
 |---|---|---|
 | **CLI** | `src/frontends/cli/cli_frontend.*` | Terminal REPL, y/n tool approval, M0 prototype |
-| **wxWidgets** | `src/frontends/wx/*` (M1) | Desktop GUI with system tray, chat UI, tool panels |
-| **CrowServer** | `src/frontends/crow/*` (M3) | HTTP/WebSocket server for external clients |
+| **wxWidgets** | `src/frontends/gui/*` | Desktop GUI with system tray, chat UI, tool panels |
 
-External clients connect to CrowServer -- they are not C++ frontends themselves:
+M6 adds a Crow-based adapter for external clients:
 
 | Client | Technology | Connection |
 |---|---|---|
-| **Browser** | HTML/CSS/JS, served by Crow at `GET /` | WebSocket + HTTP, local or LAN |
-| **VS Code extension** | TypeScript, ~200 lines | WebSocket to CrowServer |
-| **Mobile app** | Future | WebSocket over LAN |
+| **Browser** | HTML/CSS/JS | WebSocket + HTTP, local or LAN |
+| **VS Code extension** | TypeScript | WebSocket to the local adapter |
+| **Mobile/PWA client** | Future | WebSocket over LAN |
 
-Multiple frontends and clients can be active simultaneously on the same session.
+Multiple external clients on the same session are a design goal for M6, not a
+property of the current build.
 
 ---
 
@@ -134,27 +136,26 @@ behind one clean interface now, making future cross-platform support a drop-in.
 
 ---
 
-## 9. API Server (Core <-> Remote Frontends)
+## 9. API Server (Core <-> Remote Frontends, Planned M6)
 
 **Crow** -- lightweight C++ HTTP + WebSocket microframework.
 
 - WebSocket built-in -- required for streaming LLM tokens + tool approval flow
 - HTTP REST for stateless operations (workspace mgmt, sessions, settings)
-- MIT licensed, vcpkg: `crowcpp-crow`
+- MIT licensed; likely vcpkg package: `crowcpp-crow`
 
-`CrowFrontend` is the third C++ frontend -- it implements `IFrontend`, registers
-with Core directly, and exposes the session to external clients (browser, VS Code
-extension, mobile) via HTTP/WebSocket. The CLI and wxWidgets frontends bypass Crow
-entirely (direct C++ interface).
+The planned Crow adapter will implement `IFrontend`, register with Core directly,
+and expose the session to external clients via HTTP/WebSocket. The current CLI
+and wxWidgets frontends bypass this layer entirely.
 
 ---
 
-## 10. ZIM File Support
+## 10. ZIM File Support (Planned M6)
 
 **libzim** -- official Kiwix C++ library for reading `.zim` archives.
 
 - Random access to articles by title or path, MIT licensed
-- vcpkg: `libzim`
+- planned dependency: `libzim`
 - Handles full English Wikipedia (~90GB ZIM) without extraction
 
 ```cpp
@@ -170,7 +171,7 @@ std::string html = item.getData().data();
 
 **PDF**: pdfium (Google Chrome's PDF engine, C API)
 - Handles complex layouts, embedded fonts, detects encrypted files
-- vcpkg: `pdfium` (~30MB)
+- Fetched as a pinned prebuilt binary in `CMakeLists.txt`
 - Fallback: poppler (lighter, LGPL) if pdfium proves too heavy
 
 **DOCX / XLSX**: miniz + pugixml (both header-only)
@@ -212,7 +213,7 @@ Thread layout:
 | Indexer (FTS) | File traversal + FTS5 index build/update |
 | Indexer (Vec) | llama.cpp embedding, sqlite-vec writes (lower priority) |
 | Watcher | efsw event loop, posts file change events to Indexer queue |
-| Crow | CrowFrontend HTTP + WebSocket server for external clients |
+| Crow (planned) | HTTP + WebSocket server for external clients |
 
 Communication between threads via `std::queue<Event>` with `std::mutex` + `std::condition_variable`.
 No lock-free structures unless profiling shows a bottleneck.
@@ -229,9 +230,9 @@ No lock-free structures unless profiling shows a bottleneck.
 
 ---
 
-## 16. Web Retrieval (RAG)
+## 16. Web Retrieval (RAG, Planned M6)
 
-**HTML parser: gumbo-parser** (Google, Apache 2.0, vcpkg: `gumbo`)
+**HTML parser candidate: gumbo-parser** (Google, Apache 2.0)
 
 - Pure C HTML5 parser -- handles malformed real-world HTML correctly
 - Produces a DOM tree; Locus walks it to extract visible text, skip script/style/nav
@@ -261,17 +262,17 @@ See [web-retrieval.md](web-retrieval.md) for the full pipeline design.
 | Build | CMake + vcpkg | -- |
 | Frontend: CLI | Terminal REPL | -- |
 | Frontend: wxWidgets | wxWidgets + wxWebView | `wxwidgets`, `md4c` |
-| Frontend: CrowServer | Crow HTTP/WS for external clients | `crowcpp-crow` |
+| Frontend: Crow adapter | Crow HTTP/WS for external clients | planned: `crowcpp-crow` |
 | Index database | SQLite + FTS5 | `sqlite3` |
 | Vector search | sqlite-vec | (bundled extension) |
 | Embeddings | llama.cpp (GGUF) | `llama-cpp` |
 | Code parser | Tree-sitter | `tree-sitter` |
 | File watcher | efsw | `efsw` |
 | LLM HTTP client | cpr | `cpr` |
-| HTML parser | gumbo-parser | `gumbo` |
+| HTML parser | gumbo-parser | planned: `gumbo` |
 | Web search API | Brave Search (configurable) | -- |
-| ZIM reader | libzim | `libzim` |
-| PDF extraction | pdfium | `pdfium` |
+| ZIM reader | libzim | planned: `libzim` |
+| PDF extraction | pdfium | FetchContent prebuilt |
 | DOCX/XLSX | miniz + pugixml | `miniz`, `pugixml` |
 | JSON | nlohmann/json | `nlohmann-json` |
 | Logging | spdlog | `spdlog` |

@@ -32,8 +32,9 @@ VRAM, and models that need clear tools instead of giant pasted prompts.
   Markdown, HTML, JSON/YAML, and offline knowledge bases.
 - **It can act, but you stay in control.** File edits, deletes, shell commands, and
   MCP tools go through visible approval policies.
-- **It is already a real app.** Native Windows GUI, CLI, indexing, semantic search,
-  undo, plan mode, metrics, memory, MCP, and background commands are implemented.
+- **It has a working desktop surface.** The Windows GUI and CLI share the same
+  core: indexing, semantic search, undo, plan mode, metrics, memory, MCP, and
+  background commands.
 
 ## Project Status
 
@@ -53,6 +54,14 @@ Two binaries ship from the same codebase:
 
 - `locus.exe` -- terminal CLI
 - `locus_gui.exe` -- native Windows desktop app (wxWidgets + WebView2)
+
+## Platform Support
+
+Locus is currently developed and tested on **Windows 11**. The core is written
+with cross-platform support in mind, but several runtime integrations are still
+Windows-first: shell execution, background process management, MCP stdio
+transport, autostart, recent-workspace integration, and the GUI automation
+harness. macOS and Linux support are planned, not production-ready.
 
 ## Documentation Index
 
@@ -75,8 +84,7 @@ Two binaries ship from the same codebase:
 
 ## What Works Today
 
-The current codebase is already a working local-agent platform, not just a
-prototype shell around chat completion:
+The current codebase is a working local-agent application:
 
 - **Agent runtime**: streaming conversations, tool-call parsing across OpenAI-style
   and XML-style model outputs, approval gates, plan mode, slash commands, sessions,
@@ -90,9 +98,9 @@ prototype shell around chat completion:
 - **Extensibility and memory**: MCP client support, prompt templates, model presets,
   sampler controls, workspace-scoped memory with search, and git-aware workflows
   including auto-commit support.
-- **Desktop polish already landed in M5**: terminal panel, capability toggles,
-  global settings, inline diffs in chat, UI automation scripts, metrics view, and
-  the `LLMContext` refactor that centralizes conversation-facing state.
+- **Desktop polish in M5**: terminal panel, capability toggles, global settings,
+  inline diffs in chat, UI automation scripts, metrics view, and the `LLMContext`
+  refactor that centralizes conversation-facing state.
 
 ## How It Works
 

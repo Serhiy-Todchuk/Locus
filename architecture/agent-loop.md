@@ -446,7 +446,7 @@ up without replaying conversation history. Ring buffer cap: `k_activity_buffer_m
    isolates exceptions per frontend -- individual frontend bugs cannot take down the agent
    thread. Preserve this when adding fan-out points.
 5. **`tool_decision()` is thread-agnostic.** It's called from the UI thread in all current
-   frontends, but may come from a websocket thread once `CrowServer` ships (M5). `AgentCore`
+   frontends, but may come from a websocket thread once the Crow adapter ships in M6. `AgentCore`
    forwards it to `ToolDispatcher::submit_decision` which takes the dispatcher's own mutex --
    do not add thread-affinity assumptions on either side.
 6. **Cancellation is cooperative.** `cancel_requested_` is checked between rounds and between
@@ -454,7 +454,7 @@ up without replaying conversation history. Ring buffer cap: `k_activity_buffer_m
    or `tool->execute`. Those must complete before the cancel propagates.
 7. **Tool-facing surface is `IWorkspaceServices`, not `Workspace`.** Tools receive
    `services_` and must not downcast to the concrete `Workspace`. This keeps tool tests
-   hermetic (via `FakeWorkspaceServices`) and allows M5 to add remote/virtual workspaces.
+   hermetic (via `FakeWorkspaceServices`) and allows M6 to add remote/virtual workspaces.
 
 ---
 

@@ -25,7 +25,7 @@ starts / stops.
 
 **Caller threads that never form a dedicated loop but touch core state:**
 
-- The WebSocket server thread pool (M5, not yet landed) will call `ILocusCore` methods from
+- The WebSocket server thread pool (M6, not yet landed) will call `ILocusCore` methods from
   Crow handler threads.
 - `cpr` runs its libcurl SSE reads on the agent thread (no extra thread is spawned for
   streaming); callbacks fire inline on whichever thread invoked `stream_completion`, which is

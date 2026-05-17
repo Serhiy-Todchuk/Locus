@@ -71,4 +71,4 @@ Switch v1 to **wxWidgets + wxWebView**.
 - **WinUI 3 / native Windows.** Ties us to Windows harder than we want long-term. wxWidgets
   keeps the door open for Linux/macOS later.
 - **Tauri / web UI in a browser window.** Adds a JS runtime and a separate frontend process.
-  Fine later as a *remote* frontend via the Crow server -- not a fit for the v1 desktop shell.
+  Fine later as a *remote* frontend via the planned Crow adapter -- not a fit for the v1 desktop shell.
