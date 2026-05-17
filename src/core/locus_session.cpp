@@ -145,7 +145,6 @@ int LocusSession::add_tab()
         checkpoints_dir_,
         project_prompts_dir_,
         global_prompts_dir_,
-        workspace_->process_sink(),
         *sessions_);
 
     // Re-wire the workspace's indexer / embedding callbacks onto the new tab's

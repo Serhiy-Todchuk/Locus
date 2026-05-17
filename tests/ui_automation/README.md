@@ -46,6 +46,7 @@ tests/ui_automation/
     tool_approval_dialog.json       # LLM-dependent
     inline_diff_render.json         # LLM-dependent
     terminal_panel_run.json         # LLM-dependent
+    terminal_per_tab.json           # S5.R, LLM-dependent
     system_prompt_bubble.json       # S5.G
   output/               # gitignored: per-script artifacts land here
 ```
@@ -212,6 +213,7 @@ The script root supports a `setup` block:
 | [`tool_approval_dialog.json`](scripts/tool_approval_dialog.json)   | yes | Forces `write_file` to `ask` via `setup.tool_approvals_override`; LLM is asked to write a file; assert the ToolApprovalDialog opens, click Approve, assert the file appears. |
 | [`inline_diff_render.json`](scripts/inline_diff_render.json)       | yes | LLM is asked to write a file (auto-approved); assert the resulting file content also appears in the chat WebView (S5.C inline-diff render). |
 | [`terminal_panel_run.json`](scripts/terminal_panel_run.json)       | yes | LLM is asked to run a small shell command; assert the chat WebView shows the output, `Ctrl+`` brings up the terminal panel and the panel is visible. |
+| [`terminal_per_tab.json`](scripts/terminal_per_tab.json)           | yes | S5.R -- terminal is per-tab. Spawn a `run_command` in tab A so the pane auto-shows, Ctrl+T to open tab B (empty terminal view), Ctrl+Shift+Tab back to A. Asserts the terminal panel stays addressable across tab switches. |
 | [`system_prompt_bubble.json`](scripts/system_prompt_bubble.json)   | no  | S5.G -- assert the collapsed system-prompt bubble appears at the top of the chat WebView with its `System prompt (N tokens)` header. Per-section breakdown chips + the hover-reveal per-message X are inside a collapsed `<details>` element / driven by CSS hover; both stay in the manual test plan. |
 
 LLM-dependent scripts require LM Studio reachable at `http://127.0.0.1:1234` with a tool-calling model loaded. On flakes, see the per-script `output/<name>/run.log` and the workspace's `.locus/locus.log` for dropped-tool-call warnings (model behaviour, not the harness).

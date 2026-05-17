@@ -19,7 +19,7 @@ using ToolDecisionCallback = std::function<void(
     const nlohmann::json& modified_args)>;
 
 // Modal dialog shown when a tool call needs approval. Replaced the bottom-
-// docked AUI pane in S5.Z #6 -- the pane was always present (just hidden when
+// docked AUI pane in S5.Z #3 -- the pane was always present (just hidden when
 // idle), wasting screen real estate, and offered no way for the user to set
 // the surface aside without choosing approve/modify/reject. The dialog form:
 //   * appears centred over the frame only when a decision is needed

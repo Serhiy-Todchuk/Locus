@@ -274,6 +274,17 @@ IntegrationHarness::IntegrationHarness()
 
 IntegrationHarness::~IntegrationHarness()
 {
+    // Drop callbacks that capture `agent_` BEFORE tabs are gone. The
+    // workspace dtor calls `watcher_pump_->stop()` which performs one last
+    // synchronous flush; an in-flight file event there fires the indexer's
+    // on_activity callback. If we let `agent_` destruct first (reverse-
+    // declaration order: agent_ before workspace_), the captured raw pointer
+    // dangles. Mirrors `LocusSession::~LocusSession` -- same hazard.
+    if (workspace_) {
+        workspace_->indexer().on_activity = nullptr;
+        if (auto* ew = workspace_->embedding_worker())
+            ew->on_activity = nullptr;
+    }
     if (agent_) {
         agent_->stop();
         agent_->unregister_frontend(frontend_.get());

@@ -13,6 +13,7 @@
 #include "../../index/embedding_worker.h"
 #include "../../index/indexer.h"
 #include "../../mcp/mcp_manager.h"
+#include "../../tools/process_registry.h"
 
 #include <spdlog/spdlog.h>
 
@@ -108,7 +109,28 @@ LocusFrame::LocusFrame(LocusSession& session)
         if (auto& p = aui_.GetPane("activity"); p.IsOk()) { p.Show(show); aui_.Update(); }
     };
     hooks.on_toggle_terminal_pane = [this](bool show) {
-        if (auto& p = aui_.GetPane("terminal"); p.IsOk()) { p.Show(show); aui_.Update(); }
+        if (auto& p = aui_.GetPane("terminal"); p.IsOk()) {
+            p.Show(show);
+            aui_.Update();
+        }
+        // S5.R -- manual re-open clears the active tab's "user hid" flag so
+        // future first-command auto-show works again. Manual hide via View
+        // menu sets it (on_aui_pane_close fires for any pane-close path,
+        // including the menu).
+        if (show && notebook_) {
+            if (auto* ui = find_tab_ui(0); ui) (void)ui;  // silence unused
+            // Resolve the active tab via notebook selection.
+            int sel = notebook_->GetSelection();
+            if (sel >= 0) {
+                auto* chat = static_cast<ChatPanel*>(notebook_->GetPage(sel));
+                for (auto& [tid, ui] : tabs_ui_) {
+                    if (ui.chat == chat && ui.tab) {
+                        ui.tab->set_terminal_user_hidden(false);
+                        break;
+                    }
+                }
+            }
+        }
     };
     hooks.on_about = [this] {
         AboutDialog dlg(this);
@@ -176,6 +198,17 @@ LocusFrame::LocusFrame(LocusSession& session)
 
     aui_.Update();
     apply_saved_window_geometry();
+
+    // S5.R -- bind the terminal panel to the initial active tab's state.
+    // Done after AUI perspective load so the pane's hidden/shown state is
+    // already settled; set_state itself doesn't touch pane visibility.
+    if (terminal_panel_ && session_.tab_count() > 0) {
+        terminal_panel_->set_state(&session_.active_tab().terminal_state());
+        terminal_panel_->set_first_command_observer([this] {
+            // No-op here -- the per-tab observer's lifecycle hooks drive
+            // auto-show. The widget observer slot exists for future use.
+        });
+    }
 
     tray_ = std::make_unique<LocusTray>(this);
 
@@ -260,12 +293,20 @@ void LocusFrame::detach_from_session()
         workspace_.embedding_worker()->on_progress = nullptr;
     workspace_.indexer().on_progress = nullptr;
 
-    if (terminal_panel_) terminal_panel_->detach();
+    // S5.R -- detach the terminal panel from any active state before tabs
+    // tear down (states are owned by LocusTab).
+    if (terminal_panel_) terminal_panel_->set_state(nullptr);
 
-    // Unregister every tab's frontend from its agent.
+    // Unregister every tab's frontend + process observer from its agent /
+    // broker. Order: unsubscribe sinks before the LocusSession tears down
+    // each LocusTab (which would destroy the brokers).
     for (auto& [tab_id, ui] : tabs_ui_) {
         if (ui.tab && ui.frontend)
             ui.tab->agent().unregister_frontend(ui.frontend.get());
+        if (ui.tab && ui.proc_obs) {
+            if (auto* broker = ui.tab->processes().sink_broker())
+                broker->remove_sink(ui.proc_obs.get());
+        }
     }
 }
 
@@ -303,8 +344,21 @@ void LocusFrame::setup_aui_layout()
     activity_panel_ = new ActivityPanel(this, session_.active_tab().agent());
 
     terminal_panel_ = new TerminalPanel(this,
-        workspace_.process_sink(),
-        workspace_.processes());
+        [this](int bg_id) {
+            // S5.R -- route to the active tab's registry. The terminal
+            // panel shows the active tab's content, so a kill from its
+            // right-click menu always targets that tab's processes.
+            if (!notebook_) return;
+            int sel = notebook_->GetSelection();
+            if (sel < 0) return;
+            auto* chat = static_cast<ChatPanel*>(notebook_->GetPage(sel));
+            for (auto& [tid, ui] : tabs_ui_) {
+                if (ui.chat == chat && ui.tab) {
+                    ui.tab->processes().stop(bg_id);
+                    break;
+                }
+            }
+        });
 
     aui_.AddPane(file_tree_panel_, wxAuiPaneInfo()
         .Name("sidebar").Caption("Files")
@@ -441,11 +495,17 @@ LocusFrame::TabUi& LocusFrame::install_tab_ui(LocusTab& tab, const wxString& tab
     ui.tab      = &tab;
     ui.chat     = chat;
     ui.frontend = std::make_unique<WxFrontend>(this, tab.tab_id());
+    ui.proc_obs = std::make_unique<TabProcessObserver>(this, tab.tab_id());
 
     auto& slot = tabs_ui_[tab.tab_id()] = std::move(ui);
     // Register the frontend AFTER inserting into the map -- on_history_message
     // events may fire immediately.
     tab.agent().register_frontend(slot.frontend.get());
+    // S5.R -- subscribe the per-tab process observer to the tab's broker.
+    // The tab's TerminalPanelState is already subscribed (LocusTab ctor);
+    // this is the second sink the multi-subscriber broker accepts.
+    if (auto* broker = tab.processes().sink_broker())
+        broker->add_sink(slot.proc_obs.get());
 
     // Restore-from-disk render path: if this tab was loaded from a saved
     // session BEFORE the UI was installed, the agent's history already holds
@@ -476,6 +536,20 @@ void LocusFrame::teardown_tab_ui(int nb_index)
     if (it != tabs_ui_.end()) {
         if (it->second.tab && it->second.frontend)
             it->second.tab->agent().unregister_frontend(it->second.frontend.get());
+        // S5.R -- unsubscribe the observer BEFORE LocusTab teardown so a
+        // worker thread firing one last event can't land on a freed obs.
+        if (it->second.tab && it->second.proc_obs) {
+            if (auto* broker = it->second.tab->processes().sink_broker())
+                broker->remove_sink(it->second.proc_obs.get());
+        }
+        // S5.R -- if the active terminal state was this tab's, detach the
+        // widget first; LocusSession::close_tab destroys the LocusTab next
+        // and with it the TerminalPanelState we'd be pointing at.
+        if (terminal_panel_ && it->second.tab) {
+            if (terminal_panel_) {
+                terminal_panel_->set_state(nullptr);
+            }
+        }
         tabs_ui_.erase(it);
     }
 
@@ -523,10 +597,13 @@ wxString LocusFrame::compose_tab_label(const TabUi& ui) const
 {
     wxString base = ui.tab ? wxString::FromUTF8(ui.tab->title()) : wxString("(empty)");
     wxString prefix;
-    if (ui.busy)              prefix += "* ";
-    if (ui.awaiting_decision) prefix += "! ";
-    if (ui.ctx_over_auto)     prefix += "[!] ";
-    else if (ui.ctx_over_warn) prefix += "[.] ";
+    // S5.R -- single `*` for any of: agent turn busy, awaiting tool decision,
+    // bg processes running. Conflated on purpose; if real usage distinguishes
+    // them, split into two glyphs later.
+    if (ui.busy || ui.busy_processes > 0) prefix += "* ";
+    if (ui.awaiting_decision)             prefix += "! ";
+    if (ui.ctx_over_auto)                 prefix += "[!] ";
+    else if (ui.ctx_over_warn)            prefix += "[.] ";
     return prefix + base;
 }
 
@@ -592,6 +669,18 @@ void LocusFrame::on_notebook_page_changed(wxAuiNotebookEvent& evt)
     int sel = evt.GetSelection();
     if (sel < 0 || !notebook_) { evt.Skip(); return; }
     session_.set_active_tab(sel);
+    // S5.R -- swap the terminal panel's content to the newly-active tab.
+    if (terminal_panel_) {
+        auto* chat = static_cast<ChatPanel*>(notebook_->GetPage(sel));
+        TerminalPanelState* state = nullptr;
+        for (auto& [tid, ui] : tabs_ui_) {
+            if (ui.chat == chat && ui.tab) {
+                state = &ui.tab->terminal_state();
+                break;
+            }
+        }
+        terminal_panel_->set_state(state);
+    }
     if (menu_) menu_->rebuild_sessions_menu(session_.sessions().list());
     evt.Skip();
 }
@@ -934,8 +1023,25 @@ void LocusFrame::on_aui_pane_close(wxAuiManagerEvent& evt)
             menu_->set_files_pane_visible(false);
         else if (pane->name == "activity")
             menu_->set_activity_pane_visible(false);
-        else if (pane->name == "terminal")
+        else if (pane->name == "terminal") {
             menu_->set_terminal_pane_visible(false);
+            // S5.R -- manual hide of the terminal pane wins: mark the
+            // currently active tab so the next command in that tab does
+            // NOT re-pop the pane. Manual re-open via View > Terminal
+            // clears the flag (handled in on_toggle_terminal_pane).
+            if (notebook_) {
+                int sel = notebook_->GetSelection();
+                if (sel >= 0) {
+                    auto* chat = static_cast<ChatPanel*>(notebook_->GetPage(sel));
+                    for (auto& [tid, ui] : tabs_ui_) {
+                        if (ui.chat == chat && ui.tab) {
+                            ui.tab->set_terminal_user_hidden(true);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
     }
     evt.Skip();
 }
@@ -1242,6 +1348,91 @@ void LocusFrame::on_agent_history_msg_deleted(wxThreadEvent& evt)
 {
     if (auto* ui = find_tab_ui(evt.GetId()))
         ui->chat->on_history_message_deleted(evt.GetInt());
+}
+
+// ---------------------------------------------------------------------------
+// S5.R -- per-tab process observer (lifecycle only)
+// ---------------------------------------------------------------------------
+
+void LocusFrame::TabProcessObserver::on_bg_started(int /*id*/, const std::string& /*cmd*/)
+{
+    LocusFrame* frame = frame_;
+    int tab_id = tab_id_;
+    if (!frame) return;
+    frame->CallAfter([frame, tab_id] { frame->on_tab_bg_started(tab_id); });
+}
+
+void LocusFrame::TabProcessObserver::on_bg_exited(int /*id*/, int /*exit_code*/, bool /*killed*/)
+{
+    LocusFrame* frame = frame_;
+    int tab_id = tab_id_;
+    if (!frame) return;
+    frame->CallAfter([frame, tab_id] { frame->on_tab_bg_exited(tab_id); });
+}
+
+void LocusFrame::TabProcessObserver::on_sync_started(const std::string& /*cmd*/)
+{
+    LocusFrame* frame = frame_;
+    int tab_id = tab_id_;
+    if (!frame) return;
+    frame->CallAfter([frame, tab_id] { frame->on_tab_sync_started(tab_id); });
+}
+
+void LocusFrame::maybe_auto_show_terminal_for(int tab_id)
+{
+    auto* ui = find_tab_ui(tab_id);
+    if (!ui || !ui->tab) return;
+
+    // Resolve the active tab via notebook selection rather than
+    // session_.active_index() so a not-yet-propagated tab change can't
+    // misroute the auto-show decision.
+    int active_tab_id = 0;
+    if (notebook_) {
+        int sel = notebook_->GetSelection();
+        if (sel >= 0) {
+            auto* active = static_cast<ChatPanel*>(notebook_->GetPage(sel));
+            for (auto& [tid, u] : tabs_ui_) {
+                if (u.chat == active) { active_tab_id = tid; break; }
+            }
+        }
+    }
+
+    bool pane_hidden = true;
+    if (auto& p = aui_.GetPane("terminal"); p.IsOk()) pane_hidden = !p.IsShown();
+
+    if (should_auto_show_terminal(tab_id, active_tab_id, pane_hidden,
+                                    ui->tab->terminal_user_hidden())) {
+        if (auto& p = aui_.GetPane("terminal"); p.IsOk()) {
+            p.Show(true);
+            aui_.Update();
+            if (menu_) menu_->set_terminal_pane_visible(true);
+        }
+    }
+}
+
+void LocusFrame::on_tab_bg_started(int tab_id)
+{
+    auto* ui = find_tab_ui(tab_id);
+    if (!ui) return;
+    ++ui->busy_processes;
+    refresh_tab_title(tab_id);
+    maybe_auto_show_terminal_for(tab_id);
+}
+
+void LocusFrame::on_tab_bg_exited(int tab_id)
+{
+    auto* ui = find_tab_ui(tab_id);
+    if (!ui) return;
+    if (ui->busy_processes > 0) --ui->busy_processes;
+    refresh_tab_title(tab_id);
+}
+
+void LocusFrame::on_tab_sync_started(int tab_id)
+{
+    // Sync runs DON'T move the busy-process counter (sync is short-lived;
+    // the agent is already showing busy via on_turn_start). We only want
+    // the auto-show check.
+    maybe_auto_show_terminal_for(tab_id);
 }
 
 } // namespace locus

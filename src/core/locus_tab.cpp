@@ -82,10 +82,10 @@ private:
 namespace {
 
 // IWorkspaceServices wrapper that delegates everything to a backing Workspace
-// except `processes()` -- the tab's own per-tab ProcessRegistry is returned
-// instead, so background processes spawned by tools in this tab die when the
-// tab does. `process_sink()` still returns the workspace's shared broker so
-// the TerminalPanel sees output from every tab through one fan-in point.
+// except `processes()` and `process_sink()` -- the tab's own per-tab
+// ProcessRegistry + broker are returned instead. S5.R: routing sync
+// run_command through `IWorkspaceServices::process_sink()` lands the output
+// in the active tab's TerminalPanelState rather than a shared workspace one.
 class TabServices : public IWorkspaceServices {
 public:
     TabServices(Workspace& ws, ProcessRegistry& procs)
@@ -96,7 +96,7 @@ public:
     EmbeddingWorker*   embedder() override     { return ws_.embedder(); }
     Reranker*          reranker() override     { return ws_.reranker(); }
     ProcessRegistry*   processes() override    { return &procs_; }
-    ProcessSinkBroker* process_sink() override { return ws_.process_sink(); }
+    ProcessSinkBroker* process_sink() override { return procs_.sink_broker(); }
     MemoryStore*       memory() override       { return ws_.memory(); }
     Workspace*         workspace() override    { return &ws_; }
 
@@ -116,19 +116,21 @@ LocusTab::LocusTab(int tab_id,
                    const std::filesystem::path& checkpoints_dir,
                    const std::filesystem::path& project_prompts_dir,
                    const std::filesystem::path& global_prompts_dir,
-                   ProcessSinkBroker* process_sink_broker,
                    SessionManager& sessions)
     : tab_id_(tab_id),
       title_("New tab"),
       sessions_(sessions),
       sessions_dir_(sessions_dir)
 {
-    // Per-tab background-process registry. Shares the workspace broker so all
-    // tabs' output funnels into the same TerminalPanel.
+    // Per-tab background-process registry. S5.R: each tab owns its own
+    // ProcessSinkBroker (no external broker -- the workspace-shared broker
+    // wiring went away). The tab's TerminalPanelState subscribes to this
+    // broker so processes the tab spawns feed into its private terminal
+    // view; the LocusFrame also subscribes a second observer sink for
+    // auto-show / busy-badge book-keeping.
     processes_ = std::make_unique<ProcessRegistry>(
         workspace.root(),
-        static_cast<std::size_t>(workspace.config().process_output_buffer_kb) * 1024,
-        process_sink_broker);
+        static_cast<std::size_t>(workspace.config().process_output_buffer_kb) * 1024);
 
     services_ = std::make_unique<TabServices>(workspace, *processes_);
 
@@ -148,19 +150,35 @@ LocusTab::LocusTab(int tab_id,
     autosave_fe_ = std::make_unique<AutoSaveFrontend>(this);
     agent_->register_frontend(autosave_fe_.get());
 
+    // S5.R: per-tab terminal state. Constructed AFTER processes_ so we can
+    // subscribe it to the broker right here -- workers can start firing
+    // before the GUI binds the widget, and we want the events captured.
+    terminal_state_ = std::make_unique<TerminalPanelState>();
+    processes_->sink_broker()->add_sink(terminal_state_.get());
+
     agent_->start();
 }
 
 LocusTab::~LocusTab()
 {
     // Agent thread first -- its callbacks may dereference processes_ during
-    // a tool call in flight. unique_ptr destruction order then tears down
-    // services_ (a thin wrapper, safe to drop) and finally processes_.
+    // a tool call in flight. Once stopped, no more emits will fire from
+    // tool execution; bg-process reader threads still exist until
+    // processes_ is destroyed (which terminates them).
     if (agent_) {
         if (autosave_fe_)
             agent_->unregister_frontend(autosave_fe_.get());
         agent_->stop();
     }
+
+    // S5.R: unsubscribe the terminal state from the broker BEFORE unique_ptr
+    // destruction unwinds. Bg-process reader threads still alive at this
+    // point can fire one last on_bg_chunk through the broker; we don't want
+    // it landing on a half-destroyed state. The state is then destroyed by
+    // its own unique_ptr (declared last -- destructs first in the implicit
+    // reverse-declaration order).
+    if (processes_ && terminal_state_)
+        processes_->sink_broker()->remove_sink(terminal_state_.get());
 }
 
 void LocusTab::set_title(std::string t)

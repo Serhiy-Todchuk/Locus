@@ -1,0 +1,78 @@
+{
+  "name": "terminal_per_tab",
+  "description": "S5.R -- the Terminal pane is a per-tab view. Spawns a run_command in tab A so the pane auto-shows, opens a second tab (Ctrl+T) which has no terminal content yet, screenshots the empty state, switches back to tab A via Ctrl+Shift+Tab, and asserts the panel is still reachable. The substring assertion against the chat WebView verifies tab A's output round-tripped end to end. Requires LM Studio at http://127.0.0.1:1234 with a tool-calling model.",
+  "setup": {
+    "workspace": "tmp"
+  },
+  "steps": [
+    { "op": "launch" },
+    {
+      "op": "wait_for_window",
+      "args": { "title_prefix": "Locus", "timeout_ms": 30000 }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.chat.panel", "timeout_ms": 30000 }
+    },
+
+    {
+      "op": "click",
+      "args": { "parent_aid": "locus.chat.panel", "control_type": "document" }
+    },
+    {
+      "op": "type",
+      "args": {
+        "parent_aid": "locus.chat.panel",
+        "control_type": "document",
+        "text": "Use the run_command tool to run the single command: echo hello-from-tab-A"
+      }
+    },
+    { "op": "sleep", "args": { "ms": 300 } },
+    {
+      "op": "press_key",
+      "args": {
+        "parent_aid": "locus.chat.panel",
+        "control_type": "document",
+        "key": "ENTER"
+      }
+    },
+
+    {
+      "op": "assert_text_contains",
+      "args": {
+        "automation_id": "locus.chat.webview",
+        "substring": "hello-from-tab-A",
+        "walk_subtree": true,
+        "timeout_ms": 240000
+      }
+    },
+    { "op": "sleep", "args": { "ms": 500 } },
+    {
+      "op": "assert_visible",
+      "args": { "automation_id": "locus.terminal.panel", "timeout_ms": 10000 }
+    },
+    { "op": "screenshot", "args": { "name": "01_tab_a_terminal_visible" } },
+
+    { "op": "press_key", "args": { "key": "T", "modifiers": "CTRL" } },
+    { "op": "sleep", "args": { "ms": 600 } },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.chat.notebook", "timeout_ms": 5000 }
+    },
+    {
+      "op": "assert_visible",
+      "args": { "automation_id": "locus.terminal.panel", "timeout_ms": 5000 }
+    },
+    { "op": "screenshot", "args": { "name": "02_tab_b_terminal_empty" } },
+
+    { "op": "press_key", "args": { "key": "TAB", "modifiers": "CTRL+SHIFT" } },
+    { "op": "sleep", "args": { "ms": 600 } },
+    {
+      "op": "assert_visible",
+      "args": { "automation_id": "locus.terminal.panel", "timeout_ms": 5000 }
+    },
+    { "op": "screenshot", "args": { "name": "03_back_to_tab_a" } },
+
+    { "op": "quit", "args": { "wait_ms": 5000 } }
+  ]
+}

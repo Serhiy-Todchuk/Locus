@@ -3,8 +3,6 @@
 #include "theme.h"
 #include "ui_names.h"
 
-#include "../../tools/process_registry.h"
-
 #include <spdlog/spdlog.h>
 
 #include <wx/menu.h>
@@ -12,7 +10,8 @@
 #include <wx/clipbrd.h>
 
 #include <algorithm>
-#include <cstring>
+#include <deque>
+#include <unordered_map>
 
 namespace locus {
 
@@ -45,17 +44,7 @@ const wxColour& palette(std::size_t idx)
     return entries[idx];
 }
 
-// Style id 0 reserved for STC default; we map AnsiStyle -> id 1..256.
-// Encoding: (fg + 1) * 17 + (bg + 1) + bold*2 + dim*1, capped to [1, 256].
-// Keeps the style table small while covering the common combinations.
 constexpr int k_style_default = 0;
-
-enum {
-    ID_TERM_COPY_ALL = wxID_HIGHEST + 1700,
-    ID_TERM_COPY_SEL,
-    ID_TERM_CLEAR,
-    ID_TERM_KILL,
-};
 
 } // namespace
 
@@ -67,13 +56,10 @@ wxBEGIN_EVENT_TABLE(TerminalPanel, wxPanel)
     EVT_MENU(ID_TERM_KILL,     TerminalPanel::on_context_menu_action)
 wxEND_EVENT_TABLE()
 
-TerminalPanel::TerminalPanel(wxWindow* parent, ProcessSinkBroker* broker,
-                             ProcessRegistry* registry, std::size_t max_lines_per_tab)
+TerminalPanel::TerminalPanel(wxWindow* parent, KillHandler on_kill)
     : wxPanel(parent, wxID_ANY)
     , flush_timer_(this)
-    , max_lines_per_tab_(max_lines_per_tab)
-    , broker_(broker)
-    , registry_(registry)
+    , kill_handler_(std::move(on_kill))
 {
     SetName(ui_names::kTerminalPanel);
     gui::apply_locus_accessible_name(this);
@@ -86,345 +72,321 @@ TerminalPanel::TerminalPanel(wxWindow* parent, ProcessSinkBroker* broker,
     sizer->Add(notebook_, 1, wxEXPAND);
     SetSizer(sizer);
 
-    // Reserve the sync tab up front -- empty until the first run_command lands.
-    auto sync = std::make_unique<Tab>();
-    sync->id      = k_sync_id;
-    sync->command = "(no command yet)";
-    sync->page    = new wxPanel(notebook_, wxID_ANY);
-    sync->stc     = new wxStyledTextCtrl(sync->page, wxID_ANY);
-    auto* sync_sizer = new wxBoxSizer(wxVERTICAL);
-    sync_sizer->Add(sync->stc, 1, wxEXPAND);
-    sync->page->SetSizer(sync_sizer);
-    ensure_style_table(sync->stc);
-    sync->stc->SetReadOnly(true);
-    notebook_->AddPage(sync->page, "Run");
-    tabs_[k_sync_id] = std::move(sync);
-
-    // Wire ourselves as the sink.
-    if (broker_) broker_->set_sink(this);
-
     flush_timer_.Start(k_flush_interval_ms);
 }
 
 TerminalPanel::~TerminalPanel()
 {
-    detach();
     flush_timer_.Stop();
 }
 
-void TerminalPanel::detach()
+void TerminalPanel::set_state(TerminalPanelState* state)
 {
-    bool was_attached = attached_.exchange(false);
-    if (!was_attached) return;
-    if (broker_) broker_->set_sink(nullptr);
-    broker_ = nullptr;
+    if (state_ == state) return;
+    state_ = state;
+    rebuild_from_state_();
 }
 
-// -- IProcessSink (worker threads) -------------------------------------------
-
-void TerminalPanel::on_bg_started(int id, const std::string& command)
+void TerminalPanel::set_first_command_observer(std::function<void()> obs)
 {
-    std::lock_guard l(mu_);
-    LifeEvent e;
-    e.kind    = LifeKind::bg_start;
-    e.id      = id;
-    e.command = command;
-    pending_lifecycle_.push_back(std::move(e));
-}
-
-void TerminalPanel::on_bg_chunk(int id, const char* data, std::size_t n)
-{
-    std::lock_guard l(mu_);
-    pending_text_[id].append(data, n);
-}
-
-void TerminalPanel::on_bg_exited(int id, int exit_code, bool killed)
-{
-    std::lock_guard l(mu_);
-    LifeEvent e;
-    e.kind      = LifeKind::bg_exit;
-    e.id        = id;
-    e.exit_code = exit_code;
-    e.killed    = killed;
-    pending_lifecycle_.push_back(std::move(e));
-}
-
-void TerminalPanel::on_sync_started(const std::string& command)
-{
-    std::lock_guard l(mu_);
-    LifeEvent e;
-    e.kind    = LifeKind::sync_start;
-    e.id      = k_sync_id;
-    e.command = command;
-    pending_lifecycle_.push_back(std::move(e));
-    // Drop any leftover text that hadn't been flushed yet -- this is a brand
-    // new invocation and the panel resets the sync tab on the lifecycle event.
-    pending_text_.erase(k_sync_id);
-}
-
-void TerminalPanel::on_sync_chunk(const char* data, std::size_t n)
-{
-    std::lock_guard l(mu_);
-    pending_text_[k_sync_id].append(data, n);
-}
-
-void TerminalPanel::on_sync_exited(int exit_code, bool timed_out)
-{
-    std::lock_guard l(mu_);
-    LifeEvent e;
-    e.kind      = LifeKind::sync_exit;
-    e.id        = k_sync_id;
-    e.exit_code = exit_code;
-    e.timed_out = timed_out;
-    pending_lifecycle_.push_back(std::move(e));
+    first_command_observer_ = std::move(obs);
 }
 
 // -- UI thread ---------------------------------------------------------------
 
 void TerminalPanel::on_flush_timer(wxTimerEvent& /*evt*/)
 {
-    std::deque<LifeEvent>                   lifecycle;
-    std::unordered_map<int, std::string>    text;
-    {
-        std::lock_guard l(mu_);
-        lifecycle.swap(pending_lifecycle_);
-        text.swap(pending_text_);
-    }
+    if (!state_) return;
 
-    // Lifecycle first -- a start event may need to create a tab before its
-    // chunks arrive in the same tick.
-    for (const auto& ev : lifecycle) process_lifecycle(ev);
+    std::deque<TerminalPanelState::LifeEvent>      lifecycle;
+    std::unordered_map<int, std::string>           text;
+    if (!state_->drain_pending(lifecycle, text)) return;
 
-    for (auto& [id, blob] : text) {
-        auto it = tabs_.find(id);
-        if (it == tabs_.end()) {
-            // Process started + chunk + exited in the same window before the
-            // start event was processed (unlikely but possible). Drop the
-            // unattributable text rather than silently lose tab structure.
-            continue;
+    // 1. Lifecycle first -- create / tear down STC pages, update badges. The
+    //    state has already applied lifecycle effects to its tab map by the
+    //    time drain_pending returns, so this is purely a widget mirror.
+    for (const auto& ev : lifecycle) {
+        switch (ev.kind) {
+            case TerminalPanelState::LifeKind::sync_start: {
+                Page* page = ensure_page_(TerminalPanelState::k_sync_id);
+                if (!page || !page->stc) break;
+                page->stc->SetReadOnly(false);
+                page->stc->ClearAll();
+                page->stc->SetReadOnly(true);
+                page->cmd_header_written = false;
+                write_command_header_(*page, ev.command);
+                if (auto snap = state_->snapshot(page->id))
+                    set_tab_badge_(find_notebook_index_(page->id), *snap);
+                if (first_command_observer_) first_command_observer_();
+                break;
+            }
+            case TerminalPanelState::LifeKind::sync_exit: {
+                if (auto snap = state_->snapshot(TerminalPanelState::k_sync_id))
+                    set_tab_badge_(
+                        find_notebook_index_(TerminalPanelState::k_sync_id), *snap);
+                break;
+            }
+            case TerminalPanelState::LifeKind::bg_start: {
+                Page* page = ensure_page_(ev.id);
+                if (!page) break;
+                if (!page->cmd_header_written)
+                    write_command_header_(*page, ev.command);
+                if (auto snap = state_->snapshot(page->id))
+                    set_tab_badge_(find_notebook_index_(page->id), *snap);
+                if (first_command_observer_) first_command_observer_();
+                break;
+            }
+            case TerminalPanelState::LifeKind::bg_exit: {
+                // Per S5.B: drop the tab when the bg process is gone. The
+                // state has already removed the sub-tab from its map; we
+                // mirror by deleting the notebook page.
+                int idx = find_notebook_index_(ev.id);
+                if (idx >= 0) notebook_->DeletePage(static_cast<size_t>(idx));
+                pages_.erase(ev.id);
+                break;
+            }
         }
-        append_to_tab(*it->second, blob);
+    }
+
+    // 2. Text chunks. parse_and_append (state side) walks the tab's ANSI
+    //    parser and returns the freshly produced events; we write them
+    //    straight to the STC for the matching page.
+    for (auto& [id, blob] : text) {
+        if (blob.empty()) continue;
+        Page* page = nullptr;
+        if (auto it = pages_.find(id); it != pages_.end()) page = &it->second;
+        if (!page || !page->stc) continue;
+
+        auto events = state_->parse_and_append(id, blob);
+        if (events.empty()) continue;
+
+        // Track at-bottom-ness BEFORE writing so user scroll position is
+        // preserved (matches S5.B behaviour).
+        int line_count = page->stc->GetLineCount();
+        int visible    = page->stc->LinesOnScreen();
+        int first_vis  = page->stc->GetFirstVisibleLine();
+        bool at_bottom = (first_vis + visible >= line_count - 1);
+        bool stick     = true;
+        if (auto snap = state_->snapshot(id)) stick = snap->stick_to_bottom;
+        if (at_bottom) {
+            stick = true;
+            state_->set_stick_to_bottom(id, true);
+        } else if (page->stc->GetCurrentPos() != page->stc->GetLastPosition()) {
+            stick = false;
+            state_->set_stick_to_bottom(id, false);
+        }
+
+        page->stc->SetReadOnly(false);
+        TerminalTabState dummy;  // unused -- replay uses page only here
+        (void)dummy;
+        for (const auto& ev : events) apply_ansi_event_(*page, ev, nullptr);
+        page->stc->SetReadOnly(true);
+
+        trim_scrollback_(*page);
+
+        if (stick) {
+            page->stc->ScrollToLine(page->stc->GetLineCount());
+            page->stc->GotoPos(page->stc->GetLastPosition());
+        }
     }
 }
 
-TerminalPanel::Tab* TerminalPanel::ensure_tab(int id, const std::string& command)
+void TerminalPanel::rebuild_from_state_()
 {
-    auto it = tabs_.find(id);
-    if (it != tabs_.end()) return it->second.get();
+    clear_pages_();
+    if (!state_) return;
 
-    auto tab = std::make_unique<Tab>();
-    tab->id      = id;
-    tab->command = command;
-    tab->page    = new wxPanel(notebook_, wxID_ANY);
-    tab->stc     = new wxStyledTextCtrl(tab->page, wxID_ANY);
-    ensure_style_table(tab->stc);
-    tab->stc->SetReadOnly(true);
-    auto* sz = new wxBoxSizer(wxVERTICAL);
-    sz->Add(tab->stc, 1, wxEXPAND);
-    tab->page->SetSizer(sz);
+    auto ids = state_->tab_ids_in_order();
+    for (int id : ids) {
+        auto snap = state_->snapshot(id);
+        if (!snap) continue;
+        Page* page = ensure_page_(id);
+        if (!page) continue;
+        // Replay the canonical event log so the user sees exactly what was
+        // there when they last visited the tab. We don't write a fresh
+        // command header here -- replay covers it if the original sync_start
+        // produced one. For bg tabs (which write the header lazily on the
+        // first start event), the original header is in the event log too.
+        page->cmd_header_written = true;
+        auto events = state_->events_clone(id);
+        replay_events_(*page, events);
+        set_tab_badge_(find_notebook_index_(id), *snap);
+    }
 
-    // Tab label: short id + truncated command.
-    std::string label_cmd = command;
-    if (label_cmd.size() > 32) label_cmd = label_cmd.substr(0, 29) + "...";
-    wxString label = wxString::Format("#%d %s", id, wxString::FromUTF8(label_cmd));
-    notebook_->AddPage(tab->page, label);
-
-    Tab* raw = tab.get();
-    tabs_[id] = std::move(tab);
-    return raw;
+    int active = state_->active_sub_tab_id();
+    int idx    = find_notebook_index_(active);
+    if (idx >= 0) notebook_->SetSelection(static_cast<size_t>(idx));
 }
 
-int TerminalPanel::find_tab_index(int id) const
+void TerminalPanel::clear_pages_()
 {
-    auto it = tabs_.find(id);
-    if (it == tabs_.end()) return -1;
-    wxWindow* page = it->second->page;
+    if (!notebook_) return;
+    while (notebook_->GetPageCount() > 0) {
+        notebook_->DeletePage(0);
+    }
+    pages_.clear();
+}
+
+TerminalPanel::Page* TerminalPanel::ensure_page_(int id)
+{
+    auto it = pages_.find(id);
+    if (it != pages_.end()) return &it->second;
+    if (!notebook_) return nullptr;
+
+    Page page;
+    page.id    = id;
+    page.panel = new wxPanel(notebook_, wxID_ANY);
+    page.stc   = new wxStyledTextCtrl(page.panel, wxID_ANY);
+    ensure_style_table_(page.stc);
+    page.stc->SetReadOnly(true);
+    auto* sz = new wxBoxSizer(wxVERTICAL);
+    sz->Add(page.stc, 1, wxEXPAND);
+    page.panel->SetSizer(sz);
+
+    wxString label = (id == TerminalPanelState::k_sync_id)
+        ? wxString("Run")
+        : wxString::Format("#%d", id);
+    notebook_->AddPage(page.panel, label);
+
+    auto [insert_it, _] = pages_.emplace(id, std::move(page));
+    return &insert_it->second;
+}
+
+int TerminalPanel::find_notebook_index_(int id) const
+{
+    auto it = pages_.find(id);
+    if (it == pages_.end()) return -1;
+    wxWindow* w = it->second.panel;
     for (size_t i = 0; i < notebook_->GetPageCount(); ++i)
-        if (notebook_->GetPage(i) == page) return static_cast<int>(i);
+        if (notebook_->GetPage(i) == w) return static_cast<int>(i);
     return -1;
 }
 
-void TerminalPanel::set_tab_badge(int idx, const Tab& tab)
+void TerminalPanel::write_command_header_(Page& page, const std::string& command)
 {
-    if (idx < 0) return;
-    std::string label_cmd = tab.command;
-    if (label_cmd.size() > 32) label_cmd = label_cmd.substr(0, 29) + "...";
-    wxString base = tab.id == k_sync_id
-        ? wxString("Run")
-        : wxString::Format("#%d %s", tab.id, wxString::FromUTF8(label_cmd));
-    wxString badge;
-    if (tab.active) {
-        badge = " *";   // running
-    } else if (tab.killed || tab.timed_out) {
-        badge = wxString::Format(" [x:%d]", tab.exit_code);
-    } else {
-        badge = wxString::Format(" [%d]", tab.exit_code);
-    }
-    notebook_->SetPageText(idx, base + badge);
+    if (!page.stc || command.empty()) return;
+    page.stc->SetReadOnly(false);
+    AnsiStyle style;
+    write_styled_(page, "> " + command + "\n", style);
+    page.stc->SetReadOnly(true);
+    page.cmd_header_written = true;
 }
 
-void TerminalPanel::process_lifecycle(const LifeEvent& ev)
+void TerminalPanel::replay_events_(Page& page, const std::vector<AnsiEvent>& events)
 {
-    switch (ev.kind) {
-        case LifeKind::sync_start: {
-            auto it = tabs_.find(k_sync_id);
-            if (it == tabs_.end()) return;
-            Tab& tab = *it->second;
-            tab.command   = ev.command;
-            tab.active    = true;
-            tab.killed    = false;
-            tab.timed_out = false;
-            tab.exit_code = 0;
-            tab.parser.reset();
-            tab.stc->SetReadOnly(false);
-            tab.stc->ClearAll();
-            tab.stc->SetReadOnly(true);
-            tab.stick_to_bottom = true;
-            write_command_header(tab, ev.command);
-            set_tab_badge(find_tab_index(k_sync_id), tab);
-            break;
-        }
-        case LifeKind::sync_exit: {
-            auto it = tabs_.find(k_sync_id);
-            if (it == tabs_.end()) return;
-            Tab& tab = *it->second;
-            tab.active    = false;
-            tab.exit_code = ev.exit_code;
-            tab.timed_out = ev.timed_out;
-            set_tab_badge(find_tab_index(k_sync_id), tab);
-            break;
-        }
-        case LifeKind::bg_start: {
-            bool fresh = tabs_.find(ev.id) == tabs_.end();
-            Tab* tab = ensure_tab(ev.id, ev.command);
-            tab->active = true;
-            if (fresh) write_command_header(*tab, ev.command);
-            set_tab_badge(find_tab_index(ev.id), *tab);
-            break;
-        }
-        case LifeKind::bg_exit: {
-            auto it = tabs_.find(ev.id);
-            if (it == tabs_.end()) return;
-            // Always close the tab when the bg process is gone -- there's no
-            // way to interact with it any more, and the live "killed"-vs-
-            // "clean exit" branch we used to have was flaky in practice
-            // (the reader thread's was_killed flag races against
-            // TerminateJobObject on Windows, so signals to the panel landed
-            // inconsistently). Output history loss is the tradeoff; the user
-            // can copy from the tab before stopping if they need to keep it.
-            int idx = find_tab_index(ev.id);
-            if (idx >= 0) notebook_->DeletePage(static_cast<size_t>(idx));
-            tabs_.erase(it);
-            break;
-        }
-    }
+    if (!page.stc) return;
+    page.stc->SetReadOnly(false);
+    for (const auto& ev : events) apply_ansi_event_(page, ev, nullptr);
+    page.stc->SetReadOnly(true);
+    trim_scrollback_(page);
+    page.stc->ScrollToLine(page.stc->GetLineCount());
+    page.stc->GotoPos(page.stc->GetLastPosition());
 }
 
-void TerminalPanel::append_to_tab(Tab& tab, const std::string& text)
-{
-    if (text.empty() || !tab.stc) return;
-
-    // Detect whether the user has scrolled away from the bottom. If they
-    // have, keep stick_to_bottom off; if they're at the bottom (within one
-    // line), turn it back on.
-    int line_count = tab.stc->GetLineCount();
-    int visible    = tab.stc->LinesOnScreen();
-    int first_vis  = tab.stc->GetFirstVisibleLine();
-    bool at_bottom = (first_vis + visible >= line_count - 1);
-    if (at_bottom) tab.stick_to_bottom = true;
-    else if (!at_bottom && tab.stc->GetCurrentPos() != tab.stc->GetLastPosition()) {
-        // user scrolled away -- keep current position
-        tab.stick_to_bottom = false;
-    }
-
-    std::vector<AnsiEvent> events;
-    tab.parser.consume(text.data(), text.size(), events);
-    tab.stc->SetReadOnly(false);
-    for (const auto& ev : events) apply_ansi_event(tab, ev);
-    tab.stc->SetReadOnly(true);
-
-    trim_scrollback(tab);
-
-    if (tab.stick_to_bottom) {
-        tab.stc->ScrollToLine(tab.stc->GetLineCount());
-        tab.stc->GotoPos(tab.stc->GetLastPosition());
-    }
-}
-
-void TerminalPanel::trim_scrollback(Tab& tab)
-{
-    if (max_lines_per_tab_ == 0) return;
-    int line_count = tab.stc->GetLineCount();
-    if (line_count <= static_cast<int>(max_lines_per_tab_)) return;
-    int excess = line_count - static_cast<int>(max_lines_per_tab_);
-    int cut_pos = tab.stc->PositionFromLine(excess);
-    tab.stc->SetReadOnly(false);
-    tab.stc->DeleteRange(0, cut_pos);
-    tab.stc->SetReadOnly(true);
-}
-
-void TerminalPanel::apply_ansi_event(Tab& tab, const AnsiEvent& ev)
+void TerminalPanel::apply_ansi_event_(Page& page, const AnsiEvent& ev,
+                                       TerminalTabState* /*tab_state*/)
 {
     switch (ev.kind) {
         case AnsiEventKind::text:
-            write_styled(tab, ev.text, ev.style);
+            write_styled_(page, ev.text, ev.style);
             break;
         case AnsiEventKind::erase_to_eol: {
-            int pos = tab.stc->GetLastPosition();
-            int line = tab.stc->LineFromPosition(pos);
-            int eol  = tab.stc->GetLineEndPosition(line);
-            if (eol > pos) tab.stc->DeleteRange(pos, eol - pos);
+            int pos = page.stc->GetLastPosition();
+            int line = page.stc->LineFromPosition(pos);
+            int eol  = page.stc->GetLineEndPosition(line);
+            if (eol > pos) page.stc->DeleteRange(pos, eol - pos);
             break;
         }
         case AnsiEventKind::erase_to_bol: {
-            int pos  = tab.stc->GetLastPosition();
-            int line = tab.stc->LineFromPosition(pos);
-            int bol  = tab.stc->PositionFromLine(line);
-            if (pos > bol) tab.stc->DeleteRange(bol, pos - bol);
+            int pos  = page.stc->GetLastPosition();
+            int line = page.stc->LineFromPosition(pos);
+            int bol  = page.stc->PositionFromLine(line);
+            if (pos > bol) page.stc->DeleteRange(bol, pos - bol);
             break;
         }
         case AnsiEventKind::erase_line: {
-            int pos  = tab.stc->GetLastPosition();
-            int line = tab.stc->LineFromPosition(pos);
-            int bol  = tab.stc->PositionFromLine(line);
-            int eol  = tab.stc->GetLineEndPosition(line);
-            if (eol > bol) tab.stc->DeleteRange(bol, eol - bol);
-            tab.stc->GotoPos(bol);
+            int pos  = page.stc->GetLastPosition();
+            int line = page.stc->LineFromPosition(pos);
+            int bol  = page.stc->PositionFromLine(line);
+            int eol  = page.stc->GetLineEndPosition(line);
+            if (eol > bol) page.stc->DeleteRange(bol, eol - bol);
+            page.stc->GotoPos(bol);
             break;
         }
         case AnsiEventKind::erase_display:
-            tab.stc->ClearAll();
+            page.stc->ClearAll();
             break;
     }
 }
 
-// Encode an AnsiStyle as a style table index in [1, 255].
-int TerminalPanel::style_id_for(const AnsiStyle& s)
+void TerminalPanel::write_styled_(Page& page, const std::string& text,
+                                   const AnsiStyle& style)
+{
+    if (text.empty() || !page.stc) return;
+
+    // Robust byte-to-wxString decode (see S5.B for the rationale).
+    wxString s = wxString::FromUTF8(text.data(), text.size());
+    if (s.IsEmpty() && !text.empty()) {
+        s = wxString::From8BitData(text.data(), text.size());
+    }
+
+    int start_pos = page.stc->GetLastPosition();
+    page.stc->AppendText(s);
+    int end_pos = page.stc->GetLastPosition();
+    int id      = style_id_for_(style);
+    if (end_pos > start_pos) {
+        page.stc->StartStyling(start_pos);
+        page.stc->SetStyling(end_pos - start_pos, id);
+    }
+}
+
+void TerminalPanel::trim_scrollback_(Page& page)
+{
+    if (max_lines_per_tab_ == 0) return;
+    int line_count = page.stc->GetLineCount();
+    if (line_count <= static_cast<int>(max_lines_per_tab_)) return;
+    int excess = line_count - static_cast<int>(max_lines_per_tab_);
+    int cut_pos = page.stc->PositionFromLine(excess);
+    page.stc->SetReadOnly(false);
+    page.stc->DeleteRange(0, cut_pos);
+    page.stc->SetReadOnly(true);
+}
+
+void TerminalPanel::set_tab_badge_(int idx,
+                                    const TerminalPanelState::TabSnapshot& snap)
+{
+    if (idx < 0 || !notebook_) return;
+    std::string label_cmd = snap.command;
+    if (label_cmd.size() > 32) label_cmd = label_cmd.substr(0, 29) + "...";
+    wxString base = (snap.id == TerminalPanelState::k_sync_id)
+        ? wxString("Run")
+        : wxString::Format("#%d %s", snap.id, wxString::FromUTF8(label_cmd));
+    wxString badge;
+    if (snap.active) {
+        badge = " *";
+    } else if (snap.killed || snap.timed_out) {
+        badge = wxString::Format(" [x:%d]", snap.exit_code);
+    } else {
+        badge = wxString::Format(" [%d]", snap.exit_code);
+    }
+    notebook_->SetPageText(static_cast<size_t>(idx), base + badge);
+}
+
+int TerminalPanel::style_id_for_(const AnsiStyle& s)
 {
     if (s.fg_index < 0 && s.bg_index < 0 && !s.bold && !s.dim)
         return k_style_default;
-    // 4 bits bold|dim|fg_default|bg_default (top), 4 bits fg_index, 4 bits bg_index
-    int fg = s.fg_index < 0 ? 16 : s.fg_index;  // 0..16 -> 5 bits
+    int fg = s.fg_index < 0 ? 16 : s.fg_index;
     int bg = s.bg_index < 0 ? 16 : s.bg_index;
     int id = 1 + fg + bg * 17 + (s.bold ? 17 * 17 : 0);
     if (id < 1) id = 1;
-    // Scintilla reserves ids 32-39 for wxSTC_STYLE_DEFAULT, _LINENUMBER,
-    // _BRACELIGHT, _BRACEBAD, _CONTROLCHAR, _INDENTGUIDE, _CALLTIP,
-    // _LASTPREDEFINED. Without the skip, our loop overwrites wxSTC_STYLE_
-    // DEFAULT (the bg Scintilla paints over the empty area below text)
-    // with whatever (fg,bg,bold) combo happens to encode to 32 -- on the
-    // user's reporter setup that was (fg=14, bg=1, bold=0), staining the
-    // whole terminal pane bg with palette(1) = #B2182C (ANSI red).
     if (id >= 32 && id <= 39) id += 8;
     if (id > 254) id = 254;
     return id;
 }
 
-void TerminalPanel::ensure_style_table(wxStyledTextCtrl* stc)
+void TerminalPanel::ensure_style_table_(wxStyledTextCtrl* stc)
 {
-    // Theme-aware base colours. Hard-coded white-on-black left dark-mode
-    // builds with a glaring white terminal pane in an otherwise dark UI;
-    // pick neutral grey shades per theme so the panel blends in.
     const bool dark = theme::is_dark();
     const wxColour default_bg = dark ? wxColour(30, 30, 30)   : *wxWHITE;
     const wxColour default_fg = dark ? wxColour(220, 220, 220) : *wxBLACK;
@@ -440,11 +402,6 @@ void TerminalPanel::ensure_style_table(wxStyledTextCtrl* stc)
     stc->SetWrapMode(wxSTC_WRAP_NONE);
     stc->SetUseHorizontalScrollBar(true);
 
-    // Pre-populate the cross product of (fg, bg, bold). dim is collapsed onto
-    // bold for now -- few real terminals distinguish them and the visual
-    // difference on a grey background is tiny. style_id_for skips Scintilla's
-    // reserved range 32-39 (see its body); `assigned` below stops later
-    // (clamped-onto-254) high combos from overwriting earlier valid styles.
     std::vector<bool> assigned(256, false);
     for (int bold = 0; bold < 2; ++bold) {
         for (int bg = 0; bg < 17; ++bg) {
@@ -453,7 +410,7 @@ void TerminalPanel::ensure_style_table(wxStyledTextCtrl* stc)
                 s.fg_index = fg == 16 ? -1 : static_cast<int8_t>(fg);
                 s.bg_index = bg == 16 ? -1 : static_cast<int8_t>(bg);
                 s.bold     = (bold != 0);
-                int id     = style_id_for(s);
+                int id     = style_id_for_(s);
                 if (id == k_style_default) continue;
                 if (assigned[static_cast<size_t>(id)]) continue;
                 assigned[static_cast<size_t>(id)] = true;
@@ -468,78 +425,31 @@ void TerminalPanel::ensure_style_table(wxStyledTextCtrl* stc)
     }
 }
 
-void TerminalPanel::write_styled(Tab& tab, const std::string& text,
-                                  const AnsiStyle& style)
-{
-    if (text.empty()) return;
-
-    // Robust byte-to-wxString decode. Windows console / Python output isn't
-    // always UTF-8 -- depending on the active codepage Python may emit CP1252
-    // / CP866 / OEM bytes for stderr. wxString::FromUTF8 silently returns
-    // EMPTY when any byte fails to validate, which used to drop entire
-    // chunks (only trailing \n got through, rendering as a lone control-char
-    // glyph on a red bg). Try UTF-8 first; on any decode failure fall back
-    // to Latin-1 (FromAscii / From8BitData) -- every byte maps to a valid
-    // wxString character, so the user at least sees the readable ASCII slice
-    // of mixed-encoding output.
-    wxString s = wxString::FromUTF8(text.data(), text.size());
-    if (s.IsEmpty() && !text.empty()) {
-        s = wxString::From8BitData(text.data(), text.size());
-    }
-
-    int start_pos = tab.stc->GetLastPosition();
-    tab.stc->AppendText(s);
-    int end_pos = tab.stc->GetLastPosition();
-    int id = style_id_for(style);
-    if (end_pos > start_pos) {
-        tab.stc->StartStyling(start_pos);
-        tab.stc->SetStyling(end_pos - start_pos, id);
-    }
-}
-
-void TerminalPanel::write_command_header(Tab& tab, const std::string& command)
-{
-    if (!tab.stc || command.empty()) return;
-    // Plain "> <command>" line in the tab's default style. The style table
-    // collapses every colored-fg-on-default-bg combination onto one clamped
-    // id, so trying to colorize this would either no-op or paint with an
-    // unrelated palette pair. A bare prefix is the safe, legible choice.
-    tab.stc->SetReadOnly(false);
-    AnsiStyle style;  // theme-default fg/bg
-    write_styled(tab, "> " + command + "\n", style);
-    tab.stc->SetReadOnly(true);
-}
-
-void TerminalPanel::on_tab_right_click(wxContextMenuEvent& /*evt*/)
-{
-    // Context menu wiring is deferred until the inner STCs each route their
-    // wxEVT_CONTEXT_MENU here. For v1 the right-click menu lives on the
-    // notebook tabs via wxNotebook's native handling.
-}
-
 void TerminalPanel::on_context_menu_action(wxCommandEvent& evt)
 {
+    if (!notebook_) return;
     int idx = notebook_->GetSelection();
     if (idx < 0) return;
     int target_id = -1;
-    for (auto& [id, tab] : tabs_) {
-        if (find_tab_index(id) == idx) { target_id = id; break; }
+    for (auto& [id, page] : pages_) {
+        if (find_notebook_index_(id) == idx) { target_id = id; break; }
     }
     if (target_id < 0) return;
-    auto it = tabs_.find(target_id);
-    if (it == tabs_.end()) return;
-    Tab& tab = *it->second;
+    auto pit = pages_.find(target_id);
+    if (pit == pages_.end()) return;
+    Page& page = pit->second;
 
     switch (evt.GetId()) {
         case ID_TERM_COPY_ALL: {
-            if (wxTheClipboard->Open()) {
-                wxTheClipboard->SetData(new wxTextDataObject(tab.stc->GetText()));
+            if (page.stc && wxTheClipboard->Open()) {
+                wxTheClipboard->SetData(new wxTextDataObject(page.stc->GetText()));
                 wxTheClipboard->Close();
             }
             break;
         }
         case ID_TERM_COPY_SEL: {
-            wxString sel = tab.stc->GetSelectedText();
+            if (!page.stc) break;
+            wxString sel = page.stc->GetSelectedText();
             if (!sel.IsEmpty() && wxTheClipboard->Open()) {
                 wxTheClipboard->SetData(new wxTextDataObject(sel));
                 wxTheClipboard->Close();
@@ -547,16 +457,16 @@ void TerminalPanel::on_context_menu_action(wxCommandEvent& evt)
             break;
         }
         case ID_TERM_CLEAR: {
-            tab.stc->SetReadOnly(false);
-            tab.stc->ClearAll();
-            tab.stc->SetReadOnly(true);
-            tab.parser.reset();
+            if (!page.stc) break;
+            page.stc->SetReadOnly(false);
+            page.stc->ClearAll();
+            page.stc->SetReadOnly(true);
+            if (state_) state_->clear_log(target_id);
             break;
         }
         case ID_TERM_KILL: {
-            if (registry_ && target_id != k_sync_id && tab.active) {
-                registry_->stop(target_id);
-            }
+            if (target_id != TerminalPanelState::k_sync_id && kill_handler_)
+                kill_handler_(target_id);
             break;
         }
     }

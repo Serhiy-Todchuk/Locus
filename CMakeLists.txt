@@ -391,6 +391,7 @@ add_library(locus_core STATIC
     src/agent/mention_parser.cpp
     src/frontends/cli/cli_frontend.cpp
     src/frontends/gui/ansi_parser.cpp
+    src/frontends/gui/terminal_panel_state.cpp
     src/frontends/gui/diff_renderer.cpp
     src/extractors/extractor_registry.cpp
     src/extractors/markdown_extractor.cpp

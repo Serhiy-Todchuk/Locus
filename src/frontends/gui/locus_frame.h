@@ -15,6 +15,7 @@
 #include "wx_frontend.h"
 #include "../../core/locus_session.h"
 #include "../../core/workspace.h"
+#include "../../tools/process_sink.h"
 
 #include <wx/wx.h>
 #include <wx/aui/aui.h>
@@ -53,18 +54,43 @@ private:
     void setup_aui_layout();
     void apply_saved_window_geometry();
 
+    // S5.R per-tab process observer. Lives in TabUi; subscribed to the
+    // tab's broker as a second `IProcessSink` alongside `TerminalPanelState`
+    // (which is the rendering sink). Chunk methods are no-ops; the observer
+    // exists only to drive auto-show + busy-badge bookkeeping.
+    class TabProcessObserver : public IProcessSink {
+    public:
+        TabProcessObserver(LocusFrame* frame, int tab_id) noexcept
+            : frame_(frame), tab_id_(tab_id) {}
+        void on_bg_started(int id, const std::string& cmd) override;
+        void on_bg_chunk  (int /*id*/, const char* /*d*/, std::size_t /*n*/) override {}
+        void on_bg_exited (int id, int exit_code, bool killed) override;
+        void on_sync_started(const std::string& cmd) override;
+        void on_sync_chunk  (const char* /*d*/, std::size_t /*n*/) override {}
+        void on_sync_exited (int /*exit*/, bool /*timed_out*/) override {}
+    private:
+        LocusFrame* frame_;
+        int         tab_id_;
+    };
+
     // Tab-shell helpers.
     struct TabUi {
         int                          tab_id = 0;     // matches LocusTab::tab_id
         LocusTab*                    tab    = nullptr;
         ChatPanel*                   chat   = nullptr;
         std::unique_ptr<WxFrontend>  frontend;       // registered with the tab's agent
+        // S5.R per-tab process observer; subscribed to the tab's broker.
+        std::unique_ptr<TabProcessObserver> proc_obs;
         // S5.I tab status badge (computed each event so we don't recompute
         // every render).
         bool busy             = false;
         bool awaiting_decision = false;
         bool ctx_over_warn   = false;
         bool ctx_over_auto   = false;
+        // S5.R -- number of currently-running bg processes in this tab. The
+        // `*` busy badge in compose_tab_label is on when any of busy,
+        // awaiting_decision, or busy_processes > 0 is true.
+        int  busy_processes  = 0;
     };
 
     // Build a `ChatPanel` + `WxFrontend` for `tab` and add it to the notebook
@@ -134,6 +160,19 @@ private:
     void on_agent_gen_progress(wxThreadEvent& evt);
     void on_agent_history_msg_added(wxThreadEvent& evt);
     void on_agent_history_msg_deleted(wxThreadEvent& evt);
+
+    // S5.R observer callbacks (forwarded from TabProcessObserver via
+    // CallAfter -- safe to call wx from here, runs on UI thread). Sync
+    // and bg are split because only bg moves the busy-process counter.
+    void on_tab_bg_started(int tab_id);
+    void on_tab_bg_exited(int tab_id);
+    void on_tab_sync_started(int tab_id);
+    // Shared post-event work: refresh the title + decide auto-show.
+    void maybe_auto_show_terminal_for(int tab_id);
+
+    // S5.R -- auto-show predicate. The free function in
+    // terminal_panel_state.h is the source of truth; it's reusable from
+    // locus_core / locus_tests (no wx).
 
     void refresh_ops_status();
 

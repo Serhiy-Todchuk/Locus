@@ -4,13 +4,8 @@
 - FastDebug
 
 - Auto-compaction toggle
-
-- S5.Z: move bullet 2 to backlog, remove bullets 3, 4, 9
 - Still no X button on tool call+result in chat
 - No [+] button (New Tab) a on sessions tabs stripe. Is it possible?
-
-4. [ ] Visible "New Conversation" button in the chat area. Currently reset is only reachable via Session menu (Ctrl+R) or `/reset` / `/clear` slash commands -- discoverable only if the user opens the menu or knows the slash. Add a small button in the chat panel header (or above the input box) that calls the same `agent_.reset_conversation()` hook the menu uses. Optional confirm dialog when the current conversation is non-empty ("Start a new conversation? Current chat will be saved."). Becomes load-bearing once auto-restore lands.
-
 - index_events (both indexing and embeddiing) are spamming Activity panel. Shall we group them somehow? If the last record in activity log is index_event, for example "Indexed 1 file", then just update existing event's file count instead of create new (and update time) - This is just a suggestion - you can think out smarter strategy.
 - When some error happened in session tab "!" sign appears in tab header. But when I hover the tab header - no explanation what it means. Add hovering bubble with short text status of a tab.
 - I have reopened prev session and tool result looks wrong in chat - it lost multi-line look and explicitly shows "\n" symbols within one line:

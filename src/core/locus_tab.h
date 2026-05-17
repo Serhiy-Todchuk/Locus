@@ -4,6 +4,7 @@
 #include "../agent/agent_core.h"
 #include "../agent/session_manager.h"
 #include "../core/frontend.h"
+#include "../frontends/gui/terminal_panel_state.h"
 #include "../llm/llm_client.h"
 #include "../tools/tool.h"
 
@@ -18,9 +19,10 @@ class ProcessSinkBroker;
 class Workspace;
 
 // S5.I -- one conversation tab inside a workspace. Owns the per-tab
-// `AgentCore`, the per-tab `ProcessRegistry`, and the per-tab title/session
-// id. References to the workspace-shared substrate (workspace itself, LLM
-// client, tool registry, session manager) come from the LocusSession.
+// `AgentCore`, the per-tab `ProcessRegistry`, the per-tab title/session
+// id, and (S5.R) the per-tab `TerminalPanelState`. References to the
+// workspace-shared substrate (workspace itself, LLM client, tool registry,
+// session manager) come from the LocusSession.
 //
 // Lifetime: constructed in `LocusSession::add_tab`; destructor stops the
 // agent thread first (so callbacks don't fire into freed members), then
@@ -38,7 +40,6 @@ public:
              const std::filesystem::path& checkpoints_dir,
              const std::filesystem::path& project_prompts_dir,
              const std::filesystem::path& global_prompts_dir,
-             ProcessSinkBroker* process_sink_broker,
              SessionManager& sessions);
 
     ~LocusTab();
@@ -64,6 +65,19 @@ public:
     AgentCore&         agent()                       { return *agent_; }
     const AgentCore&   agent() const                 { return *agent_; }
     ProcessRegistry&   processes()                   { return *processes_; }
+
+    // S5.R per-tab terminal model. The GUI's TerminalPanel widget reads
+    // (and on activation renders) this state; workers feed it via the
+    // tab's own ProcessSinkBroker. Always non-null.
+    TerminalPanelState&       terminal_state()        { return *terminal_state_; }
+    const TerminalPanelState& terminal_state() const  { return *terminal_state_; }
+
+    // S5.R workspace-pane-relative hide flag. Set when the user manually
+    // hides the Terminal pane while this tab is active; cleared when the
+    // user re-opens the pane manually. Gates the auto-show heuristic so a
+    // deliberate hide isn't undone by the next command in the same tab.
+    bool terminal_user_hidden() const                 { return terminal_user_hidden_; }
+    void set_terminal_user_hidden(bool hidden)        { terminal_user_hidden_ = hidden; }
 
     // True iff the agent has at least one non-system message. Drives the
     // "empty tab is silently discarded" rule on close.
@@ -103,13 +117,20 @@ private:
     SessionManager& sessions_;
     std::filesystem::path sessions_dir_;
 
-    // Per-tab subsystems. Order matters: AgentCore must die first (joins its
-    // thread) before processes_ tears down so a tool call in flight can't
-    // dereference a freed registry.
+    // Per-tab subsystems. Order matters:
+    //   - AgentCore must die first (joined in ~LocusTab body) before
+    //     processes_ tears down so a tool call in flight can't dereference
+    //     a freed registry.
+    //   - terminal_state_ is the LAST unique_ptr declared so it destructs
+    //     first (reverse declaration order). ~LocusTab also unsubscribes
+    //     it from the broker explicitly before unique_ptr destruction
+    //     begins -- belt-and-suspenders.
     std::unique_ptr<ProcessRegistry>    processes_;
     std::unique_ptr<IWorkspaceServices> services_;     // TabServices impl in .cpp
     std::unique_ptr<AgentCore>          agent_;
     std::unique_ptr<AutoSaveFrontend>   autosave_fe_;  // registered last
+    std::unique_ptr<TerminalPanelState> terminal_state_;
+    bool                                 terminal_user_hidden_ = false;
 };
 
 } // namespace locus
