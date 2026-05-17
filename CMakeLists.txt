@@ -514,6 +514,19 @@ add_custom_command(TARGET locus_gui POST_BUILD
             "${PDFIUM_DLL}" "$<TARGET_FILE_DIR:locus_gui>"
 )
 
+# Copy bundled Prism (syntax highlighter for chat code blocks) next to
+# locus_gui.exe so the chat WebView loads it via file:// at runtime - no
+# CDN dependency.  Refresh via third_party/prism/build-bundle.ps1.
+add_custom_command(TARGET locus_gui POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+            "$<TARGET_FILE_DIR:locus_gui>/resources/prism"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/third_party/prism/prism.min.js"
+            "${CMAKE_SOURCE_DIR}/third_party/prism/prism.min.css"
+            "${CMAKE_SOURCE_DIR}/third_party/prism/prism-tomorrow.min.css"
+            "$<TARGET_FILE_DIR:locus_gui>/resources/prism/"
+)
+
 # -- Tests ---------------------------------------------------------------------
 
 enable_testing()

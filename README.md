@@ -140,6 +140,8 @@ locus/
   locus.exe
   locus_gui.exe
   pdfium.dll
+  resources/
+    prism/        (bundled syntax highlighter for chat code blocks)
   models/         (initially empty -- populate via the script in step 3)
 ```
 
@@ -165,7 +167,8 @@ cmake --build build/release --config Release
 The first configure pulls every dependency through vcpkg in static-CRT mode and
 fetches Tree-sitter grammars -- plan for **10-25 minutes**. Subsequent builds
 finish in seconds. Outputs land at `build/release/Release/locus.exe` and
-`build/release/Release/locus_gui.exe`. `pdfium.dll` is auto-copied next to each.
+`build/release/Release/locus_gui.exe`. `pdfium.dll` and the bundled Prism
+assets under `resources/prism/` are auto-copied next to the exes by POST_BUILD steps.
 
 Full build/test reference: [CONTRIBUTING.md](CONTRIBUTING.md).
 

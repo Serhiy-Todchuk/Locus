@@ -73,7 +73,10 @@ The repo has six buildable targets:
 | `locus_ui_tests`           | Scripted Windows UIA driver for `locus_gui.exe` (manual only) | `build/release/tests/ui_automation/Release/locus_ui_tests.exe` |
 
 `pdfium.dll` is auto-copied next to `locus.exe` and `locus_gui.exe` by a
-`POST_BUILD` step on each app target.
+`POST_BUILD` step on each app target. The bundled Prism syntax highlighter
+([third_party/prism/](third_party/prism/)) is copied to
+`<exe_dir>/resources/prism/` alongside `locus_gui.exe`. Refresh Prism via
+[third_party/prism/build-bundle.ps1](third_party/prism/build-bundle.ps1).
 
 ### Build everything (default target -- skips `_integration_tests` and `_retrieval_eval`)
 

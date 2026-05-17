@@ -15,9 +15,12 @@
 
 #include <spdlog/spdlog.h>
 
+#include <wx/stdpaths.h>
 #include <wx/webview.h>
 
 #include <algorithm>
+#include <filesystem>
+#include <fstream>
 #include <sstream>
 #include <unordered_set>
 
@@ -27,17 +30,25 @@ namespace locus {
 static constexpr int k_flush_interval_ms = 33;  // ~30fps
 
 // ---------------------------------------------------------------------------
-// Prism.js
+// Prism.js -- bundled locally under <exe_dir>/resources/prism/ so the chat
+// WebView highlights code without reaching for a CDN.  Refresh the bundle via
+// third_party/prism/build-bundle.ps1.
 // ---------------------------------------------------------------------------
 
-static const char* k_prism_css_light_url =
-    "https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css";
-static const char* k_prism_css_dark_url =
-    "https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css";
-static const char* k_prism_js_url =
-    "https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js";
-static const char* k_prism_autoloader_url =
-    "https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js";
+static std::string read_prism_asset(const char* filename)
+{
+    auto exe = wxStandardPaths::Get().GetExecutablePath().ToStdString();
+    auto path = std::filesystem::path(exe).parent_path() /
+                "resources" / "prism" / filename;
+    std::ifstream in(path, std::ios::binary);
+    if (!in) {
+        spdlog::warn("ChatPanel: Prism asset missing: {}", path.string());
+        return {};
+    }
+    std::ostringstream ss;
+    ss << in.rdbuf();
+    return ss.str();
+}
 
 // ---------------------------------------------------------------------------
 // Chat HTML template
@@ -48,12 +59,12 @@ std::string ChatPanel::build_chat_html()
     std::string html = R"html(<!DOCTYPE html>
 <html><head>
 <meta charset="utf-8">
-<link rel="stylesheet" href=")html";
-    html += k_prism_css_light_url;
-    html += R"html(" media="(prefers-color-scheme: light)">
-<link rel="stylesheet" href=")html";
-    html += k_prism_css_dark_url;
-    html += R"html(" media="(prefers-color-scheme: dark)">
+<style media="(prefers-color-scheme: light)">)html";
+    html += read_prism_asset("prism.min.css");
+    html += R"html(</style>
+<style media="(prefers-color-scheme: dark)">)html";
+    html += read_prism_asset("prism-tomorrow.min.css");
+    html += R"html(</style>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
@@ -806,12 +817,9 @@ function setPlanDecided(msgId, label) {
     }
 }
 </script>
-<script src=")html";
-    html += k_prism_js_url;
-    html += R"html(" async></script>
-<script src=")html";
-    html += k_prism_autoloader_url;
-    html += R"html(" async></script>
+<script>)html";
+    html += read_prism_asset("prism.min.js");
+    html += R"html(</script>
 </body></html>)html";
 
     return html;

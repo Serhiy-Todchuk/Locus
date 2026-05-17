@@ -235,7 +235,8 @@
       "Bash(python -c \"print\\('no script'\\)\")",
       "Bash(build/release/tests/Release/locus_tests.exe \"[s5.f]\")",
       "WebFetch(domain:api.github.com)",
-      "Bash(curl -sSLI \"https://raw.githubusercontent.com/python-openxml/python-docx/master/tests/test_files/test.docx\")"
+      "Bash(curl -sSLI \"https://raw.githubusercontent.com/python-openxml/python-docx/master/tests/test_files/test.docx\")",
+      "Bash(powershell -NoProfile -Command \"Get-ChildItem 'd:\\\\Projects\\\\AICodeAss\\\\src\\\\frontends\\\\gui\\\\chat_panel.cpp','d:\\\\Projects\\\\AICodeAss\\\\build\\\\release\\\\Release\\\\locus_gui.exe' | Select-Object FullName,LastWriteTime | Format-Table -AutoSize\")"
     ]
   }
 }
