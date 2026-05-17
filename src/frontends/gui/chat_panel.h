@@ -135,6 +135,15 @@ public:
     void on_history_message_added(int history_id, MessageRole role,
                                    bool deletable);
 
+    // S5.I follow-up -- render a previously-saved conversation into the chat
+    // panel.  Called once when a tab restores from disk (the live agent path
+    // already paints bubbles for new messages; this only fires for content
+    // that came from the session JSON).  Walks the history in order, emits
+    // basic user / assistant / tool bubbles, attaches the hover-reveal X to
+    // deletable ones, and populates the history_to_dom_ map so per-message
+    // delete works on restored content.
+    void render_loaded_history(const class ConversationHistory& history);
+
     // S5.G -- a ChatMessage was removed from ConversationHistory. Removes the
     // matching dom bubble.
     void on_history_message_deleted(int history_id);

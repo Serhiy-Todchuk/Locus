@@ -56,6 +56,11 @@ public:
     const std::string& session_id() const            { return session_id_; }
     void               set_session_id(std::string id) { session_id_ = std::move(id); }
 
+    // True while load_session is replaying history into the agent. The
+    // AutoSaveFrontend checks this to skip auto-saves triggered by the
+    // re-announce flow (the data already came from disk).
+    bool               is_loading() const            { return loading_; }
+
     AgentCore&         agent()                       { return *agent_; }
     const AgentCore&   agent() const                 { return *agent_; }
     ProcessRegistry&   processes()                   { return *processes_; }
@@ -93,6 +98,7 @@ private:
     int          tab_id_;
     std::string  title_;
     std::string  session_id_;
+    bool         loading_ = false;
 
     SessionManager& sessions_;
     std::filesystem::path sessions_dir_;

@@ -59,6 +59,11 @@ public:
 
 private:
     void try_save() {
+        // Skip during load_session's re-announce flow -- the data already came
+        // from disk; saving again would just rewrite the same JSON N times and
+        // (worse, before the load_session reorder fix) could write under a
+        // fresh session_id while session_id_ was still empty.
+        if (tab_->is_loading()) return;
         // No-op until the tab has at least one user message (lazy session-file
         // creation rule). Persist runs synchronously on the agent thread; the
         // disk-I/O cost is acceptable for small JSONs and a single workspace
@@ -239,18 +244,32 @@ std::string LocusTab::persist_as_new()
 
 void LocusTab::load_session(const std::string& id)
 {
-    agent_->load_session(id);
+    // Set session_id_ BEFORE the agent load so AutoSaveFrontend (if its
+    // is_loading guard ever flips for any reason) doesn't see an empty id
+    // and generate a fresh one.  Also bump last-opened first so the restore-
+    // bookkeeping picks it up even if the agent load throws.
     session_id_ = id;
-    // Bump last-opened so the restore-bookkeeping picks it up.
     sessions_.bump_last_opened_at(id);
     // Try to pick up the title from the session file.
     for (const auto& info : sessions_.list()) {
         if (info.id == id) {
             if (!info.title.empty()) title_ = info.title;
-            else                     maybe_autoderive_title();
             break;
         }
     }
+
+    // Suppress AutoSaveFrontend during the re-announce flow inside
+    // agent_->load_session -- the data already came from disk.
+    loading_ = true;
+    try {
+        agent_->load_session(id);
+    } catch (...) {
+        loading_ = false;
+        throw;
+    }
+    loading_ = false;
+
+    if (title_.empty()) maybe_autoderive_title();
 }
 
 } // namespace locus

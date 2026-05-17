@@ -10,6 +10,7 @@
 #include "theme.h"
 #include "ui_names.h"
 
+#include "../../agent/conversation.h"
 #include "../../agent/mention_parser.h"
 #include "../../llm/token_counter.h"
 
@@ -1420,6 +1421,98 @@ void ChatPanel::on_history_message_deleted(int history_id)
     int dom_id = it->second;
     history_to_dom_.erase(it);
     run_script(wxString::Format("removeMsg(%d);", dom_id));
+}
+
+void ChatPanel::render_loaded_history(const ConversationHistory& history)
+{
+    // Walk forward so call_id -> tool_name lookup (used to label tool-result
+    // bubbles) only needs to look backwards into already-seen messages.
+    std::unordered_map<std::string, std::string> call_id_to_tool;
+    for (const auto& msg : history.messages()) {
+        switch (msg.role) {
+        case MessageRole::system:
+            // Rendered separately as the collapsed system_prompt bubble.
+            continue;
+
+        case MessageRole::user: {
+            ++message_id_;
+            wxString html = user_text_to_html(wxString::FromUTF8(msg.content));
+            run_script(wxString::Format(
+                "addMsg(%d, 'msg-user', %s);",
+                message_id_, "'" + chat_js_escape(html) + "'"));
+            last_user_dom_id_ = message_id_;
+            if (msg.history_id > 0) {
+                history_to_dom_[msg.history_id] = message_id_;
+                run_script(wxString::Format("addDeleteButton(%d, %d);",
+                                            message_id_, msg.history_id));
+            }
+            if (show_per_message_tokens_ && msg.token_estimate > 0) {
+                run_script(wxString::Format(
+                    "setMsgTokenChip(%d, %d);", message_id_, msg.token_estimate));
+            }
+            break;
+        }
+
+        case MessageRole::assistant: {
+            // Remember the tool_name for each tool_call so the matching tool-
+            // result bubble below can label itself.
+            for (const auto& tc : msg.tool_calls) {
+                if (!tc.id.empty()) call_id_to_tool[tc.id] = tc.name;
+            }
+            if (msg.content.empty()) {
+                // tool-only assistant turn -- no visible bubble (matches the
+                // live experience where the assistant bubble seals empty and
+                // gets replaced by the tool bubble).
+                continue;
+            }
+            ++message_id_;
+            std::string body = markdown_to_html(msg.content);
+            run_script(wxString::Format(
+                "addMsg(%d, 'msg-assistant', %s);",
+                message_id_,
+                "'" + chat_js_escape(wxString::FromUTF8(body)) + "'"));
+            bool deletable = msg.tool_calls.empty();
+            if (deletable && msg.history_id > 0) {
+                history_to_dom_[msg.history_id] = message_id_;
+                run_script(wxString::Format("addDeleteButton(%d, %d);",
+                                            message_id_, msg.history_id));
+            }
+            if (show_per_message_tokens_ && msg.token_estimate > 0) {
+                run_script(wxString::Format(
+                    "setMsgTokenChip(%d, %d);", message_id_, msg.token_estimate));
+            }
+            break;
+        }
+
+        case MessageRole::tool: {
+            ++message_id_;
+            std::string tool_name = "tool";
+            if (auto it = call_id_to_tool.find(msg.tool_call_id);
+                it != call_id_to_tool.end()) {
+                tool_name = it->second;
+            }
+            wxString head = "<span class=\"tool-name\">"
+                          + chat_js_escape(wxString::FromUTF8(tool_name))
+                          + "</span>";
+            wxString body = "<details class=\"tool-result-details\">"
+                            "<summary>Result</summary>"
+                            "<pre>"
+                          + chat_js_escape(wxString::FromUTF8(msg.content))
+                          + "</pre></details>";
+            run_script(wxString::Format(
+                "addMsg(%d, 'msg-tool', %s);",
+                message_id_,
+                "'" + chat_js_escape(head + body) + "'"));
+            if (show_per_message_tokens_ && msg.token_estimate > 0) {
+                run_script(wxString::Format(
+                    "setMsgTokenChip(%d, %d);", message_id_, msg.token_estimate));
+            }
+            break;
+        }
+        }
+    }
+    // Final highlight pass so Prism colors every <pre><code> at once.
+    run_script("highlightAll();");
 }
 
 void ChatPanel::set_generation_progress(int chars, int est_tokens)

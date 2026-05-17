@@ -451,6 +451,13 @@ LocusFrame::TabUi& LocusFrame::install_tab_ui(LocusTab& tab, const wxString& tab
     // Register the frontend AFTER inserting into the map -- on_history_message
     // events may fire immediately.
     tab.agent().register_frontend(slot.frontend.get());
+
+    // Restore-from-disk render path: if this tab was loaded from a saved
+    // session BEFORE the UI was installed, the agent's history already holds
+    // those messages but the chat WebView is empty.  Paint them now.
+    if (!tab.session_id().empty() && tab.agent().history().size() > 1) {
+        slot.chat->render_loaded_history(tab.agent().history());
+    }
     return slot;
 }
 
