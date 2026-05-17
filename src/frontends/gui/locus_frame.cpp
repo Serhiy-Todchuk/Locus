@@ -1,4 +1,5 @@
 #include "locus_frame.h"
+#include "about_dialog.h"
 #include "app_icons.h"
 #include "locus_accessible.h"
 #include "locus_app.h"
@@ -15,7 +16,6 @@
 
 #include <spdlog/spdlog.h>
 
-#include <wx/aboutdlg.h>
 #include <wx/display.h>
 #include <wx/dirdlg.h>
 #include <wx/menu.h>
@@ -111,13 +111,8 @@ LocusFrame::LocusFrame(LocusSession& session)
         if (auto& p = aui_.GetPane("terminal"); p.IsOk()) { p.Show(show); aui_.Update(); }
     };
     hooks.on_about = [this] {
-        wxAboutDialogInfo info;
-        info.SetName("Locus");
-        info.SetVersion("0.1.0");
-        info.SetDescription("Local LLM Agent Assistant");
-        info.SetCopyright("MIT License");
-        info.SetIcon(gui::app_icon(256));
-        wxAboutBox(info, this);
+        AboutDialog dlg(this);
+        dlg.ShowModal();
     };
     hooks.provide_sessions = [this] { return session_.sessions().list(); };
     hooks.provide_open_ids = [this] { return session_.open_session_ids(); };

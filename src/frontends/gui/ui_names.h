@@ -16,6 +16,7 @@ namespace locus::ui_names {
 
 // --- Main frame -----------------------------------------------------------
 inline constexpr const char* kMainFrame      = "locus.main_frame";
+inline constexpr const char* kAboutDialog    = "locus.about.dialog";
 
 // --- Chat panel -----------------------------------------------------------
 inline constexpr const char* kChatPanel      = "locus.chat.panel";

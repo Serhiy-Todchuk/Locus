@@ -468,6 +468,7 @@ endif()
 add_executable(locus_gui WIN32
     ${LOCUS_GUI_WINDOWS_RESOURCES}
     src/frontends/gui/app_icons.cpp
+    src/frontends/gui/about_dialog.cpp
     src/frontends/gui/locus_app.cpp
     src/frontends/gui/locus_frame.cpp
     src/frontends/gui/locus_tray.cpp
