@@ -43,6 +43,8 @@ Write laconically. Engineers, not book writers. Narrow wording, no padding -- bu
 - Don't restate what per-stage docs (`roadmap/<milestone>/<stage>.md`), `git log`, the Code Map below, or `architecture/` already cover. Link, don't copy.
 - After completing a stage, the CLAUDE.md update is a one-line list edit (add the stage code to the done list). The narrative belongs in the per-stage doc, not here.
 
+*Calibration note: the milestone-list format above (vs. per-stage paragraphs) is tuned for steady-state work. If cross-stage interactions become a constant concern -- e.g., a heavy multi-stage refactor period where seeing how recent stages compose matters -- the diary view is genuinely faster and restoring per-stage paragraphs in "Current Stage" may be worth their cost again. Revisit then.*
+
 ---
 
 ## Current Stage
