@@ -1099,6 +1099,17 @@ void AgentCore::apply_pending_compaction()
                 archive_path.filename().string());
         }
 
+        // S5.Z task 6 -- notify frontends so the chat-footer chip can read
+        // "compacted: N". Fires only when an archive was actually written
+        // (counter > 0); GC trims older archives but the latest snapshot's
+        // counter is monotonically increasing, so it equals the on-disk
+        // count *as observed by the chip*, even after GC drops earlier ones.
+        if (counter > 0) {
+            frontends_.broadcast([&](IFrontend& fe) {
+                fe.on_compaction_archived(counter);
+            });
+        }
+
         int before_tokens = ctx_->history().estimate_tokens();
         auto result = CompactionPipeline::run(
             ctx_->history(), pipeline_sel, pipeline_target,
@@ -1351,6 +1362,12 @@ std::string AgentCore::export_metrics(const std::string& format) const
 
     spdlog::info("AgentCore: metrics exported to {}", path.string());
     return path.string();
+}
+
+int AgentCore::compacted_archive_count(const std::string& session_id) const
+{
+    if (!history_archive_ || session_id.empty()) return 0;
+    return history_archive_->highest_counter(session_id);
 }
 
 // -- save_session / load_session ---------------------------------------------

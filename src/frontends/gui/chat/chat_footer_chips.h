@@ -21,10 +21,11 @@ public:
     explicit ChatFooterChips(wxWindow* parent);
 
     // Widget accessors for ChatPanel sizer assembly.
-    wxGauge*      gauge()       const { return ctx_gauge_; }
-    wxStaticText* ctx_label()   const { return ctx_label_; }
-    wxStaticText* plan_chip()   const { return plan_chip_; }
-    wxStaticText* commit_chip() const { return commit_chip_; }
+    wxGauge*      gauge()           const { return ctx_gauge_; }
+    wxStaticText* ctx_label()       const { return ctx_label_; }
+    wxStaticText* plan_chip()       const { return plan_chip_; }
+    wxStaticText* commit_chip()     const { return commit_chip_; }
+    wxStaticText* compacted_chip()  const { return compacted_chip_; }
 
     // Context meter. Called from ChatPanel::set_context_meter.
     // Returns true when a Layout() call is needed (label width may have changed).
@@ -45,6 +46,14 @@ public:
                         const wxString& branch,
                         const wxString& subject);
 
+    // S5.Z task 6 -- compactions counter chip. `count == 0` keeps it hidden;
+    // any positive value renders "compacted: N" with a tooltip naming the
+    // archive folder. `archive_dir` is the user-facing path that opens on
+    // click; pass empty when the click handler should be disabled. Returns
+    // true if Layout() is needed (shown for the first time, or text width
+    // grew enough to need re-layout).
+    bool set_compacted_count(int count, const wxString& archive_dir);
+
     // Plan chip updates. Each returns true if Layout() is needed.
     bool on_plan_proposed(const std::string& plan_id, int total_steps,
                           const std::string& first_step_desc);
@@ -61,10 +70,11 @@ public:
 private:
     void refresh_ctx_label();
 
-    wxGauge*      ctx_gauge_  = nullptr;
-    wxStaticText* ctx_label_  = nullptr;
-    wxStaticText* plan_chip_  = nullptr;
-    wxStaticText* commit_chip_ = nullptr;
+    wxGauge*      ctx_gauge_      = nullptr;
+    wxStaticText* ctx_label_      = nullptr;
+    wxStaticText* plan_chip_      = nullptr;
+    wxStaticText* commit_chip_    = nullptr;
+    wxStaticText* compacted_chip_ = nullptr;
 
     int last_ctx_used_            = 0;
     int last_ctx_limit_           = 0;

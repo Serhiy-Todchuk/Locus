@@ -32,6 +32,8 @@ inline constexpr const char* kChatModeExec   = "locus.chat.mode_execute";
 inline constexpr const char* kChatCtxLabel   = "locus.chat.ctx_label";
 inline constexpr const char* kChatPlanChip       = "locus.chat.plan_chip";
 inline constexpr const char* kChatCommitChip     = "locus.chat.commit_chip";
+// S5.Z task 6 -- per-session compactions counter chip; hidden when N == 0.
+inline constexpr const char* kChatCompactedChip  = "locus.chat.compacted_chip";
 inline constexpr const char* kChatPresetChip     = "locus.chat.preset_chip";
 inline constexpr const char* kChatPresetChoice   = "locus.chat.preset_choice";
 inline constexpr const char* kChatSlashPopup     = "locus.chat.slash_popup";

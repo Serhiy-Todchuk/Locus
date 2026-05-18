@@ -627,6 +627,29 @@ TEST_CASE("[s5.f][archive] gc keeps last N snapshots", "[s5.f][archive]")
                 remaining.back().filename().string()) == 7);
 }
 
+// S5.Z task 6 -- highest_counter is the "total compactions ever" number that
+// the chat footer chip displays. Survives GC: the chip shows 10 even after
+// archive_keep trims the oldest 5 files off disk.
+TEST_CASE("[s5.z][archive] highest_counter returns latest assigned number",
+          "[s5.z][archive]")
+{
+    auto dir = tmp_dir("archive_highest");
+    HistoryArchive arch(dir);
+
+    REQUIRE(arch.highest_counter("sess-never") == 0);
+
+    auto h = build_synthetic_conversation();
+    arch.snapshot("sess-C", h);
+    REQUIRE(arch.highest_counter("sess-C") == 1);
+    arch.snapshot("sess-C", h);
+    arch.snapshot("sess-C", h);
+    REQUIRE(arch.highest_counter("sess-C") == 3);
+
+    arch.gc("sess-C", 1);
+    REQUIRE(arch.list("sess-C").size() == 1);
+    REQUIRE(arch.highest_counter("sess-C") == 3);
+}
+
 TEST_CASE("[s5.f][archive] footnote_relative_path shape",
           "[s5.f][archive]")
 {

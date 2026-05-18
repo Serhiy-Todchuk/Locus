@@ -944,8 +944,18 @@ ChatPanel::ChatPanel(wxWindow* parent,
     auto* footer = new wxBoxSizer(wxHORIZONTAL);
     footer->Add(footer_chips_->gauge(),       0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
     footer->Add(footer_chips_->ctx_label(),   1, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
-    footer->Add(footer_chips_->plan_chip(),   0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
-    footer->Add(footer_chips_->commit_chip(), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+    footer->Add(footer_chips_->plan_chip(),      0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+    footer->Add(footer_chips_->commit_chip(),    0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+    footer->Add(footer_chips_->compacted_chip(), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+    // S5.Z task 6 -- left-click on the chip opens the session's archive
+    // folder via the OS default. Hand-off matches the MenuController
+    // "Open Global Config..." pattern.
+    footer_chips_->compacted_chip()->Bind(wxEVT_LEFT_DOWN,
+        [this](wxMouseEvent&) {
+            if (compacted_archive_dir_.empty()) return;
+            wxLaunchDefaultApplication(compacted_archive_dir_);
+        });
+    footer_chips_->compacted_chip()->SetCursor(wxCursor(wxCURSOR_HAND));
     footer->Add(preset_chip_,    0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
     footer->Add(preset_choice_,  0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
     footer->Add(find_btn_,       0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
@@ -1508,6 +1518,12 @@ void ChatPanel::on_auto_commit(const wxString& short_sha,
                                const wxString& subject)
 {
     if (footer_chips_->on_auto_commit(short_sha, branch, subject)) Layout();
+}
+
+void ChatPanel::set_compacted_count(int count, const wxString& archive_dir)
+{
+    compacted_archive_dir_ = archive_dir;
+    if (footer_chips_->set_compacted_count(count, archive_dir)) Layout();
 }
 
 void ChatPanel::on_tool_pending(const wxString& call_id,

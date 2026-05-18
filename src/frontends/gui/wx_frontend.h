@@ -18,6 +18,7 @@ wxDECLARE_EVENT(EVT_AGENT_TURN_START,    wxThreadEvent);
 wxDECLARE_EVENT(EVT_AGENT_TURN_COMPLETE, wxThreadEvent);
 wxDECLARE_EVENT(EVT_AGENT_CONTEXT_METER, wxThreadEvent);
 wxDECLARE_EVENT(EVT_AGENT_COMPACTION,    wxThreadEvent);
+wxDECLARE_EVENT(EVT_AGENT_COMPACTION_ARCHIVED, wxThreadEvent);
 wxDECLARE_EVENT(EVT_AGENT_SESSION_RESET, wxThreadEvent);
 wxDECLARE_EVENT(EVT_AGENT_ERROR,         wxThreadEvent);
 wxDECLARE_EVENT(EVT_AGENT_EMBEDDING_PROGRESS, wxThreadEvent);
@@ -71,6 +72,7 @@ public:
                           int prompt_tokens, int completion_tokens,
                           int reserve_tokens = 0) override;
     void on_compaction_needed(int used_tokens, int limit) override;
+    void on_compaction_archived(int counter) override;
     void on_session_reset() override;
     void on_error(const std::string& message) override;
     void on_embedding_progress(int done, int total) override;

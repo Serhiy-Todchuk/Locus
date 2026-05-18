@@ -35,3 +35,15 @@ Three tests covering the new layer cascade, the manual dialog, and the chained h
 5. Disable auto-compact: set `compaction.auto_enabled: false`. Drive the same big turn -- the warn band still updates the footer chip but no automatic cascade fires; instead, you must click Compact or run `/compact` yourself.
 
 **Expected outcome**: the cascade fires without a modal, the archive trail is present and walkable, the auto-preservation heuristics keep the load-bearing parts of the conversation, and the S4.F system-prompt invariant survives compaction.
+
+## Test 4: compactions counter chip (S5.Z task 6)
+
+1. Open a fresh workspace with no prior compaction. The chat footer chip row shows the context meter, the optional plan / commit chips, the preset chip + dropdown, and the Find button. There should be **no** "compacted: ..." chip visible.
+2. Drive enough conversation to trigger a manual `/compact` (or open the Compact dialog and click Compact). Watch the footer right after the agent emits "Compaction applied". A new chip reading `compacted: 1` appears between the commit chip and the preset chip. Hover: tooltip reads `1 compaction in this session - click to open archive folder`.
+3. Click the chip. Expect Windows Explorer (or the OS's default folder app) to open at `<workspace>\.locus\sessions\<session_id>\` -- the archive folder containing `history.before-compact-1.json`.
+4. Run a second `/compact`. Chip text updates in place to `compacted: 2`; tooltip pluralisation updates to `2 compactions in this session`. The folder still opens to the same path.
+5. Save the session (File > Save Session), close the workspace, reopen it via Recent Workspaces, then reopen the saved session from the Session menu. Expect: the chip still reads `compacted: 2` (resync from disk on session load). Hard fail: the chip is hidden -- the resync didn't happen, or the chip wasn't reattached to the correct session id.
+6. Open a NEW tab (Ctrl+T) in the same workspace. Expect: the new tab's footer has no chip at all (its session_id has no archive yet). Switching back to the previous tab restores its `compacted: 2` chip. Each tab's chip is independent.
+7. Edit `.locus/config.json` to `compaction.archive_keep_count: 1`. Trigger one more `/compact` in the loaded session. Expect: only `history.before-compact-3.json` survives on disk, but the chip text reads `compacted: 3` (the chip tracks total compactions ever, not files remaining after GC).
+
+**Expected outcome**: chip is invisible at N=0, updates live on each new compaction, opens the archive folder on click, persists across session save+reload by counting the highest archive counter on disk (not just file count -- survives GC trimming).

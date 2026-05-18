@@ -97,6 +97,12 @@ public:
     // Context is critically full. Frontend should offer compaction options.
     virtual void on_compaction_needed(int used_tokens, int limit) = 0;
 
+    // S5.Z task 6 -- a pre-compaction history snapshot was just written.
+    // `counter` is the monotonic 1-based archive number; the chat-footer
+    // chip uses this to surface "compacted: N" without scraping disk.
+    // Optional -- the CLI ignores it.
+    virtual void on_compaction_archived(int /*counter*/) {}
+
     // Conversation was reset (history cleared, system prompt re-seeded).
     virtual void on_session_reset() = 0;
 

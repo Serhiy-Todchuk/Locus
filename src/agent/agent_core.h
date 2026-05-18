@@ -156,6 +156,11 @@ public:
     const ConversationHistory& history() const { return ctx_->history(); }
     int context_limit() const { return ctx_->llm_config().context_limit; }
 
+    // S5.Z task 6 -- total number of pre-compaction snapshots ever written for
+    // a session id. Used by the chat footer to resync its "compacted: N" chip
+    // when a saved session is loaded. Returns 0 if no archive has been written.
+    int compacted_archive_count(const std::string& session_id) const;
+
     // Start/stop the agent thread. Must be called after construction.
     void start();
     void stop();

@@ -258,6 +258,7 @@ LocusFrame::LocusFrame(LocusSession& session)
     Bind(EVT_AGENT_TURN_COMPLETE, &LocusFrame::on_agent_turn_complete, this);
     Bind(EVT_AGENT_CONTEXT_METER, &LocusFrame::on_agent_context_meter, this);
     Bind(EVT_AGENT_COMPACTION,    &LocusFrame::on_agent_compaction,    this);
+    Bind(EVT_AGENT_COMPACTION_ARCHIVED, &LocusFrame::on_agent_compaction_archived, this);
     Bind(EVT_AGENT_SESSION_RESET, &LocusFrame::on_agent_session_reset, this);
     Bind(EVT_AGENT_ERROR,         &LocusFrame::on_agent_error,         this);
     Bind(EVT_AGENT_EMBEDDING_PROGRESS, &LocusFrame::on_agent_embedding_progress, this);
@@ -479,6 +480,16 @@ void LocusFrame::configure_chat_panel(ChatPanel* chat, LocusTab& tab)
             if (picked) agent_ptr->set_runtime_permission_preset(*picked);
             else        agent_ptr->clear_runtime_permission_preset();
         });
+
+    // S5.Z task 6 -- resync the compactions chip from disk so a loaded
+    // session shows its historic count immediately (the live increment path
+    // only catches new compactions). 0 keeps the chip hidden.
+    {
+        std::string sid = tab.session_id();
+        int n = agent_ptr->compacted_archive_count(sid);
+        auto archive_dir = workspace_.root() / ".locus" / "sessions" / sid;
+        chat->set_compacted_count(n, wxString::FromUTF8(archive_dir.string()));
+    }
 
     {
         std::vector<SlashItem> items = {
@@ -1366,6 +1377,17 @@ void LocusFrame::on_agent_compaction(wxThreadEvent& /*evt*/)
         notification_sounds::Kind::compaction,
         workspace_.config(), this);
     show_compaction_dialog();
+}
+
+void LocusFrame::on_agent_compaction_archived(wxThreadEvent& evt)
+{
+    int counter = evt.GetInt();
+    auto* ui = find_tab_ui(evt.GetId());
+    if (!ui || !ui->chat || !ui->tab) return;
+    auto archive_dir = workspace_.root() / ".locus" / "sessions" /
+                       ui->tab->session_id();
+    ui->chat->set_compacted_count(counter,
+        wxString::FromUTF8(archive_dir.string()));
 }
 
 void LocusFrame::on_agent_session_reset(wxThreadEvent& evt)

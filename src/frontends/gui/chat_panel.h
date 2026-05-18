@@ -115,6 +115,10 @@ public:
                         const wxString& branch,
                         const wxString& subject);
 
+    // S5.Z task 6 -- compactions counter chip. `archive_dir` is opened with
+    // the OS default app on chip click. Pass count == 0 to hide.
+    void set_compacted_count(int count, const wxString& archive_dir);
+
     // Footer updates.
     void set_context_meter(int used, int limit,
                            int prompt_tokens = 0, int completion_tokens = 0,
@@ -291,6 +295,10 @@ private:
     long          find_total_       = 0;       // wxWebView::Find return for current query
     long          find_index_       = 0;       // 1-based current match (0 when none)
     wxString      find_active_query_;          // last non-empty query handed to Find()
+
+    // S5.Z task 6 -- archive folder to open when the compactions chip is
+    // clicked. Empty when the chip is hidden / not yet computed.
+    wxString compacted_archive_dir_;
 
     // Attached-context chip row.
     wxPanel*      attach_panel_  = nullptr;

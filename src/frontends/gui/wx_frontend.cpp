@@ -13,6 +13,7 @@ wxDEFINE_EVENT(EVT_AGENT_TURN_START,    wxThreadEvent);
 wxDEFINE_EVENT(EVT_AGENT_TURN_COMPLETE, wxThreadEvent);
 wxDEFINE_EVENT(EVT_AGENT_CONTEXT_METER, wxThreadEvent);
 wxDEFINE_EVENT(EVT_AGENT_COMPACTION,    wxThreadEvent);
+wxDEFINE_EVENT(EVT_AGENT_COMPACTION_ARCHIVED, wxThreadEvent);
 wxDEFINE_EVENT(EVT_AGENT_SESSION_RESET, wxThreadEvent);
 wxDEFINE_EVENT(EVT_AGENT_ERROR,         wxThreadEvent);
 wxDEFINE_EVENT(EVT_AGENT_EMBEDDING_PROGRESS, wxThreadEvent);
@@ -119,6 +120,13 @@ void WxFrontend::on_compaction_needed(int used_tokens, int limit)
     auto* evt = new_evt(EVT_AGENT_COMPACTION, tab_id_);
     evt->SetInt(used_tokens);
     evt->SetExtraLong(limit);
+    wxQueueEvent(handler_, evt);
+}
+
+void WxFrontend::on_compaction_archived(int counter)
+{
+    auto* evt = new_evt(EVT_AGENT_COMPACTION_ARCHIVED, tab_id_);
+    evt->SetInt(counter);
     wxQueueEvent(handler_, evt);
 }
 

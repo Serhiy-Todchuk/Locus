@@ -42,6 +42,11 @@ public:
     // List the archive files for `session_id`, sorted by counter ascending.
     std::vector<std::filesystem::path> list(const std::string& session_id) const;
 
+    // S5.Z task 6 -- the highest counter ever assigned for `session_id`
+    // (== total compactions in this session, even if older snapshots were
+    // GC'd). Returns 0 when no archive has ever been written.
+    int highest_counter(const std::string& session_id) const;
+
     // The directory this archive writes into. Public for tests that need
     // to inspect on-disk layout.
     const std::filesystem::path& root() const { return sessions_dir_; }

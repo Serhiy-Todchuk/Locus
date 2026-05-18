@@ -45,6 +45,14 @@ std::string HistoryArchive::footnote_relative_path(const std::string& session_id
     return o.str();
 }
 
+int HistoryArchive::highest_counter(const std::string& session_id) const
+{
+    auto files = list(session_id);
+    if (files.empty()) return 0;
+    // list() returns ascending by counter, so the back is the largest.
+    return counter_from_filename(files.back().filename().string());
+}
+
 std::vector<fs::path> HistoryArchive::list(const std::string& session_id) const
 {
     std::vector<fs::path> out;

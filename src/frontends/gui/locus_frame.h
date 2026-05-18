@@ -151,6 +151,7 @@ private:
     void on_agent_turn_complete(wxThreadEvent& evt);
     void on_agent_context_meter(wxThreadEvent& evt);
     void on_agent_compaction(wxThreadEvent& evt);
+    void on_agent_compaction_archived(wxThreadEvent& evt);
     void on_agent_session_reset(wxThreadEvent& evt);
     void on_agent_error(wxThreadEvent& evt);
     void on_agent_embedding_progress(wxThreadEvent& evt);
