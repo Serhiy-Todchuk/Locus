@@ -1,16 +1,15 @@
-- More broad About window - put some information there.
 - Voice chat input
 - Add image attachment for LLM prompt
 - FastDebug
 
 - Auto-compaction toggle
-- Still no X button on tool call+result in chat
-- No [+] button (New Tab) a on sessions tabs stripe. Is it possible?
+- Still no X button when hovering tool call+result in chat - they should be removable as well.
 - index_events (both indexing and embeddiing) are spaming Activity panel. Shall we group them somehow? If the last record in activity log is index_event, for example "Indexed 1 file", then just update existing event's file count instead of create new (and update time) - This is just a suggestion - you can think out smarter strategy.
 - When some error happened in session tab "!" sign appears in tab header. But when I hover the tab header - no explanation what it means. Add hovering bubble with short text status of a tab.
-- I have reopened prev session and tool result looks wrong in chat - it lost multi-line look and explicitly shows "\n" symbols within one line:
-"[.] 31 entries\n  .claude/\n  architecture/\n  assets/\n  cmake/\n  models/\n  queries/\n  roadmap/\n  scripts/\n  src/\n  tests/\n  third_party/\n  tools/\n  .gitignore  (125 bytes)  [text]\n  CLAUDE.md  (175559 bytes)  [markdown]\n  CMakeLists.txt  (19448 bytes)  [text]\n  CMakePresets.json  (1495 bytes)  [json]\n  CONTRIBUTING.md  (11091 bytes)  [markdown]\n  DIFFERENTIATORS.md  (7039 bytes)  [markdown]\n  LICENSE  (1092 bytes)  [text]\n  LOCUS.md  (2447 bytes)  [markdown]\n  QUICKSTART.md  (4394 bytes)  [markdown]\n  README.md  (13127 bytes)  [markdown]\n  THIRD_PARTY_LICENSES  (2022 bytes)  [text]\n  TODO.txt  (373 bytes)  [text]\n  gui_ux.md  (34606 bytes)  [markdown]\n  manual-tests.txt  (1581 bytes)  [text]\n  requirements.md  (12809 bytes)  [markdown]\n  roadmap.md  (11458 bytes)  [markdown]\n  test-workspaces.md  (6916 bytes)  [markdown]\n  vcpkg.json  (454 bytes)  [json]\n  vision.md  (5903 bytes)  [markdown]\n"
 
+- Claude Blender
+- GoodOldSoftware
+- free nvidia inference
 
 Have you added integration test and UI automation test (if needed)?
 Run integration tests and then AUI tests. The PC is yours until done.

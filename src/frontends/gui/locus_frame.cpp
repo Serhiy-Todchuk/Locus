@@ -4,6 +4,7 @@
 #include "locus_accessible.h"
 #include "locus_app.h"
 #include "manage_sessions_dialog.h"
+#include "new_tab_button_tab_art.h"
 #include "ui_names.h"
 #include "ui_state.h"
 
@@ -183,8 +184,20 @@ LocusFrame::LocusFrame(LocusSession& session)
         auto& tab = session_.tab(i);
         install_tab_ui(tab, wxString::FromUTF8(tab.title().empty() ? "New tab" : tab.title()));
     }
+
+    // Append the non-closable "+" pseudo-tab AFTER all real tabs so it
+    // sits rightmost. install_tab_ui from this point on InsertPages just
+    // before it, keeping it pinned to the end.
+    new_tab_placeholder_ = install_new_tab_button(notebook_, [this] {
+        // Bail out if we're in the middle of closing a tab -- the
+        // PAGE_CHANGING that lands on the placeholder is wxAuiNotebook's
+        // automatic re-selection after RemovePage, not a user click on +.
+        if (suppress_placeholder_trigger_) return;
+        on_new_tab();
+    });
+
     if (notebook_ && session_.active_index() >= 0
-                  && session_.active_index() < static_cast<int>(notebook_->GetPageCount())) {
+                  && session_.active_index() < chat_page_count()) {
         notebook_->SetSelection(session_.active_index());
     }
 
@@ -346,6 +359,8 @@ void LocusFrame::setup_aui_layout()
         wxAUI_NB_DEFAULT_STYLE | wxAUI_NB_WINDOWLIST_BUTTON);
     notebook_->SetName(ui_names::kChatNotebook);
     gui::apply_locus_accessible_name(notebook_);
+    // The "+" placeholder is installed in the ctor AFTER the initial tabs
+    // are added so it lands rightmost; see ctor body.
 
     activity_panel_ = new ActivityPanel(this, session_.active_tab().agent());
 
@@ -504,7 +519,23 @@ LocusFrame::TabUi& LocusFrame::install_tab_ui(LocusTab& tab, const wxString& tab
 
     configure_chat_panel(chat, tab);
 
-    notebook_->AddPage(chat, tab_title, /*select=*/false);
+    // Insert just before the "+" placeholder so it stays rightmost. If the
+    // placeholder hasn't been installed yet (initial-tabs pass), this falls
+    // through to a plain AddPage.
+    if (new_tab_placeholder_) {
+        int placeholder_idx = -1;
+        for (int i = 0; i < static_cast<int>(notebook_->GetPageCount()); ++i) {
+            if (notebook_->GetPage(i) == new_tab_placeholder_) {
+                placeholder_idx = i; break;
+            }
+        }
+        if (placeholder_idx >= 0)
+            notebook_->InsertPage(placeholder_idx, chat, tab_title, /*select=*/false);
+        else
+            notebook_->AddPage(chat, tab_title, /*select=*/false);
+    } else {
+        notebook_->AddPage(chat, tab_title, /*select=*/false);
+    }
 
     TabUi ui;
     ui.tab_id   = tab.tab_id();
@@ -536,6 +567,7 @@ void LocusFrame::teardown_tab_ui(int nb_index)
 {
     if (nb_index < 0 || !notebook_) return;
     if (nb_index >= static_cast<int>(notebook_->GetPageCount())) return;
+    if (is_placeholder_index(nb_index)) return;  // never tear down the "+" tab
 
     auto* chat = static_cast<ChatPanel*>(notebook_->GetPage(nb_index));
     int   tab_id = 0;
@@ -647,23 +679,25 @@ void LocusFrame::on_new_tab()
 
 void LocusFrame::on_close_active_tab()
 {
-    if (!notebook_ || notebook_->GetPageCount() == 0) return;
+    if (!notebook_ || chat_page_count() == 0) return;
     int sel = notebook_->GetSelection();
-    if (sel < 0) return;
+    if (sel < 0 || is_placeholder_index(sel)) return;
+    suppress_placeholder_trigger_ = true;
     teardown_tab_ui(sel);
     session_.close_tab(sel);
 
     // If close_tab auto-opened a fresh empty tab (last tab closed), install
     // its UI now and select it.
-    while (static_cast<int>(notebook_->GetPageCount()) < session_.tab_count()) {
-        int new_idx = static_cast<int>(notebook_->GetPageCount());
+    while (chat_page_count() < session_.tab_count()) {
+        int new_idx = chat_page_count();
         auto& tab = session_.tab(new_idx);
         install_tab_ui(tab, "New tab");
     }
     int active = session_.active_index();
-    if (notebook_->GetPageCount() > 0 &&
-        active >= 0 && active < static_cast<int>(notebook_->GetPageCount()))
+    if (chat_page_count() > 0 &&
+        active >= 0 && active < chat_page_count())
         notebook_->SetSelection(active);
+    suppress_placeholder_trigger_ = false;
 }
 
 void LocusFrame::on_rename_active_tab()
@@ -684,6 +718,7 @@ void LocusFrame::on_notebook_page_changed(wxAuiNotebookEvent& evt)
 {
     int sel = evt.GetSelection();
     if (sel < 0 || !notebook_) { evt.Skip(); return; }
+    if (is_placeholder_index(sel)) { evt.Skip(); return; }
     session_.set_active_tab(sel);
     // S5.R -- swap the terminal panel's content to the newly-active tab.
     if (terminal_panel_) {
@@ -708,23 +743,27 @@ void LocusFrame::on_notebook_page_close(wxAuiNotebookEvent& evt)
     int sel = evt.GetSelection();
     evt.Veto();
     if (sel < 0) return;
+    if (is_placeholder_index(sel)) return;
+    suppress_placeholder_trigger_ = true;
     teardown_tab_ui(sel);
     session_.close_tab(sel);
-    while (static_cast<int>(notebook_->GetPageCount()) < session_.tab_count()) {
-        int new_idx = static_cast<int>(notebook_->GetPageCount());
+    while (chat_page_count() < session_.tab_count()) {
+        int new_idx = chat_page_count();
         auto& tab = session_.tab(new_idx);
         install_tab_ui(tab, "New tab");
     }
     int active = session_.active_index();
-    if (notebook_->GetPageCount() > 0 &&
-        active >= 0 && active < static_cast<int>(notebook_->GetPageCount()))
+    if (chat_page_count() > 0 &&
+        active >= 0 && active < chat_page_count())
         notebook_->SetSelection(active);
+    suppress_placeholder_trigger_ = false;
 }
 
 void LocusFrame::on_notebook_tab_right_up(wxAuiNotebookEvent& evt)
 {
     int sel = evt.GetSelection();
     if (sel < 0) return;
+    if (is_placeholder_index(sel)) return;
     auto* chat = static_cast<ChatPanel*>(notebook_->GetPage(sel));
     int tab_id = 0;
     for (auto& [tid, ui] : tabs_ui_) {
@@ -757,17 +796,20 @@ void LocusFrame::on_notebook_tab_right_up(wxAuiNotebookEvent& evt)
             break;
         }
         case MID_CLOSE: {
+            suppress_placeholder_trigger_ = true;
             teardown_tab_ui(sel);
             session_.close_tab(sel);
-            while (static_cast<int>(notebook_->GetPageCount()) < session_.tab_count()) {
-                int new_idx = static_cast<int>(notebook_->GetPageCount());
+            while (chat_page_count() < session_.tab_count()) {
+                int new_idx = chat_page_count();
                 auto& tab = session_.tab(new_idx);
                 install_tab_ui(tab, "New tab");
             }
+            suppress_placeholder_trigger_ = false;
             break;
         }
         case MID_CLOSE_OTHERS: {
-            for (int i = static_cast<int>(notebook_->GetPageCount()) - 1; i >= 0; --i) {
+            suppress_placeholder_trigger_ = true;
+            for (int i = chat_page_count() - 1; i >= 0; --i) {
                 if (i == sel) continue;
                 teardown_tab_ui(i);
             }
@@ -776,18 +818,21 @@ void LocusFrame::on_notebook_tab_right_up(wxAuiNotebookEvent& evt)
                 if (i == sel) continue;
                 session_.close_tab(i);
             }
-            while (static_cast<int>(notebook_->GetPageCount()) < session_.tab_count()) {
-                int new_idx = static_cast<int>(notebook_->GetPageCount());
+            while (chat_page_count() < session_.tab_count()) {
+                int new_idx = chat_page_count();
                 auto& tab = session_.tab(new_idx);
                 install_tab_ui(tab, "New tab");
             }
+            suppress_placeholder_trigger_ = false;
             break;
         }
         case MID_CLOSE_RIGHT: {
-            for (int i = static_cast<int>(notebook_->GetPageCount()) - 1; i > sel; --i) {
+            suppress_placeholder_trigger_ = true;
+            for (int i = chat_page_count() - 1; i > sel; --i) {
                 teardown_tab_ui(i);
                 session_.close_tab(i);
             }
+            suppress_placeholder_trigger_ = false;
             break;
         }
         case MID_DELETE: {
@@ -798,13 +843,15 @@ void LocusFrame::on_notebook_tab_right_up(wxAuiNotebookEvent& evt)
                                   wxString::FromUTF8(tab.title())),
                 "Delete Session", wxYES_NO | wxICON_WARNING, this);
             if (answer != wxYES) break;
+            suppress_placeholder_trigger_ = true;
             teardown_tab_ui(sel);
             session_.delete_tab(sel);
-            while (static_cast<int>(notebook_->GetPageCount()) < session_.tab_count()) {
-                int new_idx = static_cast<int>(notebook_->GetPageCount());
+            while (chat_page_count() < session_.tab_count()) {
+                int new_idx = chat_page_count();
                 auto& t = session_.tab(new_idx);
                 install_tab_ui(t, "New tab");
             }
+            suppress_placeholder_trigger_ = false;
             break;
         }
     }

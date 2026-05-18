@@ -1,6 +1,6 @@
 {
   "name": "tabs_new_and_close",
-  "description": "S5.I -- exercise the multi-tab notebook on the center pane. Verifies the wxAuiNotebook is reachable as `locus.chat.notebook`, opens a new tab via the Ctrl+T accelerator, screenshots the two-tab state, then closes the active tab via Ctrl+W and verifies the notebook is still present (the last-tab-close should auto-open a fresh empty tab in its place, never leaving the workspace tab-less). Pure shell test -- no LLM involvement.",
+  "description": "Exercise the multi-tab notebook on the center pane. Verifies the wxAuiNotebook is reachable as `locus.chat.notebook`, opens a new tab via the Ctrl+T accelerator, screenshots the two-tab state, then closes the active tab via Ctrl+W and verifies the notebook is still present and the app is still responsive. Regression guard: a previous bug had RemovePage auto-select the '+' placeholder tab; the placeholder PAGE_CHANGING handler then re-fired on_new_tab, creating tabs in an infinite loop. The Ctrl+W close after Ctrl+T exercises that exact path -- a re-run of this script on the fixed build should finish cleanly within a few seconds, while the broken build would hang. Note: the '+' placeholder tab cannot be clicked directly via UIA because wxAuiNotebook does not expose its tabs as TabItem elements; Ctrl+T covers the same on_new_tab() entry point. Pure shell test -- no LLM involvement.",
   "setup": {
     "workspace": "tmp"
   },
@@ -35,6 +35,16 @@
       "args": { "automation_id": "locus.chat.notebook", "timeout_ms": 5000 }
     },
     { "op": "screenshot", "args": { "name": "03_after_ctrl_w" } },
+
+    { "op": "press_key", "args": { "key": "T", "modifiers": "CTRL" } },
+    { "op": "sleep", "args": { "ms": 500 } },
+    { "op": "press_key", "args": { "key": "W", "modifiers": "CTRL" } },
+    { "op": "sleep", "args": { "ms": 500 } },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.chat.notebook", "timeout_ms": 5000 }
+    },
+    { "op": "screenshot", "args": { "name": "04_second_round" } },
 
     { "op": "quit", "args": { "wait_ms": 5000 } }
   ]

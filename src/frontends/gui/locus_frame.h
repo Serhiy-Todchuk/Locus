@@ -198,6 +198,32 @@ private:
     wxAuiManager      aui_;
     wxAuiNotebook*    notebook_ = nullptr;
 
+    // Non-closable "+" placeholder tab at the rightmost notebook position;
+    // clicking it triggers on_new_tab(). nullptr until install_new_tab_button
+    // runs after the initial-tabs pass. Treated as not-a-real-tab everywhere:
+    // chat_page_count() / chat_page_index_end() are the iteration bounds.
+    wxWindow*         new_tab_placeholder_ = nullptr;
+
+    // Set to true while we're inside a tab-close code path. wxAuiNotebook's
+    // RemovePage auto-selects the next page; with the "+" placeholder being
+    // the only remaining page in some cases, the resulting PAGE_CHANGING
+    // would be mis-interpreted as a user click on "+" and re-create the tab
+    // we just closed, looping forever. The placeholder PAGE_CHANGING handler
+    // bails when this flag is set.
+    bool              suppress_placeholder_trigger_ = false;
+
+    int chat_page_count() const {
+        if (!notebook_) return 0;
+        int n = static_cast<int>(notebook_->GetPageCount());
+        return new_tab_placeholder_ ? n - 1 : n;
+    }
+    bool is_placeholder_index(int nb_index) const {
+        return new_tab_placeholder_ &&
+               nb_index >= 0 &&
+               nb_index < static_cast<int>(notebook_->GetPageCount()) &&
+               notebook_->GetPage(nb_index) == new_tab_placeholder_;
+    }
+
     // System tray + menu.
     std::unique_ptr<LocusTray>      tray_;
     std::unique_ptr<MenuController> menu_;
