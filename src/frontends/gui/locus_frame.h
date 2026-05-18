@@ -108,6 +108,10 @@ private:
     void refresh_tab_title(int tab_id);
     wxString compose_tab_label(const TabUi& ui) const;
 
+    // Tooltip shown when hovering a tab header. Explains the meaning of any
+    // currently-active status badge prefix on the label (! [!] [.] *).
+    wxString compose_tab_tooltip(const TabUi& ui) const;
+
     // Lookup helpers.
     TabUi* find_tab_ui(int tab_id);
     int    notebook_index_for_tab_id(int tab_id) const;

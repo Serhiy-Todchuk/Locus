@@ -656,6 +656,32 @@ wxString LocusFrame::compose_tab_label(const TabUi& ui) const
     return prefix + base;
 }
 
+wxString LocusFrame::compose_tab_tooltip(const TabUi& ui) const
+{
+    wxString base = ui.tab ? wxString::FromUTF8(ui.tab->title()) : wxString("(empty)");
+    wxString out = base;
+
+    auto add_line = [&out](const wxString& line) {
+        out += "\n";
+        out += line;
+    };
+
+    if (ui.busy)
+        add_line("* Agent turn in progress");
+    if (ui.busy_processes > 0)
+        add_line(wxString::Format("* %d background process%s running",
+                                  ui.busy_processes,
+                                  ui.busy_processes == 1 ? "" : "es"));
+    if (ui.awaiting_decision)
+        add_line("! Waiting for tool approval");
+    if (ui.ctx_over_auto)
+        add_line("[!] Context limit reached - compaction needed before next turn");
+    else if (ui.ctx_over_warn)
+        add_line("[.] Context approaching limit");
+
+    return out;
+}
+
 void LocusFrame::refresh_tab_title(int tab_id)
 {
     auto* ui = find_tab_ui(tab_id);
@@ -663,6 +689,7 @@ void LocusFrame::refresh_tab_title(int tab_id)
     int idx = notebook_index_for_tab_id(tab_id);
     if (idx < 0) return;
     notebook_->SetPageText(idx, compose_tab_label(*ui));
+    notebook_->SetPageToolTip(idx, compose_tab_tooltip(*ui));
 }
 
 // ---------------------------------------------------------------------------

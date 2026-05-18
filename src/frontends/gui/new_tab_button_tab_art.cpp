@@ -15,6 +15,8 @@ wxWindow* install_new_tab_button(wxAuiNotebook* notebook,
     auto* placeholder = new wxPanel(notebook);
     placeholder->Hide();
     notebook->AddPage(placeholder, "+");
+    notebook->SetPageToolTip(notebook->GetPageCount() - 1,
+                             "New tab (Ctrl+T)");
 
     auto cb = std::make_shared<std::function<void()>>(std::move(on_click));
 

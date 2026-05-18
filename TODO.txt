@@ -1,14 +1,10 @@
-- Voice chat input
-- Add image attachment for LLM prompt
-- FastDebug
-
+- Auto-compaction toggle
 - Multi LLM + select toggle in chat panel bottom
 - Permission presets + select toggle in chat panel bottom
 - Ask user tool with pre-determined answers
-
-- Auto-compaction toggle
-- When some error happened in session tab "!" sign appears in tab header. But when I hover the tab header - no explanation what it means. Add hovering bubble with short text status of a tab.
-
+- Voice chat input
+- Add image attachment for LLM prompt
+- FastDebug
 
 - Claude Blender
 - GoodOldSoftware
