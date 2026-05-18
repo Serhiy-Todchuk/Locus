@@ -54,7 +54,8 @@ TEST_CASE("ToolRegistry: build_schema_json produces valid OpenAI schema", "[s0.6
     //       -1 `create_file` (merged into `write_file` with optional `overwrite`).
     // S4.D: +2 `propose_plan`, `mark_step_done` (visible only in plan/execute modes).
     // S4.R: +2 `add_memory`, `search_memory` (memory bank).
-    REQUIRE(schema.size() == 17);
+    // S5.Z task 8: +1 `filter_output` (regex/substring over arbitrary text).
+    REQUIRE(schema.size() == 18);
 
     // One `search` entry, no split search_* tools.
     bool has_search = false;
@@ -97,8 +98,9 @@ TEST_CASE("ToolRegistry: all returns all tools", "[s0.6]")
     locus::register_builtin_tools(registry);
 
     auto all = registry.all();
-    REQUIRE(all.size() == 17);  // S4.D adds propose_plan + mark_step_done;
-                                // S4.R adds add_memory + search_memory.
+    REQUIRE(all.size() == 18);  // S4.D adds propose_plan + mark_step_done;
+                                // S4.R adds add_memory + search_memory;
+                                // S5.Z task 8 adds filter_output.
 }
 
 TEST_CASE("ToolRegistry: parse_tool_call handles valid and empty JSON", "[s0.6]")
@@ -476,8 +478,8 @@ TEST_CASE("ITool defaults: available()=true, visible_in_mode only in agent", "[s
     // themselves unavailable when the workspace has no ProcessRegistry,
     // which the FakeWorkspaceServices used here does not. plan-mode and
     // execute-mode-only tools (S4.D propose_plan, mark_step_done) are also
-    // hidden from agent mode.
-    REQUIRE(agent.size() == 9);
+    // hidden from agent mode. S5.Z task 8 adds filter_output.
+    REQUIRE(agent.size() == 10);
     REQUIRE(plan.size()  == 1);  // S4.D: propose_plan is the one plan-mode tool
 }
 

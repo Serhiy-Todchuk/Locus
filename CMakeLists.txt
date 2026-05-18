@@ -364,6 +364,7 @@ add_library(locus_core STATIC
     src/tools/interactive_tools.cpp
     src/tools/plan_tools.cpp
     src/tools/memory_tools.cpp
+    src/tools/filter_output_tool.cpp
     src/tools/tools.cpp
     src/tools/process_registry.cpp
     src/mcp/json_rpc.cpp

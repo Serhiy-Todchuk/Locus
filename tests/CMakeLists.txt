@@ -17,6 +17,7 @@ add_executable(locus_tests
     test_reranker.cpp
     test_checkpoint_store.cpp
     test_process_registry.cpp
+    test_filter_output_tool.cpp
     test_retrieval_eval.cpp
     test_metrics.cpp
     test_file_change_tracker.cpp
