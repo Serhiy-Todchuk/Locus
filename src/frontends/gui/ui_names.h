@@ -23,6 +23,7 @@ inline constexpr const char* kChatPanel      = "locus.chat.panel";
 inline constexpr const char* kChatWebView    = "locus.chat.webview";
 inline constexpr const char* kChatInput      = "locus.chat.input";
 inline constexpr const char* kChatCompactBtn = "locus.chat.compact_btn";
+inline constexpr const char* kChatAutoCompactToggle = "locus.chat.auto_compact_cb";
 inline constexpr const char* kChatStopBtn    = "locus.chat.stop_btn";
 inline constexpr const char* kChatUndoBtn    = "locus.chat.undo_btn";
 inline constexpr const char* kChatModeChat   = "locus.chat.mode_chat";
@@ -116,6 +117,7 @@ inline constexpr const char* kCapabilityWeb         = "locus.capabilities.cb_web
 inline constexpr const char* kCompactionDialog       = "locus.compaction.dialog";
 inline constexpr const char* kCompactionStrategyB    = "locus.compaction.strategy_b";
 inline constexpr const char* kCompactionStrategyC    = "locus.compaction.strategy_c";
+inline constexpr const char* kCompactionSaveBtn      = "locus.compaction.save_btn";
 inline constexpr const char* kCompactionTurnsSlider  = "locus.compaction.turns_slider";
 inline constexpr const char* kCompactionPreviewList  = "locus.compaction.preview_list";
 

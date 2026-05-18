@@ -341,6 +341,7 @@ StepResult ScriptRunner::run_step(const Json& step)
     if (op == "quit")                    return op_quit(args);
     if (op == "dump_tree")               return op_dump_tree(args);
     if (op == "assert_file_exists")      return op_assert_file_exists(args);
+    if (op == "assert_file_contains")    return op_assert_file_contains(args);
 
     return StepResult{ false, "unknown op '" + op + "'", {} };
 }
@@ -727,6 +728,39 @@ StepResult ScriptRunner::op_assert_file_exists(const Json& args)
                  {} };
     }
     return { true, {}, "file appeared" };
+}
+
+StepResult ScriptRunner::op_assert_file_contains(const Json& args)
+{
+    std::string rel       = get_string(args, "path");
+    std::string substring = get_string(args, "substring");
+    int         timeout   = get_int(args, "timeout_ms", 5000);
+
+    if (rel.empty())
+        return { false, "assert_file_contains: requires 'path'", {} };
+    if (substring.empty())
+        return { false, "assert_file_contains: requires 'substring'", {} };
+
+    std::filesystem::path full = std::filesystem::path(workspace_path_used_) / rel;
+
+    bool ok = uia_.wait_for([&] {
+        std::error_code ec;
+        if (!std::filesystem::exists(full, ec)) return false;
+        std::ifstream in(full, std::ios::binary);
+        if (!in) return false;
+        std::string contents((std::istreambuf_iterator<char>(in)),
+                              std::istreambuf_iterator<char>());
+        return contents.find(substring) != std::string::npos;
+    }, timeout);
+
+    if (!ok) {
+        return { false,
+                 "assert_file_contains: '" + substring +
+                 "' not found in " + full.string() +
+                 " after " + std::to_string(timeout) + " ms",
+                 {} };
+    }
+    return { true, {}, "substring present" };
 }
 
 // ---------------------------------------------------------------------------

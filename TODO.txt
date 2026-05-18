@@ -1,4 +1,3 @@
-- Auto-compaction toggle
 - Permission presets + select toggle in chat panel bottom
 - Multi LLM + select toggle in chat panel bottom
 - Ask user tool with pre-determined answers

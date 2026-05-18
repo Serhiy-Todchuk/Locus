@@ -122,9 +122,9 @@ public:
     void set_show_per_message_tokens(bool show);
     void set_generation_progress(int chars, int est_tokens);
 
-    // S5.N -- auto-compact toggle in the chat footer. LocusFrame mirrors
-    // the workspace config's compaction.auto_enabled value here and
-    // listens for user toggles via set_on_auto_compact_toggle().
+    // Auto-compact toggle in the chat footer. LocusFrame mirrors the
+    // workspace config's compaction.auto_enabled value here and listens
+    // for user toggles via set_on_auto_compact_toggle().
     void set_auto_compact_state(bool checked);
     void set_on_auto_compact_toggle(std::function<void(bool)> cb) {
         on_auto_compact_toggle_ = std::move(cb);

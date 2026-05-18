@@ -1029,6 +1029,8 @@ void ChatPanel::create_footer()
     });
 
     auto_compact_cb_ = new wxCheckBox(this, wxID_ANY, "Auto");
+    auto_compact_cb_->SetName(ui_names::kChatAutoCompactToggle);
+    gui::apply_locus_accessible_name(auto_compact_cb_);
     auto_compact_cb_->SetToolTip(
         "Auto-compact: when context usage crosses the configured threshold, "
         "run the saved compaction layers automatically before the next turn.\n"

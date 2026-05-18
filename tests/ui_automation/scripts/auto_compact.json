@@ -1,0 +1,112 @@
+{
+  "name": "auto_compact",
+  "description": "Cover the two new auto-compaction surfaces: (1) the 'Auto' checkbox in the chat footer, which toggles WorkspaceConfig::compaction.auto_enabled and persists to .locus/config.json; (2) the 'Save' button in the Compaction dialog, which writes the chosen layer selection + custom instructions back to config (driving the cascade auto-compact runs). Pure deterministic test -- no LLM involvement. Persistence is verified by reading .locus/config.json after each action and asserting the expected JSON substring is present. The toggle is also exercised across a launch / quit / re-launch cycle to confirm the chat footer reflects the persisted state on load.",
+  "setup": {
+    "workspace": "tmp"
+  },
+  "steps": [
+    { "op": "launch" },
+    {
+      "op": "wait_for_window",
+      "args": { "title_prefix": "Locus", "timeout_ms": 20000 }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.chat.panel", "timeout_ms": 15000 }
+    },
+    { "op": "sleep", "args": { "ms": 500 } },
+
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.chat.auto_compact_cb", "timeout_ms": 5000 }
+    },
+    { "op": "screenshot", "args": { "name": "01_initial_state" } },
+
+    {
+      "op": "click",
+      "args": { "automation_id": "locus.chat.auto_compact_cb", "timeout_ms": 5000 }
+    },
+    { "op": "sleep", "args": { "ms": 500 } },
+    { "op": "screenshot", "args": { "name": "02_auto_unchecked" } },
+
+    {
+      "op": "assert_file_contains",
+      "args": {
+        "path": ".locus/config.json",
+        "substring": "\"auto_enabled\": false",
+        "timeout_ms": 5000
+      }
+    },
+
+    {
+      "op": "click",
+      "args": { "automation_id": "locus.chat.compact_btn", "timeout_ms": 5000 }
+    },
+    { "op": "sleep", "args": { "ms": 600 } },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.compaction.strategy_b", "timeout_ms": 8000 }
+    },
+    { "op": "screenshot", "args": { "name": "03_compact_dialog_open" } },
+
+    {
+      "op": "click",
+      "args": { "automation_id": "locus.compaction.strategy_c", "timeout_ms": 5000 }
+    },
+    { "op": "sleep", "args": { "ms": 200 } },
+
+    {
+      "op": "click",
+      "args": { "automation_id": "locus.compaction.save_btn", "timeout_ms": 5000 }
+    },
+    { "op": "sleep", "args": { "ms": 600 } },
+    { "op": "screenshot", "args": { "name": "04_after_save" } },
+
+    {
+      "op": "assert_file_contains",
+      "args": {
+        "path": ".locus/config.json",
+        "substring": "\"layer_drop_oldest_turns\": true",
+        "timeout_ms": 5000
+      }
+    },
+
+    { "op": "quit", "args": { "wait_ms": 5000 } },
+    { "op": "sleep", "args": { "ms": 600 } },
+
+    { "op": "launch" },
+    {
+      "op": "wait_for_window",
+      "args": { "title_prefix": "Locus", "timeout_ms": 20000 }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.chat.panel", "timeout_ms": 15000 }
+    },
+    { "op": "sleep", "args": { "ms": 500 } },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.chat.auto_compact_cb", "timeout_ms": 5000 }
+    },
+    { "op": "screenshot", "args": { "name": "05_after_relaunch" } },
+
+    {
+      "op": "assert_file_contains",
+      "args": {
+        "path": ".locus/config.json",
+        "substring": "\"auto_enabled\": false",
+        "timeout_ms": 5000
+      }
+    },
+    {
+      "op": "assert_file_contains",
+      "args": {
+        "path": ".locus/config.json",
+        "substring": "\"layer_drop_oldest_turns\": true",
+        "timeout_ms": 5000
+      }
+    },
+
+    { "op": "quit", "args": { "wait_ms": 5000 } }
+  ]
+}

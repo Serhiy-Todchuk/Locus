@@ -113,6 +113,8 @@ void CompactionDialog::create_controls(int used_tokens, int limit_tokens)
 
     btn_ok_     = new wxButton(this, wxID_OK, "Compact");
     btn_save_   = new wxButton(this, wxID_ANY, "Save");
+    btn_save_->SetName(ui_names::kCompactionSaveBtn);
+    gui::apply_locus_accessible_name(btn_save_);
     btn_save_->SetToolTip(
         "Save current selection as auto-compact defaults. "
         "Does not run compaction now.");

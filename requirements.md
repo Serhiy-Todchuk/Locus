@@ -141,7 +141,7 @@ The user is presented with a compaction dialog and chooses the strategy.
 
 - [ ] Compaction is always visible: user sees before/after token counts
 - [ ] User can trigger manual compaction at any time (not just when limit approached)
-- [ ] Per-workspace default strategy can be configured (used as the pre-selected option in dialog)
+- [x] Per-workspace default strategy can be configured (used as the pre-selected option in dialog, and as the cascade auto-compact runs when enabled). Configured via the dialog's **Save** button; the chat footer has an **Auto** toggle that enables/disables automatic firing.
 
 ### F7 -- Active Edit Context
 - [ ] Agent is aware of which file the user currently has open / focused

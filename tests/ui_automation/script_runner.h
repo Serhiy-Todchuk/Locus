@@ -78,6 +78,7 @@ private:
     StepResult op_quit(const Json& args);
     StepResult op_dump_tree(const Json& args);
     StepResult op_assert_file_exists(const Json& args);
+    StepResult op_assert_file_contains(const Json& args);
 
     Element find_named(const std::string& automation_id, int timeout_ms);
     Element resolve_target(const Json& args, int timeout_ms);

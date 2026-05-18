@@ -88,7 +88,8 @@ The current codebase is a working local-agent application:
 
 - **Agent runtime**: streaming conversations, tool-call parsing across OpenAI-style
   and XML-style model outputs, approval gates, plan mode, slash commands, sessions,
-  compaction, file-change awareness, and per-turn activity logging.
+  layered context compaction (manual via dialog or fully automatic with per-workspace
+  defaults configurable via Save), file-change awareness, and per-turn activity logging.
 - **Safe workspace operations**: read-before-edit discipline, app-level checkpoints
   and `/undo`, inline diff rendering, delete/write/edit tools, command execution,
   background processes, and outside-workspace shell-path warnings.
