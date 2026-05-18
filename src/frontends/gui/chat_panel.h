@@ -30,9 +30,9 @@ class ChatStreamRenderer;
 // Chat display + input panel. Center pane of the main frame.
 //
 // Layout (vertical):
-//   [wxWebView   -- chat history, HTML/CSS rendered     ] (stretches)
-//   [wxTextCtrl  -- multiline input, Enter=send         ] (fixed height)
-//   [footer bar  -- context gauge + LOCUS.md chip       ] (fixed height)
+//   [wxWebView   -- chat history, HTML/CSS rendered                      ] (stretches)
+//   [wxTextCtrl  -- multiline input, Enter=send                          ] (fixed height)
+//   [footer bar  -- context gauge + plan/commit/preset chips + buttons   ] (fixed height)
 //
 // Streaming: tokens are buffered and flushed to the WebView via a wxTimer
 // every 33ms (~30fps). md4c converts accumulated markdown to HTML on each

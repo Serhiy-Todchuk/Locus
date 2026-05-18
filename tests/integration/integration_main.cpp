@@ -5,7 +5,6 @@
 #include <catch2/reporters/catch_reporter_event_listener.hpp>
 #include <catch2/reporters/catch_reporter_registrars.hpp>
 
-#include <set>
 #include <string>
 
 #include <cstdio>
@@ -163,15 +162,17 @@ int relaunch_in_new_console(int argc, char** argv)
 #endif
 
 // Catch2 listener that:
-//   * resets the harness's conversation history at most ONCE per area, where
-//     "area" is the source file of the TEST_CASE (each test_int_<topic>.cpp
-//     is one area: [search], [outline], ...). Catch2's default test order
-//     can interleave files, so a "reset whenever the file changes" strategy
-//     thrashes -- here we track areas already reset and skip subsequent
-//     re-entries. Per-case reset was correct but slow (every case re-paid
-//     the system prompt + tool-manifest tokens); per-area reset keeps the
-//     full-suite conversation from drifting toward Gemma 4 E4B's 16k ceiling
-//     while paying the reset cost at most N-areas times per run;
+//   * resets the harness's conversation history whenever we cross a TEST_CASE
+//     file boundary. "Area" = source file of the TEST_CASE; consecutive tests
+//     from the same file share one conversation (preserves the system-prompt /
+//     tool-manifest token caching). Earlier versions used a one-shot
+//     `areas_reset_` set, but Catch2's default test order does NOT guarantee
+//     all tests from one file run before tests from another -- declaration
+//     order across TUs depends on link order and can interleave. The one-shot
+//     set marked an area "done" after the first visit, so a later test from
+//     the same file inherited whatever conversation grew in between. Tracking
+//     the most-recently-seen file fixes that without going all the way to
+//     per-case reset (which was correct but slow);
 //   * tears down the shared harness once all tests have finished running.
 //
 // Reset uses the non-constructing peek so the first area boundary (before
@@ -184,7 +185,8 @@ public:
     void testCaseStarting(const Catch::TestCaseInfo& info) override
     {
         const char* file = info.lineInfo.file ? info.lineInfo.file : "";
-        if (!areas_reset_.insert(file).second) return;  // already reset this area
+        if (last_file_ == file) return;   // still inside the same area
+        last_file_ = file;
 
         if (auto* h = locus::integration::IntegrationHarness::shared_if_alive()) {
             h->agent().reset_conversation();
@@ -197,7 +199,7 @@ public:
     }
 
 private:
-    std::set<std::string> areas_reset_;
+    std::string last_file_;
 };
 
 } // namespace

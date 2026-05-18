@@ -227,6 +227,15 @@ void XmlToolCallExtractor::parse_qwen_body(const std::string& body,
         return;
     }
 
+    // Hermes / GLM dialect: some tunes wrap a non-JSON body inside
+    // <tool_call>, using <function=NAME><parameter=...>... instead of the
+    // canonical Qwen JSON object. Dispatch before json::parse so we don't
+    // spuriously warn on a legitimately-formatted (just wrong-dialect) call.
+    if (trimmed.compare(0, 9, "<function") == 0) {
+        parse_hermes_body(trimmed, next_index, on_tool_call);
+        return;
+    }
+
     // Qwen body shape:
     //   {"name": "fn_name", "arguments": {"k": "v"}}
     // OR
@@ -388,6 +397,119 @@ void XmlToolCallExtractor::parse_claude_body(const std::string& body,
         if (on_tool_call) on_tool_call(d);
         ++next_index;
     }
+}
+
+// ----- Hermes / GLM body parsing --------------------------------------------
+
+namespace {
+
+// Read a function name out of an opening "<function..." tag. Accepts both
+//   <function=NAME>
+// and
+//   <function name="NAME">
+// Returns (name, byte after the closing '>') or {{}, npos} on parse failure.
+// `start` must point at the '<' of "<function".
+std::pair<std::string, size_t> read_hermes_tag_name(const std::string& s,
+                                                    size_t start,
+                                                    const char* tag /*"function" or "parameter"*/)
+{
+    size_t tag_len = std::strlen(tag);
+    // s[start] == '<', followed by tag.
+    size_t i = start + 1 + tag_len;   // past '<' + tag
+    if (i > s.size()) return {{}, std::string::npos};
+
+    std::string name;
+    if (i < s.size() && s[i] == '=') {
+        // `=NAME>` form -- name is everything up to the next '>'.
+        size_t close = s.find('>', i + 1);
+        if (close == std::string::npos) return {{}, std::string::npos};
+        name = s.substr(i + 1, close - (i + 1));
+        // Strip surrounding whitespace / quotes the model might emit.
+        name = trim(name);
+        if (name.size() >= 2 && name.front() == '"' && name.back() == '"')
+            name = name.substr(1, name.size() - 2);
+        return {name, close + 1};
+    }
+
+    // Attribute form: `<function name="NAME">`. Look for `name="..."` up to '>'.
+    size_t close = s.find('>', i);
+    if (close == std::string::npos) return {{}, std::string::npos};
+    size_t attr = s.find("name=\"", i);
+    if (attr == std::string::npos || attr > close) return {{}, std::string::npos};
+    attr += 6;   // past name="
+    size_t attr_end = s.find('"', attr);
+    if (attr_end == std::string::npos || attr_end > close)
+        return {{}, std::string::npos};
+    name = s.substr(attr, attr_end - attr);
+    return {name, close + 1};
+}
+
+} // namespace
+
+void XmlToolCallExtractor::parse_hermes_body(const std::string& body,
+                                             int& next_index,
+                                             const OnToolCall& on_tool_call)
+{
+    // Walk every <function...>...</function> block. Most models emit only
+    // one per <tool_call>, but tolerate multiples for symmetry with Claude.
+    size_t i = 0;
+    int emitted_here = 0;
+    for (;;) {
+        size_t f_open = body.find("<function", i);
+        if (f_open == std::string::npos) break;
+
+        auto [fn_name, after_open] = read_hermes_tag_name(body, f_open, "function");
+        if (after_open == std::string::npos || fn_name.empty()) {
+            spdlog::warn("XmlToolCallExtractor: malformed Hermes <function> tag");
+            return;
+        }
+
+        size_t f_close = body.find("</function>", after_open);
+        if (f_close == std::string::npos) {
+            spdlog::warn("XmlToolCallExtractor: Hermes <function> missing close");
+            return;
+        }
+
+        json args = json::object();
+        size_t p = after_open;
+        while (p < f_close) {
+            size_t p_open = body.find("<parameter", p);
+            if (p_open == std::string::npos || p_open >= f_close) break;
+
+            auto [p_name, after_p_open] =
+                read_hermes_tag_name(body, p_open, "parameter");
+            if (after_p_open == std::string::npos || p_name.empty()) {
+                spdlog::warn("XmlToolCallExtractor: malformed Hermes <parameter> tag");
+                break;
+            }
+
+            size_t p_close = body.find("</parameter>", after_p_open);
+            if (p_close == std::string::npos || p_close > f_close) break;
+
+            std::string raw = body.substr(after_p_open, p_close - after_p_open);
+            // Models commonly put the value on its own line:
+            //   <parameter=path>\n  src/x.cpp\n</parameter>
+            // Trim so the value lands as expected; value_from_param_text
+            // also trims internally, but doing it here keeps the raw-string
+            // fallback (multi-line bodies) from carrying stray newlines.
+            args[p_name] = value_from_param_text(trim(raw));
+            p = p_close + std::strlen("</parameter>");
+        }
+
+        StreamDecoderSink::ToolCallDelta d;
+        d.index     = next_index;
+        d.id_frag   = synth_id(next_index);
+        d.name_frag = fn_name;
+        d.args_frag = args.dump();
+        if (on_tool_call) on_tool_call(d);
+        ++next_index;
+        ++emitted_here;
+
+        i = f_close + std::strlen("</function>");
+    }
+
+    if (emitted_here == 0)
+        spdlog::warn("XmlToolCallExtractor: no <function> blocks in Hermes body");
 }
 
 } // namespace locus

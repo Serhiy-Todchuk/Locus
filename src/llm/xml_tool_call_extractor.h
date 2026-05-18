@@ -51,6 +51,13 @@ public:
     // for the auto-detect decoder to lock the format.
     bool has_emitted() const { return next_index_ > 0; }
 
+    // Shared-counter hook. Decoders that run two extractor instances over
+    // the content + reasoning channels of the same stream sync the counter
+    // through these accessors so tool-call `index` slots and synthetic
+    // `call_xml_<n>` ids stay unique across channels.
+    int  next_index() const         { return next_index_; }
+    void set_next_index(int n)      { next_index_ = n; }
+
 private:
     enum class State {
         Outside,
@@ -73,6 +80,14 @@ private:
     static void parse_qwen_body(const std::string& body, int& next_index,
                                 const OnToolCall& on_tool_call);
     static void parse_claude_body(const std::string& body, int& next_index,
+                                  const OnToolCall& on_tool_call);
+
+    // Hermes / GLM-style body inside <tool_call>:
+    //   <function=NAME><parameter=PNAME>VALUE</parameter>...</function>
+    // (also accepts the attribute form <function name="NAME"> /
+    //  <parameter name="PNAME">). Dispatched from parse_qwen_body when the
+    // body starts with "<function" instead of "{".
+    static void parse_hermes_body(const std::string& body, int& next_index,
                                   const OnToolCall& on_tool_call);
 
     std::vector<XmlMarker> watch_;

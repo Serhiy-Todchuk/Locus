@@ -77,6 +77,20 @@ std::string content_chunk(const std::string& content)
     return j.dump();
 }
 
+// Same shell, reasoning_content channel.
+std::string reasoning_chunk(const std::string& reasoning)
+{
+    json j = {
+        {"choices", json::array({
+            json::object({
+                {"index", 0},
+                {"delta", json::object({{"reasoning_content", reasoning}})}
+            })
+        })}
+    };
+    return j.dump();
+}
+
 std::string usage_chunk(int prompt, int completion, int total)
 {
     json j = {
@@ -563,6 +577,166 @@ TEST_CASE("XmlToolCallExtractor: emits truncated body as text on finish",
     // as text so the user can see what came through.
     CHECK(calls.empty());
     CHECK(text.find("\"name\":\"q\"") != std::string::npos);
+}
+
+// ============================================================================
+// Reasoning-channel + Hermes body (S5.S regression coverage)
+// ============================================================================
+
+TEST_CASE("XmlToolCallExtractor: Hermes function body parses inside <tool_call>",
+          "[xml-extractor][hermes]")
+{
+    XmlToolCallExtractor x({XmlMarker::Qwen});
+    std::string text;
+    std::vector<StreamDecoderSink::ToolCallDelta> calls;
+    auto on_t = [&](const std::string& s) { text += s; };
+    auto on_c = [&](const StreamDecoderSink::ToolCallDelta& d) {
+        calls.push_back(d);
+    };
+
+    // Exactly the body shape that previously fell through with a JSON warn.
+    x.feed(
+        "<tool_call>\n"
+        "<function=search>\n"
+        "<parameter=path_glob>roadmap/**/*.md</parameter>\n"
+        "<parameter=mode>text</parameter>\n"
+        "<parameter=max_results>20</parameter>\n"
+        "<parameter=query>multi LLM</parameter>\n"
+        "</function>\n"
+        "</tool_call>", on_t, on_c);
+    x.finish(on_t);
+
+    REQUIRE(calls.size() == 1);
+    CHECK(calls[0].name_frag == "search");
+    auto args = json::parse(calls[0].args_frag);
+    CHECK(args["path_glob"]   == "roadmap/**/*.md");
+    CHECK(args["mode"]        == "text");
+    CHECK(args["max_results"] == 20);          // typed via value_from_param_text
+    CHECK(args["query"]       == "multi LLM");
+}
+
+TEST_CASE("XmlToolCallExtractor: Hermes attribute form <function name=\"...\">",
+          "[xml-extractor][hermes]")
+{
+    XmlToolCallExtractor x({XmlMarker::Qwen});
+    std::vector<StreamDecoderSink::ToolCallDelta> calls;
+    auto on_t = [&](const std::string&){};
+    auto on_c = [&](const StreamDecoderSink::ToolCallDelta& d) { calls.push_back(d); };
+
+    x.feed(
+        "<tool_call><function name=\"read_file\">"
+        "<parameter name=\"path\">src/main.cpp</parameter>"
+        "</function></tool_call>", on_t, on_c);
+    x.finish(on_t);
+
+    REQUIRE(calls.size() == 1);
+    CHECK(calls[0].name_frag == "read_file");
+    auto args = json::parse(calls[0].args_frag);
+    CHECK(args["path"] == "src/main.cpp");
+}
+
+TEST_CASE("AutoToolFormatDecoder: tool call in reasoning_content channel fires",
+          "[decoders][auto][reasoning]")
+{
+    AutoToolFormatDecoder d;
+    Capture cap;
+    auto sink = cap.make_sink();
+
+    d.decode(reasoning_chunk(
+        "Let me think... "
+        "<tool_call>{\"name\":\"read_file\",\"arguments\":{\"path\":\"x.cpp\"}}</tool_call>"
+        " done."), sink);
+    d.finish_stream(sink);
+
+    // The thinking prose still renders to the reasoning channel,
+    // sans the marker.
+    CHECK(cap.reasoning == "Let me think...  done.");
+    CHECK(cap.text.empty());
+    REQUIRE(cap.tool_calls.size() == 1);
+    CHECK(cap.tool_calls[0].name_frag == "read_file");
+    CHECK(cap.tool_calls[0].args_frag == R"({"path":"x.cpp"})");
+}
+
+TEST_CASE("AutoToolFormatDecoder: original repro -- Hermes body in reasoning channel",
+          "[decoders][auto][reasoning][hermes]")
+{
+    // Bug as reported: model emits a tool call inside its thinking,
+    // *and* uses the Hermes <function=...><parameter=...> body shape
+    // rather than the canonical Qwen JSON. Both fixes have to land for
+    // the call to dispatch.
+    AutoToolFormatDecoder d;
+    Capture cap;
+    auto sink = cap.make_sink();
+
+    d.decode(reasoning_chunk(
+        "I should search for it. "
+        "<tool_call>\n"
+        "<function=search>\n"
+        "<parameter=path_glob>\nroadmap/**/*.md\n</parameter>\n"
+        "<parameter=mode>\ntext\n</parameter>\n"
+        "<parameter=max_results>\n20\n</parameter>\n"
+        "<parameter=query>\nmulti LLM\n</parameter>\n"
+        "</function>\n"
+        "</tool_call>"), sink);
+    d.finish_stream(sink);
+
+    REQUIRE(cap.tool_calls.size() == 1);
+    CHECK(cap.tool_calls[0].name_frag == "search");
+    auto args = json::parse(cap.tool_calls[0].args_frag);
+    CHECK(args["path_glob"]   == "roadmap/**/*.md");
+    CHECK(args["mode"]        == "text");
+    CHECK(args["max_results"] == 20);
+    CHECK(args["query"]       == "multi LLM");
+}
+
+TEST_CASE("AutoToolFormatDecoder: shared counter keeps ids unique across channels",
+          "[decoders][auto][reasoning]")
+{
+    // One call from reasoning, one from content -- indices and synth ids
+    // must NOT collide, or LMStudioClient's per-index coalescing would
+    // merge them into a corrupt single call.
+    AutoToolFormatDecoder d;
+    Capture cap;
+    auto sink = cap.make_sink();
+
+    d.decode(reasoning_chunk(
+        "<tool_call>{\"name\":\"a\",\"arguments\":{}}</tool_call>"), sink);
+    d.decode(content_chunk(
+        "<tool_call>{\"name\":\"b\",\"arguments\":{}}</tool_call>"), sink);
+    d.finish_stream(sink);
+
+    REQUIRE(cap.tool_calls.size() == 2);
+    CHECK(cap.tool_calls[0].name_frag == "a");
+    CHECK(cap.tool_calls[1].name_frag == "b");
+    CHECK(cap.tool_calls[0].index    != cap.tool_calls[1].index);
+    CHECK(cap.tool_calls[0].id_frag  != cap.tool_calls[1].id_frag);
+}
+
+TEST_CASE("QwenXmlDecoder: tool call in reasoning_content channel fires",
+          "[decoders][qwen][reasoning]")
+{
+    QwenXmlDecoder d;
+    Capture cap;
+    auto sink = cap.make_sink();
+    d.decode(reasoning_chunk(
+        "<tool_call>{\"name\":\"x\",\"arguments\":{}}</tool_call>"), sink);
+    d.finish_stream(sink);
+    REQUIRE(cap.tool_calls.size() == 1);
+    CHECK(cap.tool_calls[0].name_frag == "x");
+}
+
+TEST_CASE("ClaudeXmlDecoder: tool call in reasoning_content channel fires",
+          "[decoders][claude][reasoning]")
+{
+    ClaudeXmlDecoder d;
+    Capture cap;
+    auto sink = cap.make_sink();
+    d.decode(reasoning_chunk(
+        "<function_calls><invoke name=\"y\">"
+        "<parameter name=\"a\">1</parameter></invoke></function_calls>"), sink);
+    d.finish_stream(sink);
+    REQUIRE(cap.tool_calls.size() == 1);
+    CHECK(cap.tool_calls[0].name_frag == "y");
 }
 
 // ============================================================================

@@ -136,6 +136,13 @@ LLM output contains tool call
                 └─── Reject    -> inject "user rejected tool call" -> continue LLM
 ```
 
+Per-tool defaults can be overridden by the user. Resolution order, highest
+wins: **runtime preset** (S5.S chat-footer dropdown) -> **workspace config**
+(`tool_approval_policies` map in `.locus/config.json`, Settings -> Tool
+Approvals) -> tool's built-in `approval_policy()`. Named presets
+(Read-only / Ask before edits / Allow edits / Allow all) are snapshots that
+write the full per-tool map; see `src/tools/permission_presets.h`.
+
 ---
 
 ## What a Tool Implementation Looks Like
