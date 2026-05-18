@@ -1,6 +1,7 @@
-- Permission presets + select toggle in chat panel bottom
 - Multi LLM + select toggle in chat panel bottom
 - Ask user tool with pre-determined answers
+- Sound alert when ask user, tool approval or work done happens
+- Ask user auto answer feature
 - Voice chat input
 - Add image attachment for LLM prompt
 - FastDebug

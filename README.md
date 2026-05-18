@@ -186,7 +186,12 @@ reranker (top-K precision). Both are GGUF files placed in `models/` next to
 
 The small reranker is ~13x faster than the recommended one in practice
 (22M vs 568M params; ~8 ms vs ~100 ms per rerank in Release on CPU) but
-English-only and weaker on long passages -- pick by your corpus.
+English-only and weaker on long passages. The small embedder is also
+lower-resolution (384-D, 33M params vs bge-m3's 1024-D, 568M params), so on
+large or semantically diverse workspaces it loses recall first -- pick the
+small profile if you're disk-constrained, English-only, and your queries lean
+lexical; otherwise the recommended profile holds up better as the workspace
+grows.
 
 ```powershell
 # From the repo root. -ExecutionPolicy Bypass avoids permanently changing
