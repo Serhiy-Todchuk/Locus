@@ -501,6 +501,8 @@ add_executable(locus_gui WIN32
     src/frontends/gui/settings/capabilities_settings_panel.cpp
     src/frontends/gui/settings/tool_approvals_settings_panel.cpp
     src/frontends/gui/settings/mcp_settings_panel.cpp
+    src/frontends/gui/settings/notifications_settings_panel.cpp
+    src/frontends/gui/notification_sounds.cpp
     src/frontends/gui/markdown.cpp
     src/frontends/gui/autostart.cpp
     src/frontends/gui/terminal_panel.cpp
@@ -513,6 +515,7 @@ target_link_libraries(locus_gui PRIVATE
     wx::core wx::base wx::aui wx::stc wx::webview
     unofficial::webview2::webview2
     md4c::md4c-html
+    $<$<PLATFORM_ID:Windows>:winmm>
 )
 
 add_custom_command(TARGET locus_gui POST_BUILD

@@ -270,6 +270,21 @@ struct WorkspaceConfig {
     };
     Sessions sessions;
 
+    // Sound alerts when the GUI needs the user's attention (tool approval,
+    // ask_user question, agent turn complete, compaction-needed dialog). Each
+    // event maps to a distinct Windows system sound alias (PlaySound + SND_ALIAS)
+    // so the OS theme controls the actual waveform. `only_when_unfocused` gates
+    // every sound on the main frame not being the foreground window -- avoids
+    // chirping when the user is already watching the agent work.
+    struct Notifications {
+        bool sound_on_tool_approval  = true;
+        bool sound_on_ask_user       = true;
+        bool sound_on_turn_complete  = false;
+        bool sound_on_compaction     = true;
+        bool only_when_unfocused     = true;
+    };
+    Notifications notifications;
+
     // S5.A -- workspace capability buckets. Each bucket gates a family of
     // tools (and sometimes a system-prompt slot) so the per-turn manifest
     // only carries what the user asked for. `semantic_search` and

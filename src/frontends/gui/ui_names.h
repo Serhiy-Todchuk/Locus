@@ -68,6 +68,7 @@ inline constexpr const char* kSettingsTabIndex        = "locus.settings.tab.inde
 inline constexpr const char* kSettingsTabApprovals    = "locus.settings.tab.approvals";
 inline constexpr const char* kSettingsTabMcp          = "locus.settings.tab.mcp";
 inline constexpr const char* kSettingsTabCapabilities = "locus.settings.tab.capabilities";
+inline constexpr const char* kSettingsTabNotifications = "locus.settings.tab.notifications";
 inline constexpr const char* kSettingsSaveAsGlobalBtn = "locus.settings.save_as_global_btn";
 
 // Settings -> LLM tab sub-controls (S5.L Phase A extension).

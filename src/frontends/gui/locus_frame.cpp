@@ -5,6 +5,7 @@
 #include "locus_app.h"
 #include "manage_sessions_dialog.h"
 #include "new_tab_button_tab_art.h"
+#include "notification_sounds.h"
 #include "ui_names.h"
 #include "ui_state.h"
 
@@ -1247,7 +1248,10 @@ void LocusFrame::on_agent_tool_pending(wxThreadEvent& evt)
         refresh_tab_title(tab_id);
 
         auto* agent_ptr = &ui->tab->agent();
+        const auto& cfg = workspace_.config();
         if (tool == "ask_user") {
+            notification_sounds::play(
+                notification_sounds::Kind::ask_user, cfg, this);
             std::string question = args.value("question", "");
             AskUserDialog dlg(this, question);
             if (dlg.ShowModal() == wxID_OK) {
@@ -1258,6 +1262,8 @@ void LocusFrame::on_agent_tool_pending(wxThreadEvent& evt)
                 agent_ptr->tool_decision(call_id, ToolDecision::reject, {});
             }
         } else {
+            notification_sounds::play(
+                notification_sounds::Kind::tool_approval, cfg, this);
             ToolApprovalDialog::run(this, call_id, tool, args, preview,
                 safety_warnings,
                 [agent_ptr](const std::string& cid, ToolDecision d,
@@ -1295,6 +1301,9 @@ void LocusFrame::on_agent_turn_complete(wxThreadEvent& evt)
         refresh_tab_title(tab_id);
         ui->chat->on_turn_complete();
     }
+    notification_sounds::play(
+        notification_sounds::Kind::turn_complete,
+        workspace_.config(), this);
     // S5.I -- a tab's title might have just been autoderived from its first
     // user message; refresh the notebook label.
     if (auto* ui = find_tab_ui(tab_id); ui && ui->tab)
@@ -1332,6 +1341,9 @@ void LocusFrame::on_agent_context_meter(wxThreadEvent& evt)
 
 void LocusFrame::on_agent_compaction(wxThreadEvent& /*evt*/)
 {
+    notification_sounds::play(
+        notification_sounds::Kind::compaction,
+        workspace_.config(), this);
     show_compaction_dialog();
 }
 

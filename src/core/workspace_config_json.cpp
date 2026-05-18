@@ -207,6 +207,25 @@ WorkspaceConfig workspace_config_from_json(const json& j)
             cfg.sessions.restore_last = s["restore_last"].get<bool>();
     }
 
+    if (j.contains("notifications") && j["notifications"].is_object()) {
+        auto& n = j["notifications"];
+        if (n.contains("sound_on_tool_approval"))
+            cfg.notifications.sound_on_tool_approval =
+                n["sound_on_tool_approval"].get<bool>();
+        if (n.contains("sound_on_ask_user"))
+            cfg.notifications.sound_on_ask_user =
+                n["sound_on_ask_user"].get<bool>();
+        if (n.contains("sound_on_turn_complete"))
+            cfg.notifications.sound_on_turn_complete =
+                n["sound_on_turn_complete"].get<bool>();
+        if (n.contains("sound_on_compaction"))
+            cfg.notifications.sound_on_compaction =
+                n["sound_on_compaction"].get<bool>();
+        if (n.contains("only_when_unfocused"))
+            cfg.notifications.only_when_unfocused =
+                n["only_when_unfocused"].get<bool>();
+    }
+
     if (j.contains("tool_approvals") && j["tool_approvals"].is_object()) {
         for (auto it = j["tool_approvals"].begin();
              it != j["tool_approvals"].end(); ++it) {
@@ -316,6 +335,13 @@ json workspace_config_to_json(const WorkspaceConfig& cfg)
             {"keep_last_count",      cfg.sessions.keep_last_count},
             {"delete_after_days",    cfg.sessions.delete_after_days},
             {"restore_last",         cfg.sessions.restore_last}
+        }},
+        {"notifications", {
+            {"sound_on_tool_approval", cfg.notifications.sound_on_tool_approval},
+            {"sound_on_ask_user",      cfg.notifications.sound_on_ask_user},
+            {"sound_on_turn_complete", cfg.notifications.sound_on_turn_complete},
+            {"sound_on_compaction",    cfg.notifications.sound_on_compaction},
+            {"only_when_unfocused",    cfg.notifications.only_when_unfocused}
         }}
     };
 }
