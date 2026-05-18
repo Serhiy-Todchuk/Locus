@@ -231,7 +231,7 @@ flowchart TB
     Pick -->|Claude| CL[ClaudeXmlDecoder]
     Pick -->|None| NN["OpenAiDecoder<br/>tools array omitted"]
 
-    QW -.uses.-> Xml[XmlToolCallExtractor<br/>boundary-safe<br/>partial-marker hold-back]
+    QW -.uses.-> Xml[XmlToolCallExtractor<br/>boundary-safe<br/>partial-marker hold-back<br/>content + reasoning channels<br/>shared next_index counter]
     CL -.uses.-> Xml
     Auto -.uses.-> Xml
 
