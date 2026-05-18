@@ -175,7 +175,8 @@ public:
     }
 
     locus::ToolResult execute(const locus::ToolCall& call,
-                              locus::IWorkspaceServices&) override
+                              locus::IWorkspaceServices&,
+                              const std::atomic<bool>* = nullptr) override
     {
         std::lock_guard lock(mu_);
         executed_ids.push_back(call.id);

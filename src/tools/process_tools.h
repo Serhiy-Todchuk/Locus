@@ -22,7 +22,8 @@ public:
         };
     }
     std::string preview(const ToolCall& call) const override;
-    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws) override;
+    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws,
+                        const std::atomic<bool>* cancel_flag = nullptr) override;
 };
 
 // -- S4.I -- background processes -------------------------------------------
@@ -43,7 +44,8 @@ public:
     }
     bool available(IWorkspaceServices& ws) const override;
     std::string preview(const ToolCall& call) const override;
-    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws) override;
+    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws,
+                        const std::atomic<bool>* cancel_flag = nullptr) override;
 };
 
 class ReadProcessOutputTool : public ITool {
@@ -66,7 +68,8 @@ public:
     ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::auto_approve; }
     bool available(IWorkspaceServices& ws) const override;
     std::string preview(const ToolCall& call) const override;
-    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws) override;
+    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws,
+                        const std::atomic<bool>* cancel_flag = nullptr) override;
 };
 
 class StopProcessTool : public ITool {
@@ -83,7 +86,8 @@ public:
     }
     bool available(IWorkspaceServices& ws) const override;
     std::string preview(const ToolCall& call) const override;
-    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws) override;
+    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws,
+                        const std::atomic<bool>* cancel_flag = nullptr) override;
 };
 
 class ListProcessesTool : public ITool {
@@ -97,7 +101,8 @@ public:
     std::vector<ToolParam> params() const override { return {}; }
     ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::auto_approve; }
     bool available(IWorkspaceServices& ws) const override;
-    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws) override;
+    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws,
+                        const std::atomic<bool>* cancel_flag = nullptr) override;
 };
 
 } // namespace locus

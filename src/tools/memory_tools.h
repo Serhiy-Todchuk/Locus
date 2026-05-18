@@ -32,7 +32,8 @@ public:
     }
     ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::ask; }
     bool available(IWorkspaceServices& ws) const override;
-    ToolResult execute(const ToolCall& call, IWorkspaceServices& ws) override;
+    ToolResult execute(const ToolCall& call, IWorkspaceServices& ws,
+                       const std::atomic<bool>* cancel_flag = nullptr) override;
 };
 
 // Hybrid retrieval over the workspace memory bank. Approval: auto.
@@ -57,7 +58,8 @@ public:
     }
     ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::auto_approve; }
     bool available(IWorkspaceServices& ws) const override;
-    ToolResult execute(const ToolCall& call, IWorkspaceServices& ws) override;
+    ToolResult execute(const ToolCall& call, IWorkspaceServices& ws,
+                       const std::atomic<bool>* cancel_flag = nullptr) override;
 };
 
 } // namespace locus

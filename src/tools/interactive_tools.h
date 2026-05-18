@@ -22,7 +22,8 @@ public:
     // tool_decision(modify, {"question": "...", "response": "user answer"}).
     ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::ask; }
     std::string preview(const ToolCall& call) const override;
-    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws) override;
+    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws,
+                        const std::atomic<bool>* cancel_flag = nullptr) override;
 };
 
 } // namespace locus

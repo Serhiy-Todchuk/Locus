@@ -401,7 +401,8 @@ public:
     std::string name()        const override { return name_; }
     std::string description() const override { return "stub"; }
     std::vector<locus::ToolParam> params() const override { return {}; }
-    locus::ToolResult execute(const locus::ToolCall&, locus::IWorkspaceServices&) override {
+    locus::ToolResult execute(const locus::ToolCall&, locus::IWorkspaceServices&,
+                               const std::atomic<bool>* = nullptr) override {
         return {true, "", ""};
     }
 

@@ -30,7 +30,8 @@ public:
     }
 
     locus::ToolResult execute(const locus::ToolCall& call,
-                              locus::IWorkspaceServices&) override {
+                              locus::IWorkspaceServices&,
+                              const std::atomic<bool>* = nullptr) override {
         locus::ToolResult r;
         r.success = true;
         r.content = call.args.dump();
@@ -45,7 +46,8 @@ public:
     std::string description() const override { return "no args"; }
     std::vector<locus::ToolParam> params() const override { return {}; }
     locus::ToolResult execute(const locus::ToolCall&,
-                              locus::IWorkspaceServices&) override {
+                              locus::IWorkspaceServices&,
+                              const std::atomic<bool>* = nullptr) override {
         return {true, "pong", "pong"};
     }
 };

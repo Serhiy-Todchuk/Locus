@@ -52,7 +52,8 @@ std::string SearchTool::description_for(IWorkspaceServices& ws) const
     return desc;
 }
 
-ToolResult SearchTool::execute(const ToolCall& call, IWorkspaceServices& ws)
+ToolResult SearchTool::execute(const ToolCall& call, IWorkspaceServices& ws,
+                                const std::atomic<bool>* /*cancel_flag*/)
 {
     std::string mode = call.args.value("mode", "text");
 
@@ -92,7 +93,8 @@ ToolResult SearchTool::execute(const ToolCall& call, IWorkspaceServices& ws)
 
 // -- SearchTextTool ---------------------------------------------------------
 
-ToolResult SearchTextTool::execute(const ToolCall& call, IWorkspaceServices& ws)
+ToolResult SearchTextTool::execute(const ToolCall& call, IWorkspaceServices& ws,
+                                    const std::atomic<bool>* /*cancel_flag*/)
 {
     std::string query = call.args.value("query", "");
     int max_results = call.args.value("max_results", 20);
@@ -126,7 +128,8 @@ ToolResult SearchTextTool::execute(const ToolCall& call, IWorkspaceServices& ws)
 
 // -- SearchSymbolsTool ------------------------------------------------------
 
-ToolResult SearchSymbolsTool::execute(const ToolCall& call, IWorkspaceServices& ws)
+ToolResult SearchSymbolsTool::execute(const ToolCall& call, IWorkspaceServices& ws,
+                                       const std::atomic<bool>* /*cancel_flag*/)
 {
     std::string name_query = call.args.value("name", "");
     std::string kind     = call.args.value("kind", "");
@@ -243,7 +246,8 @@ std::string indexing_progress_note(IWorkspaceServices& ws)
 
 } // namespace
 
-ToolResult SearchSemanticTool::execute(const ToolCall& call, IWorkspaceServices& ws)
+ToolResult SearchSemanticTool::execute(const ToolCall& call, IWorkspaceServices& ws,
+                                        const std::atomic<bool>* /*cancel_flag*/)
 {
     auto* emb = ws.embedder();
     if (!emb)
@@ -342,7 +346,8 @@ std::string extract_regex_snippet(const std::string& content,
 
 } // namespace
 
-ToolResult SearchRegexTool::execute(const ToolCall& call, IWorkspaceServices& ws)
+ToolResult SearchRegexTool::execute(const ToolCall& call, IWorkspaceServices& ws,
+                                     const std::atomic<bool>* /*cancel_flag*/)
 {
     std::string pattern = call.args.value("query", "");
     if (pattern.empty())
@@ -571,7 +576,8 @@ bool match_passes_predicates(TSQuery* query, const TSQueryMatch& m,
 
 } // namespace
 
-ToolResult SearchAstTool::execute(const ToolCall& call, IWorkspaceServices& ws)
+ToolResult SearchAstTool::execute(const ToolCall& call, IWorkspaceServices& ws,
+                                   const std::atomic<bool>* /*cancel_flag*/)
 {
     std::string language       = call.args.value("language", "");
     std::string query_src      = call.args.value("query", "");
@@ -730,7 +736,8 @@ ToolResult SearchAstTool::execute(const ToolCall& call, IWorkspaceServices& ws)
 
 // -- SearchHybridTool -------------------------------------------------------
 
-ToolResult SearchHybridTool::execute(const ToolCall& call, IWorkspaceServices& ws)
+ToolResult SearchHybridTool::execute(const ToolCall& call, IWorkspaceServices& ws,
+                                      const std::atomic<bool>* /*cancel_flag*/)
 {
     auto* emb = ws.embedder();
     if (!emb)

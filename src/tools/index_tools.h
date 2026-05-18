@@ -24,7 +24,8 @@ public:
         };
     }
     ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::auto_approve; }
-    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws) override;
+    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws,
+                        const std::atomic<bool>* cancel_flag = nullptr) override;
 };
 
 class GetFileOutlineTool : public ITool {
@@ -43,7 +44,8 @@ public:
     // S5.A -- hidden from the manifest when the code-aware-search capability
     // is off (the outline is essentially the symbols view of a single file).
     bool        available(IWorkspaceServices& ws) const override;
-    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws) override;
+    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws,
+                        const std::atomic<bool>* cancel_flag = nullptr) override;
 };
 
 } // namespace locus

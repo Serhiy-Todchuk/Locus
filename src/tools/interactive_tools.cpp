@@ -9,7 +9,8 @@ std::string AskUserTool::preview(const ToolCall& call) const
     return call.args.value("question", "");
 }
 
-ToolResult AskUserTool::execute(const ToolCall& call, IWorkspaceServices& /*ws*/)
+ToolResult AskUserTool::execute(const ToolCall& call, IWorkspaceServices& /*ws*/,
+                                 const std::atomic<bool>* /*cancel_flag*/)
 {
     // The frontend injects the user's response into args["response"] via the
     // modify flow in tool_decision(). If no response was provided (direct

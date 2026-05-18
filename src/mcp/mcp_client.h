@@ -53,10 +53,14 @@ public:
     // Returns the parsed `result` object from `tools/call`. Caller is
     // responsible for shaping it for the LLM (we hand back the raw MCP
     // result so the namespacing tool can decide on display vs content).
+    // S5.Z task 7 -- `cancel_flag` (default null) is polled in the wait
+    // loop; on observed cancel the pending id is erased from the request
+    // map and a "cancelled by user" runtime_error is thrown.
     nlohmann::json call_tool(const std::string& tool_name,
                              const nlohmann::json& arguments,
                              std::chrono::milliseconds timeout =
-                                 std::chrono::milliseconds(60000));
+                                 std::chrono::milliseconds(60000),
+                             const std::atomic<bool>* cancel_flag = nullptr);
 
     // Status accessors. Thread-safe.
     Status              status()       const;
@@ -79,7 +83,8 @@ private:
 
     nlohmann::json send_request_sync(const std::string& method,
                                      nlohmann::json params,
-                                     std::chrono::milliseconds timeout);
+                                     std::chrono::milliseconds timeout,
+                                     const std::atomic<bool>* cancel_flag = nullptr);
 
     McpServerConfig                  cfg_;
     std::unique_ptr<StdioTransport>  transport_;

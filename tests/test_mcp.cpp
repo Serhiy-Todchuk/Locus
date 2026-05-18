@@ -416,7 +416,8 @@ TEST_CASE("ToolRegistry: unregister removes by name", "[s4.g][tools]")
         std::string name()        const override { return n_; }
         std::string description() const override { return "dummy"; }
         std::vector<locus::ToolParam> params() const override { return {}; }
-        locus::ToolResult execute(const locus::ToolCall&, locus::IWorkspaceServices&) override
+        locus::ToolResult execute(const locus::ToolCall&, locus::IWorkspaceServices&,
+                                   const std::atomic<bool>* = nullptr) override
         { return {true, "ok", "ok"}; }
     };
 

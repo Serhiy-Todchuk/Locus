@@ -31,7 +31,8 @@ std::string ReadFileTool::preview(const ToolCall& call) const
            std::to_string(offset + length - 1);
 }
 
-ToolResult ReadFileTool::execute(const ToolCall& call, IWorkspaceServices& ws)
+ToolResult ReadFileTool::execute(const ToolCall& call, IWorkspaceServices& ws,
+                                  const std::atomic<bool>* /*cancel_flag*/)
 {
     std::string rel_path = call.args.value("path", "");
     int offset = call.args.value("offset", 1);
@@ -103,7 +104,8 @@ std::string WriteFileTool::preview(const ToolCall& call) const
     return head + path + " (" + std::to_string(new_len) + " bytes)";
 }
 
-ToolResult WriteFileTool::execute(const ToolCall& call, IWorkspaceServices& ws)
+ToolResult WriteFileTool::execute(const ToolCall& call, IWorkspaceServices& ws,
+                                   const std::atomic<bool>* /*cancel_flag*/)
 {
     std::string rel_path = call.args.value("path", "");
     std::string content  = call.args.value("content", "");
@@ -269,7 +271,8 @@ std::string EditFileTool::preview(const ToolCall& call) const
     return ss.str();
 }
 
-ToolResult EditFileTool::execute(const ToolCall& call, IWorkspaceServices& ws)
+ToolResult EditFileTool::execute(const ToolCall& call, IWorkspaceServices& ws,
+                                  const std::atomic<bool>* /*cancel_flag*/)
 {
     std::string rel_path = call.args.value("path", "");
     if (rel_path.empty())
@@ -351,7 +354,8 @@ std::string DeleteFileTool::preview(const ToolCall& call) const
     return "WARNING: Permanently delete " + path;
 }
 
-ToolResult DeleteFileTool::execute(const ToolCall& call, IWorkspaceServices& ws)
+ToolResult DeleteFileTool::execute(const ToolCall& call, IWorkspaceServices& ws,
+                                    const std::atomic<bool>* /*cancel_flag*/)
 {
     std::string rel_path = call.args.value("path", "");
 

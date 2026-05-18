@@ -2,6 +2,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <atomic>
 #include <memory>
 #include <string>
 #include <vector>
@@ -105,8 +106,15 @@ public:
     // to forward the server-supplied `inputSchema` verbatim.
     virtual nlohmann::json parameters_schema() const { return nlohmann::json::object(); }
 
+    // S5.Z task 7 -- `cancel_flag` is the agent's `cancel_requested_` atomic
+    // threaded through so a long-running tool can poll for an in-flight stop.
+    // Default `nullptr` keeps test callers and any tool that doesn't care
+    // about cancellation back-compat. Long-running shell + MCP tools poll
+    // this and abort (Terminate the process tree / CancelIoEx the pipe);
+    // pure-CPU fast tools simply ignore it.
     virtual ToolResult execute(const ToolCall& call,
-                               IWorkspaceServices& ws) = 0;
+                               IWorkspaceServices& ws,
+                               const std::atomic<bool>* cancel_flag = nullptr) = 0;
 
     // Default approval policy for this tool. User-configured overrides in
     // WorkspaceConfig take precedence -- see AgentCore::resolve_policy().

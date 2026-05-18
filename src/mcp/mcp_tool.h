@@ -23,7 +23,8 @@ public:
     std::string              description() const override;
     std::vector<ToolParam>   params()      const override;
 
-    ToolResult execute(const ToolCall& call, IWorkspaceServices& ws) override;
+    ToolResult execute(const ToolCall& call, IWorkspaceServices& ws,
+                       const std::atomic<bool>* cancel_flag = nullptr) override;
 
     // MCP tools are untrusted by default. Users opt in per-tool via the
     // existing per-workspace `tool_approvals` config map (key =

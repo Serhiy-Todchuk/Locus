@@ -54,7 +54,8 @@ public:
         };
     }
     ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::auto_approve; }
-    ToolResult execute(const ToolCall& call, IWorkspaceServices& ws) override;
+    ToolResult execute(const ToolCall& call, IWorkspaceServices& ws,
+                       const std::atomic<bool>* cancel_flag = nullptr) override;
 };
 
 // The four individual search tools below remain available as direct `ITool`s
@@ -74,7 +75,8 @@ public:
         };
     }
     ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::auto_approve; }
-    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws) override;
+    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws,
+                        const std::atomic<bool>* cancel_flag = nullptr) override;
 };
 
 class SearchSymbolsTool : public ITool {
@@ -92,7 +94,8 @@ public:
         };
     }
     ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::auto_approve; }
-    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws) override;
+    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws,
+                        const std::atomic<bool>* cancel_flag = nullptr) override;
 };
 
 class SearchSemanticTool : public ITool {
@@ -110,7 +113,8 @@ public:
         };
     }
     ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::auto_approve; }
-    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws) override;
+    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws,
+                        const std::atomic<bool>* cancel_flag = nullptr) override;
 };
 
 // Raw-content regex search. Runs in-process over indexed (non-binary) files via
@@ -136,7 +140,8 @@ public:
         };
     }
     ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::auto_approve; }
-    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws) override;
+    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws,
+                        const std::atomic<bool>* cancel_flag = nullptr) override;
 };
 
 // Tree-sitter structural search (S4.M). Compiles a `.scm` query against the
@@ -170,7 +175,8 @@ public:
         };
     }
     ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::auto_approve; }
-    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws) override;
+    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws,
+                        const std::atomic<bool>* cancel_flag = nullptr) override;
 };
 
 class SearchHybridTool : public ITool {
@@ -188,7 +194,8 @@ public:
         };
     }
     ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::auto_approve; }
-    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws) override;
+    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws,
+                        const std::atomic<bool>* cancel_flag = nullptr) override;
 };
 
 } // namespace locus

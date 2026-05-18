@@ -199,7 +199,8 @@ void walk_dir(const fs::path&     abs_dir,
 
 } // namespace
 
-ToolResult ListDirectoryTool::execute(const ToolCall& call, IWorkspaceServices& ws)
+ToolResult ListDirectoryTool::execute(const ToolCall& call, IWorkspaceServices& ws,
+                                      const std::atomic<bool>* /*cancel_flag*/)
 {
     std::string path = call.args.value("path", "");
     int depth = call.args.value("depth", 0);
@@ -289,7 +290,8 @@ bool GetFileOutlineTool::available(IWorkspaceServices& ws) const
     return w ? w->config().capabilities.code_aware_search : true;
 }
 
-ToolResult GetFileOutlineTool::execute(const ToolCall& call, IWorkspaceServices& ws)
+ToolResult GetFileOutlineTool::execute(const ToolCall& call, IWorkspaceServices& ws,
+                                        const std::atomic<bool>* /*cancel_flag*/)
 {
     std::string path = call.args.value("path", "");
 

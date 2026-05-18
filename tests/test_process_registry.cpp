@@ -274,4 +274,37 @@ TEST_CASE("ProcessRegistry: write_stdin returns false after process exited", "[s
     REQUIRE_FALSE(reg.write_stdin(id, std::string("late\n")));
 }
 
+// S5.Z task 7 -- a long-running run_command exits within ~1 s of the cancel
+// flag flipping, returning success=false with a `[cancelled by user]` line.
+TEST_CASE("RunCommandTool: observes cancel flag mid-execution", "[s5.z]")
+{
+    WsWithProcs ws(tmp_root(), 64 * 1024);
+    locus::RunCommandTool tool;
+
+    std::atomic<bool> cancel{false};
+    locus::ToolCall call{"c1", "run_command",
+                         {{"command", "ping -n 30 127.0.0.1"},
+                          {"timeout_ms", 60000}}};
+
+    auto t0 = std::chrono::steady_clock::now();
+
+    // Trip the cancel after ~300 ms so the polled wait observes it well
+    // before ping naturally completes (~29 seconds).
+    std::thread tripper([&] {
+        std::this_thread::sleep_for(300ms);
+        cancel.store(true);
+    });
+
+    auto r = tool.execute(call, ws, &cancel);
+    tripper.join();
+
+    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                       std::chrono::steady_clock::now() - t0);
+
+    REQUIRE_FALSE(r.success);
+    REQUIRE_THAT(r.content, ContainsSubstring("[cancelled by user]"));
+    // ping -n 30 would take ~29s. Cancel should fire well inside 5s.
+    REQUIRE(elapsed < std::chrono::seconds(5));
+}
+
 #endif // _WIN32

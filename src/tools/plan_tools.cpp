@@ -46,7 +46,8 @@ std::string ProposePlanTool::preview(const ToolCall& call) const
     return out;
 }
 
-ToolResult ProposePlanTool::execute(const ToolCall& call, IWorkspaceServices& /*ws*/)
+ToolResult ProposePlanTool::execute(const ToolCall& call, IWorkspaceServices& /*ws*/,
+                                     const std::atomic<bool>* /*cancel_flag*/)
 {
     json out;
     out["ok"]      = true;
@@ -128,7 +129,8 @@ std::string MarkStepDoneTool::preview(const ToolCall& call) const
     return out;
 }
 
-ToolResult MarkStepDoneTool::execute(const ToolCall& call, IWorkspaceServices& /*ws*/)
+ToolResult MarkStepDoneTool::execute(const ToolCall& call, IWorkspaceServices& /*ws*/,
+                                      const std::atomic<bool>* /*cancel_flag*/)
 {
     if (!call.args.contains("step")) {
         ToolResult r;

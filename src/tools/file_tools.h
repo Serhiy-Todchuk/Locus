@@ -20,7 +20,8 @@ public:
     }
     ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::auto_approve; }
     std::string preview(const ToolCall& call) const override;
-    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws) override;
+    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws,
+                        const std::atomic<bool>* cancel_flag = nullptr) override;
 };
 
 // Create a new file, or overwrite an existing one when `overwrite=true` is
@@ -49,7 +50,8 @@ public:
         };
     }
     std::string preview(const ToolCall& call) const override;
-    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws) override;
+    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws,
+                        const std::atomic<bool>* cancel_flag = nullptr) override;
 };
 
 // Exact string-match edit (Claude-Code-style: find `old_string` in the file,
@@ -82,7 +84,8 @@ public:
         };
     }
     std::string preview(const ToolCall& call) const override;
-    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws) override;
+    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws,
+                        const std::atomic<bool>* cancel_flag = nullptr) override;
 };
 
 class DeleteFileTool : public ITool {
@@ -97,7 +100,8 @@ public:
         };
     }
     std::string preview(const ToolCall& call) const override;
-    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws) override;
+    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws,
+                        const std::atomic<bool>* cancel_flag = nullptr) override;
 };
 
 } // namespace locus

@@ -79,7 +79,8 @@ bool AddMemoryTool::available(IWorkspaceServices& ws) const
     return w ? w->config().capabilities.memory_bank : true;
 }
 
-ToolResult AddMemoryTool::execute(const ToolCall& call, IWorkspaceServices& ws)
+ToolResult AddMemoryTool::execute(const ToolCall& call, IWorkspaceServices& ws,
+                                   const std::atomic<bool>* /*cancel_flag*/)
 {
     auto* mem = ws.memory();
     if (!mem) return error_result("Error: memory bank is disabled for this workspace");
@@ -141,7 +142,8 @@ bool SearchMemoryTool::available(IWorkspaceServices& ws) const
     return w ? w->config().capabilities.memory_bank : true;
 }
 
-ToolResult SearchMemoryTool::execute(const ToolCall& call, IWorkspaceServices& ws)
+ToolResult SearchMemoryTool::execute(const ToolCall& call, IWorkspaceServices& ws,
+                                      const std::atomic<bool>* /*cancel_flag*/)
 {
     auto* mem = ws.memory();
     if (!mem) return error_result("Error: memory bank is disabled for this workspace");

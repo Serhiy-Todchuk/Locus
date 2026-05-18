@@ -33,7 +33,8 @@ std::string RunCommandTool::preview(const ToolCall& call) const
 
 #ifdef _WIN32
 
-ToolResult RunCommandTool::execute(const ToolCall& call, IWorkspaceServices& ws)
+ToolResult RunCommandTool::execute(const ToolCall& call, IWorkspaceServices& ws,
+                                    const std::atomic<bool>* cancel_flag)
 {
     std::string command = call.args.value("command", "");
     // Default 30 minutes -- matches Pi's bash tool. Long-enough builds, test
@@ -143,7 +144,38 @@ ToolResult RunCommandTool::execute(const ToolCall& call, IWorkspaceServices& ws)
         }
     });
 
-    DWORD wait_result = WaitForSingleObject(pi.hProcess, static_cast<DWORD>(timeout_ms));
+    // S5.Z task 7 -- replace the single WaitForSingleObject with a polled
+    // wait so the dispatcher's cancel flag is observed in <= poll_ms.
+    // Polling interval is short (50 ms) -- the WaitForSingleObject still
+    // blocks the agent thread, but the wake-up is now bounded by both the
+    // process exiting AND the user pressing Stop.
+    constexpr DWORD k_poll_ms = 50;
+    DWORD remaining = timeout_ms <= 0 ? INFINITE
+                                       : static_cast<DWORD>(timeout_ms);
+    DWORD wait_result = WAIT_FAILED;
+    bool cancelled = false;
+    for (;;) {
+        DWORD slice = (remaining == INFINITE)
+                          ? k_poll_ms
+                          : std::min<DWORD>(remaining, k_poll_ms);
+        wait_result = WaitForSingleObject(pi.hProcess, slice);
+        if (wait_result == WAIT_OBJECT_0) break;
+        if (wait_result != WAIT_TIMEOUT) break;     // failed/abandoned
+        if (cancel_flag && cancel_flag->load()) {
+            TerminateJobObject(job, 1);
+            WaitForSingleObject(pi.hProcess, 2000);
+            cancelled = true;
+            wait_result = WAIT_OBJECT_0;
+            break;
+        }
+        if (remaining != INFINITE) {
+            if (remaining <= slice) {
+                wait_result = WAIT_TIMEOUT;
+                break;
+            }
+            remaining -= slice;
+        }
+    }
 
     DWORD exit_code = 0;
     bool timed_out = false;
@@ -174,8 +206,11 @@ ToolResult RunCommandTool::execute(const ToolCall& call, IWorkspaceServices& ws)
     }
 
     std::ostringstream content;
-    if (timed_out)
+    if (cancelled) {
+        content << "[cancelled by user]\n";
+    } else if (timed_out) {
         content << "[TIMEOUT after " << timeout_ms << "ms]\n";
+    }
     content << "[exit code: " << exit_code << "]\n";
     content << output;
 
@@ -186,12 +221,13 @@ ToolResult RunCommandTool::execute(const ToolCall& call, IWorkspaceServices& ws)
 
     if (sink) sink->emit_sync_exited(static_cast<int>(exit_code), timed_out);
 
-    return {exit_code == 0 && !timed_out, result, result};
+    return {exit_code == 0 && !timed_out && !cancelled, result, result};
 }
 
 #else
 
-ToolResult RunCommandTool::execute(const ToolCall& /*call*/, IWorkspaceServices& /*ws*/)
+ToolResult RunCommandTool::execute(const ToolCall& /*call*/, IWorkspaceServices& /*ws*/,
+                                    const std::atomic<bool>* /*cancel_flag*/)
 {
     // S5.Z task 5 -- prefix with the OS name so the activity-log line makes
     // it unambiguous *why* the call failed (Windows-only at v1; macOS / Linux
@@ -244,7 +280,8 @@ std::string RunCommandBgTool::preview(const ToolCall& call) const
     return "Start in background: " + call.args.value("command", "");
 }
 
-ToolResult RunCommandBgTool::execute(const ToolCall& call, IWorkspaceServices& ws)
+ToolResult RunCommandBgTool::execute(const ToolCall& call, IWorkspaceServices& ws,
+                                      const std::atomic<bool>* /*cancel_flag*/)
 {
     auto* reg = ws.processes();
     if (!reg) return no_registry();
@@ -281,7 +318,8 @@ std::string ReadProcessOutputTool::preview(const ToolCall& call) const
     return "Read output of process " + std::to_string(pid);
 }
 
-ToolResult ReadProcessOutputTool::execute(const ToolCall& call, IWorkspaceServices& ws)
+ToolResult ReadProcessOutputTool::execute(const ToolCall& call, IWorkspaceServices& ws,
+                                           const std::atomic<bool>* /*cancel_flag*/)
 {
     auto* reg = ws.processes();
     if (!reg) return no_registry();
@@ -333,7 +371,8 @@ std::string StopProcessTool::preview(const ToolCall& call) const
     return "Stop process " + std::to_string(pid);
 }
 
-ToolResult StopProcessTool::execute(const ToolCall& call, IWorkspaceServices& ws)
+ToolResult StopProcessTool::execute(const ToolCall& call, IWorkspaceServices& ws,
+                                     const std::atomic<bool>* /*cancel_flag*/)
 {
     auto* reg = ws.processes();
     if (!reg) return no_registry();
@@ -354,7 +393,8 @@ bool ListProcessesTool::available(IWorkspaceServices& ws) const
     return ws.processes() != nullptr && bg_capability_enabled(ws);
 }
 
-ToolResult ListProcessesTool::execute(const ToolCall& /*call*/, IWorkspaceServices& ws)
+ToolResult ListProcessesTool::execute(const ToolCall& /*call*/, IWorkspaceServices& ws,
+                                       const std::atomic<bool>* /*cancel_flag*/)
 {
     auto* reg = ws.processes();
     if (!reg) return no_registry();

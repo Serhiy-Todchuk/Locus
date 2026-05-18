@@ -337,7 +337,10 @@ void ToolDispatcher::dispatch(const ToolCall& call, const AppendFn& append_resul
     maybe_snapshot(effective_call);
 
     auto exec_t0 = std::chrono::steady_clock::now();
-    auto result = tool->execute(effective_call, services_);
+    // S5.Z task 7 -- thread the agent's cancel flag through so long-running
+    // tools (run_command, MCP) can abort in flight rather than waiting for
+    // the natural timeout.
+    auto result = tool->execute(effective_call, services_, &cancel_flag_);
     auto exec_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                        std::chrono::steady_clock::now() - exec_t0).count();
 

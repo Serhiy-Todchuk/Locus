@@ -119,7 +119,8 @@ std::string flatten_content(const nlohmann::json& result)
 
 } // namespace
 
-ToolResult McpTool::execute(const ToolCall& call, IWorkspaceServices& /*ws*/)
+ToolResult McpTool::execute(const ToolCall& call, IWorkspaceServices& /*ws*/,
+                             const std::atomic<bool>* cancel_flag)
 {
     if (!client_ || client_->status() != McpClient::Status::ready) {
         ToolResult r;
@@ -132,7 +133,9 @@ ToolResult McpTool::execute(const ToolCall& call, IWorkspaceServices& /*ws*/)
 
     nlohmann::json result;
     try {
-        result = client_->call_tool(def_.name, call.args);
+        result = client_->call_tool(def_.name, call.args,
+                                     std::chrono::milliseconds(60000),
+                                     cancel_flag);
     } catch (const std::exception& e) {
         ToolResult r;
         r.success = false;

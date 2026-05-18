@@ -140,7 +140,8 @@ McpClient::list_tools(std::chrono::milliseconds timeout)
 
 nlohmann::json McpClient::call_tool(const std::string& tool_name,
                                     const nlohmann::json& arguments,
-                                    std::chrono::milliseconds timeout)
+                                    std::chrono::milliseconds timeout,
+                                    const std::atomic<bool>* cancel_flag)
 {
     if (status_.load() != Status::ready)
         throw std::runtime_error("McpClient not ready");
@@ -149,7 +150,7 @@ nlohmann::json McpClient::call_tool(const std::string& tool_name,
     params["name"]      = tool_name;
     params["arguments"] = arguments.is_null() ? nlohmann::json::object() : arguments;
 
-    return send_request_sync("tools/call", std::move(params), timeout);
+    return send_request_sync("tools/call", std::move(params), timeout, cancel_flag);
 }
 
 McpClient::Status McpClient::status() const { return status_.load(); }
@@ -162,7 +163,8 @@ std::string McpClient::last_error() const
 
 nlohmann::json McpClient::send_request_sync(const std::string& method,
                                             nlohmann::json params,
-                                            std::chrono::milliseconds timeout)
+                                            std::chrono::milliseconds timeout,
+                                            const std::atomic<bool>* cancel_flag)
 {
     std::int64_t id = next_id_.fetch_add(1);
     auto promise = std::make_shared<std::promise<nlohmann::json>>();
@@ -180,10 +182,33 @@ nlohmann::json McpClient::send_request_sync(const std::string& method,
         throw std::runtime_error("transport write failed");
     }
 
-    if (future.wait_for(timeout) != std::future_status::ready) {
-        std::lock_guard l(pending_mu_);
-        pending_.erase(id);
-        throw std::runtime_error("timed out waiting for response to " + method);
+    // S5.Z task 7 -- poll for cancellation while waiting. Without a cancel
+    // flag we keep the original "single wait_for(timeout)" semantics.
+    if (!cancel_flag) {
+        if (future.wait_for(timeout) != std::future_status::ready) {
+            std::lock_guard l(pending_mu_);
+            pending_.erase(id);
+            throw std::runtime_error("timed out waiting for response to " + method);
+        }
+        return future.get();
+    }
+
+    constexpr auto k_poll = std::chrono::milliseconds(50);
+    auto remaining = timeout;
+    while (true) {
+        auto slice = remaining < k_poll ? remaining : k_poll;
+        if (future.wait_for(slice) == std::future_status::ready) break;
+        if (cancel_flag->load()) {
+            std::lock_guard l(pending_mu_);
+            pending_.erase(id);
+            throw std::runtime_error("cancelled by user");
+        }
+        if (remaining <= slice) {
+            std::lock_guard l(pending_mu_);
+            pending_.erase(id);
+            throw std::runtime_error("timed out waiting for response to " + method);
+        }
+        remaining -= slice;
     }
     return future.get();
 }
