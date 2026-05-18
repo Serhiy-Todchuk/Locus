@@ -191,6 +191,7 @@ The script root supports a `setup` block:
 | `allow_first_time_prompts`  | bool   | `false` | When true, skip the `.locus/config.json` pre-seed AND don't auto-inject `--no-first-time-prompts` to the launch args. Used by `capabilities_first_open.json` to exercise the Capabilities first-open modal. |
 | `env`                       | object | `{}`    | Map of env-var to value, applied via `SetEnvironmentVariableA` in the harness before launch. `{workspace}` substitution is supported in values. Used by `save_as_global_defaults.json` to redirect `LOCUS_GLOBAL_DIR` into the script's own tmp dir. |
 | `tool_approvals_override`   | object | `{}`    | Merges into the tmp workspace's pre-seeded `tool_approvals` block (tool name -> `"ask"`/`"auto"`/`"deny"`). Used by `tool_approval_dialog.json` to flip a tool that's auto-approved by default back to `ask` so the approval dialog actually fires. |
+| `capabilities_override`     | object | `{}`    | Merges into the tmp workspace's pre-seeded `capabilities` block (capability key -> bool). Used by `terminal_stdin.json` to enable `background_processes` for the run since `--no-first-time-prompts` defaults them off. |
 
 ## Bundled scripts
 
@@ -218,6 +219,7 @@ The script root supports a `setup` block:
 | [`inline_diff_render.json`](scripts/inline_diff_render.json)       | yes | LLM is asked to write a file (auto-approved); assert the resulting file content also appears in the chat WebView (S5.C inline-diff render). |
 | [`terminal_panel_run.json`](scripts/terminal_panel_run.json)       | yes | LLM is asked to run a small shell command; assert the chat WebView shows the output, `Ctrl+`` brings up the terminal panel and the panel is visible. |
 | [`terminal_per_tab.json`](scripts/terminal_per_tab.json)           | yes | S5.R -- terminal is per-tab. Spawn a `run_command` in tab A so the pane auto-shows, Ctrl+T to open tab B (empty terminal view), Ctrl+Shift+Tab back to A. Asserts the terminal panel stays addressable across tab switches. |
+| [`terminal_stdin.json`](scripts/terminal_stdin.json)               | yes | S5.Z task 4 -- LLM is asked to start `more` via run_command_bg; assert the bg tab's stdin input (`locus.terminal.stdin_input.<id>`) is reachable once the terminal panel surfaces it. Uses `setup.capabilities_override.background_processes=true` so the bg capability is on under the unattended run. |
 | [`system_prompt_bubble.json`](scripts/system_prompt_bubble.json)   | no  | S5.G -- assert the collapsed system-prompt bubble appears at the top of the chat WebView with its `System prompt (N tokens)` header. Per-section breakdown chips + the hover-reveal per-message X are inside a collapsed `<details>` element / driven by CSS hover; both stay in the manual test plan. |
 
 LLM-dependent scripts require LM Studio reachable at `http://127.0.0.1:1234` with a tool-calling model loaded. On flakes, see the per-script `output/<name>/run.log` and the workspace's `.locus/locus.log` for dropped-tool-call warnings (model behaviour, not the harness).

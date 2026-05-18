@@ -33,9 +33,16 @@ namespace locus {
 // backlog quietly; on activation the next timer tick processes it.
 class TerminalPanel : public wxPanel {
 public:
-    using KillHandler = std::function<void(int bg_id)>;
+    using KillHandler  = std::function<void(int bg_id)>;
+    // S5.Z task 4 -- the widget forwards an Enter-submitted stdin line
+    // (with trailing '\n' appended by the panel) to whoever owns the bg
+    // process registry. Returns true on a successful WriteFile so the panel
+    // can echo the line locally; on false the line still appears as input
+    // but a one-line warning is shown.
+    using StdinHandler = std::function<bool(int bg_id, const std::string& line)>;
 
-    TerminalPanel(wxWindow* parent, KillHandler on_kill = {});
+    TerminalPanel(wxWindow* parent, KillHandler on_kill = {},
+                  StdinHandler on_stdin = {});
     ~TerminalPanel() override;
 
     TerminalPanel(const TerminalPanel&)            = delete;
@@ -57,6 +64,7 @@ private:
         ID_TERM_COPY_SEL,
         ID_TERM_CLEAR,
         ID_TERM_KILL,
+        ID_TERM_STDIN_INPUT,  // S5.Z task 4 -- per-bg-tab stdin entry
     };
 
     static constexpr int k_flush_interval_ms = 33;
@@ -64,15 +72,22 @@ private:
     // Per-process-tab widget bookkeeping. Lives only while the parent state
     // is bound -- rebuilt from scratch on `set_state` from the state's
     // tab list. Never the source of truth; the state's TerminalTabState is.
+    //
+    // S5.Z task 4 -- bg tabs (id > 0) also own a single-line `stdin_input`
+    // wxTextCtrl docked below the STC. The sync tab (`id == k_sync_id`)
+    // leaves it null: the dispatcher waits synchronously on exit, so the
+    // user can't realistically feed input mid-run.
     struct Page {
         int               id          = 0;
         wxPanel*          panel       = nullptr;
         wxStyledTextCtrl* stc         = nullptr;
+        wxTextCtrl*       stdin_input = nullptr;
         bool              cmd_header_written = false;
     };
 
     void on_flush_timer(wxTimerEvent& evt);
     void on_context_menu_action(wxCommandEvent& evt);
+    void on_stdin_input_enter(wxCommandEvent& evt);
 
     void rebuild_from_state_();
     void clear_pages_();
@@ -91,6 +106,7 @@ private:
     wxNotebook*     notebook_ = nullptr;
     wxTimer         flush_timer_;
     KillHandler     kill_handler_;
+    StdinHandler    stdin_handler_;
     std::function<void()> first_command_observer_;
 
     TerminalPanelState* state_ = nullptr;

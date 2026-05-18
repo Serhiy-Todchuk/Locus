@@ -49,7 +49,7 @@ Write laconically. Engineers, not book writers. Narrow wording, no padding -- bu
 
 ## Current Stage
 
-**M5 -- Polish, UX & Performance -- in progress.** Done: S5.A, S5.B, S5.C, S5.D, S5.F, S5.G, S5.I, S5.J, S5.K, S5.L, S5.M, S5.O, S5.P, S5.Q, S5.R, S5.S, S5.Z (tasks 1, 2, 3). Per-stage detail in [roadmap/M5/](roadmap/M5/).
+**M5 -- Polish, UX & Performance -- in progress.** Done: S5.A, S5.B, S5.C, S5.D, S5.F, S5.G, S5.I, S5.J, S5.K, S5.L, S5.M, S5.O, S5.P, S5.Q, S5.R, S5.S, S5.Z (tasks 1, 2, 3, 4). Per-stage detail in [roadmap/M5/](roadmap/M5/).
 
 **M4 -- Agent Quality -- complete.** Done: S4.A, S4.B, S4.D, S4.F, S4.G, S4.I, S4.J, S4.K, S4.L, S4.M, S4.N, S4.P, S4.R (Phase 1), S4.S, S4.T, S4.U, S4.V, S4.W, S4.X, S4.Y. Per-stage detail in [roadmap/M4/](roadmap/M4/). S4.C parked -- see [roadmap/backlog/S4.C-auto-verify.md](roadmap/backlog/S4.C-auto-verify.md).
 

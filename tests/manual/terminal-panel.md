@@ -124,10 +124,38 @@ symptoms are weirder than the underlying cause:
   on empty-result, so ASCII output at least survives mixed-encoding
   streams.
 
+## Test 4 -- Interactive stdin (S5.Z task 4)
+
+1. Open WS1. View > Terminal.
+2. Ask the agent to start `more` via `run_command_bg`. Approve.
+3. Switch to the `#1 more *` tab. Expect: a single-line text input row
+   docked below the STC with the placeholder "type and press Enter to
+   send to stdin".
+4. Type `hello world` and press Enter. Expect: the input clears, the
+   typed line echoes back into the STC in a dimmed (grey) style with a
+   trailing newline. The input keeps focus.
+5. Wait a beat for `more` to print the line back through its pipe. The
+   line may or may not appear in default colour depending on Windows
+   pipe buffering -- the canonical signal here is the dimmed echo
+   showing what you submitted; the round-trip echo from the process
+   itself is best-effort.
+6. Type two more lines. Expect each behaves the same.
+7. Right-click on the STC area > Kill. Expect: the bg tab badge flips
+   to `[x:N]`. Type into the input again and press Enter. Expect: a
+   red `[locus: failed to write to stdin -- process may have exited]`
+   line appears after the dimmed echo. The input recovers (you can
+   keep typing after the warning).
+8. Switch to the `Run` tab. Expect: no stdin input row at all -- the
+   sync tab leaves it off because the dispatcher waits on exit and the
+   user can't realistically feed input mid-run.
+
 ## Out of scope for v1 (don't fail the plan over these)
 
-- Sending input back to the running process (interactive prompts, `git
-  push` password prompts). Documented limitation in the stage spec.
+- Char-at-a-time (bracketed paste, password prompts that disable echo
+  and expect single-keystroke reads). The input is line-buffered: a
+  full line + `\n` per Enter.
+- Ctrl+C / Ctrl+Break forwarding. The right-click Kill action already
+  covers the destructive case.
 - AUI perspective persistence (the panel always starts hidden).
 - Status-bar badge with active-process count.
 - Search-in-tab via Ctrl+F (wxSTC's built-in incremental search can be

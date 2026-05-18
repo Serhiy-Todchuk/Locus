@@ -54,12 +54,15 @@ wxBEGIN_EVENT_TABLE(TerminalPanel, wxPanel)
     EVT_MENU(ID_TERM_COPY_SEL, TerminalPanel::on_context_menu_action)
     EVT_MENU(ID_TERM_CLEAR,    TerminalPanel::on_context_menu_action)
     EVT_MENU(ID_TERM_KILL,     TerminalPanel::on_context_menu_action)
+    EVT_TEXT_ENTER(ID_TERM_STDIN_INPUT, TerminalPanel::on_stdin_input_enter)
 wxEND_EVENT_TABLE()
 
-TerminalPanel::TerminalPanel(wxWindow* parent, KillHandler on_kill)
+TerminalPanel::TerminalPanel(wxWindow* parent, KillHandler on_kill,
+                              StdinHandler on_stdin)
     : wxPanel(parent, wxID_ANY)
     , flush_timer_(this)
     , kill_handler_(std::move(on_kill))
+    , stdin_handler_(std::move(on_stdin))
 {
     SetName(ui_names::kTerminalPanel);
     gui::apply_locus_accessible_name(this);
@@ -241,6 +244,23 @@ TerminalPanel::Page* TerminalPanel::ensure_page_(int id)
     page.stc->SetReadOnly(true);
     auto* sz = new wxBoxSizer(wxVERTICAL);
     sz->Add(page.stc, 1, wxEXPAND);
+
+    // S5.Z task 4 -- bg tabs get a single-line stdin input docked below the
+    // STC. Sync tab leaves it off: the dispatcher waits synchronously on
+    // exit, the user can't realistically feed input mid-run there.
+    if (id != TerminalPanelState::k_sync_id) {
+        page.stdin_input = new wxTextCtrl(
+            page.panel, ID_TERM_STDIN_INPUT, wxEmptyString,
+            wxDefaultPosition, wxDefaultSize,
+            wxTE_PROCESS_ENTER);
+        std::string name = std::string(ui_names::kTerminalStdinInputPrefix) +
+                           std::to_string(id);
+        page.stdin_input->SetName(name);
+        gui::apply_locus_accessible_name(page.stdin_input);
+        page.stdin_input->SetHint("type and press Enter to send to stdin");
+        sz->Add(page.stdin_input, 0, wxEXPAND | wxTOP, 2);
+    }
+
     page.panel->SetSizer(sz);
 
     wxString label = (id == TerminalPanelState::k_sync_id)
@@ -421,6 +441,50 @@ void TerminalPanel::ensure_style_table_(wxStyledTextCtrl* stc)
                     s.bg_index < 0 ? default_bg : palette(s.bg_index));
                 stc->StyleSetBold(id, s.bold);
             }
+        }
+    }
+}
+
+void TerminalPanel::on_stdin_input_enter(wxCommandEvent& evt)
+{
+    // Find the page whose stdin_input owns this event.
+    auto* src = dynamic_cast<wxTextCtrl*>(evt.GetEventObject());
+    if (!src) return;
+    Page* target = nullptr;
+    for (auto& [id, page] : pages_) {
+        if (page.stdin_input == src) { target = &page; break; }
+    }
+    if (!target) return;
+    if (target->id == TerminalPanelState::k_sync_id) return;
+
+    wxString line = src->GetValue();
+    src->Clear();
+
+    std::string utf8(line.utf8_str().data());
+    // Locally echo the user input as a dimmed-grey line so it stands out from
+    // program output. Newline appended on send. Note we echo even on failure
+    // so the user sees what they tried to submit.
+    if (target->stc) {
+        AnsiStyle dim_style;
+        dim_style.dim     = true;
+        dim_style.fg_index = 8;  // bright black / grey
+        target->stc->SetReadOnly(false);
+        write_styled_(*target, utf8 + "\n", dim_style);
+        target->stc->SetReadOnly(true);
+        target->stc->ScrollToLine(target->stc->GetLineCount());
+        target->stc->GotoPos(target->stc->GetLastPosition());
+    }
+
+    if (stdin_handler_) {
+        bool ok = stdin_handler_(target->id, utf8 + "\n");
+        if (!ok && target->stc) {
+            AnsiStyle warn;
+            warn.fg_index = 1;  // red
+            target->stc->SetReadOnly(false);
+            write_styled_(*target,
+                          "[locus: failed to write to stdin -- process may have exited]\n",
+                          warn);
+            target->stc->SetReadOnly(true);
         }
     }
 }

@@ -175,6 +175,24 @@ ScriptResult ScriptRunner::run()
                     }
                 }
             }
+            // S5.Z task 4 -- scripts can opt in to specific capability buckets
+            // (e.g. background processes) via setup.capabilities_override. The
+            // default suppress-first-time-prompts path writes a config without
+            // a capabilities block, so subsystems fall back to off; this hook
+            // lets a script flip the relevant bucket on for the duration of
+            // the test without touching the global Capabilities dialog.
+            if (script_.contains("setup") && script_["setup"].is_object()) {
+                const auto& setup = script_["setup"];
+                if (setup.contains("capabilities_override") &&
+                    setup["capabilities_override"].is_object())
+                {
+                    for (auto it = setup["capabilities_override"].begin();
+                              it != setup["capabilities_override"].end(); ++it) {
+                        if (it.value().is_boolean())
+                            cfg["capabilities"][it.key()] = it.value().get<bool>();
+                    }
+                }
+            }
             std::ofstream f(cfg_path);
             f << cfg.dump(2) << '\n';
         } catch (const std::exception& ex) {

@@ -228,4 +228,50 @@ TEST_CASE("Bg tools report unavailable when registry missing", "[s4.i]")
     REQUIRE_THAT(r.content, ContainsSubstring("not available"));
 }
 
+// S5.Z task 4 -- stdin forwarding to a backgrounded process. We don't try to
+// round-trip bytes through a child: Windows block-buffers piped stdout
+// (findstr / more / sort all hold output until close), which makes the
+// timing brittle. The contract we verify here is the parent side: the
+// WriteFile succeeds while the child is alive, and the per-id routing in
+// the registry is correct.
+TEST_CASE("ProcessRegistry: write_stdin succeeds for a running bg process", "[s5.z]")
+{
+    locus::ProcessRegistry reg(tmp_root(), 64 * 1024);
+    // `more` reads from stdin and writes to stdout, exiting on EOF -- long
+    // enough lived that we can write to its stdin pipe.
+    int id = reg.spawn("more");
+    REQUIRE(id > 0);
+
+    REQUIRE(reg.write_stdin(id, std::string("hello\n")));
+    REQUIRE(reg.write_stdin(id, std::string("world\n")));
+
+    reg.stop(id);
+    REQUIRE(wait_for([&] {
+        auto entries = reg.list();
+        return entries.empty() ||
+               entries[0].status != locus::BackgroundProcess::Status::running;
+    }));
+}
+
+TEST_CASE("ProcessRegistry: write_stdin returns false for unknown id", "[s5.z]")
+{
+    locus::ProcessRegistry reg(tmp_root(), 64 * 1024);
+    REQUIRE_FALSE(reg.write_stdin(999, std::string("nope\n")));
+}
+
+TEST_CASE("ProcessRegistry: write_stdin returns false after process exited", "[s5.z]")
+{
+    locus::ProcessRegistry reg(tmp_root(), 64 * 1024);
+    int id = reg.spawn("echo bye");
+    REQUIRE(id > 0);
+
+    REQUIRE(wait_for([&] {
+        auto entries = reg.list();
+        return !entries.empty() &&
+               entries[0].status != locus::BackgroundProcess::Status::running;
+    }));
+
+    REQUIRE_FALSE(reg.write_stdin(id, std::string("late\n")));
+}
+
 #endif // _WIN32

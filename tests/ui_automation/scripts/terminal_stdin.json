@@ -1,0 +1,62 @@
+{
+  "name": "terminal_stdin",
+  "description": "S5.Z task 4 -- per-bg-tab stdin input. Drives the LLM into spawning a long-lived bg process (`more` -- reads from stdin, exits on EOF, doesn't echo immediately so the process stays alive long enough to be inspected). Asserts that the terminal panel surfaces a `locus.terminal.stdin_input.<id>` text control under the bg tab. Spec-aligned: sync `Run` tab gets NO input row; bg tabs always do. Requires LM Studio at http://127.0.0.1:1234 with a tool-calling model.",
+  "setup": {
+    "workspace": "tmp",
+    "capabilities_override": {
+      "background_processes": true
+    }
+  },
+  "steps": [
+    { "op": "launch" },
+    {
+      "op": "wait_for_window",
+      "args": { "title_prefix": "Locus", "timeout_ms": 30000 }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.chat.panel", "timeout_ms": 30000 }
+    },
+
+    {
+      "op": "click",
+      "args": { "parent_aid": "locus.chat.panel", "control_type": "document" }
+    },
+    {
+      "op": "type",
+      "args": {
+        "parent_aid": "locus.chat.panel",
+        "control_type": "document",
+        "text": "Use run_command_bg to start the command: more"
+      }
+    },
+    { "op": "sleep", "args": { "ms": 300 } },
+    {
+      "op": "press_key",
+      "args": {
+        "parent_aid": "locus.chat.panel",
+        "control_type": "document",
+        "key": "ENTER"
+      }
+    },
+
+    { "op": "press_key", "args": { "key": "BACKTICK", "modifiers": "CTRL" } },
+    { "op": "sleep", "args": { "ms": 800 } },
+    {
+      "op": "assert_visible",
+      "args": { "automation_id": "locus.terminal.panel", "timeout_ms": 240000 }
+    },
+    {
+      "op": "select_tab",
+      "args": { "parent_aid": "locus.terminal.notebook", "index": 1, "timeout_ms": 240000 }
+    },
+    { "op": "sleep", "args": { "ms": 500 } },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.terminal.stdin_input.1", "timeout_ms": 10000 }
+    },
+    { "op": "screenshot", "args": { "name": "01_stdin_input_visible" } },
+
+    { "op": "quit", "args": { "wait_ms": 5000 } }
+  ]
+}

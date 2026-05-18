@@ -389,6 +389,20 @@ void LocusFrame::setup_aui_layout()
                     break;
                 }
             }
+        },
+        [this](int bg_id, const std::string& line) -> bool {
+            // S5.Z task 4 -- forward Enter-submitted stdin to the active
+            // tab's bg process. Same routing as the kill handler.
+            if (!notebook_) return false;
+            int sel = notebook_->GetSelection();
+            if (sel < 0) return false;
+            auto* chat = static_cast<ChatPanel*>(notebook_->GetPage(sel));
+            for (auto& [tid, ui] : tabs_ui_) {
+                if (ui.chat == chat && ui.tab) {
+                    return ui.tab->processes().write_stdin(bg_id, line);
+                }
+            }
+            return false;
         });
 
     aui_.AddPane(file_tree_panel_, wxAuiPaneInfo()

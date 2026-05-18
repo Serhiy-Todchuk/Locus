@@ -9,6 +9,7 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <unordered_map>
 #include <vector>
@@ -58,6 +59,12 @@ public:
     // Terminate the process tree (TerminateJobObject on Windows). Idempotent.
     void terminate();
 
+    // S5.Z task 4 -- write bytes into the child's stdin pipe. Returns false if
+    // the process is no longer running, the stdin pipe is absent (closed or
+    // never opened), or the WriteFile call fails. Thread-safe; serialised
+    // through the per-process mutex so concurrent writers don't interleave.
+    bool write_stdin(std::string_view data);
+
     // Wait for the reader thread to drain and join. Called by the registry on
     // teardown after `terminate()` to ensure no thread outlives this object.
     void join();
@@ -98,9 +105,10 @@ private:
     std::size_t        bytes_dropped_       = 0;
 
 #ifdef _WIN32
-    LocusOsHandle      process_   = nullptr;
-    LocusOsHandle      job_       = nullptr;
-    LocusOsHandle      read_pipe_ = nullptr;
+    LocusOsHandle      process_     = nullptr;
+    LocusOsHandle      job_         = nullptr;
+    LocusOsHandle      read_pipe_   = nullptr;
+    LocusOsHandle      stdin_write_ = nullptr;
     std::thread        reader_;
 #endif
     std::atomic<bool>  reader_running_{false};
@@ -136,6 +144,11 @@ public:
 
     // Terminate a process tree. Returns false if `id` is unknown.
     bool stop(int id);
+
+    // S5.Z task 4 -- write bytes into a tracked bg process's stdin pipe.
+    // Returns false if `id` is unknown, the process is no longer running, or
+    // the underlying WriteFile fails.
+    bool write_stdin(int id, std::string_view data);
 
     // Remove an entry from the registry. Running processes are terminated
     // first. Returns false if `id` is unknown.

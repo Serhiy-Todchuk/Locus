@@ -59,6 +59,16 @@ BackgroundProcess::~BackgroundProcess()
 void BackgroundProcess::join()
 {
 #ifdef _WIN32
+    // Close the stdin pipe first so the child sees EOF if it's still reading;
+    // do it under the mutex because `write_stdin` may be observing the handle
+    // from another thread.
+    {
+        std::lock_guard l(mu_);
+        if (stdin_write_) {
+            CloseHandle(static_cast<HANDLE>(stdin_write_));
+            stdin_write_ = nullptr;
+        }
+    }
     if (reader_.joinable()) reader_.join();
 
     if (read_pipe_) {
@@ -174,6 +184,28 @@ void BackgroundProcess::terminate()
 #endif
 }
 
+bool BackgroundProcess::write_stdin(std::string_view data)
+{
+#ifdef _WIN32
+    if (data.empty()) return true;
+    std::lock_guard l(mu_);
+    if (status_ != Status::running) return false;
+    if (!stdin_write_) return false;
+    DWORD written = 0;
+    BOOL ok = WriteFile(static_cast<HANDLE>(stdin_write_), data.data(),
+                        static_cast<DWORD>(data.size()), &written, nullptr);
+    if (!ok || written != data.size()) {
+        spdlog::warn("BackgroundProcess::write_stdin: WriteFile failed id={} err={}",
+                     id_, ok ? 0 : GetLastError());
+        return false;
+    }
+    return true;
+#else
+    (void)data;
+    return false;
+#endif
+}
+
 #ifdef _WIN32
 
 void BackgroundProcess::spawn_win32(const fs::path& cwd)
@@ -189,10 +221,24 @@ void BackgroundProcess::spawn_win32(const fs::path& cwd)
 
     SetHandleInformation(read_pipe, HANDLE_FLAG_INHERIT, 0);
 
+    // S5.Z task 4 -- give the child a real stdin pipe so the terminal panel
+    // can forward user input. The parent-side write handle (`stdin_write`)
+    // is marked non-inheritable so a re-spawn doesn't leak it.
+    HANDLE stdin_read  = nullptr;
+    HANDLE stdin_write = nullptr;
+    if (!CreatePipe(&stdin_read, &stdin_write, &sa, 0)) {
+        CloseHandle(read_pipe);
+        CloseHandle(write_pipe);
+        throw std::runtime_error("CreatePipe (stdin) failed");
+    }
+    SetHandleInformation(stdin_write, HANDLE_FLAG_INHERIT, 0);
+
     HANDLE job = CreateJobObjectA(nullptr, nullptr);
     if (!job) {
         CloseHandle(read_pipe);
         CloseHandle(write_pipe);
+        CloseHandle(stdin_read);
+        CloseHandle(stdin_write);
         throw std::runtime_error("CreateJobObject failed");
     }
     JOBOBJECT_EXTENDED_LIMIT_INFORMATION jli{};
@@ -204,11 +250,7 @@ void BackgroundProcess::spawn_win32(const fs::path& cwd)
     si.dwFlags = STARTF_USESTDHANDLES;
     si.hStdOutput = write_pipe;
     si.hStdError  = write_pipe;
-    // Detach stdin: a backgrounded `cmd /c` should never block reading from
-    // our terminal. NUL is the safe sink.
-    HANDLE nul = CreateFileA("NUL", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
-                              &sa, OPEN_EXISTING, 0, nullptr);
-    si.hStdInput = nul;
+    si.hStdInput  = stdin_read;
 
     PROCESS_INFORMATION pi{};
     std::string cmd_line = "cmd /c " + command_;
@@ -220,11 +262,12 @@ void BackgroundProcess::spawn_win32(const fs::path& cwd)
         &si, &pi);
 
     CloseHandle(write_pipe);
-    if (nul != INVALID_HANDLE_VALUE) CloseHandle(nul);
+    CloseHandle(stdin_read);
 
     if (!created) {
         DWORD err = GetLastError();
         CloseHandle(read_pipe);
+        CloseHandle(stdin_write);
         CloseHandle(job);
         throw std::runtime_error("CreateProcess failed (" + std::to_string(err) + ")");
     }
@@ -235,6 +278,7 @@ void BackgroundProcess::spawn_win32(const fs::path& cwd)
         CloseHandle(pi.hProcess);
         CloseHandle(pi.hThread);
         CloseHandle(read_pipe);
+        CloseHandle(stdin_write);
         CloseHandle(job);
         throw std::runtime_error("AssignProcessToJobObject failed (" +
                                  std::to_string(err) + ")");
@@ -243,9 +287,10 @@ void BackgroundProcess::spawn_win32(const fs::path& cwd)
     ResumeThread(pi.hThread);
     CloseHandle(pi.hThread);
 
-    process_   = pi.hProcess;
-    job_       = job;
-    read_pipe_ = read_pipe;
+    process_     = pi.hProcess;
+    job_         = job;
+    read_pipe_   = read_pipe;
+    stdin_write_ = stdin_write;
 
     reader_running_ = true;
     reader_ = std::thread(&BackgroundProcess::reader_loop, this);
@@ -379,6 +424,18 @@ bool ProcessRegistry::stop(int id)
     if (it == procs_.end()) return false;
     it->second->terminate();
     return true;
+}
+
+bool ProcessRegistry::write_stdin(int id, std::string_view data)
+{
+    BackgroundProcess* proc = nullptr;
+    {
+        std::lock_guard l(mu_);
+        auto it = procs_.find(id);
+        if (it == procs_.end()) return false;
+        proc = it->second.get();
+    }
+    return proc->write_stdin(data);
 }
 
 bool ProcessRegistry::remove(int id)

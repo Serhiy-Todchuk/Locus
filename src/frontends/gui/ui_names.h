@@ -65,6 +65,10 @@ inline constexpr const char* kManageSessionsBtnClose  = "locus.manage_sessions.b
 // --- Terminal panel (S5.B) ------------------------------------------------
 inline constexpr const char* kTerminalPanel    = "locus.terminal.panel";
 inline constexpr const char* kTerminalNotebook = "locus.terminal.notebook";
+// S5.Z task 4 -- per-bg-tab stdin input. Actual name is this prefix + the
+// numeric bg id (e.g. "locus.terminal.stdin_input.7"), since the panel can
+// host multiple bg tabs simultaneously.
+inline constexpr const char* kTerminalStdinInputPrefix = "locus.terminal.stdin_input.";
 
 // --- File tree panel ------------------------------------------------------
 inline constexpr const char* kFileTreePanel = "locus.filetree.panel";
