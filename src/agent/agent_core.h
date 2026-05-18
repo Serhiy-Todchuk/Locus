@@ -104,6 +104,24 @@ public:
     // Refuses the system message (delegated to ConversationHistory).
     void delete_message(int history_id) override;
 
+    // S5.S -- runtime permission preset override (chat-footer combobox path).
+    // Stored on the dispatcher; broadcast via on_permission_preset_changed.
+    // Custom is rejected silently; pass the explicit clear method below.
+    void set_runtime_permission_preset(tools::PermissionPreset preset) override;
+    void clear_runtime_permission_preset() override;
+    std::optional<tools::PermissionPreset> runtime_permission_preset() const override;
+
+    // Compute the preset the dispatcher will use right now: runtime override
+    // if set, otherwise the detected workspace-config preset. Used by
+    // frontends to repaint the chip when they attach mid-session.
+    tools::PermissionPreset effective_permission_preset() const;
+
+    // Broadcast a fresh on_permission_preset_changed event derived from the
+    // current state. Called by LocusFrame after a settings save (the panel
+    // may have updated tool_approval_policies, which changes the detected
+    // preset even though no runtime override is in play).
+    void rebroadcast_permission_preset(bool from_runtime = false);
+
     std::string save_session() override;
     void load_session(const std::string& session_id) override;
 

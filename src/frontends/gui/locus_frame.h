@@ -166,6 +166,7 @@ private:
     void on_agent_gen_progress(wxThreadEvent& evt);
     void on_agent_history_msg_added(wxThreadEvent& evt);
     void on_agent_history_msg_deleted(wxThreadEvent& evt);
+    void on_agent_preset_changed(wxThreadEvent& evt);
 
     // S5.R observer callbacks (forwarded from TabProcessObserver via
     // CallAfter -- safe to call wx from here, runs on UI thread). Sync

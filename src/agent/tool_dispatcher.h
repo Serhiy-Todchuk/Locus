@@ -4,6 +4,7 @@
 #include "../core/frontend.h"
 #include "../core/frontend_registry.h"
 #include "llm/llm_client.h"
+#include "../tools/permission_presets.h"
 #include "../tools/tool.h"
 
 #include <atomic>
@@ -72,6 +73,14 @@ public:
     // AgentCore; pass nullptr to disable.
     void set_change_tracker(FileChangeTracker* tracker);
 
+    // S5.S -- runtime permission override. When set, the dispatcher composes
+    // the preset signature on top of the workspace config so the runtime map
+    // wins over the persisted override map. Clearing it (no value) restores
+    // the workspace-config-only lookup. Callable from any thread. The custom
+    // sentinel is rejected -- pass std::nullopt to clear instead.
+    void set_runtime_preset(std::optional<tools::PermissionPreset> preset);
+    std::optional<tools::PermissionPreset> runtime_preset() const;
+
 private:
     // Inspect the tool name + args and snapshot the target path if relevant.
     void maybe_snapshot(const ToolCall& call);
@@ -108,6 +117,12 @@ private:
     // mutating tool call records the touched path so it gets suppressed from
     // next turn's external-changes notification.
     FileChangeTracker* change_tracker_ = nullptr;
+
+    // S5.S -- runtime permission preset override. Protected by runtime_mutex_
+    // because submit happens from any thread (chat footer ui thread) while
+    // dispatch reads from the agent thread.
+    mutable std::mutex                       runtime_mutex_;
+    std::optional<tools::PermissionPreset>   runtime_preset_;
 };
 
 } // namespace locus

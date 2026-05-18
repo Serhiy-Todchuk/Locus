@@ -35,6 +35,7 @@ add_executable(locus_tests
     test_model_presets.cpp
     test_ansi_parser.cpp
     test_capability_toggles.cpp
+    test_permission_presets.cpp
     test_global_config.cpp
     test_chat_diff_rendering.cpp
     test_system_prompt_assembly.cpp

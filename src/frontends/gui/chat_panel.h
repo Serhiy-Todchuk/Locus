@@ -4,6 +4,7 @@
 #include "../../agent/system_prompt_assembly.h"
 #include "../../core/frontend.h"
 #include "../../llm/llm_client.h"   // MessageRole
+#include "../../tools/permission_presets.h"
 #include "slash_popup.h"
 
 #include <wx/wx.h>
@@ -130,6 +131,23 @@ public:
         on_auto_compact_toggle_ = std::move(cb);
     }
 
+    // S5.S -- permission preset chip + combobox in the chat footer.
+    // `effective` is the preset to render; `is_runtime_override` controls
+    // the chip border style. Called by LocusFrame in response to
+    // IFrontend::on_permission_preset_changed.
+    void on_permission_preset_changed(tools::PermissionPreset effective,
+                                       bool is_runtime_override);
+    // Callback fired when the user picks a new preset from the chat-footer
+    // dropdown. "custom" is never emitted -- selecting Custom from the menu
+    // is a no-op at the panel layer (no signature to apply). Passing a value
+    // means: apply this as a runtime override. nullopt means: clear the
+    // runtime override and revert to the saved setting.
+    using PermissionPresetPickFn =
+        std::function<void(std::optional<tools::PermissionPreset>)>;
+    void set_on_permission_preset_pick(PermissionPresetPickFn cb) {
+        on_permission_preset_pick_ = std::move(cb);
+    }
+
     // S5.G -- collapsed system-prompt bubble at the top of the chat. Renders
     // the full prompt text + per-section breakdown chips. Owned by AgentCore;
     // the chat panel just displays. Call once at construction (and on session
@@ -228,6 +246,13 @@ private:
     wxToggleButton* mode_chat_btn_    = nullptr;
     wxToggleButton* mode_plan_btn_    = nullptr;
     wxToggleButton* mode_execute_btn_ = nullptr;
+
+    // S5.S permission preset chip + dropdown.
+    wxChoice*              preset_choice_      = nullptr;
+    wxStaticText*          preset_chip_        = nullptr;
+    tools::PermissionPreset preset_effective_   = tools::PermissionPreset::ask_before_edits;
+    bool                   preset_is_runtime_  = false;
+    PermissionPresetPickFn on_permission_preset_pick_;
 
     // Attached-context chip row.
     wxPanel*      attach_panel_  = nullptr;

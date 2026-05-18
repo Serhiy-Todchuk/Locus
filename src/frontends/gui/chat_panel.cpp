@@ -945,6 +945,8 @@ ChatPanel::ChatPanel(wxWindow* parent,
     footer->Add(footer_chips_->ctx_label(),   1, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
     footer->Add(footer_chips_->plan_chip(),   0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
     footer->Add(footer_chips_->commit_chip(), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+    footer->Add(preset_chip_,    0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
+    footer->Add(preset_choice_,  0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
     footer->AddStretchSpacer();
     footer->Add(auto_compact_cb_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
     footer->Add(compact_btn_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
@@ -1061,6 +1063,74 @@ void ChatPanel::create_footer()
     undo_btn_->SetToolTip("Revert files mutated by the most recent turn");
     undo_btn_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
         if (on_undo_) on_undo_();
+    });
+
+    // S5.S -- permission preset chip + dropdown.
+    preset_chip_ = new wxStaticText(this, wxID_ANY, "Ask before edits");
+    preset_chip_->SetName(ui_names::kChatPresetChip);
+    gui::apply_locus_accessible_name(preset_chip_);
+
+    {
+        wxArrayString preset_labels;
+        for (auto p : tools::all_presets_in_order())
+            preset_labels.Add(tools::display_name(p));
+        preset_choice_ = new wxChoice(this, wxID_ANY, wxDefaultPosition,
+                                       wxDefaultSize, preset_labels);
+    }
+    preset_choice_->SetName(ui_names::kChatPresetChoice);
+    gui::apply_locus_accessible_name(preset_choice_);
+    preset_choice_->SetToolTip(
+        "Permission preset for this tab. Runtime overrides last until the\n"
+        "tab is closed -- the persistent setting is in Settings -> Tool Approvals.");
+    preset_choice_->Bind(wxEVT_CHOICE, [this](wxCommandEvent&) {
+        int sel = preset_choice_->GetSelection();
+        auto order = tools::all_presets_in_order();
+        if (sel < 0 || sel >= static_cast<int>(order.size())) return;
+        tools::PermissionPreset picked = order[sel];
+
+        // "Custom" from the dropdown is a no-op. Snap back to the effective.
+        if (picked == tools::PermissionPreset::custom) {
+            on_permission_preset_changed(preset_effective_, preset_is_runtime_);
+            return;
+        }
+
+        // Confirm modal for elevated presets. Skipped when the pick matches
+        // what's already effective so the dropdown can be repainted without
+        // re-prompting.
+        if (picked != preset_effective_) {
+            if (picked == tools::PermissionPreset::allow_edits ||
+                picked == tools::PermissionPreset::allow_all)
+            {
+                wxString title;
+                wxString msg;
+                if (picked == tools::PermissionPreset::allow_edits) {
+                    title = "Apply 'Allow edits' for this tab?";
+                    msg = "File edits will run without prompting until you\n"
+                          "close this tab. Shell + MCP still ask.\n\n"
+                          "The persistent setting under Settings -> Tool\n"
+                          "Approvals is not changed.";
+                } else {
+                    title = "Apply 'Allow all' for this tab?";
+                    msg = "File mutations AND shell commands will run\n"
+                          "without prompting until you close this tab.\n"
+                          "MCP tools still ask -- elevate per server under\n"
+                          "Settings -> MCP if needed.\n\n"
+                          "Combined with auto-compaction the agent can run\n"
+                          "unattended. The persistent setting under Settings\n"
+                          "-> Tool Approvals is not changed.";
+                }
+                wxMessageDialog dlg(this, msg, title,
+                                    wxYES_NO | wxNO_DEFAULT | wxICON_WARNING);
+                dlg.SetYesNoLabels("Apply preset", "Cancel");
+                if (dlg.ShowModal() != wxID_YES) {
+                    on_permission_preset_changed(preset_effective_,
+                                                  preset_is_runtime_);
+                    return;
+                }
+            }
+        }
+
+        if (on_permission_preset_pick_) on_permission_preset_pick_(picked);
     });
 
     refresh_action_btn();
@@ -1387,6 +1457,72 @@ void ChatPanel::set_show_per_message_tokens(bool show)
 void ChatPanel::set_auto_compact_state(bool checked)
 {
     if (auto_compact_cb_) auto_compact_cb_->SetValue(checked);
+}
+
+// ---------------------------------------------------------------------------
+// S5.S -- permission preset chip
+// ---------------------------------------------------------------------------
+
+void ChatPanel::on_permission_preset_changed(tools::PermissionPreset effective,
+                                             bool is_runtime_override)
+{
+    preset_effective_  = effective;
+    preset_is_runtime_ = is_runtime_override;
+
+    if (preset_choice_) {
+        auto order = tools::all_presets_in_order();
+        int idx = 0;
+        for (size_t i = 0; i < order.size(); ++i) {
+            if (order[i] == effective) { idx = static_cast<int>(i); break; }
+        }
+        preset_choice_->SetSelection(idx);
+    }
+
+    if (preset_chip_) {
+        preset_chip_->SetLabel(wxString::FromUTF8(tools::display_name(effective)));
+
+        // Colour the chip by elevation level. SetForegroundColour applied to
+        // the static text -- background stays the panel default so the chip
+        // visually attaches to the surrounding bar.
+        wxColour fg = wxColour(80, 80, 80);  // gray default
+        switch (effective) {
+        case tools::PermissionPreset::read_only:
+        case tools::PermissionPreset::ask_before_edits:
+            fg = wxColour(80, 80, 80);     // gray
+            break;
+        case tools::PermissionPreset::allow_edits:
+            fg = wxColour(178, 130, 0);    // yellow / amber
+            break;
+        case tools::PermissionPreset::allow_all:
+            fg = wxColour(200, 90, 0);     // orange
+            break;
+        case tools::PermissionPreset::custom:
+            fg = wxColour(60, 90, 180);    // blue
+            break;
+        }
+        preset_chip_->SetForegroundColour(fg);
+
+        wxString tip;
+        switch (effective) {
+        case tools::PermissionPreset::read_only:
+            tip = "Read-only: mutations denied";          break;
+        case tools::PermissionPreset::ask_before_edits:
+            tip = "Asks before every mutation";           break;
+        case tools::PermissionPreset::allow_edits:
+            tip = "Files auto-approved; shell + delete + MCP ask"; break;
+        case tools::PermissionPreset::allow_all:
+            tip = "Files + shell auto-approved; MCP still asks";   break;
+        case tools::PermissionPreset::custom:
+            tip = "Custom per-tool overrides";            break;
+        }
+        if (is_runtime_override)
+            tip += " (runtime override -- closes with this tab)";
+        else
+            tip += " (from workspace setting)";
+        preset_chip_->SetToolTip(tip);
+        preset_chip_->Refresh();
+    }
+    Layout();
 }
 
 // ---------------------------------------------------------------------------

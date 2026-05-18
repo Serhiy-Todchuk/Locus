@@ -3,6 +3,7 @@
 #include "../locus_accessible.h"
 #include "../ui_names.h"
 #include "../../../core/global_config.h"
+#include "../../../tools/permission_presets.h"
 #include "../../../tools/tool.h"
 
 #include <wx/sizer.h>
@@ -32,6 +33,65 @@ ToolApprovalsSettingsPanel::ToolApprovalsSettingsPanel(wxWindow* parent,
     , tools_(tools)
 {
     auto* outer = new wxBoxSizer(wxVERTICAL);
+
+    // Capture wildcard / per-server MCP overrides at construction so they
+    // round-trip through preset selection. Per-tool entries are managed by
+    // the dropdown grid below.
+    for (const auto& [key, val] : config.tool_approval_policies) {
+        if (key.size() >= 2 && key.compare(key.size() - 2, 2, ":*") == 0) {
+            wildcard_overrides_[key] = val;
+        } else if (key.rfind("mcp:", 0) == 0) {
+            wildcard_overrides_[key] = val;
+        }
+    }
+
+    // -- S5.S preset row ---------------------------------------------------
+    {
+        auto* preset_row = new wxBoxSizer(wxHORIZONTAL);
+        preset_row->Add(new wxStaticText(this, wxID_ANY, "Preset:"),
+                        0, wxALIGN_CENTER_VERTICAL | wxLEFT | wxRIGHT, 4);
+
+        wxArrayString preset_labels;
+        for (auto p : tools::all_presets_in_order())
+            preset_labels.Add(tools::display_name(p));
+
+        preset_choice_ = new wxChoice(this, wxID_ANY, wxDefaultPosition,
+                                       wxDefaultSize, preset_labels);
+        preset_choice_->SetName(ui_names::kSettingsApprovalsPresetChoice);
+        gui::apply_locus_accessible_name(preset_choice_);
+        preset_choice_->SetToolTip(
+            "Pick a named preset to snapshot a full per-tool policy. "
+            "After a preset is applied you can still tweak individual tools "
+            "below; the chip will switch to \"Custom\".");
+        preset_row->Add(preset_choice_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+
+        preset_desc_ = new wxStaticText(this, wxID_ANY, wxEmptyString);
+        preset_row->Add(preset_desc_, 1,
+                        wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
+
+        outer->Add(preset_row, 0, wxEXPAND | wxALL, 8);
+
+        preset_choice_->Bind(wxEVT_CHOICE, [this](wxCommandEvent&) {
+            int sel = preset_choice_->GetSelection();
+            auto order = tools::all_presets_in_order();
+            if (sel < 0 || sel >= static_cast<int>(order.size())) return;
+            tools::PermissionPreset preset = order[sel];
+
+            // Selecting Custom is a no-op (no signature to apply). Snap the
+            // dropdown back to whatever the current per-tool map detects as.
+            if (preset == tools::PermissionPreset::custom) {
+                refresh_preset_chip();
+                return;
+            }
+
+            if (!confirm_preset_warning(preset)) {
+                refresh_preset_chip();
+                return;
+            }
+
+            apply_preset(preset);
+        });
+    }
 
     require_read_before_edit_ctrl_ = new wxCheckBox(this, wxID_ANY,
         "Require read_file before edit_file (default on)");
@@ -109,6 +169,7 @@ ToolApprovalsSettingsPanel::ToolApprovalsSettingsPanel(wxWindow* parent,
                 return;
             }
             approval_prev_sel_[idx] = new_sel;
+            refresh_preset_chip();
         });
     }
 
@@ -134,6 +195,8 @@ ToolApprovalsSettingsPanel::ToolApprovalsSettingsPanel(wxWindow* parent,
     }
 
     SetSizer(outer);
+
+    refresh_preset_chip();
 }
 
 bool ToolApprovalsSettingsPanel::confirm_auto_approve_mutating(const std::string& tool_name)
@@ -154,10 +217,118 @@ bool ToolApprovalsSettingsPanel::confirm_auto_approve_mutating(const std::string
     return dlg.ShowModal() == wxID_YES;
 }
 
+bool ToolApprovalsSettingsPanel::confirm_preset_warning(tools::PermissionPreset preset)
+{
+    if (preset == tools::PermissionPreset::read_only
+        || preset == tools::PermissionPreset::ask_before_edits)
+        return true;
+
+    wxString msg;
+    wxString title;
+    long style = wxYES_NO | wxNO_DEFAULT | wxICON_WARNING;
+
+    if (preset == tools::PermissionPreset::allow_edits) {
+        title = "Apply 'Allow edits' preset?";
+        msg   =
+            "File CRUD (write_file, edit_file) will run without prompting.\n"
+            "delete_file, shell commands (run_command / run_command_bg), and\n"
+            "MCP tools will still ask. Checkpoints continue to snapshot every\n"
+            "mutation so /undo works.\n\n"
+            "Revoke by switching back to 'Ask before edits' at any time.";
+    } else if (preset == tools::PermissionPreset::allow_all) {
+        title = "Apply 'Allow all' preset?";
+        msg   =
+            "All file mutations AND shell commands will run without prompting.\n"
+            "Combined with auto-compaction the agent can run unattended.\n\n"
+            "MCP tools still ask -- elevate per server under Settings -> MCP\n"
+            "if you really need fully-autonomous MCP calls.\n\n"
+            "Continue?";
+    } else {
+        return true;
+    }
+
+    wxMessageDialog dlg(this, msg, title, style);
+    dlg.SetYesNoLabels("Apply preset", "Cancel");
+    return dlg.ShowModal() == wxID_YES;
+}
+
+void ToolApprovalsSettingsPanel::apply_preset(tools::PermissionPreset preset)
+{
+    auto signature = tools::preset_signature(preset, tools_);
+
+    for (size_t i = 0; i < tool_names_.size(); ++i) {
+        const std::string& tname = tool_names_[i];
+        ITool* tool = tools_.find(tname);
+        ToolApprovalPolicy default_policy =
+            tool ? tool->approval_policy() : ToolApprovalPolicy::ask;
+
+        ToolApprovalPolicy effective = default_policy;
+        auto it = signature.find(tname);
+        if (it != signature.end()) effective = it->second;
+
+        int sel = 0;
+        switch (effective) {
+            case ToolApprovalPolicy::ask:          sel = 0; break;
+            case ToolApprovalPolicy::auto_approve: sel = 1; break;
+            case ToolApprovalPolicy::deny:         sel = 2; break;
+        }
+        approval_choices_[i]->SetSelection(sel);
+        approval_prev_sel_[i] = sel;
+    }
+
+    // Force mcp:* to ask in wildcard_overrides_ so detect_preset is unambiguous.
+    // Per-server overrides (mcp:<name>:tool) stay -- the MCP panel manages those.
+    wildcard_overrides_["mcp:*"] = ToolApprovalPolicy::ask;
+
+    refresh_preset_chip();
+}
+
+void ToolApprovalsSettingsPanel::refresh_preset_chip()
+{
+    if (!preset_choice_) return;
+
+    // Compose the same map commit_to_config will produce -- including wildcard
+    // overrides -- so the detection runs on the value that will actually persist.
+    std::unordered_map<std::string, ToolApprovalPolicy> snap;
+    for (size_t i = 0; i < tool_names_.size(); ++i) {
+        int sel = approval_choices_[i]->GetSelection();
+        ToolApprovalPolicy chosen = ToolApprovalPolicy::ask;
+        if (sel == 1) chosen = ToolApprovalPolicy::auto_approve;
+        else if (sel == 2) chosen = ToolApprovalPolicy::deny;
+
+        ITool* tool = tools_.find(tool_names_[i]);
+        ToolApprovalPolicy default_policy =
+            tool ? tool->approval_policy() : ToolApprovalPolicy::ask;
+        if (chosen != default_policy) snap[tool_names_[i]] = chosen;
+    }
+    for (const auto& [k, v] : wildcard_overrides_) snap[k] = v;
+
+    tools::PermissionPreset detected = tools::detect_preset(snap, tools_);
+
+    auto order = tools::all_presets_in_order();
+    int idx = 0;
+    for (size_t i = 0; i < order.size(); ++i) {
+        if (order[i] == detected) { idx = static_cast<int>(i); break; }
+    }
+    preset_choice_->SetSelection(idx);
+    if (preset_desc_)
+        preset_desc_->SetLabel(tools::preset_description(detected));
+}
+
 void ToolApprovalsSettingsPanel::load_from_config(const WorkspaceConfig& cfg)
 {
     if (require_read_before_edit_ctrl_)
         require_read_before_edit_ctrl_->SetValue(cfg.require_read_before_edit);
+
+    // Refresh wildcard overrides from the reloaded config.
+    wildcard_overrides_.clear();
+    for (const auto& [key, val] : cfg.tool_approval_policies) {
+        if (key.size() >= 2 && key.compare(key.size() - 2, 2, ":*") == 0) {
+            wildcard_overrides_[key] = val;
+        } else if (key.rfind("mcp:", 0) == 0) {
+            wildcard_overrides_[key] = val;
+        }
+    }
 
     for (size_t i = 0; i < tool_names_.size(); ++i) {
         ITool* tool = tools_.find(tool_names_[i]);
@@ -175,6 +346,7 @@ void ToolApprovalsSettingsPanel::load_from_config(const WorkspaceConfig& cfg)
         approval_choices_[i]->SetSelection(sel);
         approval_prev_sel_[i] = sel;
     }
+    refresh_preset_chip();
 }
 
 bool ToolApprovalsSettingsPanel::validate(wxString& /*out_error*/) const

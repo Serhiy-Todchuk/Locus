@@ -3,6 +3,7 @@
 #include "activity_event.h"
 #include "../agent/agent_mode.h"
 #include "../llm/llm_client.h"   // MessageRole
+#include "../tools/permission_presets.h"
 #include "../tools/tool.h"
 
 #include <cstdint>
@@ -186,6 +187,17 @@ public:
     // initiate, so a CLI /forget-style hook would land here too). Frontends
     // remove the matching DOM bubble.
     virtual void on_history_message_deleted(int /*history_id*/) {}
+
+    // S5.S -- effective permission preset changed. `effective` is the preset
+    // the dispatcher will use for the next tool call (runtime override if
+    // set, otherwise the detected workspace-config preset). `from_runtime` is
+    // true when the change came from the chat-footer combobox (session-only),
+    // false when it came from a settings save. Frontends use this to repaint
+    // the bottom-bar chip. Default no-op so frontends that don't render the
+    // chip stay clean.
+    virtual void on_permission_preset_changed(
+        tools::PermissionPreset /*effective*/,
+        bool /*from_runtime*/) {}
 };
 
 // -- ILocusCore ---------------------------------------------------------------
@@ -270,6 +282,16 @@ public:
     // Refuses the system message; refuses unknown ids. Default no-op so
     // implementations that don't support delete (test stubs) compile clean.
     virtual void delete_message(int /*history_id*/) {}
+
+    // S5.S -- set or clear the runtime permission preset override. The
+    // runtime override lives on the dispatcher and wins over the persisted
+    // workspace config until cleared (passing custom -> nullopt). Settings
+    // save calls clear_runtime_permission_preset() so the dialog's new
+    // baseline takes over. Default no-op so test stubs compile.
+    virtual void set_runtime_permission_preset(tools::PermissionPreset /*preset*/) {}
+    virtual void clear_runtime_permission_preset() {}
+    virtual std::optional<tools::PermissionPreset>
+        runtime_permission_preset() const { return std::nullopt; }
 };
 
 } // namespace locus

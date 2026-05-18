@@ -465,11 +465,89 @@ void AgentCore::agent_thread_func()
 void AgentCore::register_frontend(IFrontend* fe)
 {
     frontends_.register_frontend(fe);
+    // Late-attaching frontend: send the current effective preset so its chip
+    // renders in the right state without waiting for the next change.
+    if (fe) {
+        tools::PermissionPreset eff = effective_permission_preset();
+        bool from_runtime = dispatcher_ && dispatcher_->runtime_preset().has_value();
+        fe->on_permission_preset_changed(eff, from_runtime);
+    }
 }
 
 void AgentCore::unregister_frontend(IFrontend* fe)
 {
     frontends_.unregister_frontend(fe);
+}
+
+// -- S5.S Permission preset runtime override ---------------------------------
+
+tools::PermissionPreset AgentCore::effective_permission_preset() const
+{
+    if (dispatcher_) {
+        if (auto rt = dispatcher_->runtime_preset())
+            return *rt;
+    }
+    if (auto* ws = services_.workspace()) {
+        return tools::detect_preset(ws->config().tool_approval_policies, tools_);
+    }
+    return tools::PermissionPreset::ask_before_edits;
+}
+
+void AgentCore::set_runtime_permission_preset(tools::PermissionPreset preset)
+{
+    if (preset == tools::PermissionPreset::custom) {
+        spdlog::warn("AgentCore: set_runtime_permission_preset(custom) ignored");
+        return;
+    }
+    if (!dispatcher_) return;
+    auto prev = dispatcher_->runtime_preset();
+    dispatcher_->set_runtime_preset(preset);
+
+    std::string detail = std::string("Runtime override -> ")
+                       + tools::display_name(preset);
+    if (prev) detail = std::string("Runtime override: ")
+                     + tools::display_name(*prev) + " -> "
+                     + tools::display_name(preset);
+
+    activity_->emit(ActivityKind::warning,
+                    std::string("Permission preset: ")
+                        + tools::display_name(preset)
+                        + " (runtime override)",
+                    detail);
+    frontends_.broadcast([&](IFrontend& fe) {
+        fe.on_permission_preset_changed(preset, /*from_runtime=*/true);
+    });
+}
+
+void AgentCore::clear_runtime_permission_preset()
+{
+    if (!dispatcher_) return;
+    if (!dispatcher_->runtime_preset().has_value()) return;
+
+    dispatcher_->set_runtime_preset(std::nullopt);
+    tools::PermissionPreset eff = effective_permission_preset();
+    activity_->emit(ActivityKind::warning,
+                    "Permission preset: runtime override cleared",
+                    std::string("Falling back to workspace setting: ")
+                        + tools::display_name(eff));
+    frontends_.broadcast([&](IFrontend& fe) {
+        fe.on_permission_preset_changed(eff, /*from_runtime=*/false);
+    });
+}
+
+std::optional<tools::PermissionPreset>
+AgentCore::runtime_permission_preset() const
+{
+    if (!dispatcher_) return std::nullopt;
+    return dispatcher_->runtime_preset();
+}
+
+void AgentCore::rebroadcast_permission_preset(bool from_runtime)
+{
+    tools::PermissionPreset eff = effective_permission_preset();
+    frontends_.broadcast([&](IFrontend& fe) {
+        fe.on_permission_preset_changed(eff, from_runtime);
+    });
 }
 
 // -- send_message (non-blocking) ---------------------------------------------

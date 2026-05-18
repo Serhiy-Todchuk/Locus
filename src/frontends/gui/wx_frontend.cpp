@@ -28,6 +28,7 @@ wxDEFINE_EVENT(EVT_AGENT_AUTO_COMMIT,         wxThreadEvent);
 wxDEFINE_EVENT(EVT_AGENT_GEN_PROGRESS,        wxThreadEvent);
 wxDEFINE_EVENT(EVT_AGENT_HISTORY_MSG_ADDED,   wxThreadEvent);
 wxDEFINE_EVENT(EVT_AGENT_HISTORY_MSG_DELETED, wxThreadEvent);
+wxDEFINE_EVENT(EVT_AGENT_PRESET_CHANGED,      wxThreadEvent);
 
 WxFrontend::WxFrontend(wxEvtHandler* handler, int tab_id)
     : handler_(handler), tab_id_(tab_id)
@@ -247,6 +248,18 @@ void WxFrontend::on_history_message_deleted(int history_id)
 {
     auto* evt = new_evt(EVT_AGENT_HISTORY_MSG_DELETED, tab_id_);
     evt->SetInt(history_id);
+    wxQueueEvent(handler_, evt);
+}
+
+void WxFrontend::on_permission_preset_changed(tools::PermissionPreset effective,
+                                              bool from_runtime)
+{
+    auto* evt = new_evt(EVT_AGENT_PRESET_CHANGED, tab_id_);
+    // Encode (preset, from_runtime) into the SetInt slot.
+    // Low byte = preset enum; bit 8 = from_runtime flag.
+    int packed = static_cast<int>(effective) & 0xff;
+    if (from_runtime) packed |= 0x100;
+    evt->SetInt(packed);
     wxQueueEvent(handler_, evt);
 }
 

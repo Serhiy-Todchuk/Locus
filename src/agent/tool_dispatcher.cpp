@@ -69,6 +69,24 @@ void ToolDispatcher::set_change_tracker(FileChangeTracker* tracker)
     change_tracker_ = tracker;
 }
 
+void ToolDispatcher::set_runtime_preset(
+    std::optional<tools::PermissionPreset> preset)
+{
+    if (preset && *preset == tools::PermissionPreset::custom) {
+        spdlog::warn("ToolDispatcher: ignoring set_runtime_preset(custom) -- "
+                     "the custom sentinel cannot be applied as a runtime override");
+        return;
+    }
+    std::lock_guard lock(runtime_mutex_);
+    runtime_preset_ = preset;
+}
+
+std::optional<tools::PermissionPreset> ToolDispatcher::runtime_preset() const
+{
+    std::lock_guard lock(runtime_mutex_);
+    return runtime_preset_;
+}
+
 void ToolDispatcher::maybe_snapshot(const ToolCall& call)
 {
     // Detect mutating tools once -- both the checkpoint snapshot (S4.B) and
@@ -172,13 +190,27 @@ void ToolDispatcher::dispatch(const ToolCall& call, const AppendFn& append_resul
 
     ToolCall effective_call = call;
 
-    // Resolve effective approval policy. Exact override wins over prefix
-    // ("mcp:<server>:*") match, both win over the tool's built-in default.
-    // See tools::resolve_approval_policy for the full lookup contract.
+    // Resolve effective approval policy. Lookup order:
+    //   1. S5.S runtime preset signature (when set).
+    //   2. Exact / prefix override in WorkspaceConfig::tool_approval_policies.
+    //   3. Tool's built-in default.
+    // See tools::resolve_approval_policy for the workspace-config contract.
     ToolApprovalPolicy policy = tool->approval_policy();
     if (auto* ws = services_.workspace()) {
         policy = tools::resolve_approval_policy(
             call.tool_name, policy, ws->config().tool_approval_policies);
+    }
+    {
+        std::optional<tools::PermissionPreset> rt;
+        {
+            std::lock_guard lock(runtime_mutex_);
+            rt = runtime_preset_;
+        }
+        if (rt) {
+            auto signature = tools::preset_signature(*rt, tools_);
+            policy = tools::resolve_approval_policy(
+                call.tool_name, policy, signature);
+        }
     }
 
     // S4.V Task 5 -- outside-workspace path guard for shell tools. If the

@@ -265,6 +265,7 @@ LocusFrame::LocusFrame(LocusSession& session)
     Bind(EVT_AGENT_GEN_PROGRESS,        &LocusFrame::on_agent_gen_progress,       this);
     Bind(EVT_AGENT_HISTORY_MSG_ADDED,   &LocusFrame::on_agent_history_msg_added,   this);
     Bind(EVT_AGENT_HISTORY_MSG_DELETED, &LocusFrame::on_agent_history_msg_deleted, this);
+    Bind(EVT_AGENT_PRESET_CHANGED,      &LocusFrame::on_agent_preset_changed,      this);
 
     // Notebook events.
     if (notebook_) {
@@ -451,6 +452,11 @@ void LocusFrame::configure_chat_panel(ChatPanel* chat, LocusTab& tab)
     chat->set_on_delete_message([agent_ptr](int history_id) {
         agent_ptr->delete_message(history_id);
     });
+    chat->set_on_permission_preset_pick(
+        [agent_ptr](std::optional<tools::PermissionPreset> picked) {
+            if (picked) agent_ptr->set_runtime_permission_preset(*picked);
+            else        agent_ptr->clear_runtime_permission_preset();
+        });
 
     {
         std::vector<SlashItem> items = {
@@ -1030,6 +1036,17 @@ void LocusFrame::show_settings_dialog()
         workspace_.save_config();
         SetStatusText("Settings saved", 0);
 
+        // S5.S -- the saved approval map is the new baseline. Clear every
+        // tab's runtime preset override (the chat-footer combobox) so the
+        // user isn't silently still elevated after explicitly committing a
+        // different policy. rebroadcast_permission_preset() repaints the
+        // chip on whichever workspace-config preset was just persisted.
+        for (int i = 0; i < session_.tab_count(); ++i) {
+            auto& tab = session_.tab(i);
+            tab.agent().clear_runtime_permission_preset();
+            tab.agent().rebroadcast_permission_preset();
+        }
+
         if (dlg.llm_changed()) {
             wxMessageBox(
                 "LLM settings changed.\nRestart Locus to apply new endpoint/model settings.",
@@ -1501,6 +1518,17 @@ void LocusFrame::on_agent_history_msg_deleted(wxThreadEvent& evt)
 {
     if (auto* ui = find_tab_ui(evt.GetId()))
         ui->chat->on_history_message_deleted(evt.GetInt());
+}
+
+void LocusFrame::on_agent_preset_changed(wxThreadEvent& evt)
+{
+    if (auto* ui = find_tab_ui(evt.GetId())) {
+        int packed = evt.GetInt();
+        tools::PermissionPreset effective =
+            static_cast<tools::PermissionPreset>(packed & 0xff);
+        bool from_runtime = (packed & 0x100) != 0;
+        ui->chat->on_permission_preset_changed(effective, from_runtime);
+    }
 }
 
 // ---------------------------------------------------------------------------
