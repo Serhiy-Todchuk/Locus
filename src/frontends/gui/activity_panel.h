@@ -32,6 +32,13 @@ public:
     // Append a new event and refresh the list.
     void append(const ActivityEvent& event);
 
+    // Replace an existing event in place (matched by id) and refresh that
+    // row. Used by ActivityLog's index_event coalescing path -- the
+    // backend keeps the same id when it merges consecutive entries, so the
+    // panel updates the row's summary / timestamp / detail without growing
+    // the list. No-op if the id isn't found.
+    void update(const ActivityEvent& event);
+
     // Clear all events (e.g. on session reset).
     void clear();
 

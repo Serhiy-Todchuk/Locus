@@ -2,9 +2,13 @@
 - Add image attachment for LLM prompt
 - FastDebug
 
+- Multi LLM + select toggle in chat panel bottom
+- Permission presets + select toggle in chat panel bottom
+- Ask user tool with pre-determined answers
+
 - Auto-compaction toggle
-- index_events (both indexing and embeddiing) are spaming Activity panel. Shall we group them somehow? If the last record in activity log is index_event, for example "Indexed 1 file", then just update existing event's file count instead of create new (and update time) - This is just a suggestion - you can think out smarter strategy.
 - When some error happened in session tab "!" sign appears in tab header. But when I hover the tab header - no explanation what it means. Add hovering bubble with short text status of a tab.
+
 
 - Claude Blender
 - GoodOldSoftware

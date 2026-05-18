@@ -137,6 +137,31 @@ void ActivityPanel::append(const ActivityEvent& event)
     if (metrics_view_) metrics_view_->refresh_now();
 }
 
+void ActivityPanel::update(const ActivityEvent& event)
+{
+    // Hot path: coalesced events almost always land on the most recent row
+    // (ActivityLog only merges with `buffer_.back()`). Try that first, then
+    // fall back to a reverse scan for robustness.
+    if (!events_.empty() && events_.back().id == event.id) {
+        events_.back() = event;
+        long idx = static_cast<long>(events_.size()) - 1;
+        list_->RefreshItem(idx);
+        if (metrics_view_) metrics_view_->refresh_now();
+        return;
+    }
+    for (auto it = events_.rbegin(); it != events_.rend(); ++it) {
+        if (it->id == event.id) {
+            *it = event;
+            long idx = static_cast<long>(events_.rend() - it - 1);
+            list_->RefreshItem(idx);
+            if (metrics_view_) metrics_view_->refresh_now();
+            return;
+        }
+    }
+    // Unknown id -- defensive append rather than dropping the update.
+    append(event);
+}
+
 void ActivityPanel::clear()
 {
     events_.clear();

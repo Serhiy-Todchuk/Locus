@@ -152,6 +152,7 @@ private:
     void on_agent_embedding_progress(wxThreadEvent& evt);
     void on_agent_indexing_progress(wxThreadEvent& evt);
     void on_agent_activity(wxThreadEvent& evt);
+    void on_agent_activity_updated(wxThreadEvent& evt);
     void on_agent_attached_context(wxThreadEvent& evt);
     void on_agent_mode_changed(wxThreadEvent& evt);
     void on_agent_plan_proposed(wxThreadEvent& evt);

@@ -43,6 +43,7 @@ add_executable(locus_tests
     test_reserve_enforcement.cpp
     test_compaction_pipeline.cpp
     test_chat_activity_restructure.cpp
+    test_activity_log.cpp
     test_tabs_and_sessions.cpp
     test_source_hygiene.cpp
     test_terminal_per_tab.cpp

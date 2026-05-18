@@ -115,6 +115,14 @@ public:
     // don't care can ignore it.
     virtual void on_activity(const ActivityEvent& event) = 0;
 
+    // An existing activity event was updated in place (same `id`), used by
+    // ActivityLog when consecutive index_event entries are coalesced so the
+    // activity panel doesn't pile up dozens of "Indexed 1 file" / "Embedding
+    // progress: ..." rows. The `event` carries the current (post-update)
+    // values; frontends should locate the row by id and replace it. Default
+    // no-op so frontends that don't render the activity log keep compiling.
+    virtual void on_activity_updated(const ActivityEvent& /*event*/) {}
+
     // Attached-context state changed (set or cleared). Empty when detached.
     // Frontends use this to show/hide a "📎 file" chip near the input.
     virtual void on_attached_context_changed(

@@ -255,6 +255,7 @@ LocusFrame::LocusFrame(LocusSession& session)
     Bind(EVT_AGENT_EMBEDDING_PROGRESS, &LocusFrame::on_agent_embedding_progress, this);
     Bind(EVT_AGENT_INDEXING_PROGRESS,  &LocusFrame::on_agent_indexing_progress,  this);
     Bind(EVT_AGENT_ACTIVITY,      &LocusFrame::on_agent_activity,      this);
+    Bind(EVT_AGENT_ACTIVITY_UPDATED, &LocusFrame::on_agent_activity_updated, this);
     Bind(EVT_AGENT_ATTACHED_CONTEXT, &LocusFrame::on_agent_attached_context, this);
     Bind(EVT_AGENT_MODE_CHANGED,        &LocusFrame::on_agent_mode_changed,       this);
     Bind(EVT_AGENT_PLAN_PROPOSED,       &LocusFrame::on_agent_plan_proposed,      this);
@@ -1339,6 +1340,15 @@ void LocusFrame::on_agent_activity(wxThreadEvent& evt)
     auto ev = evt.GetPayload<ActivityEvent>();
     if (activity_panel_) activity_panel_->append(ev);
     if (memory_bank_panel_) memory_bank_panel_->on_activity_event(ev);
+}
+
+void LocusFrame::on_agent_activity_updated(wxThreadEvent& evt)
+{
+    // ActivityLog coalesced an index_event onto an existing row -- replace
+    // the matching row in place. Memory-bank panel doesn't render the
+    // activity log, so no notification needed there.
+    auto ev = evt.GetPayload<ActivityEvent>();
+    if (activity_panel_) activity_panel_->update(ev);
 }
 
 void LocusFrame::on_agent_attached_context(wxThreadEvent& evt)

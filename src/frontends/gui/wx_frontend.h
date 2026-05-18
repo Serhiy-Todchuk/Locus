@@ -23,6 +23,7 @@ wxDECLARE_EVENT(EVT_AGENT_ERROR,         wxThreadEvent);
 wxDECLARE_EVENT(EVT_AGENT_EMBEDDING_PROGRESS, wxThreadEvent);
 wxDECLARE_EVENT(EVT_AGENT_INDEXING_PROGRESS,  wxThreadEvent);
 wxDECLARE_EVENT(EVT_AGENT_ACTIVITY,      wxThreadEvent);
+wxDECLARE_EVENT(EVT_AGENT_ACTIVITY_UPDATED, wxThreadEvent);
 wxDECLARE_EVENT(EVT_AGENT_ATTACHED_CONTEXT, wxThreadEvent);
 // S4.D plan-mode events.
 wxDECLARE_EVENT(EVT_AGENT_MODE_CHANGED,      wxThreadEvent);
@@ -73,6 +74,7 @@ public:
     void on_embedding_progress(int done, int total) override;
     void on_indexing_progress(int done, int total) override;
     void on_activity(const ActivityEvent& event) override;
+    void on_activity_updated(const ActivityEvent& event) override;
     void on_attached_context_changed(
         const std::optional<AttachedContext>& ctx) override;
     // S4.D

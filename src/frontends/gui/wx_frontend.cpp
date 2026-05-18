@@ -18,6 +18,7 @@ wxDEFINE_EVENT(EVT_AGENT_ERROR,         wxThreadEvent);
 wxDEFINE_EVENT(EVT_AGENT_EMBEDDING_PROGRESS, wxThreadEvent);
 wxDEFINE_EVENT(EVT_AGENT_INDEXING_PROGRESS,  wxThreadEvent);
 wxDEFINE_EVENT(EVT_AGENT_ACTIVITY,      wxThreadEvent);
+wxDEFINE_EVENT(EVT_AGENT_ACTIVITY_UPDATED, wxThreadEvent);
 wxDEFINE_EVENT(EVT_AGENT_ATTACHED_CONTEXT, wxThreadEvent);
 wxDEFINE_EVENT(EVT_AGENT_MODE_CHANGED,        wxThreadEvent);
 wxDEFINE_EVENT(EVT_AGENT_PLAN_PROPOSED,       wxThreadEvent);
@@ -151,6 +152,13 @@ void WxFrontend::on_indexing_progress(int done, int total)
 void WxFrontend::on_activity(const ActivityEvent& event)
 {
     auto* evt = new_evt(EVT_AGENT_ACTIVITY, tab_id_);
+    evt->SetPayload(event);
+    wxQueueEvent(handler_, evt);
+}
+
+void WxFrontend::on_activity_updated(const ActivityEvent& event)
+{
+    auto* evt = new_evt(EVT_AGENT_ACTIVITY_UPDATED, tab_id_);
     evt->SetPayload(event);
     wxQueueEvent(handler_, evt);
 }
