@@ -450,8 +450,14 @@ up without replaying conversation history. Ring buffer cap: `k_activity_buffer_m
    forwards it to `ToolDispatcher::submit_decision` which takes the dispatcher's own mutex --
    do not add thread-affinity assumptions on either side.
 6. **Cancellation is cooperative.** `cancel_requested_` is checked between rounds and between
-   tool calls within a round; it does **not** interrupt an in-flight `llm_.stream_completion`
-   or `tool->execute`. Those must complete before the cancel propagates.
+   tool calls within a round. S5.Z task 7 threads the same atomic into `tool->execute` as an
+   optional `const std::atomic<bool>*` so long-running tools can observe a stop mid-call:
+   `RunCommandTool` polls on a 50 ms slice and `TerminateJobObject`s the process tree on
+   cancel; `McpTool` polls during `tools/call` and `pending_.erase(id)` + throws on cancel
+   (the reader thread's late response then drops, harmlessly). Pure-CPU tools (search /
+   file / plan / memory / interactive) accept the parameter and ignore it -- they finish
+   in single-digit ms. `llm_.stream_completion` still completes naturally on cancel; the
+   atomic is only forwarded to the tool layer.
 7. **Tool-facing surface is `IWorkspaceServices`, not `Workspace`.** Tools receive
    `services_` and must not downcast to the concrete `Workspace`. This keeps tool tests
    hermetic (via `FakeWorkspaceServices`) and allows M6 to add remote/virtual workspaces.

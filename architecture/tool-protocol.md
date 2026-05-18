@@ -52,9 +52,14 @@ public:
     virtual std::string              description() const = 0;  // fed verbatim to LLM
     virtual std::vector<ToolParam>   params()      const = 0;
 
-    // Execution -- called only after user approval (if required)
+    // Execution -- called only after user approval (if required).
+    // `cancel_flag` (S5.Z task 7) is the agent's `cancel_requested_` atomic
+    // threaded through so long-running tools (run_command, MCP) can poll for
+    // an in-flight stop and abort cleanly. Defaults to null for back-compat
+    // and for fast pure-CPU tools that have nothing to cancel.
     virtual ToolResult execute(const ToolCall& call,
-                               IWorkspaceServices& ws) = 0;
+                               IWorkspaceServices& ws,
+                               const std::atomic<bool>* cancel_flag = nullptr) = 0;
 
     // Approval policy
     // "always"  -- pause for user before every execution (default)
@@ -164,7 +169,8 @@ public:
     }
     std::string approval_policy() const override { return "auto"; }
 
-    ToolResult execute(const ToolCall& call, IWorkspaceServices& ws) override {
+    ToolResult execute(const ToolCall& call, IWorkspaceServices& ws,
+                       const std::atomic<bool>* /*cancel_flag*/ = nullptr) override {
         // ... read the file, return paginated content
     }
 };

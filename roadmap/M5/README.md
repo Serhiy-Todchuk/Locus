@@ -25,7 +25,7 @@
 - [x] **[S5.K](S5.K-memory-bank-ui.md)** -- Memory Bank UI Viewer / Editor -- _UX_
 - [ ] **[S5.N](S5.N-non-code-workspace-proof.md)** -- Non-Code Workspace Proof -- _Product / QA_
 - [x] **[S5.S](S5.S-permission-presets.md)** -- Permission Presets -- _Safety / UX_
-- [ ] **[S5.Z](S5.Z-misc-gaps.md)** -- Miscellaneous Smaller Gaps -- _Mixed_
+- [x] **[S5.Z](S5.Z-misc-gaps.md)** -- Miscellaneous Smaller Gaps -- _Mixed_
 
 More stages will be added here as polish/UX/perf candidates surface. Letters are identity, not order -- listed top-down in execution order. S5.Z is the misc bucket at the end (mirrors [S4.V](../M4/S4.V-misc-gaps.md)) and is expected to grow.
 
