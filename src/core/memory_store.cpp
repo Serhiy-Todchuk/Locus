@@ -31,6 +31,43 @@ std::int64_t now_seconds()
         std::chrono::system_clock::now().time_since_epoch()).count();
 }
 
+// FTS5 treats `-`, `^`, `"`, `(`, `)`, `:`, `+`, `~`, `*`, `AND/OR/NOT/NEAR`
+// as operators. The agent-facing search_memory tool takes a natural-language
+// query string, so a hyphenated marker like "S4R-INT-tool-search-6882a8"
+// gets parsed as "S4R NOT INT NOT tool NOT search NOT 6882a8" and matches
+// nothing it should match. Wrap each whitespace-separated token in double
+// quotes so its content is treated as a phrase (operators inside a quoted
+// phrase are literal). Empty / whitespace-only queries pass through.
+//
+// Phrase content matches the FTS5 tokenizer's view of the same string in
+// indexed content, so the marker-as-phrase still finds the marker-as-stored.
+std::string escape_fts5_query(const std::string& q)
+{
+    std::string out;
+    out.reserve(q.size() + 8);
+    std::string token;
+    auto flush = [&]() {
+        if (token.empty()) return;
+        if (!out.empty()) out += ' ';
+        out += '"';
+        for (char c : token) {
+            if (c == '"') out += "\"\"";   // FTS5 phrase escape
+            else          out += c;
+        }
+        out += '"';
+        token.clear();
+    };
+    for (char c : q) {
+        if (c == ' ' || c == '\t' || c == '\n' || c == '\r') {
+            flush();
+        } else {
+            token += c;
+        }
+    }
+    flush();
+    return out;
+}
+
 std::string format_iso8601(std::int64_t secs)
 {
     if (secs <= 0) return "";
@@ -805,9 +842,12 @@ MemoryStore::search(const std::string&              query,
     std::unordered_map<std::string, Candidate> cands;
 
     // -- FTS5 channel
-    if (!query.empty()) {
+    // Wrap each whitespace token in a phrase so FTS5 operators inside tokens
+    // (notably `-` interpreted as NOT) don't sabotage natural-language queries.
+    std::string fts_query = escape_fts5_query(query);
+    if (!fts_query.empty()) {
         sqlite3_reset(stmt_fts_search_);
-        sqlite3_bind_text(stmt_fts_search_, 1, query.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_text(stmt_fts_search_, 1, fts_query.c_str(), -1, SQLITE_TRANSIENT);
         sqlite3_bind_int(stmt_fts_search_, 2, max_results * 4);
         while (sqlite3_step(stmt_fts_search_) == SQLITE_ROW) {
             const auto* idp = sqlite3_column_text(stmt_fts_search_, 0);

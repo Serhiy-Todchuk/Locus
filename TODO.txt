@@ -12,6 +12,6 @@
 
 Have you added integration test and UI automation test (if needed)?
 Run integration tests and then AUI tests. The PC is yours until done.
-Run unit tests then integration tests and then AUI tests
+Run unit tests then integration tests and then AUI tests. The PC is yours until done.
 Short commit message?
 Wrap up - update docs/comments, then we're done.

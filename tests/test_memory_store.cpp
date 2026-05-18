@@ -140,6 +140,29 @@ TEST_CASE("MemoryStore: FTS keyword search", "[s4.r][memory-store][search]")
     REQUIRE_THAT(hits[0].entry.content, ContainsSubstring("cmake"));
 }
 
+TEST_CASE("MemoryStore: hyphenated query is not parsed as FTS5 NOT operators",
+          "[memory-store][search][fts5]")
+{
+    // Regression -- raw user queries pass through to FTS5, which treats "-"
+    // as a unary NOT prefix. A marker like "S4R-INT-tool-search-6882a8" used
+    // to parse as "S4R NOT INT NOT tool NOT search NOT 6882a8" and matched
+    // nothing it should match. The store now phrase-wraps each whitespace
+    // token before binding to FTS5.
+    StoreFixture fx("search_hyphen");
+    auto id = fx.store->add(
+        "S4R-INT-tool-search-6882a8: the bge-m3 embedder runs at "
+        "LLAMA_POOLING_TYPE_LAST.", {"embedder"});
+    fx.store->add("unrelated entry about cmake", {"build"});
+
+    auto hits = fx.store->search("S4R-INT-tool-search-6882a8", 5);
+    REQUIRE_FALSE(hits.empty());
+    bool found_seeded = false;
+    for (auto& h : hits) {
+        if (h.entry.id == id) { found_seeded = true; break; }
+    }
+    REQUIRE(found_seeded);
+}
+
 TEST_CASE("MemoryStore: empty query returns all entries", "[s4.r][memory-store][search]")
 {
     StoreFixture fx("search_all");
