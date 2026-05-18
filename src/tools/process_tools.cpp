@@ -193,7 +193,18 @@ ToolResult RunCommandTool::execute(const ToolCall& call, IWorkspaceServices& ws)
 
 ToolResult RunCommandTool::execute(const ToolCall& /*call*/, IWorkspaceServices& /*ws*/)
 {
-    return error_result("Error: run_command not implemented on this platform");
+    // S5.Z task 5 -- prefix with the OS name so the activity-log line makes
+    // it unambiguous *why* the call failed (Windows-only at v1; macOS / Linux
+    // shell-out is a separate multi-week effort outside M5).
+#if defined(__APPLE__)
+    const char* os = "macos";
+#elif defined(__linux__)
+    const char* os = "linux";
+#else
+    const char* os = "unknown";
+#endif
+    return error_result(std::string("[platform: ") + os +
+                        "] run_command is Windows-only in this build");
 }
 
 #endif

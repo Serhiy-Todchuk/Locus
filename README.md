@@ -57,11 +57,14 @@ Two binaries ship from the same codebase:
 
 ## Platform Support
 
-Locus is currently developed and tested on **Windows 11**. The core is written
-with cross-platform support in mind, but several runtime integrations are still
-Windows-first: shell execution, background process management, MCP stdio
-transport, autostart, recent-workspace integration, and the GUI automation
-harness. macOS and Linux support are planned, not production-ready.
+**Locus is currently Windows-only; macOS / Linux support is planned.** The
+core is written with cross-platform support in mind, but several runtime
+integrations are still Windows-first: shell execution (`run_command`,
+`run_command_bg`), MCP stdio transport, autostart on login, recent-workspace
+integration, and the GUI automation harness. On macOS / Linux today these
+surfaces return a `[platform: <os>]` error rather than running -- the
+Windows-only build is what's production-ready in v1; cross-platform parity
+is a separate multi-stage effort outside M5.
 
 ## Documentation Index
 

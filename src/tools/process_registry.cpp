@@ -387,7 +387,18 @@ int ProcessRegistry::spawn(const std::string& command)
     return id;
 #else
     (void)command;
-    throw std::runtime_error("Background commands not implemented on this platform");
+    // S5.Z task 5 -- name the OS in the error so a non-Windows caller can
+    // tell apart "the workspace has no registry" from "this build can't
+    // launch shell processes at all".
+#if defined(__APPLE__)
+    const char* os = "macos";
+#elif defined(__linux__)
+    const char* os = "linux";
+#else
+    const char* os = "unknown";
+#endif
+    throw std::runtime_error(std::string("[platform: ") + os +
+        "] background commands are Windows-only in this build");
 #endif
 }
 
