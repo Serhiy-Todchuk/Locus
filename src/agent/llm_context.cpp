@@ -204,9 +204,13 @@ void LLMContext::add_message(ChatMessage msg)
     // deletable too (the X triggers a pair-delete of the assistant + every
     // matching tool result, routed through delete_message below). Empty-content
     // assistants get no bubble in the UI so deletability there is moot.
-    // Tool-result + system messages are never deletable on their own.
+    // Tool-result messages are also deletable: clicking their X walks back to
+    // the parent assistant and pair-deletes the whole turn (deleting just the
+    // tool side would orphan the assistant's tool_call -- delete_message does
+    // the lookup). System messages are never deletable.
     bool deletable = (added.role == MessageRole::user) ||
-                     (added.role == MessageRole::assistant && !added.content.empty());
+                     (added.role == MessageRole::assistant && !added.content.empty()) ||
+                     (added.role == MessageRole::tool);
     frontends_.broadcast([&](IFrontend& fe) {
         fe.on_history_message_added(added.history_id, added.role, deletable);
     });
@@ -221,7 +225,9 @@ bool LLMContext::delete_message(int history_id)
 {
     // Pair-delete if the target is an assistant message with tool_calls --
     // deleting one side without the other leaves orphan tool_calls / tool
-    // results that break the next LLM round.
+    // results that break the next LLM round. Clicking the X on a tool-result
+    // bubble redirects to the same pair-delete by looking up the parent
+    // assistant via tool_call_id.
     const auto& msgs = history_.messages();
     auto it = std::find_if(msgs.begin(), msgs.end(),
                            [history_id](const ChatMessage& m) {
@@ -232,6 +238,20 @@ bool LLMContext::delete_message(int history_id)
     std::vector<int> deleted;
     if (it->role == MessageRole::assistant && !it->tool_calls.empty()) {
         deleted = history_.delete_tool_call_pair(history_id);
+        if (deleted.empty()) return false;
+    } else if (it->role == MessageRole::tool && !it->tool_call_id.empty()) {
+        const std::string call_id = it->tool_call_id;
+        int parent_history_id = 0;
+        for (const auto& m : msgs) {
+            if (m.role != MessageRole::assistant) continue;
+            bool match = false;
+            for (const auto& tc : m.tool_calls) {
+                if (tc.id == call_id) { match = true; break; }
+            }
+            if (match) { parent_history_id = m.history_id; break; }
+        }
+        if (parent_history_id == 0) return false;
+        deleted = history_.delete_tool_call_pair(parent_history_id);
         if (deleted.empty()) return false;
     } else {
         if (!history_.delete_by_id(history_id)) return false;
@@ -317,7 +337,8 @@ void LLMContext::load_session(const std::string& id)
     // + re-render), so the added events here are purely for the delete map.
     for (const auto& m : history_.messages()) {
         bool deletable = (m.role == MessageRole::user) ||
-                         (m.role == MessageRole::assistant && !m.content.empty());
+                         (m.role == MessageRole::assistant && !m.content.empty()) ||
+                         (m.role == MessageRole::tool);
         frontends_.broadcast([&](IFrontend& fe) {
             fe.on_history_message_added(m.history_id, m.role, deletable);
         });

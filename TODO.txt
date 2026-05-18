@@ -3,7 +3,6 @@
 - FastDebug
 
 - Auto-compaction toggle
-- Still no X button when hovering tool call+result in chat - they should be removable as well.
 - index_events (both indexing and embeddiing) are spaming Activity panel. Shall we group them somehow? If the last record in activity log is index_event, for example "Indexed 1 file", then just update existing event's file count instead of create new (and update time) - This is just a suggestion - you can think out smarter strategy.
 - When some error happened in session tab "!" sign appears in tab header. But when I hover the tab header - no explanation what it means. Add hovering bubble with short text status of a tab.
 

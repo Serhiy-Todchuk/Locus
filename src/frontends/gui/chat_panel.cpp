@@ -1254,10 +1254,16 @@ void ChatPanel::on_tool_result(const wxString& call_id,
     }
 
     // Pair the tool message's history_id (parked by on_history_message_added
-    // which fires immediately before this) with its dom bubble id, so a
-    // pair-delete on the parent assistant can find and remove this row.
+    // which fires immediately before this) with its dom bubble id. Used for
+    // two paths: (a) pair-delete from the parent assistant cascades to this
+    // tool row via history_to_dom_; (b) the hover-reveal X on the tool bubble
+    // itself routes a delete-message request whose target is the tool's
+    // history_id -- LLMContext::delete_message walks back to the parent
+    // assistant and pair-deletes the whole turn.
     if (pending_tool_history_id_ > 0) {
         history_to_dom_[pending_tool_history_id_] = target_id;
+        run_script(wxString::Format("addDeleteButton(%d, %d);",
+                                    target_id, pending_tool_history_id_));
         pending_tool_history_id_ = 0;
     }
 
@@ -1533,10 +1539,14 @@ void ChatPanel::render_loaded_history(const ConversationHistory& history)
                 "d.appendChild(det);}",
                 message_id_,
                 "'" + chat_js_escape(wxString::FromUTF8(msg.content)) + "'"));
-            // Map the tool history_id -> dom_id so pair-delete can remove
-            // this row when the parent assistant is deleted.
+            // Map the tool history_id -> dom_id and attach the hover-reveal
+            // delete X. Clicking it routes through LLMContext::delete_message
+            // which walks back to the parent assistant and pair-deletes the
+            // whole turn (matches the live on_tool_result wiring above).
             if (msg.history_id > 0) {
                 history_to_dom_[msg.history_id] = message_id_;
+                run_script(wxString::Format("addDeleteButton(%d, %d);",
+                                            message_id_, msg.history_id));
             }
             if (show_per_message_tokens_ && msg.token_estimate > 0) {
                 run_script(wxString::Format(

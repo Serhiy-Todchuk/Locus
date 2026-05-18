@@ -27,6 +27,7 @@
 
 #include <filesystem>
 #include <random>
+#include <unordered_set>
 
 using namespace locus;
 namespace fs = std::filesystem;
@@ -268,7 +269,9 @@ TEST_CASE("LLMContext: ctor + add_message broadcast on_history_message_added",
     REQUIRE(f.recorder.adds[3].role == MessageRole::assistant);
     REQUIRE_FALSE(f.recorder.adds[3].deletable);
 
-    // Tool result is NOT deletable.
+    // Tool result IS deletable; clicking its X routes through
+    // LLMContext::delete_message which walks back to the parent assistant
+    // via tool_call_id and pair-deletes the whole turn.
     ChatMessage tool_result;
     tool_result.role         = MessageRole::tool;
     tool_result.tool_call_id = "call_1";
@@ -276,7 +279,7 @@ TEST_CASE("LLMContext: ctor + add_message broadcast on_history_message_added",
     ctx->add_message(std::move(tool_result));
     REQUIRE(f.recorder.adds.size() == 5);
     REQUIRE(f.recorder.adds[4].role == MessageRole::tool);
-    REQUIRE_FALSE(f.recorder.adds[4].deletable);
+    REQUIRE(f.recorder.adds[4].deletable);
 }
 
 TEST_CASE("LLMContext: delete_message removes + broadcasts on_history_message_deleted",
@@ -311,6 +314,59 @@ TEST_CASE("LLMContext: delete_message refuses the system message",
     REQUIRE_FALSE(ctx->delete_message(sys_id));
     REQUIRE(ctx->history().size() == 1);
     REQUIRE(f.recorder.deletes.empty());
+}
+
+TEST_CASE("LLMContext: delete_message on tool walks back to parent assistant",
+          "[s5.g][llm-context][delete]")
+{
+    Fixture f("delete_tool_walks_back");
+    auto ctx = f.make_context();
+    f.frontends.register_frontend(&f.recorder);
+
+    // user -> assistant with two tool_calls -> two tool results.
+    ctx->add_message({MessageRole::user, "do it"});
+    int user_id = ctx->history().messages().back().history_id;
+
+    ChatMessage asst;
+    asst.role       = MessageRole::assistant;
+    asst.content    = "";
+    asst.tool_calls = {{"call_a", "read_file", "{}"},
+                       {"call_b", "list_dir",  "{}"}};
+    ctx->add_message(std::move(asst));
+    int asst_id = ctx->history().messages().back().history_id;
+
+    ChatMessage tool_a;
+    tool_a.role         = MessageRole::tool;
+    tool_a.tool_call_id = "call_a";
+    tool_a.content      = "result A";
+    ctx->add_message(std::move(tool_a));
+    int tool_a_id = ctx->history().messages().back().history_id;
+
+    ChatMessage tool_b;
+    tool_b.role         = MessageRole::tool;
+    tool_b.tool_call_id = "call_b";
+    tool_b.content      = "result B";
+    ctx->add_message(std::move(tool_b));
+    int tool_b_id = ctx->history().messages().back().history_id;
+
+    // history: system + user + assistant + tool_a + tool_b = 5
+    REQUIRE(ctx->history().size() == 5);
+    f.recorder.deletes.clear();
+
+    // Clicking the X on tool_a should pair-delete assistant + tool_a + tool_b.
+    REQUIRE(ctx->delete_message(tool_a_id));
+    REQUIRE(ctx->history().size() == 2);  // system + user
+    // All three rows broadcast on_history_message_deleted (chat panel uses
+    // them to drop the bubbles); user-clicked X started from tool_a but the
+    // pair-delete cascades to assistant + every matching tool result.
+    REQUIRE(f.recorder.deletes.size() == 3);
+    std::unordered_set<int> deleted_ids;
+    for (const auto& d : f.recorder.deletes) deleted_ids.insert(d.history_id);
+    REQUIRE(deleted_ids.count(asst_id)   == 1);
+    REQUIRE(deleted_ids.count(tool_a_id) == 1);
+    REQUIRE(deleted_ids.count(tool_b_id) == 1);
+    // The user message is untouched.
+    REQUIRE(ctx->history().messages()[1].history_id == user_id);
 }
 
 TEST_CASE("LLMContext: load_session re-announces every message",
