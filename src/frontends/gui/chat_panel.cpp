@@ -851,6 +851,7 @@ ChatPanel::ChatPanel(wxWindow* parent,
 
     create_webview();
     create_input();
+    create_find_bar();
 
     // Footer chips must be created before create_footer() wires the sizer.
     footer_chips_ = std::make_unique<ChatFooterChips>(this);
@@ -947,6 +948,7 @@ ChatPanel::ChatPanel(wxWindow* parent,
     footer->Add(footer_chips_->commit_chip(), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
     footer->Add(preset_chip_,    0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
     footer->Add(preset_choice_,  0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+    footer->Add(find_btn_,       0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
     footer->AddStretchSpacer();
     footer->Add(auto_compact_cb_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
     footer->Add(compact_btn_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
@@ -955,6 +957,7 @@ ChatPanel::ChatPanel(wxWindow* parent,
 
     // Main vertical layout.
     auto* sizer = new wxBoxSizer(wxVERTICAL);
+    sizer->Add(find_bar_,     0, wxEXPAND);
     sizer->Add(webview_,      1, wxEXPAND);
     sizer->Add(attach_panel_, 0, wxEXPAND | wxTOP | wxBOTTOM, 2);
     sizer->Add(mode_row,      0, wxEXPAND | wxTOP | wxLEFT | wxRIGHT, 2);
@@ -1065,6 +1068,17 @@ void ChatPanel::create_footer()
         if (on_undo_) on_undo_();
     });
 
+    // S5.Z task 2 -- magnifier toggle that opens the find-in-conversation bar.
+    // Sits inline with the rest of the chips; Ctrl+F is the other entry point.
+    find_btn_ = new wxButton(this, wxID_ANY, "Find",
+                             wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+    find_btn_->SetName(ui_names::kChatFindBtn);
+    gui::apply_locus_accessible_name(find_btn_);
+    find_btn_->SetToolTip("Find in conversation (Ctrl+F)");
+    find_btn_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
+        toggle_find_bar();
+    });
+
     // S5.S -- permission preset chip + dropdown.
     preset_chip_ = new wxStaticText(this, wxID_ANY, "Ask before edits");
     preset_chip_->SetName(ui_names::kChatPresetChip);
@@ -1137,6 +1151,217 @@ void ChatPanel::create_footer()
 }
 
 // ---------------------------------------------------------------------------
+// S5.Z task 2 -- in-conversation find bar
+// ---------------------------------------------------------------------------
+
+void ChatPanel::create_find_bar()
+{
+    find_bar_ = new wxPanel(this, wxID_ANY);
+    find_bar_->SetName(ui_names::kChatFindBar);
+    gui::apply_locus_accessible_name(find_bar_);
+
+    find_input_ = new wxTextCtrl(find_bar_, wxID_ANY, wxEmptyString,
+                                  wxDefaultPosition, wxDefaultSize,
+                                  wxTE_PROCESS_ENTER);
+    find_input_->SetName(ui_names::kChatFindInput);
+    gui::apply_locus_accessible_name(find_input_);
+    find_input_->SetToolTip("Find in conversation. Enter = next, "
+                            "Shift+Enter = previous, Esc = close.");
+    find_input_->Bind(wxEVT_TEXT, [this](wxCommandEvent& evt) {
+        find_apply();
+        evt.Skip();
+    });
+    find_input_->Bind(wxEVT_KEY_DOWN, &ChatPanel::on_find_input_key, this);
+
+    find_counter_ = new wxStaticText(find_bar_, wxID_ANY, "0 / 0");
+    find_counter_->SetName(ui_names::kChatFindCounter);
+    gui::apply_locus_accessible_name(find_counter_);
+
+    find_prev_btn_ = new wxButton(find_bar_, wxID_ANY, "Prev",
+                                   wxDefaultPosition, wxDefaultSize,
+                                   wxBU_EXACTFIT);
+    find_prev_btn_->SetName(ui_names::kChatFindPrevBtn);
+    gui::apply_locus_accessible_name(find_prev_btn_);
+    find_prev_btn_->SetToolTip("Previous match (Shift+Enter / Shift+F3)");
+    find_prev_btn_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
+        find_step(/*forward=*/false);
+    });
+
+    find_next_btn_ = new wxButton(find_bar_, wxID_ANY, "Next",
+                                   wxDefaultPosition, wxDefaultSize,
+                                   wxBU_EXACTFIT);
+    find_next_btn_->SetName(ui_names::kChatFindNextBtn);
+    gui::apply_locus_accessible_name(find_next_btn_);
+    find_next_btn_->SetToolTip("Next match (Enter / F3)");
+    find_next_btn_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
+        find_step(/*forward=*/true);
+    });
+
+    find_case_toggle_ = new wxCheckBox(find_bar_, wxID_ANY, "Aa");
+    find_case_toggle_->SetName(ui_names::kChatFindCaseToggle);
+    gui::apply_locus_accessible_name(find_case_toggle_);
+    find_case_toggle_->SetToolTip("Match case");
+    find_case_toggle_->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) {
+        find_apply();
+    });
+
+    find_close_btn_ = new wxButton(find_bar_, wxID_ANY, "x",
+                                    wxDefaultPosition, wxSize(22, 22),
+                                    wxBU_EXACTFIT);
+    find_close_btn_->SetName(ui_names::kChatFindCloseBtn);
+    gui::apply_locus_accessible_name(find_close_btn_);
+    find_close_btn_->SetToolTip("Close find bar (Esc)");
+    find_close_btn_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
+        hide_find_bar();
+    });
+
+    auto* row = new wxBoxSizer(wxHORIZONTAL);
+    row->Add(new wxStaticText(find_bar_, wxID_ANY, "Find:"),
+             0, wxALIGN_CENTER_VERTICAL | wxLEFT | wxRIGHT, 6);
+    row->Add(find_input_, 1, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
+    row->Add(find_counter_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+    row->Add(find_prev_btn_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 2);
+    row->Add(find_next_btn_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+    row->Add(find_case_toggle_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
+    row->Add(find_close_btn_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
+    find_bar_->SetSizer(row);
+    find_bar_->Hide();
+}
+
+bool ChatPanel::is_find_bar_visible() const
+{
+    return find_bar_ && find_bar_->IsShown();
+}
+
+void ChatPanel::toggle_find_bar()
+{
+    if (is_find_bar_visible()) hide_find_bar();
+    else                       show_find_bar();
+}
+
+void ChatPanel::show_find_bar()
+{
+    if (!find_bar_) return;
+    if (!find_bar_->IsShown()) {
+        find_bar_->Show();
+        Layout();
+    }
+    find_input_->SetFocus();
+    find_input_->SelectAll();
+    // If text is non-empty, ensure the highlight matches the current query.
+    if (!find_input_->GetValue().IsEmpty()) find_apply();
+}
+
+void ChatPanel::hide_find_bar()
+{
+    if (!find_bar_) return;
+    if (webview_ && !find_active_query_.IsEmpty()) {
+        // Cancel any active highlight before tearing down the UI.  wx docs
+        // specify Find("") as the explicit cancel path.
+        webview_->Find("");
+    }
+    find_active_query_.clear();
+    find_total_ = 0;
+    find_index_ = 0;
+    update_find_counter();
+    if (find_bar_->IsShown()) {
+        find_bar_->Hide();
+        Layout();
+    }
+    if (input_) input_->SetFocus();
+}
+
+int ChatPanel::current_find_flags() const
+{
+    int flags = wxWEBVIEW_FIND_WRAP | wxWEBVIEW_FIND_HIGHLIGHT_RESULT;
+    if (find_case_toggle_ && find_case_toggle_->GetValue())
+        flags |= wxWEBVIEW_FIND_MATCH_CASE;
+    return flags;
+}
+
+void ChatPanel::find_apply()
+{
+    if (!webview_ || !find_input_) return;
+
+    wxString query = find_input_->GetValue();
+
+    // Empty input: cancel any active highlight and clear the counter.
+    if (query.IsEmpty()) {
+        if (!find_active_query_.IsEmpty()) webview_->Find("");
+        find_active_query_.clear();
+        find_total_ = 0;
+        find_index_ = 0;
+        update_find_counter();
+        return;
+    }
+
+    // The wx contract: a fresh Find() with a NEW phrase returns the total
+    // match count; subsequent same-phrase calls advance through results.
+    // To get a fresh count after a case-toggle or query change we must clear
+    // first.
+    if (!find_active_query_.IsEmpty()) webview_->Find("");
+
+    long total = webview_->Find(query, current_find_flags());
+    find_active_query_ = query;
+    if (total <= 0) {
+        find_total_ = 0;
+        find_index_ = 0;
+    } else {
+        find_total_ = total;
+        find_index_ = 1;  // wx scrolls + selects the first match.
+    }
+    update_find_counter();
+}
+
+void ChatPanel::find_step(bool forward)
+{
+    if (!webview_) return;
+
+    // No active query yet: treat as initial apply.
+    if (find_active_query_.IsEmpty()) {
+        find_apply();
+        return;
+    }
+    if (find_total_ <= 0) {
+        update_find_counter();
+        return;
+    }
+
+    int flags = current_find_flags();
+    if (!forward) flags |= wxWEBVIEW_FIND_BACKWARDS;
+    webview_->Find(find_active_query_, flags);
+
+    if (forward) {
+        find_index_ = (find_index_ % find_total_) + 1;
+    } else {
+        find_index_ = (find_index_ <= 1) ? find_total_ : (find_index_ - 1);
+    }
+    update_find_counter();
+}
+
+void ChatPanel::update_find_counter()
+{
+    if (!find_counter_) return;
+    find_counter_->SetLabel(
+        wxString::Format("%ld / %ld", find_index_, find_total_));
+    if (find_bar_) find_bar_->Layout();
+}
+
+void ChatPanel::on_find_input_key(wxKeyEvent& evt)
+{
+    const int key = evt.GetKeyCode();
+    if (key == WXK_ESCAPE) {
+        hide_find_bar();
+        return;
+    }
+    if (key == WXK_RETURN || key == WXK_NUMPAD_ENTER) {
+        find_step(/*forward=*/!evt.ShiftDown());
+        return;
+    }
+    evt.Skip();
+}
+
+// ---------------------------------------------------------------------------
 // Public API -- called from LocusFrame event handlers
 // ---------------------------------------------------------------------------
 
@@ -1193,6 +1418,8 @@ void ChatPanel::on_session_reset()
     history_to_dom_.clear();
     last_user_dom_id_ = 0;
     pending_tool_history_id_ = 0;
+    // S5.Z task 2 -- previous find state references DOM that no longer exists.
+    if (is_find_bar_visible()) hide_find_bar();
 }
 
 // ---------------------------------------------------------------------------

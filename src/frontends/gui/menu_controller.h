@@ -42,6 +42,9 @@ public:
         std::function<void(bool show)>              on_toggle_terminal_pane;
         // S5.K -- Memory Bank panel toggle (Ctrl+M).
         std::function<void(bool show)>              on_toggle_memory_bank_pane;
+        // S5.Z task 2 -- chat find bar toggle (Ctrl+F). LocusFrame routes to
+        // the active tab's ChatPanel.
+        std::function<void()>                       on_toggle_find_in_chat;
         std::function<void()>                       on_about;
         // Called when the Session menu opens -- controller uses the returned
         // list to rebuild the Saved Sessions submenu so newly-saved sessions

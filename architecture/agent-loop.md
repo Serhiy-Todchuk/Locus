@@ -316,7 +316,7 @@ they fire around:
 | Hook | Phase | Used by | Notes |
 |---|---|---|---|
 | `before_turn` | start of `process_message` | plan mode (S4.D), memory bank (S4.R) | inject mode-specific system-prompt variant; recall relevant memories |
-| `after_user_message` | after `history.add(user)`, before round 1 | plan mode, multi-model router (S4.Q) | choose model / mode for this turn |
+| `after_user_message` | after `history.add(user)`, before round 1 | plan mode, strong/weak router (S4.Q) | choose model / mode for this turn |
 | `before_llm_step` | top of `AgentLoop::run_step` | KV-cache optimizer (S4.F), router (S4.Q) | pick model, slice history, inject system-prompt deltas |
 | `after_llm_step` | after `history.add(assistant)` | telemetry (S4.S) | |
 | `before_tool_dispatch` | top of `ToolDispatcher::dispatch`, after policy resolve | plan mode (blocks tools), LSP (S4.E), parallel dispatch (S4.H) | plan mode rejects any tool except `propose_plan`; LSP augments `write_file` pre-hook |

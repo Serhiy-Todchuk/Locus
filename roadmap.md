@@ -32,7 +32,7 @@ This file is the milestone index. Stage detail lives in each milestone's own doc
 | **[M3 -- Refactoring](roadmap/M3/README.md)** done | Pay down architectural debt before the next big feature push (split god-classes, regularize layering, document threading model) | WS1 |
 | **[M4 -- Agent Quality](roadmap/M4/README.md)** done | Close the gap vs RooCode/Aider/Cline/OpenCode/Claude Code on the tech fundamentals of a coding agent (editing, verification, undo, planning, extensibility, retrieval quality) | WS1 |
 | **[M5 -- Polish, UX & Performance](roadmap/M5/README.md)** | Sand down the user-visible edges before multiplying frontends -- UX refinements, performance optimization, robustness, quality-of-life touches | WS1, WS2, WS3 |
-| **[M6 -- Connected](roadmap/M6/README.md)** | Remote access, VS Code shim, web frontend | All, from any device |
+| **[M6 -- Connected & Misc](roadmap/M6/README.md)** | Remote access, VS Code shim, web frontend, plus catch-all for non-polish work that doesn't fit M5 | All, from any device |
 
 M0-M2 each live in a single milestone file (completed history). M3, M4, M5, M6 use one folder per milestone with a `README.md` index plus one file per stage so each stays individually greppable as it moves from planned -> scoping -> in-progress.
 
@@ -60,7 +60,7 @@ Complete. Closed the gap against leading agents on the tech fundamentals -- diff
 
 ## M5 -- Polish, UX & Performance
 
-With the M4 engine in place, sand down the user-visible edges. UX refinements, performance optimization, robustness work, and quality-of-life touches that make the existing capability set feel fast, predictable, and discoverable. Lands before M6 so each new frontend in the Connected milestone inherits a well-shaped foundation.
+With the M4 engine in place, sand down the user-visible edges. UX refinements, performance optimization, robustness work, and quality-of-life touches that make the existing capability set feel fast, predictable, and discoverable. Lands before M6 so each new frontend in the connectivity milestone inherits a well-shaped foundation.
 
 Implementation baseline: the engine already includes tool approvals, checkpoints and `/undo`, plan mode, MCP, multi-decoder stream parsing, background commands, metrics, semantic/hybrid retrieval with reranking, memory bank, git-aware workflows, prompt templates, and UI automation hooks. M5 is therefore not about proving the agent exists; it is about making those shipped capabilities feel coherent, debuggable, and safe enough to carry into more frontends.
 
@@ -68,9 +68,9 @@ Progress: **S5.L (UI Automation Test Driver) done** -- ships a manual-only `locu
 
 Stage list: [roadmap/M5/README.md](roadmap/M5/README.md).
 
-## M6 -- Connected
+## M6 -- Connected & Misc
 
-Core accessible over LAN. VS Code sends editor context. Browser frontend works. Wikipedia works end-to-end.
+Core accessible over LAN. VS Code sends editor context. Browser frontend works. Wikipedia works end-to-end. Plus the non-connectivity work that doesn't fit M5's "polish" frame -- storage migrations (S6.8 delta archives), on-demand skill packs (S6.7), and the next batch of features that need a milestone home without being narrowly themed.
 
 Stage list and inter-stage dependencies: [roadmap/M6/README.md](roadmap/M6/README.md).
 

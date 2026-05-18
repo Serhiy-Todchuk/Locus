@@ -114,6 +114,13 @@ LocusFrame::LocusFrame(LocusSession& session)
         if (auto& p = aui_.GetPane("memory_bank"); p.IsOk()) { p.Show(show); aui_.Update(); }
         if (show && memory_bank_panel_) memory_bank_panel_->refresh();
     };
+    hooks.on_toggle_find_in_chat = [this]() {
+        if (!notebook_) return;
+        int sel = notebook_->GetSelection();
+        if (sel < 0) return;
+        auto* chat = static_cast<ChatPanel*>(notebook_->GetPage(sel));
+        if (chat) chat->toggle_find_bar();
+    };
     hooks.on_toggle_terminal_pane = [this](bool show) {
         if (auto& p = aui_.GetPane("terminal"); p.IsOk()) {
             p.Show(show);

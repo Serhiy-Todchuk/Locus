@@ -37,6 +37,16 @@ inline constexpr const char* kChatPresetChoice   = "locus.chat.preset_choice";
 inline constexpr const char* kChatSlashPopup     = "locus.chat.slash_popup";
 inline constexpr const char* kChatMentionPopup   = "locus.chat.mention_popup";
 
+// Chat find-in-conversation bar (S5.Z task 2).
+inline constexpr const char* kChatFindBar        = "locus.chat.find_bar";
+inline constexpr const char* kChatFindInput      = "locus.chat.find_input";
+inline constexpr const char* kChatFindCounter    = "locus.chat.find_counter";
+inline constexpr const char* kChatFindPrevBtn    = "locus.chat.find_prev_btn";
+inline constexpr const char* kChatFindNextBtn    = "locus.chat.find_next_btn";
+inline constexpr const char* kChatFindCaseToggle = "locus.chat.find_case_toggle";
+inline constexpr const char* kChatFindCloseBtn   = "locus.chat.find_close_btn";
+inline constexpr const char* kChatFindBtn        = "locus.chat.find_btn";
+
 // --- Activity panel -------------------------------------------------------
 inline constexpr const char* kActivityPanel    = "locus.activity.panel";
 inline constexpr const char* kActivityNotebook = "locus.activity.notebook";

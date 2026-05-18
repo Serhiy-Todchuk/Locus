@@ -49,13 +49,13 @@ Write laconically. Engineers, not book writers. Narrow wording, no padding -- bu
 
 ## Current Stage
 
-**M5 -- Polish, UX & Performance -- in progress.** Done: S5.A, S5.B, S5.C, S5.D, S5.F, S5.G, S5.I, S5.J, S5.K, S5.L, S5.M, S5.O, S5.P, S5.Q, S5.R, S5.S. Per-stage detail in [roadmap/M5/](roadmap/M5/).
+**M5 -- Polish, UX & Performance -- in progress.** Done: S5.A, S5.B, S5.C, S5.D, S5.F, S5.G, S5.I, S5.J, S5.K, S5.L, S5.M, S5.O, S5.P, S5.Q, S5.R, S5.S, S5.Z (tasks 1, 2, 3). Per-stage detail in [roadmap/M5/](roadmap/M5/).
 
 **M4 -- Agent Quality -- complete.** Done: S4.A, S4.B, S4.D, S4.F, S4.G, S4.I, S4.J, S4.K, S4.L, S4.M, S4.N, S4.P, S4.R (Phase 1), S4.S, S4.T, S4.U, S4.V, S4.W, S4.X, S4.Y. Per-stage detail in [roadmap/M4/](roadmap/M4/). S4.C parked -- see [roadmap/backlog/S4.C-auto-verify.md](roadmap/backlog/S4.C-auto-verify.md).
 
 **M3 -- Refactoring -- complete.** S3.A through S3.L done. Per-stage detail in [roadmap/M3/](roadmap/M3/).
 
-Note: M3 is Refactoring (not Agent Quality). Renumbering trail: original M3 -> M4 (Agent Quality), original M4 -> M6 (Connected), new M5 (Polish, UX & Performance) inserted. Roadmap index: [roadmap.md](roadmap.md).
+Note: M3 is Refactoring (not Agent Quality). Renumbering trail: original M3 -> M4 (Agent Quality), original M4 -> M6 (Connected & Misc), new M5 (Polish, UX & Performance) inserted. M6 was later renamed from "Connected" to "Connected & Misc" once non-connectivity stages started landing there. Roadmap index: [roadmap.md](roadmap.md).
 
 ### Key invariants
 
@@ -388,6 +388,8 @@ Core is a static lib (`locus_core`). Both `locus` (exe) and `locus_tests` link i
 | `src/frontends/gui/compaction_dialog.h/cpp` | Context compaction modal: strategy B/C radio, N-turns slider, message preview, before/after token counts. | `CompactionDialog`, `CompactionChoice` |
 | `src/frontends/gui/file_tree_panel.h/cpp` | File tree sidebar: wxTreeCtrl with lazy-loading from IndexQuery, index stats, re-index gauge. | `FileTreePanel` |
 | `src/frontends/gui/settings_dialog.h/cpp` | Settings modal: LLM endpoint/model/temperature/context, index exclude patterns. | `SettingsDialog` |
+| `src/frontends/gui/notification_sounds.h/cpp` | Per-event sound alerts (Windows-only). Maps four `Kind`s to distinct `PlaySoundW` aliases -- `SystemExclamation` (tool approval), `SystemQuestion` (ask_user), `SystemAsterisk` (turn complete), `SystemHand` (compaction). `play(kind, cfg, frame)` is a no-op when the matching `WorkspaceConfig::Notifications` flag is off OR when `only_when_unfocused` is set and `frame` (or any of its owned modals -- checked via `GetAncestor(fg, GA_ROOTOWNER)`) is the foreground window. Called from `LocusFrame::on_agent_tool_pending` (split between the ask_user and approval-modal branches), `on_agent_turn_complete`, and `on_agent_compaction`. `winmm.lib` linked behind `$<$<PLATFORM_ID:Windows>:winmm>` so non-Windows builds compile as no-ops. | `notification_sounds::Kind`, `notification_sounds::play` |
+| `src/frontends/gui/settings/notifications_settings_panel.h/cpp` | Settings tab: four per-event sound toggles + one "Only when the Locus window isn't focused" gate. Writes to `WorkspaceConfig::Notifications`. Tab id `ui_names::kSettingsTabNotifications`. | `NotificationsSettingsPanel` |
 | `src/frontends/gui/memory_bank_panel.h/cpp` | S5.K dockable Memory Bank panel. AUI-docked on the right; default hidden, toggled via View > Memory Bank (Ctrl+M). Pure view over `MemoryStore` -- store is the source of truth, panel renders snapshots. Toolbar (search-as-you-type, source / tag / pinned-only filters, "Show deleted" toggle, "Clear"), `wxDataViewListCtrl` list, edit-in-place detail pane (content + tags + pinned + Save), and bulk-op buttons (Delete / Pin/Unpin / Add tags). Right-click context menu on rows. Search + filter changes go through a 200 ms debounce timer. Live updates: `on_activity_event` re-renders on `memory_added` / `memory_deleted` / `memory_searched` plus any `tool_result` whose summary names `add_memory` / `search_memory` (the agent-tool path emits the latter; only slash paths emit the former, so the panel watches both). When `capabilities.memory_bank` flips off mid-session, the panel auto-hides and the View menu item greys out via `LocusFrame::update_memory_bank_menu_state`. v1 deferred items (cross-linking to chat bubbles, zip import/export, "N new since last looked" badge) are intentionally absent -- the stage doc lists them as polish, not load-bearing. | `MemoryBankPanel` |
 | `src/frontends/gui/autostart.h/cpp` | Windows startup-on-login via HKCU Run key (opt-in). | `is_autostart_enabled()`, `set_autostart_enabled()` |
 | `src/frontends/gui/ansi_parser.h/cpp` | S5.B stateful, partial-sequence-safe ANSI escape parser. Lives in `locus_core` (no wx dependency) so unit tests link against it cleanly. Handles SGR (foreground 30-37/90-97, background 40-47/100-107, bold/dim/reset), erase-in-line / erase-in-display, and bare CR -> erase-line; recognises + drops 256-colour / truecolour / cursor-position / OSC. Output is a vector of `AnsiEvent` (text run + style, or one of the erase commands); state machine survives split-CSI and split-`ESC[` across chunk boundaries. | `AnsiParser`, `AnsiStyle`, `AnsiEvent` |
@@ -419,7 +421,7 @@ Core is a static lib (`locus_core`). Both `locus` (exe) and `locus_tests` link i
 | [roadmap/M3/](roadmap/M3/) | M3 Refactoring done -- one file per stage (S3.A-S3.L) |
 | [roadmap/M4/](roadmap/M4/) | M4 Agent Quality -- one file per stage (S4.A-S4.Y) |
 | [roadmap/M5/](roadmap/M5/) | M5 Polish, UX & Performance -- one file per stage (S5.A...) |
-| [roadmap/M6/](roadmap/M6/) | M6 Connected -- one file per stage (S6.1-S6.7) |
+| [roadmap/M6/](roadmap/M6/) | M6 Connected & Misc -- one file per stage (S6.1-S6.8) |
 | [roadmap/backlog/README.md](roadmap/backlog/README.md) | Unscheduled tasks + parked drafts (e.g. S4.E LSP) -- items recognised as worth doing but not yet promoted to a milestone |
 | [test-workspaces.md](test-workspaces.md) | Three concrete test cases -- read when scoping features |
 | [vision.md](vision.md) | Understanding the *why* behind any design decision |

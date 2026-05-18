@@ -48,7 +48,7 @@ VRAM, and models that need clear tools instead of giant pasted prompts.
 | M3 -- Refactoring | Complete | split agent/index/tools/GUI structure, threading docs, ADRs |
 | M4 -- Agent Quality | Complete | diff editing, undo, plan mode, MCP, memory, git, retrieval quality |
 | M5 -- Polish, UX & Performance | In progress | UI automation, terminal panel, capability toggles, global settings, inline diffs, LLMContext refactor landed; context-management polish still active |
-| M6 -- Connected | Planned | remote access, VS Code shim, web frontend, ZIM reader |
+| M6 -- Connected & Misc | Planned | remote access, VS Code shim, web frontend, ZIM reader, plus catch-all non-polish work that doesn't fit M5 |
 
 Two binaries ship from the same codebase:
 

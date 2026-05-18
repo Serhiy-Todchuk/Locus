@@ -1,0 +1,84 @@
+{
+  "name": "chat_find_bar",
+  "description": "S5.Z task 2 -- chat find bar. Two entry points: Ctrl+F (panel-level CHAR_HOOK) and the 'Find' button in the chat footer. Both reveal the find row at the top of the chat panel with input + counter + Prev/Next + Aa case toggle + close X. Esc closes from inside the input; the X button closes from the bar itself. Pure UI wiring -- no agent traffic, no LLM. Asserts every named widget is reachable once shown.",
+  "setup": {
+    "workspace": "tmp"
+  },
+  "steps": [
+    { "op": "launch" },
+    {
+      "op": "wait_for_window",
+      "args": { "title_prefix": "Locus", "timeout_ms": 20000 }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.chat.panel", "timeout_ms": 15000 }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.chat.find_btn", "timeout_ms": 5000 }
+    },
+    { "op": "screenshot", "args": { "name": "01_baseline" } },
+
+    { "op": "press_key", "args": { "key": "F", "modifiers": "CTRL" } },
+    { "op": "sleep", "args": { "ms": 300 } },
+    {
+      "op": "assert_visible",
+      "args": { "automation_id": "locus.chat.find_bar", "timeout_ms": 5000 }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.chat.find_input", "timeout_ms": 5000 }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.chat.find_counter", "timeout_ms": 5000 }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.chat.find_prev_btn", "timeout_ms": 5000 }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.chat.find_next_btn", "timeout_ms": 5000 }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.chat.find_case_toggle", "timeout_ms": 5000 }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.chat.find_close_btn", "timeout_ms": 5000 }
+    },
+
+    {
+      "op": "type",
+      "args": { "automation_id": "locus.chat.find_input", "text": "locus", "timeout_ms": 5000 }
+    },
+    { "op": "screenshot", "args": { "name": "02_find_bar_open_with_query" } },
+
+    { "op": "press_key", "args": { "key": "ESCAPE" } },
+    { "op": "sleep", "args": { "ms": 300 } },
+    { "op": "screenshot", "args": { "name": "03_find_bar_closed" } },
+
+    {
+      "op": "click",
+      "args": { "automation_id": "locus.chat.find_btn", "timeout_ms": 5000 }
+    },
+    { "op": "sleep", "args": { "ms": 300 } },
+    {
+      "op": "assert_visible",
+      "args": { "automation_id": "locus.chat.find_bar", "timeout_ms": 5000 }
+    },
+    { "op": "screenshot", "args": { "name": "04_find_bar_reopened_via_btn" } },
+
+    {
+      "op": "click",
+      "args": { "automation_id": "locus.chat.find_close_btn", "timeout_ms": 5000 }
+    },
+    { "op": "sleep", "args": { "ms": 300 } },
+    { "op": "screenshot", "args": { "name": "05_find_bar_closed_via_x" } },
+
+    { "op": "quit", "args": { "wait_ms": 5000 } }
+  ]
+}

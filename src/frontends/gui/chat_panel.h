@@ -197,10 +197,30 @@ public:
     // Append a system-style note into the chat (used by /help).
     void append_system_note(const wxString& html);
 
+    // S5.Z task 2 -- in-conversation find bar.  Toggled by the footer
+    // magnifier button + the View > Find in Conversation menu item (Ctrl+F).
+    // The menu accelerator is the only path that survives Win32 native
+    // controls (chat input is RichEdit, which swallows key messages before
+    // they propagate up the wx parent chain).  LocusFrame's MenuController
+    // hook resolves the active chat tab and calls toggle_find_bar.  Pure
+    // frontend; no agent-thread plumbing.
+    void toggle_find_bar();
+    bool is_find_bar_visible() const;
+
 private:
     void create_webview();
     void create_input();
     void create_footer();
+    void create_find_bar();
+
+    // S5.Z task 2 helpers.
+    void show_find_bar();
+    void hide_find_bar();
+    void find_apply();           // re-issues Find for current query, resets counter.
+    void find_step(bool forward);// Next / Prev with wrap.
+    void update_find_counter();
+    int  current_find_flags() const;
+    void on_find_input_key(wxKeyEvent& evt);
 
     static std::string build_chat_html();
 
@@ -253,6 +273,24 @@ private:
     tools::PermissionPreset preset_effective_   = tools::PermissionPreset::ask_before_edits;
     bool                   preset_is_runtime_  = false;
     PermissionPresetPickFn on_permission_preset_pick_;
+
+    // S5.Z task 2 find-in-chat bar.  Hidden by default; toggled via the
+    // View > Find in Conversation menu item (Ctrl+F) or the footer Find
+    // button.  Lives at the top of the chat panel's vertical sizer so it
+    // pushes chat content down rather than overlaying it (overlay would need
+    // a wxPopupTransientWindow which doesn't play well with WebView2's
+    // focus model).
+    wxPanel*      find_bar_         = nullptr;
+    wxTextCtrl*   find_input_       = nullptr;
+    wxStaticText* find_counter_     = nullptr;
+    wxButton*     find_prev_btn_    = nullptr;
+    wxButton*     find_next_btn_    = nullptr;
+    wxCheckBox*   find_case_toggle_ = nullptr;
+    wxButton*     find_close_btn_   = nullptr;
+    wxButton*     find_btn_         = nullptr; // footer magnifier toggle
+    long          find_total_       = 0;       // wxWebView::Find return for current query
+    long          find_index_       = 0;       // 1-based current match (0 when none)
+    wxString      find_active_query_;          // last non-empty query handed to Find()
 
     // Attached-context chip row.
     wxPanel*      attach_panel_  = nullptr;

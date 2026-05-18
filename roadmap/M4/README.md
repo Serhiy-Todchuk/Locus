@@ -38,5 +38,5 @@ Already landed (no action required):
 - [S3.L -- tool-catalog-hygiene](../M3/S3.L-tool-catalog-hygiene.md) -- every M4 stage that adds tools is authored against the `available()` / `visible_in_mode()` hooks instead of retrofitted.
 - [S3.G -- locus-session](../M3/S3.G-locus-session.md) -- bundles the per-workspace lifecycle so future M4 subsystems (LSP, MCP, process registry) slot in as one more `unique_ptr` member.
 - [S3.D -- indexer-split](../M3/S3.D-indexer-split.md).
-- [S3.B -- llm-client-split](../M3/S3.B-llm-client-split.md) -- `OpenAiTransport` + `IStreamDecoder` + `TokenCounter` + `LlmRouter` skeleton landed with [S4.N](S4.N-tool-call-robustness.md); the weak/strong split it seeded ([S4.Q](../backlog/S4.Q-multi-model.md)) is now parked in the backlog.
+- [S3.B -- llm-client-split](../M3/S3.B-llm-client-split.md) -- `OpenAiTransport` + `IStreamDecoder` + `TokenCounter` + `LlmRouter` skeleton landed with [S4.N](S4.N-tool-call-robustness.md); the weak/strong split it seeded ([S4.Q](../backlog/S4.Q-strong-weak-model.md)) is now parked in the backlog.
 - [S3.H -- src-layering](../M3/S3.H-src-layering.md) is a nice-to-have refactor with no hard M4 dependency; pick it up opportunistically when the touched files come up for other reasons.

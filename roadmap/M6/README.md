@@ -1,10 +1,10 @@
-# M6 -- Connected
+# M6 -- Connected & Misc
 
-**Goal**: Core accessible over LAN. VS Code sends editor context. Browser frontend works. Wikipedia works end-to-end.
+**Goal**: Core accessible over LAN. VS Code sends editor context. Browser frontend works. Wikipedia works end-to-end. Plus the non-connectivity work that doesn't fit M5's "polish" frame (storage migrations, on-demand skills, future expansions) -- the bucket is no longer narrowly themed.
 
 **Test workspaces unlocked**: All, from any device.
 
-**Note**: This milestone was previously numbered M5 (the "Connected" milestone). It was renumbered to M6 when a new M5 ("Polish, UX & Performance") was inserted ahead of it. Stage IDs were renumbered S5.x -> S6.x at the same time. File-level link stability is preserved within the new layout (all `S6.x-*.md` filenames match the new IDs).
+**Note**: This milestone was previously numbered M5 (the "Connected" milestone). It was renumbered to M6 when a new M5 ("Polish, UX & Performance") was inserted ahead of it, and renamed to "Connected & Misc" once it became clear additional non-connectivity tasks would land here (e.g. S6.8 delta-history archives). Stage IDs were renumbered S5.x -> S6.x at the same time. File-level link stability is preserved within the new layout (all `S6.x-*.md` filenames match the new IDs).
 
 ## Stages
 

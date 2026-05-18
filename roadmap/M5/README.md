@@ -4,7 +4,7 @@
 
 **Test workspaces unlocked**: WS1, WS2, WS3 (no new workspace requirements).
 
-**Why before M6 (Connected)**: M6 multiplies surface area (remote frontends, web UI, VS Code shim, ZIM reader). Polishing the local experience first means each new frontend in M6 inherits a well-shaped foundation rather than papering over rough edges in three places.
+**Why before M6 (Connected & Misc)**: M6 multiplies surface area (remote frontends, web UI, VS Code shim, ZIM reader, plus assorted non-polish work). Polishing the local experience first means each new frontend in M6 inherits a well-shaped foundation rather than papering over rough edges in three places.
 
 ## Stages (in execution order)
 
