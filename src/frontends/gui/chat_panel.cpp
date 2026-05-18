@@ -946,6 +946,7 @@ ChatPanel::ChatPanel(wxWindow* parent,
     footer->Add(footer_chips_->plan_chip(),   0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
     footer->Add(footer_chips_->commit_chip(), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
     footer->AddStretchSpacer();
+    footer->Add(auto_compact_cb_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
     footer->Add(compact_btn_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
     footer->Add(undo_btn_,    0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
     footer->Add(stop_btn_,    0, wxALIGN_CENTER_VERTICAL);
@@ -1025,6 +1026,15 @@ void ChatPanel::create_footer()
     compact_btn_->SetToolTip("Open context compaction dialog");
     compact_btn_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
         if (on_compact_) on_compact_();
+    });
+
+    auto_compact_cb_ = new wxCheckBox(this, wxID_ANY, "Auto");
+    auto_compact_cb_->SetToolTip(
+        "Auto-compact: when context usage crosses the configured threshold, "
+        "run the saved compaction layers automatically before the next turn.\n"
+        "Edit which layers run by clicking Compact and using its Save button.");
+    auto_compact_cb_->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent& evt) {
+        if (on_auto_compact_toggle_) on_auto_compact_toggle_(evt.IsChecked());
     });
 
     stop_btn_ = new wxButton(this, wxID_ANY, "Submit",
@@ -1370,6 +1380,11 @@ void ChatPanel::set_context_meter(int used, int limit,
 void ChatPanel::set_show_per_message_tokens(bool show)
 {
     show_per_message_tokens_ = show;
+}
+
+void ChatPanel::set_auto_compact_state(bool checked)
+{
+    if (auto_compact_cb_) auto_compact_cb_->SetValue(checked);
 }
 
 // ---------------------------------------------------------------------------

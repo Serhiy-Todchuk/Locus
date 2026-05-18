@@ -20,6 +20,11 @@ namespace locus {
 // and runs the same cascade auto-compact would.
 struct CompactionChoice {
     bool made = false;                       // false if user cancelled
+    // True when the user clicked "Save" instead of "Compact". Caller should
+    // persist `selection` + `custom_instructions` into
+    // WorkspaceConfig::Compaction (so they drive the next auto-compact run)
+    // and NOT run compaction immediately.
+    bool save_as_default = false;
     CompactionLayerSelection selection;
     std::string custom_instructions;         // per-run override
 
@@ -49,6 +54,7 @@ private:
 
     void on_any_changed(wxCommandEvent& evt);
     void on_ok(wxCommandEvent& evt);
+    void on_save(wxCommandEvent& evt);
 
     void update_preview();
     CompactionLayerSelection snapshot_selection() const;
@@ -77,6 +83,7 @@ private:
     wxStaticText* freed_label_   = nullptr;
     wxStaticText* layer_summary_ = nullptr;
     wxButton*     btn_ok_        = nullptr;
+    wxButton*     btn_save_      = nullptr;
     wxButton*     btn_cancel_    = nullptr;
 
     int used_tokens_  = 0;

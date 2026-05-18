@@ -31,6 +31,11 @@ namespace {
 CompactionLayerSelection selection_from_config(const WorkspaceConfig::Compaction& c)
 {
     CompactionLayerSelection sel;
+    sel.drop_redundant_tool_results           = c.layer_drop_redundant_tool_results;
+    sel.strip_large_tool_bodies               = c.layer_strip_large_tool_bodies;
+    sel.drop_old_reasoning                    = c.layer_drop_old_reasoning;
+    sel.drop_oldest_turns                     = c.layer_drop_oldest_turns;
+    sel.llm_summary                           = c.layer_llm_summary;
     sel.strip_threshold_tokens                = c.strip_threshold_tokens;
     sel.older_than_turns                      = c.older_than_turns;
     sel.keep_recent_turns                     = c.keep_recent_turns;
@@ -627,11 +632,6 @@ void AgentCore::process_message(const std::string& content)
                     double ratio = static_cast<double>(used) / eff;
                     if (ratio >= cc.auto_threshold) {
                         CompactionLayerSelection sel = selection_from_config(cc);
-                        sel.drop_redundant_tool_results = true;
-                        sel.strip_large_tool_bodies     = true;
-                        sel.drop_old_reasoning          = true;
-                        sel.drop_oldest_turns           = false;
-                        sel.llm_summary                 = true;
                         int target = static_cast<int>(eff * cc.warn_threshold);
                         if (target <= 0) target = eff / 2;
                         spdlog::warn("AgentCore: auto-compact firing ({} / {} = {:.0f}% of effective_limit, threshold {:.0f}%)",

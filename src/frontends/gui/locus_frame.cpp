@@ -443,6 +443,10 @@ void LocusFrame::configure_chat_panel(ChatPanel* chat, LocusTab& tab)
                             workspace_.config().chat_diff_context_lines,
                             workspace_.config().chat_diff_collapse_threshold);
     chat->set_show_per_message_tokens(workspace_.config().ui_show_per_message_tokens);
+    chat->set_auto_compact_state(workspace_.config().compaction.auto_enabled);
+    chat->set_on_auto_compact_toggle([this](bool enabled) {
+        on_auto_compact_toggled(enabled);
+    });
     chat->set_system_prompt_bubble(agent_ptr->context().system_prompt());
     chat->set_on_delete_message([agent_ptr](int history_id) {
         agent_ptr->delete_message(history_id);
@@ -973,6 +977,19 @@ void LocusFrame::on_manage_sessions(bool prefilter_cleanup)
 // Compaction / Settings
 // ---------------------------------------------------------------------------
 
+void LocusFrame::on_auto_compact_toggled(bool enabled)
+{
+    if (workspace_.config().compaction.auto_enabled == enabled) return;
+    workspace_.config().compaction.auto_enabled = enabled;
+    workspace_.save_config();
+    // Mirror the new state into every other tab so all chat footers stay
+    // in sync (the originating tab's checkbox already reflects the click).
+    for (auto& [tab_id, ui] : tabs_ui_) {
+        if (ui.chat) ui.chat->set_auto_compact_state(enabled);
+    }
+    SetStatusText(enabled ? "Auto-compact enabled" : "Auto-compact disabled", 0);
+}
+
 void LocusFrame::show_compaction_dialog()
 {
     auto& agent = session_.active_tab().agent();
@@ -983,7 +1000,21 @@ void LocusFrame::show_compaction_dialog()
                           workspace_.config().compaction);
     if (dlg.ShowModal() == wxID_OK) {
         auto choice = dlg.result();
-        if (choice.made) {
+        if (choice.save_as_default) {
+            auto& cc = workspace_.config().compaction;
+            cc.layer_drop_redundant_tool_results = choice.selection.drop_redundant_tool_results;
+            cc.layer_strip_large_tool_bodies     = choice.selection.strip_large_tool_bodies;
+            cc.layer_drop_old_reasoning          = choice.selection.drop_old_reasoning;
+            cc.layer_drop_oldest_turns           = choice.selection.drop_oldest_turns;
+            cc.layer_llm_summary                 = choice.selection.llm_summary;
+            cc.strip_threshold_tokens                = choice.selection.strip_threshold_tokens;
+            cc.older_than_turns                      = choice.selection.older_than_turns;
+            cc.keep_recent_turns                     = choice.selection.keep_recent_turns;
+            cc.summary_max_tokens                    = choice.selection.summary_max_tokens;
+            cc.custom_summary_instructions           = choice.custom_instructions;
+            workspace_.save_config();
+            SetStatusText("Auto-compact defaults saved", 0);
+        } else if (choice.made) {
             agent.run_compaction(choice.selection, /*target=*/0,
                                    choice.custom_instructions);
             SetStatusText("Context compaction queued", 0);

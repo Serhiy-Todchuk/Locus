@@ -203,6 +203,17 @@ struct WorkspaceConfig {
         double warn_threshold  = 0.70;
         double auto_threshold  = 0.85;
 
+        // Which cascade layers auto-compact runs (and the initial state of
+        // the per-layer checkboxes in the /compact dialog). Persisted via
+        // the dialog's Save button so the user can tailor the automatic
+        // cascade without editing config.json. Defaults match the original
+        // hardcoded auto cascade (1+2+3+6).
+        bool   layer_drop_redundant_tool_results = true;
+        bool   layer_strip_large_tool_bodies     = true;
+        bool   layer_drop_old_reasoning          = true;
+        bool   layer_drop_oldest_turns           = false;
+        bool   layer_llm_summary                 = true;
+
         // Per-layer knobs (snapshot copied into the pipeline at run time).
         int    strip_threshold_tokens                = 1000;
         int    older_than_turns                      = 3;

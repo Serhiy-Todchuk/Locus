@@ -148,6 +148,21 @@ WorkspaceConfig workspace_config_from_json(const json& j)
         if (c.contains("custom_summary_instructions"))
             cfg.compaction.custom_summary_instructions =
                 c["custom_summary_instructions"].get<std::string>();
+        if (c.contains("layer_drop_redundant_tool_results"))
+            cfg.compaction.layer_drop_redundant_tool_results =
+                c["layer_drop_redundant_tool_results"].get<bool>();
+        if (c.contains("layer_strip_large_tool_bodies"))
+            cfg.compaction.layer_strip_large_tool_bodies =
+                c["layer_strip_large_tool_bodies"].get<bool>();
+        if (c.contains("layer_drop_old_reasoning"))
+            cfg.compaction.layer_drop_old_reasoning =
+                c["layer_drop_old_reasoning"].get<bool>();
+        if (c.contains("layer_drop_oldest_turns"))
+            cfg.compaction.layer_drop_oldest_turns =
+                c["layer_drop_oldest_turns"].get<bool>();
+        if (c.contains("layer_llm_summary"))
+            cfg.compaction.layer_llm_summary =
+                c["layer_llm_summary"].get<bool>();
     }
 
     if (j.contains("ui")) {
@@ -286,7 +301,12 @@ json workspace_config_to_json(const WorkspaceConfig& cfg)
             {"archive_keep_count",                 cfg.compaction.archive_keep_count},
             {"preserve_short_user_msgs_max_tokens",  cfg.compaction.preserve_short_user_msgs_max_tokens},
             {"preserve_short_tool_calls_max_tokens", cfg.compaction.preserve_short_tool_calls_max_tokens},
-            {"custom_summary_instructions",        cfg.compaction.custom_summary_instructions}
+            {"custom_summary_instructions",        cfg.compaction.custom_summary_instructions},
+            {"layer_drop_redundant_tool_results",  cfg.compaction.layer_drop_redundant_tool_results},
+            {"layer_strip_large_tool_bodies",      cfg.compaction.layer_strip_large_tool_bodies},
+            {"layer_drop_old_reasoning",           cfg.compaction.layer_drop_old_reasoning},
+            {"layer_drop_oldest_turns",            cfg.compaction.layer_drop_oldest_turns},
+            {"layer_llm_summary",                  cfg.compaction.layer_llm_summary}
         }},
         {"ui", {
             {"show_per_message_tokens", cfg.ui_show_per_message_tokens}

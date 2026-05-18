@@ -61,32 +61,32 @@ void CompactionDialog::create_controls(int used_tokens, int limit_tokens)
     freed_label_->SetForegroundColour(wxColour(76, 175, 80));
     layer_summary_ = new wxStaticText(this, wxID_ANY, "");
 
-    // Per-layer checkboxes. Defaults mirror the auto-compact cascade
-    // (1+2+3+6); layer 5 (mechanical drop) is off so the user gets a
-    // faithful summary first.
+    // Per-layer checkboxes. Initial state mirrors the saved auto-compact
+    // cascade (config-driven so the Save button round-trips); defaults if
+    // never saved match the original hardcoded auto cascade 1+2+3+6.
     cb_layer1_ = new wxCheckBox(this, ID_LAYER1,
         "Drop redundant tool results  (None)");
-    cb_layer1_->SetValue(true);
+    cb_layer1_->SetValue(cfg_.layer_drop_redundant_tool_results);
     cb_layer1_->SetName(ui_names::kCompactionStrategyB);  // re-use existing automation id
     gui::apply_locus_accessible_name(cb_layer1_);
 
     cb_layer2_ = new wxCheckBox(this, ID_LAYER2,
         "Strip large tool bodies  (Low -- header retained)");
-    cb_layer2_->SetValue(true);
+    cb_layer2_->SetValue(cfg_.layer_strip_large_tool_bodies);
 
     cb_layer3_ = new wxCheckBox(this, ID_LAYER3,
         "Drop reasoning from older turns  (None for replay)");
-    cb_layer3_->SetValue(true);
+    cb_layer3_->SetValue(cfg_.layer_drop_old_reasoning);
 
     cb_layer5_ = new wxCheckBox(this, ID_LAYER5,
         "Drop oldest turn pairs  (Mechanical -- escalation only)");
-    cb_layer5_->SetValue(false);
+    cb_layer5_->SetValue(cfg_.layer_drop_oldest_turns);
     cb_layer5_->SetName(ui_names::kCompactionStrategyC);
     gui::apply_locus_accessible_name(cb_layer5_);
 
     cb_layer6_ = new wxCheckBox(this, ID_LAYER6,
         "LLM summary of dropped span  (Lossy; costs one LLM call)");
-    cb_layer6_->SetValue(true);
+    cb_layer6_->SetValue(cfg_.layer_llm_summary);
 
     // Per-layer knobs.
     sp_strip_threshold_ = new wxSpinCtrl(this, ID_STRIP_THRESHOLD, "",
@@ -112,6 +112,10 @@ void CompactionDialog::create_controls(int used_tokens, int limit_tokens)
     gui::apply_locus_accessible_name(tx_custom_instructions_);
 
     btn_ok_     = new wxButton(this, wxID_OK, "Compact");
+    btn_save_   = new wxButton(this, wxID_ANY, "Save");
+    btn_save_->SetToolTip(
+        "Save current selection as auto-compact defaults. "
+        "Does not run compaction now.");
     btn_cancel_ = new wxButton(this, wxID_CANCEL, "Cancel");
 
     auto rebind = [&](wxWindow* w) {
@@ -126,6 +130,7 @@ void CompactionDialog::create_controls(int used_tokens, int limit_tokens)
     rebind(sp_keep_recent_); rebind(sp_summary_tokens_);
 
     btn_ok_->Bind(wxEVT_BUTTON, &CompactionDialog::on_ok, this);
+    btn_save_->Bind(wxEVT_BUTTON, &CompactionDialog::on_save, this);
 }
 
 void CompactionDialog::layout()
@@ -198,6 +203,7 @@ void CompactionDialog::layout()
     auto* btn_sizer = new wxBoxSizer(wxHORIZONTAL);
     btn_sizer->AddStretchSpacer();
     btn_sizer->Add(btn_cancel_, 0, wxRIGHT, 4);
+    btn_sizer->Add(btn_save_,   0, wxRIGHT, 4);
     btn_sizer->Add(btn_ok_, 0);
     sizer->Add(btn_sizer, 0, wxEXPAND | wxALL, 10);
 
@@ -216,6 +222,20 @@ void CompactionDialog::on_any_changed(wxCommandEvent& /*evt*/)
 void CompactionDialog::on_ok(wxCommandEvent& /*evt*/)
 {
     choice_.made                = true;
+    choice_.save_as_default     = false;
+    choice_.selection           = snapshot_selection();
+    choice_.custom_instructions = tx_custom_instructions_
+        ? tx_custom_instructions_->GetValue().ToStdString()
+        : std::string{};
+    EndModal(wxID_OK);
+}
+
+void CompactionDialog::on_save(wxCommandEvent& /*evt*/)
+{
+    // Same snapshot as Compact, but the caller persists it to
+    // WorkspaceConfig::Compaction and does NOT run compaction.
+    choice_.made                = false;
+    choice_.save_as_default     = true;
     choice_.selection           = snapshot_selection();
     choice_.custom_instructions = tx_custom_instructions_
         ? tx_custom_instructions_->GetValue().ToStdString()

@@ -1,6 +1,6 @@
 - Auto-compaction toggle
-- Multi LLM + select toggle in chat panel bottom
 - Permission presets + select toggle in chat panel bottom
+- Multi LLM + select toggle in chat panel bottom
 - Ask user tool with pre-determined answers
 - Voice chat input
 - Add image attachment for LLM prompt

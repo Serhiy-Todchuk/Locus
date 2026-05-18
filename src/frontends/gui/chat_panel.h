@@ -122,6 +122,14 @@ public:
     void set_show_per_message_tokens(bool show);
     void set_generation_progress(int chars, int est_tokens);
 
+    // S5.N -- auto-compact toggle in the chat footer. LocusFrame mirrors
+    // the workspace config's compaction.auto_enabled value here and
+    // listens for user toggles via set_on_auto_compact_toggle().
+    void set_auto_compact_state(bool checked);
+    void set_on_auto_compact_toggle(std::function<void(bool)> cb) {
+        on_auto_compact_toggle_ = std::move(cb);
+    }
+
     // S5.G -- collapsed system-prompt bubble at the top of the chat. Renders
     // the full prompt text + per-section breakdown chips. Owned by AgentCore;
     // the chat panel just displays. Call once at construction (and on session
@@ -202,6 +210,7 @@ private:
     // Callbacks from LocusFrame.
     std::function<void(const std::string&)> on_send_;
     std::function<void()>                    on_compact_;
+    std::function<void(bool)>                on_auto_compact_toggle_;
     std::function<void()>                    on_stop_;
     std::function<void()>                    on_undo_;
     std::function<void(AgentMode)>           on_mode_pick_;
@@ -213,6 +222,7 @@ private:
     wxWebView*    webview_       = nullptr;
     wxTextCtrl*   input_         = nullptr;
     wxButton*     compact_btn_   = nullptr;
+    wxCheckBox*   auto_compact_cb_ = nullptr;
     wxButton*     stop_btn_      = nullptr;
     wxButton*     undo_btn_      = nullptr;
     wxToggleButton* mode_chat_btn_    = nullptr;

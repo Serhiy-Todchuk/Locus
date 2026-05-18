@@ -191,6 +191,11 @@ private:
     // out so install_tab_ui can call it without massive duplication.
     void configure_chat_panel(ChatPanel* chat, LocusTab& tab);
 
+    // S5.N -- user toggled the "Auto" checkbox in some tab's chat footer.
+    // Mirrors the new state into workspace config, persists, and broadcasts
+    // to every other open tab so they all reflect the same state.
+    void on_auto_compact_toggled(bool enabled);
+
     // Workspace-level resources, owned by LocusSession.
     LocusSession& session_;
     Workspace&    workspace_;

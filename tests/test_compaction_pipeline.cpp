@@ -119,6 +119,14 @@ TEST_CASE("[s5.f][config] compaction block round-trips through JSON",
     cfg.compaction.preserve_short_tool_calls_max_tokens = 0;  // disabled
     cfg.compaction.custom_summary_instructions =
         "preserve all file paths and test commands";
+    // S5.N -- per-layer flags. Flip non-default values to verify the round
+    // trip carries them faithfully; the Save button in CompactionDialog
+    // depends on this so users can persist their layer choices.
+    cfg.compaction.layer_drop_redundant_tool_results = false;
+    cfg.compaction.layer_strip_large_tool_bodies     = false;
+    cfg.compaction.layer_drop_old_reasoning          = false;
+    cfg.compaction.layer_drop_oldest_turns           = true;
+    cfg.compaction.layer_llm_summary                 = false;
 
     auto j = workspace_config_to_json(cfg);
     auto parsed = workspace_config_from_json(j);
@@ -135,6 +143,11 @@ TEST_CASE("[s5.f][config] compaction block round-trips through JSON",
     REQUIRE(parsed.compaction.preserve_short_tool_calls_max_tokens == 0);
     REQUIRE(parsed.compaction.custom_summary_instructions ==
             "preserve all file paths and test commands");
+    REQUIRE(parsed.compaction.layer_drop_redundant_tool_results == false);
+    REQUIRE(parsed.compaction.layer_strip_large_tool_bodies     == false);
+    REQUIRE(parsed.compaction.layer_drop_old_reasoning          == false);
+    REQUIRE(parsed.compaction.layer_drop_oldest_turns           == true);
+    REQUIRE(parsed.compaction.layer_llm_summary                 == false);
 }
 
 TEST_CASE("[s5.f][config] compaction defaults", "[s5.f][config]")
