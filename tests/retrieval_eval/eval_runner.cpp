@@ -29,11 +29,15 @@ std::string normalise_slashes(std::string p)
 
 // Normalised single-token path for FTS5: replaces non-alphanumeric chars with
 // spaces so queries like "src/tools/file_tools.cpp" don't tokenise as the
-// special FTS column-spec syntax. Caller wraps the result in quotes.
+// special FTS column-spec syntax.
+//
+// The strip set mirrors IndexQuery::sanitise_fts_query in production. S5.N
+// added '/', '.', ',', ';' etc. after discovering real WS3 chat queries
+// ("HTTP/3", "TLS 1.3") raise `fts5: syntax error near X` against the
+// production index. Keep this list in sync with the production helper.
 std::string sanitise_for_fts(const std::string& q)
 {
-    // Drop FTS5-meta characters; bm25() tokenises on whitespace anyway.
-    static const std::string strip = "\"'():*-^!";
+    static const std::string strip = "\"'():*-^!/.,;?+=<>{}[]|&#@~\\$%`";
     std::string out;
     out.reserve(q.size());
     for (char c : q) {

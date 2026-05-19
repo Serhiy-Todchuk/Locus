@@ -87,10 +87,20 @@ IndexQuery::IndexQuery(Database& main_db, Database* vectors_db)
     : main_db_(main_db)
     , vectors_db_(vectors_db)
 {
-    // FTS5 search with BM25 ranking. Join with files to get abs_path for content reading.
+    // FTS5 search with BM25 ranking.
     // bm25() returns negative values where more negative = better match.
+    //
+    // snippet(files_fts, 1, '', '', '...', 24) reads the EXTRACTED content
+    // (column index 1 of files_fts is `content`) and returns a 24-token
+    // window centered on the best match, with '...' elision on either
+    // side. This sidesteps the original "open abs_path and slice raw bytes"
+    // path which dragged HTML/PDF/DOCX markup into snippets on non-code
+    // workspaces (a single Wikipedia article hit could push ~1200 tokens
+    // of CSS and table tags into the LLM response). S5.N investigation.
     stmt_search_text_ = main_db_.prepare(R"(
-        SELECT f.path, bm25(files_fts) AS rank, f.abs_path
+        SELECT f.path, bm25(files_fts) AS rank,
+               snippet(files_fts, 1, '', '', '...', 24),
+               f.abs_path
         FROM files_fts
         JOIN files f ON f.path = files_fts.path
         WHERE files_fts MATCH ?1
@@ -169,6 +179,30 @@ IndexQuery::~IndexQuery()
 
 // -- search_text --------------------------------------------------------------
 
+// Replace FTS5-special characters with spaces. Without this, natural-
+// language queries break the sqlite parser and return zero rows -- the
+// agent then reports "no matches" even though the article is sitting
+// right there in the index. Three real examples surfaced in S5.N's WS3
+// chat sessions:
+//   "HTTP/3"     -> `fts5: syntax error near "/"`
+//   "TLS 1.3"    -> `fts5: syntax error near "."`
+//   "TLS 1.3,"   -> `fts5: syntax error near ","`
+// FTS5's query grammar reserves more punctuation than the unicode61
+// tokenizer treats as separators, so the safe move is to strip every
+// punctuation char an LLM might emit. Keep alphanumerics + underscore.
+// Phrase-quoting + boolean operators (NOT/OR/NEAR/*/-/^) are sacrificed
+// at this layer; the agent's queries are natural-language anyway.
+static std::string sanitise_fts_query(const std::string& q)
+{
+    static const std::string strip = "\"'():*-^!/.,;?+=<>{}[]|&#@~\\$%`";
+    std::string out;
+    out.reserve(q.size());
+    for (char c : q) {
+        out += (strip.find(c) != std::string::npos) ? ' ' : c;
+    }
+    return out;
+}
+
 std::vector<SearchResult> IndexQuery::search_text(const std::string& query,
                                                   const SearchOptions& opts) const
 {
@@ -176,38 +210,55 @@ std::vector<SearchResult> IndexQuery::search_text(const std::string& query,
 
     std::vector<SearchResult> results;
 
+    const std::string sanitised = sanitise_fts_query(query);
+
     sqlite3_reset(stmt_search_text_);
-    sqlite3_bind_text(stmt_search_text_, 1, query.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt_search_text_, 1, sanitised.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_bind_int(stmt_search_text_, 2, opts.max_results);
+
+    // Pull the first query term for line-number recovery. Strip FTS5
+    // operators the user might have included (NOT/OR, parens, quotes).
+    std::string first_term = sanitised;
+    {
+        auto sp = first_term.find(' ');
+        if (sp != std::string::npos) first_term.resize(sp);
+        if (first_term == "NOT" || first_term == "OR") {
+            auto rest_start = query.find(' ');
+            first_term = (rest_start == std::string::npos)
+                ? std::string() : query.substr(rest_start + 1);
+            auto sp2 = first_term.find(' ');
+            if (sp2 != std::string::npos) first_term.resize(sp2);
+        }
+    }
 
     while (sqlite3_step(stmt_search_text_) == SQLITE_ROW) {
         SearchResult r;
         r.path = col_text(stmt_search_text_, 0);
         r.score = sqlite3_column_double(stmt_search_text_, 1);
-        std::string abs_path = col_text(stmt_search_text_, 2);
+        r.snippet = col_text(stmt_search_text_, 2);
+        r.line = 0;
 
-        // Read file content to find match line and snippet.
-        // For performance, read only first 64 KB.
-        std::string content;
-        {
-            std::ifstream f(abs_path, std::ios::binary);
-            if (f.is_open()) {
-                content.resize(65536);
-                f.read(content.data(), static_cast<std::streamsize>(content.size()));
-                content.resize(static_cast<size_t>(f.gcount()));
+        // Best-effort line recovery: search for the first query term in
+        // the raw file. Works for code-like files (raw == extracted) and
+        // gives a useful line. For doc files (HTML/PDF/DOCX) the raw file
+        // is markup -- the term still tends to appear somewhere, but the
+        // line points at raw bytes rather than the clean snippet. The
+        // search tool formatter omits the `:line` suffix when line==0,
+        // so files where the term is genuinely absent from raw bytes
+        // (extractor produced text that doesn't appear in source, e.g.
+        // PDFium decoding hex-encoded strings) stay clean.
+        if (!first_term.empty()) {
+            std::string abs_path = col_text(stmt_search_text_, 3);
+            if (!abs_path.empty()) {
+                std::ifstream f(abs_path, std::ios::binary);
+                if (f.is_open()) {
+                    std::string content(65536, '\0');
+                    f.read(content.data(), static_cast<std::streamsize>(content.size()));
+                    content.resize(static_cast<size_t>(f.gcount()));
+                    r.line = find_match_line(content, first_term);
+                }
             }
         }
-
-        // Extract first query term for line finding (strip FTS5 operators)
-        std::string first_term = query;
-        // Take first word, strip quotes/operators
-        auto sp = first_term.find(' ');
-        if (sp != std::string::npos) first_term.resize(sp);
-        // Strip leading NOT/OR
-        if (first_term == "NOT" || first_term == "OR") first_term = query.substr(sp + 1);
-
-        r.line = find_match_line(content, first_term);
-        r.snippet = extract_snippet(content, r.line);
 
         results.push_back(std::move(r));
     }
@@ -433,8 +484,14 @@ std::vector<SearchResult> IndexQuery::search_semantic(
             continue;
         }
 
-        if (h.snippet.size() > 500) {
-            h.snippet.resize(500);
+        // 250-char cap: each result line in a hybrid response carries one
+        // semantic snippet, so a 10-hit response previously cost ~5 KB of
+        // chunk text. On a 5000-article Wikipedia workspace the LLM doesn't
+        // need 500 chars of Wikipedia-infobox prose per hit to figure out
+        // which file to read next; 250 chars is enough to disambiguate.
+        // S5.N investigation -- see test-workspaces.md.
+        if (h.snippet.size() > 250) {
+            h.snippet.resize(250);
             h.snippet += "...";
         }
         r.snippet = std::move(h.snippet);

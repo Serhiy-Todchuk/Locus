@@ -51,6 +51,13 @@ public:
     bool is_streaming() const { return streaming_; }
     bool is_waiting_for_first_token() const { return waiting_for_first_token_; }
     int  current_assistant_id() const { return assistant_id_; }
+    // The dom_id of the most recently sealed assistant bubble. Both
+    // `finish_stream()` and `seal_bubble()` capture this before zeroing
+    // `assistant_id_`, so callers that fire AFTER the seal (e.g.
+    // on_history_message_added, which the agent loop dispatches once it
+    // commits the assistant message to history) can still pair the
+    // history_id with the right dom bubble for the hover-reveal X.
+    int  last_sealed_assistant_id() const { return last_sealed_assistant_id_; }
 
 private:
     RunJsFn run_js_;
@@ -60,8 +67,9 @@ private:
     std::string current_response_;
     std::string reasoning_buffer_;
     std::string current_reasoning_;
-    int         assistant_id_            = 0;
-    int         reasoning_id_            = 0;
+    int         assistant_id_              = 0;
+    int         last_sealed_assistant_id_  = 0;
+    int         reasoning_id_              = 0;
     bool        streaming_               = false;
     bool        in_flush_                = false;
     bool        waiting_for_first_token_ = false;

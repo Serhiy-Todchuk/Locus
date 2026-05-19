@@ -109,6 +109,7 @@ void ChatStreamRenderer::end_turn()
             run_js_(wxString::Format(
                 "var d=document.getElementById('msg-%d');if(d)d.remove();",
                 assistant_id_));
+            last_sealed_assistant_id_ = 0;  // empty bubble removed; no target
         } else {
             std::string html = markdown_to_html(current_response_);
             run_js_(wxString::Format(
@@ -116,6 +117,10 @@ void ChatStreamRenderer::end_turn()
                 assistant_id_, "'" + chat_js_escape(wxString::FromUTF8(html)) + "'"));
             run_js_(wxString::Format(
                 "removeClassFromMsg(%d, 'streaming-cursor');", assistant_id_));
+            // Hold the dom_id so a follow-up on_history_message_added (which
+            // arrives AFTER the agent loop has committed the assistant
+            // message to history) can still attach the hover-reveal X.
+            last_sealed_assistant_id_ = assistant_id_;
         }
     }
 
@@ -129,10 +134,11 @@ void ChatStreamRenderer::reset()
     token_buffer_.clear();
     current_reasoning_.clear();
     reasoning_buffer_.clear();
-    streaming_               = false;
-    waiting_for_first_token_ = false;
-    assistant_id_            = 0;
-    reasoning_id_            = 0;
+    streaming_                 = false;
+    waiting_for_first_token_   = false;
+    assistant_id_              = 0;
+    last_sealed_assistant_id_  = 0;
+    reasoning_id_              = 0;
 }
 
 void ChatStreamRenderer::seal_bubble()
@@ -162,6 +168,7 @@ void ChatStreamRenderer::seal_bubble()
             run_js_(wxString::Format(
                 "var d=document.getElementById('msg-%d');if(d)d.remove();",
                 assistant_id_));
+            last_sealed_assistant_id_ = 0;
         } else {
             if (!token_buffer_.empty()) {
                 current_response_ += token_buffer_;
@@ -174,6 +181,10 @@ void ChatStreamRenderer::seal_bubble()
                 "'" + chat_js_escape(wxString::FromUTF8(html)) + "'"));
             run_js_(wxString::Format(
                 "removeClassFromMsg(%d, 'streaming-cursor');", assistant_id_));
+            // S5.G follow-up: park the dom_id so the post-seal
+            // on_history_message_added can pair the hover-reveal X with
+            // the right bubble. See chat_stream_renderer.h.
+            last_sealed_assistant_id_ = assistant_id_;
         }
         assistant_id_ = 0;
         current_response_.clear();

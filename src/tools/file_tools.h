@@ -8,8 +8,12 @@ class ReadFileTool : public ITool {
 public:
     std::string name()        const override { return "read_file"; }
     std::string description() const override {
-        return "Read the contents of a file. Use offset and length to paginate large files. "
-               "Returns line-numbered content.";
+        return "Read the contents of a text file. Use offset and length to "
+               "paginate large files. Returns line-numbered content. "
+               "For binary document formats (PDF, DOCX, XLSX) read_file "
+               "returns raw bytes -- use `search` instead: those formats "
+               "are extracted to clean text at index time and are fully "
+               "searchable. `get_file_outline` also works on them.";
     }
     std::vector<ToolParam> params() const override {
         return {

@@ -103,7 +103,12 @@ struct LLMConfig {
     std::string model         = "";          // empty = use server default
     double      temperature   = 0.7;
     int         max_tokens    = 8192;
-    int         context_limit = 8192;        // total context window size
+    // 0 sentinel = "ask the server", resolved by LocusSession at startup
+    // from the LM Studio / Ollama / llama-server model-info endpoint.
+    // Hardcoding 8192 here used to silently cap 32k-context models to 8k
+    // and trigger spurious auto-compaction on big context windows.
+    int         context_limit = 0;
+
     int         timeout_ms    = 600000;      // stream stall timeout: abort if no bytes flow for this long. Not a total-request cap -- long reasoning streams are fine. 600s default covers prefill + a buffered <think> block on a 35B-MoE thinking model with multi-K-token context on consumer GPU; configurable per workspace via .locus/config.json llm.timeout_ms.
     ToolFormat  tool_format   = ToolFormat::Auto;
 

@@ -176,7 +176,12 @@ int main(int argc, char** argv) try
     // them. The initial index is synchronous (build_initial finished inside
     // the Workspace ctor), but the embedding worker is async.
     if (auto* w = ws.embedding_worker(); w && !args.no_wait) {
-        wait_for_embeddings(*w, /*max_seconds=*/600);
+        // S5.N WS2 is large enough (5000 articles × ~7 chunks = ~34k chunks)
+        // that even bge-small takes ~55 min to drain on CPU. Cap raised to
+        // 2 h so a single eval run can fully drain instead of needing
+        // multiple passes. The 30s-no-progress guard inside the function
+        // still short-circuits a stuck worker.
+        wait_for_embeddings(*w, /*max_seconds=*/7200);
     }
 
     const std::vector<int> ks = {1, 3, 5, 10};

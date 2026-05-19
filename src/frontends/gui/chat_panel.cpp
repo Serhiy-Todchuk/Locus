@@ -1818,8 +1818,17 @@ void ChatPanel::on_history_message_added(int history_id, MessageRole role,
         target_dom_id = last_user_dom_id_;
         last_user_dom_id_ = 0;
     } else if (role == MessageRole::assistant) {
-        // The renderer holds the most recent assistant bubble (open or sealed).
-        target_dom_id = renderer_ ? renderer_->current_assistant_id() : 0;
+        // Live path: the agent loop commits the assistant message to history
+        // AFTER the stream renderer has sealed the bubble and zeroed its
+        // assistant_id_. Fall back to the last-sealed dom_id so the
+        // hover-reveal X attaches on the same run instead of only after a
+        // session reload. (S5.G follow-up; pre-fix the X was visible only
+        // after close + reopen.)
+        if (renderer_) {
+            target_dom_id = renderer_->current_assistant_id();
+            if (target_dom_id <= 0)
+                target_dom_id = renderer_->last_sealed_assistant_id();
+        }
     }
     // system role isn't user-deletable; skip mapping.
 

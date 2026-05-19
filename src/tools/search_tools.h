@@ -41,8 +41,11 @@ public:
             {"path_glob",      "string",  "regex/ast modes: optional glob to limit which "
                                           "indexed files are searched (e.g. `**/*.cpp`).", false},
             {"case_sensitive", "boolean", "regex mode only: defaults to true.", false},
-            {"max_results",    "integer", "Maximum results (default 20 for text/symbols, "
-                                          "50 for regex/ast, 10 for semantic/hybrid).", false},
+            {"max_results",    "integer", "Maximum results (default 8 for text, "
+                                          "5 for semantic/hybrid, 10 for symbols, "
+                                          "50 for regex/ast). Raise it when you "
+                                          "want breadth; the defaults are tuned "
+                                          "for short-context local LLMs.", false},
             {"kind",           "string",  "symbols mode only: filter by kind "
                                           "(function, class, struct, method).", false},
             {"language",       "string",  "symbols mode: filter by language. "

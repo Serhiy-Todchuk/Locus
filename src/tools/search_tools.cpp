@@ -39,7 +39,14 @@ std::string SearchTool::description_for(IWorkspaceServices& ws) const
 
     // The base list always carries text + regex. `symbols`/`ast` follow
     // code-aware-search; `semantic`/`hybrid` follow semantic-search.
-    std::string desc = "Unified workspace search. `mode` selects the backend: "
+    std::string desc = "Unified workspace search. Indexed content is the "
+                       "EXTRACTED text from every file: source code as-is, "
+                       "Markdown / HTML stripped of markup, and PDF / DOCX / "
+                       "XLSX extracted via PDFium / OOXML parsers. These "
+                       "binary document formats are first-class searchable "
+                       "(spreadsheet cells, PDF body text, Word paragraphs) "
+                       "even though `read_file` only returns their raw "
+                       "bytes. `mode` selects the backend: "
                        "text (FTS5 keyword, default), regex (raw-content "
                        "ECMAScript regex, preserves punctuation/case)";
     if (code)     desc += ", symbols (code definitions), ast (Tree-sitter "
@@ -97,7 +104,10 @@ ToolResult SearchTextTool::execute(const ToolCall& call, IWorkspaceServices& ws,
                                     const std::atomic<bool>* /*cancel_flag*/)
 {
     std::string query = call.args.value("query", "");
-    int max_results = call.args.value("max_results", 20);
+    // Default tightened from 20 -> 8 in S5.N: local LLMs lose tokens fast
+    // on long search results; FTS5 ranks the right file at the top anyway.
+    // Caller can still pass max_results=20 when breadth matters.
+    int max_results = call.args.value("max_results", 8);
 
     if (query.empty())
         return error_result("Error: 'query' parameter is required");
@@ -261,7 +271,10 @@ ToolResult SearchSemanticTool::execute(const ToolCall& call, IWorkspaceServices&
     if (query.empty())
         return error_result("Error: 'query' parameter is required");
 
-    int max_results = call.args.value("max_results", 10);
+    // Default tightened from 10 -> 5 in S5.N (semantic mode). Semantic search
+    // on local-LLM-friendly workspaces hits MRR=~1.0 on most queries; the
+    // right file is almost always rank 1-2. Caller can override.
+    int max_results = call.args.value("max_results", 5);
 
     auto embedding = emb->embed_query(query);
 
@@ -751,7 +764,12 @@ ToolResult SearchHybridTool::execute(const ToolCall& call, IWorkspaceServices& w
     if (query.empty())
         return error_result("Error: 'query' parameter is required");
 
-    int max_results = call.args.value("max_results", 10);
+    // Default tightened from 10 -> 5 in S5.N (hybrid mode). Hybrid is the
+    // most token-heavy search path because each hit carries a snippet from
+    // either the BM25 or semantic side; a 10-hit response on a non-code
+    // workspace was costing ~1200 tokens. Caller can pass max_results=20
+    // when breadth matters (broad survey queries, retrieval eval).
+    int max_results = call.args.value("max_results", 5);
 
     auto embedding = emb->embed_query(query);
 
@@ -777,8 +795,9 @@ ToolResult SearchHybridTool::execute(const ToolCall& call, IWorkspaceServices& w
         << (use_rr ? " + rerank):\n" : "):\n");
     for (size_t i = 0; i < results.size(); ++i) {
         auto& r = results[i];
-        out << "\n[" << (i + 1) << "] " << r.path << ":" << r.line
-            << " (score: " << std::fixed << std::setprecision(4) << r.score << ")\n";
+        out << "\n[" << (i + 1) << "] " << r.path;
+        if (r.line > 0) out << ":" << r.line;
+        out << " (score: " << std::fixed << std::setprecision(4) << r.score << ")\n";
         out << r.snippet << "\n";
     }
 
