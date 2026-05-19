@@ -1,0 +1,18 @@
+{
+  "_about": "Gold-standard retrieval queries for WS3 (mixed personal-documents library built by scripts/build_ws3.ps1). The corpus has one RFC PDF per protocol, one DOCX, one XLSX, and five hand-authored Markdown notes that reference the RFCs. Queries exercise: keyword-direct hits, semantic synonymy, PDF extraction quality (older RFCs rendered via /pdfrfc/), and Markdown-vs-RFC cross-document synthesis. S5.N originally shipped each RFC twice (PDF + TXT) to test cross-format retrieval but the TXT duplicates depressed recall@K without adding extractor coverage; dropped post-investigation. Run: locus_retrieval_eval --workspace D:/Projects/LocusTestWorkspaces/WS3_Documents --queries tests/retrieval_eval/queries_ws3.json --out tests/retrieval_eval/results_ws3.md --baseline tests/retrieval_eval/baseline_ws3_none.json",
+  "queries": [
+    { "query": "which RFC defines HTTP/3 QUIC",                        "expected_files": ["rfcs/rfc9114.pdf"] },
+    { "query": "TCP three-way handshake sliding window",               "expected_files": ["rfcs/rfc793.pdf", "notes/networking.md"] },
+    { "query": "Ethernet address resolution protocol",                 "expected_files": ["rfcs/rfc826.pdf"] },
+    { "query": "DNS resource records A AAAA CNAME MX",                 "expected_files": ["rfcs/rfc1035.pdf", "notes/data-formats.md"] },
+    { "query": "JSON data interchange format specification",           "expected_files": ["rfcs/rfc8259.pdf", "notes/data-formats.md"] },
+    { "query": "TLS 1.3 zero round trip handshake forward secrecy",    "expected_files": ["rfcs/rfc8446.pdf", "notes/security.md"] },
+    { "query": "HTTP/2 binary framing multiplexing HPACK",             "expected_files": ["rfcs/rfc7540.pdf", "notes/web-protocols.md"] },
+    { "query": "UDP user datagram protocol connectionless",            "expected_files": ["rfcs/rfc768.pdf", "notes/networking.md"] },
+    { "query": "IPv4 internet protocol best effort datagram",          "expected_files": ["rfcs/rfc791.pdf", "notes/networking.md"] },
+    { "query": "HTTP/1.1 message syntax current specification",        "expected_files": ["rfcs/rfc9112.pdf", "notes/web-protocols.md"] },
+    { "query": "evolution of HTTP versions notes",                     "expected_files": ["notes/web-protocols.md"] },
+    { "query": "OSI layer 4 transport protocols notes",                "expected_files": ["notes/networking.md"] },
+    { "query": "open questions reading list TODO",                     "expected_files": ["notes/reading-list.md"] }
+  ]
+}

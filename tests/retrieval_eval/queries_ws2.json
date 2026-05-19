@@ -1,0 +1,19 @@
+{
+  "_about": "Gold-standard retrieval queries for WS2 (Simple English Wikipedia, Kiwix-extracted). Paths are workspace-relative; the build_ws2.ps1 script places articles under A/ with .html suffix. The DEFAULT corpus is the first 5000 articles alphabetical of the Simple English nopic ZIM -- if you raise -MaxArticles you may want to broaden expected_files. Queries that depend on later-alphabet articles (M-Z) are noted in the _coverage_note field where applicable; they'll only score against a full or larger subset. Run: locus_retrieval_eval --workspace D:/Projects/LocusTestWorkspaces/WS2_Wikipedia --queries tests/retrieval_eval/queries_ws2.json --out tests/retrieval_eval/results_ws2.md --baseline tests/retrieval_eval/baseline_ws2_none.json  (the --baseline path is intentionally nonexistent so the harness skips the WS1-baseline comparison)",
+  "queries": [
+    { "query": "what is the capital of Australia",                "expected_files": ["A/Australia.html", "A/Canberra.html"] },
+    { "query": "Albert Einstein theory of relativity",            "expected_files": ["A/Albert_Einstein.html"] },
+    { "query": "ancient Egypt pyramids pharaoh",                  "expected_files": ["A/Ancient_Egypt.html"] },
+    { "query": "Byzantine Empire Constantinople fall 1453",       "expected_files": ["A/Byzantine_Empire.html"] },
+    { "query": "Beethoven classical composer symphonies",         "expected_files": ["A/Ludwig_van_Beethoven.html"], "_coverage_note": "Article is in L-range; expand -MaxArticles or test on full corpus." },
+    { "query": "Charles Darwin evolution natural selection",      "expected_files": ["A/Charles_Darwin.html"] },
+    { "query": "DNA double helix structure",                      "expected_files": ["A/DNA.html"] },
+    { "query": "Earth orbit around the Sun",                      "expected_files": ["A/Earth.html"] },
+    { "query": "French Revolution 1789 storming Bastille",        "expected_files": ["A/French_Revolution.html"] },
+    { "query": "Galileo Galilei astronomy telescope",             "expected_files": ["A/Galileo_Galilei.html"] },
+    { "query": "human heart circulatory system",                  "expected_files": ["A/Heart.html"] },
+    { "query": "Industrial Revolution steam engine factories",    "expected_files": ["A/Industrial_Revolution.html"] },
+    { "query": "Japan Tokyo emperor",                             "expected_files": ["A/Japan.html"] },
+    { "query": "Krakatoa volcano 1883 eruption",                  "expected_files": ["A/Krakatoa.html"] }
+  ]
+}

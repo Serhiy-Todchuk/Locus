@@ -33,8 +33,12 @@ cmake --build build/release --target locus_retrieval_eval
 
 It will:
 1. Open the workspace (full index build runs synchronously in the ctor).
-2. Wait for the embedding queue to drain (capped at 600s -- set `--no-wait` to
-   skip).
+2. Wait for the embedding queue to drain (capped at 7200s = 2 h -- raised
+   from the original 600s in [S5.N](../../roadmap/M5/S5.N-non-code-workspace-proof.md)
+   because WS2's 5000-article corpus produces ~34k chunks and bge-small
+   needs ~55 min to drain on CPU. The 30-second-no-progress short-circuit
+   inside `wait_for_embeddings` still triggers for stuck workers, so the
+   cap doesn't affect WS1-scale runs in practice). Set `--no-wait` to skip.
 3. Run every query through all three methods.
 4. Write a markdown report to `--out` and print a summary to stdout.
 5. If `tests/retrieval_eval/baseline.json` exists, compare the run against it
@@ -77,6 +81,55 @@ locus_retrieval_eval --curate-from .locus/sessions > new_queries.json
 
 Hand-fill `expected_files` and merge into `queries.json`. This keeps the gold
 set anchored on questions a real user actually asked.
+
+## Non-code workspaces (S5.N)
+
+Two extra query files measure retrieval on the non-code demo workspaces:
+
+- [queries_ws2.json](queries_ws2.json) -- Simple English Wikipedia subset
+  (HTML-only corpus built by [scripts/build_ws2.ps1](../../scripts/build_ws2.ps1)).
+- [queries_ws3.json](queries_ws3.json) -- mixed personal-documents library
+  (RFCs as PDF + TXT, Apache POI samples, hand-authored Markdown notes,
+  built by [scripts/build_ws3.ps1](../../scripts/build_ws3.ps1)).
+
+Run them with the same harness, swapping `--workspace` + `--queries`.
+Pass `--baseline` at a nonexistent path so the harness skips the WS1
+baseline comparison (a WS1 baseline against WS2/WS3 queries would
+spuriously flag every metric as a regression):
+
+```
+locus_retrieval_eval --workspace D:/Projects/LocusTestWorkspaces/WS2_Wikipedia \
+  --queries  tests/retrieval_eval/queries_ws2.json \
+  --out      tests/retrieval_eval/results_ws2.md \
+  --baseline tests/retrieval_eval/baseline_ws2_none.json
+
+locus_retrieval_eval --workspace D:/Projects/LocusTestWorkspaces/WS3_Documents \
+  --queries  tests/retrieval_eval/queries_ws3.json \
+  --out      tests/retrieval_eval/results_ws3.md \
+  --baseline tests/retrieval_eval/baseline_ws3_none.json
+```
+
+**No baselines committed for WS2/WS3.** These workspaces aren't on every
+dev's disk; the committed `baseline.json` stays WS1-only. If a future
+retrieval refactor needs a regression guard on non-code corpora,
+reactivate by running `--write-baseline` against a freshly built WS2/WS3
+and committing the resulting per-workspace baseline file.
+
+**Pick the embedder profile that matches what you're measuring.** WS2's
+committed `results_ws2.md` ran on bge-small (small profile) because
+bge-m3 takes ~10 hours to embed 5000 articles on CPU. The numbers there
+are honest for that setup -- semantic recall 13/14 at full coverage --
+but they hide a known small-embedder limitation: gold queries that share
+vocabulary with the article body score well, gold queries that paraphrase
+the topic can drop out entirely. Concrete example from the S5.N
+acceptance run: *"Which scientist explained how species change over
+time?"* surfaces `A/Earth.html` rank-1 on small profile and Darwin
+nowhere in top-5, even though `A/Charles_Darwin.html` is indexed and
+ranks #1 the moment the query uses "evolution natural selection". See
+the "Small-profile paraphrase ceiling" subsection in
+[test-workspaces.md](../../test-workspaces.md) for the four-query table.
+Run with bge-m3 if your eval needs paraphrase robustness; budget the
+embedding wall time accordingly.
 
 ## Why no CI hook
 

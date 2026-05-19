@@ -106,6 +106,27 @@ The current codebase is a working local-agent application:
   inline diffs in chat, UI automation scripts, metrics view, and the `LLMContext`
   refactor that centralizes conversation-facing state.
 
+## Beyond code: document folders + offline knowledge bases
+
+Locus indexes PDFs, DOCX, XLSX, Markdown, HTML, JSON, and YAML the same way
+it indexes code: full-text + semantic + optional reranking, with the agent
+fetching what it needs via tools instead of pasting whole files into the
+prompt. Two ready-made demo workspaces live under
+[scripts/](scripts/):
+
+```
+pwsh ./scripts/build_ws3.ps1
+locus_gui.exe D:\Projects\LocusTestWorkspaces\WS3_Documents
+```
+
+Then ask: **"Which RFC defines HTTP/3?"** -- the agent runs hybrid
+retrieval, opens `rfcs/rfc9114.pdf`, and answers with a citation. The
+matching offline-knowledge-base demo (`build_ws2.ps1`) builds a Simple
+English Wikipedia subset from a Kiwix `.zim` snapshot. See
+[test-workspaces.md](test-workspaces.md) and
+[tests/manual/non-code-workspaces.md](tests/manual/non-code-workspaces.md)
+for the full walkthrough.
+
 ## How It Works
 
 Locus runs against one local workspace folder at a time. It builds a search index,
@@ -195,6 +216,27 @@ large or semantically diverse workspaces it loses recall first -- pick the
 small profile if you're disk-constrained, English-only, and your queries lean
 lexical; otherwise the recommended profile holds up better as the workspace
 grows.
+
+**Concrete example of the small-profile paraphrase ceiling** (from the
+S5.N WS2 acceptance run on Simple English Wikipedia, 5000 articles):
+
+- Query *"Which scientist explained how species change over time?"* on the
+  small profile -> ranks `Earth.html` first, doesn't surface `Charles_Darwin.html`
+  at all. The synonymy bridge between "species change over time" and
+  "evolution by natural selection" (the article's actual phrasing) is too
+  wide for bge-small at 384 dimensions.
+- Same workspace, same query, on the recommended profile (bge-m3) -> ranks
+  `Charles_Darwin.html` first.
+- Sanity check: small profile ranks Darwin first when the query uses
+  matching vocabulary -- *"evolution natural selection"* or *"Darwin"*
+  both put `Charles_Darwin.html` at rank 1.
+
+The takeaway: small profile works well when user queries lean lexical
+(they share words with the document); it falls down when the query
+paraphrases the topic in unrelated vocabulary. For agent workflows the
+LLM tends to retry with closer wording when the first search misses, so
+the practical hit is smaller than the worst case suggests -- but it's
+real, and tied to the embedder dimensionality, not to Locus.
 
 ```powershell
 # From the repo root. -ExecutionPolicy Bypass avoids permanently changing

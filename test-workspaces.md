@@ -40,114 +40,209 @@ Do not modify CLAUDE.md or any .md files under architecture/ without explicit in
 
 ## Workspace 2 -- Wikipedia (Kiwix)
 
-**Path**: TBD (location of extracted content or ZIM file)
+**Path**: `D:\Projects\LocusTestWorkspaces\WS2_Wikipedia\` (built by [scripts/build_ws2.ps1](scripts/build_ws2.ps1))
 **Access**: Read-only
 **Type**: Knowledge base
-**Scale**: Very large -- full English Wikipedia is ~22 million chunks when embedded
+**Scale**: 5,000 articles by default (cap configurable; full Simple English ZIM is ~250K articles)
 
-### The ZIM format problem
+### Setup
 
-Kiwix distributes Wikipedia as `.zim` files -- a single compressed archive containing
-all articles. A full English Wikipedia ZIM is ~90GB compressed (~21M articles).
+From the repo root:
 
-**Options for Locus:**
-
-#### Option A -- Native ZIM support (recommended long-term)
-Integrate `libzim` (official C/C++ library from the Kiwix project, MIT licensed).
-- Articles are read directly from the ZIM archive without extraction
-- No disk space wasted on decompression
-- Random access by article title or URL path
-- Locus treats the ZIM file as a virtual workspace -- the "files" are articles
-
-Technical requirements:
-- libzim as a vcpkg dependency (or bundled)
-- A ZIM-aware indexer that iterates articles via libzim API
-- Article text extracted as plain text / stripped HTML
-- FTS5 + embedding indexed over article content
-- `list_directory` maps to ZIM namespace/category structure
-
-#### Option B -- Kiwix HTTP server (easier short-term)
-Run `kiwix-serve` locally, Locus fetches articles via HTTP.
-- No libzim dependency
-- Locus treats it like a web search tool pointed at localhost
-- Loses the "fully offline single binary" advantage
-- Good for prototype testing before libzim integration
-
-#### Option C -- Pre-extracted HTML files
-Extract the ZIM to individual HTML files (kiwix-tools can do this).
-- Locus works with a folder of HTML files -- no special support needed
-- Cons: requires ~3x the disk space, millions of small files, slow filesystem
-- Only viable for a small subset (e.g. a topic-specific ZIM like "Wikipedia Medicine")
-
-**Plan**: Use Option B (kiwix-serve) for early testing. Implement Option A (libzim)
-as a planned feature -- it is the correct long-term solution and a meaningful differentiator.
-
-### What it tests
-- Semantic search on natural language text at massive scale
-- Hybrid search (keyword + semantic) for topic queries
-- Graceful handling of a read-only workspace with no code
-- Very large file/article counts -- index build time and query performance
-- "Find me everything about Byzantine fault tolerance" type queries
-
-### Expected LOCUS.md
-```markdown
-This is an offline copy of English Wikipedia sourced from Kiwix.
-All content is read-only -- do not attempt to write or modify anything.
-Articles cover all topics in the English Wikipedia as of the ZIM snapshot date.
-Prefer search_hybrid for topic questions. For specific article titles, use search_text.
-This workspace has no code -- do not suggest code-related tools.
+```
+pwsh ./scripts/build_ws2.ps1
 ```
 
-### Success criteria
-- "What is the capital of Mongolia?" -> finds and returns the correct article section
-- "Explain Byzantine fault tolerance" -> finds the relevant article and summarizes
-- "What articles relate to Vulkan graphics API?" -> returns ranked relevant articles
-- Queries return in < 2 seconds after index is built
+This downloads a Simple English Wikipedia ZIM (~250 MB), downloads
+`kiwix-tools` for `zimdump.exe`, extracts the first 5000 articles
+alphabetical into `<WorkspaceRoot>/A/*.html`, and writes a `LOCUS.md`
+that frames the workspace as read-only.
+
+To rebuild from scratch: `pwsh ./scripts/build_ws2.ps1 -Force`. To keep
+the full corpus instead of the 5000-article cap: `-MaxArticles 0`. The
+ZIM is cached under `D:\Projects\LocusTestWorkspaces\.cache\` so a
+second build doesn't re-download.
+
+### Disk footprint (default 5000-article subset)
+
+Measured 2026-05-18 against `wikipedia_en_simple_all_nopic_2026-05.zim`:
+
+| Artifact                              | Size      |
+|---|---|
+| Cached ZIM                            | 937 MB    |
+| Extracted articles (`A/*.html`)       | ~140 MB   |
+| Locus `.locus/index.db`               | 49 MB     |
+| Locus `.locus/vectors.db` (bge-small) | 90 MB (33,965 chunks × 384-dim Q8_0) |
+
+### Performance notes (measured)
+
+5000-article WS2 on Windows 11, CPU-only embedder, no GPU:
+
+- First index build (text + chunking): ~30 s
+- Embedding queue: **33,965 chunks**. bge-m3 (recommended profile)
+  embeds ~0.9 chunks/sec on CPU -- a full drain would take ~10 hours.
+  bge-small (small profile) embeds ~10 chunks/sec -- full drain in
+  ~55 min. **WS2 ships configured for the small profile** (set in
+  `.locus/config.json` -> `index.semantic_search.model = "bge-small-en-v1.5-Q8_0.gguf"`).
+  Switch to bge-m3 only when you've got hours to spare and the small
+  embedder's recall isn't enough.
+- Query latency (post-drain): text ~26 ms total / 14 queries;
+  semantic and hybrid ~4 s total each (cold model load on first query).
+- **Small-profile paraphrase ceiling (measured).** bge-small at 384
+  dimensions doesn't bridge wide synonymy gaps. Concrete example from
+  the S5.N WS2 acceptance run, all four queries against the same
+  workspace and same 5000-article corpus:
+
+  | Query                                                | Rank-1 hit             |
+  |---|---|
+  | "Which scientist explained how species change over time?" | `A/Earth.html` (wrong) |
+  | "species change over time scientist"                 | `A/Earth.html` (wrong) |
+  | "evolution natural selection"                        | `A/Charles_Darwin.html` |
+  | "Darwin"                                             | `A/Charles_Darwin.html` |
+
+  The Darwin article IS indexed (7 chunks, 13 KB of extracted text)
+  and BM25 finds it perfectly when the query uses matching vocabulary.
+  But the semantic embedder doesn't bridge "species change over time"
+  to the article's actual phrasing "evolution by natural selection",
+  so the *full* hybrid retrieval misses Darwin entirely on the
+  paraphrased query.
+
+  This is a real characteristic of bge-small on a 5000-article
+  corpus, not a Locus bug. The mitigations are: (a) keyword-anchored
+  queries for high-stakes lookups (the agent can rephrase its own
+  search if its first attempt misses), or (b) switching to bge-m3
+  on the recommended profile when paraphrase robustness matters.
+  Pre-S5.N retrieval-eval evidence has bge-m3 hitting MRR=1.000 on
+  the WS2 gold set, which confirms the larger embedder closes this
+  gap.
+- Headline retrieval at full coverage:
+  - search_text: 14/14, MRR=0.905, nDCG@10=0.929
+  - search_semantic: 14/14, **MRR=1.000, nDCG@10=1.000** (perfect rank
+    on Wikipedia-style queries -- the embedder strongly captures the
+    "what article is this about" signal)
+  - search_hybrid: 14/14, MRR=0.929, nDCG@10=0.947
+- Full per-query breakdown: [tests/retrieval_eval/results_ws2.md](tests/retrieval_eval/results_ws2.md).
+
+### Why a pre-extracted ZIM and not native libzim?
+
+[S6.2](roadmap/M6/S6.2-zim-reader.md) will integrate `libzim` (official
+C/C++ library from the Kiwix project, MIT licensed) so a `.zim` file
+can be opened as a virtual workspace without extraction -- the correct
+long-term path. S5.N delivers the non-code workspace proof on what we
+already have: HTML extraction, the existing indexer, and `zimdump` for
+one-time extraction. The same retrieval + agent loop will carry forward
+unchanged once S6.2 lands; only the file backend changes.
+
+### What it tests
+- Semantic search on natural-language text at moderate scale
+- Hybrid search (keyword + semantic) for topic queries
+- Read-only workspace with no code -- capability defaults + `LOCUS.md` policy
+- HTML extractor end-to-end at thousands-of-files volume
+- "Answer not present" framing on a deliberately small subset
+
+### Acceptance prompts
+
+Four WS2 prompts are part of S5.N's 10-prompt acceptance set; the full
+walkthrough lives in [tests/manual/non-code-workspaces.md](tests/manual/non-code-workspaces.md)
+Test 1. Summary of what each probes:
+
+- "What is the capital of Australia?" -> direct keyword retrieval + citation
+- "Compare TCP and UDP" -> cross-document synthesis
+- "Explain Byzantine fault tolerance" -> semantic > keyword (synonymy gap)
+- "What does this corpus say about quantum chromodynamics?" -> negative case
 
 ---
 
 ## Workspace 3 -- Personal Documents Folder
 
-**Path**: `C:\Users\serhi\Documents\` (or a curated subfolder)
-**Access**: Read-only (or very cautious read-write)
+**Path**: `D:\Projects\LocusTestWorkspaces\WS3_Documents\` (built by [scripts/build_ws3.ps1](scripts/build_ws3.ps1))
+**Access**: Read-only (enforced via `LOCUS.md`)
 **Type**: Personal document library
-**Scale**: Medium -- depends on contents, likely hundreds to low thousands of files
+**Scale**: Small (~30-40 files, ~10-20 MB) -- representative, not exhaustive
 
-Mixed file types: PDF, DOCX, XLSX, images, text files, etc.
+Mixed file types: PDF, TXT, DOCX, XLSX, Markdown -- one file per extractor
+path so the index exercises every extractor end-to-end.
 
 ### What it tests
-- PDF text extraction (requires a PDF library -- `pdfium` or `poppler`)
-- DOCX text extraction (requires XML parsing of `.docx` ZIP structure)
-- XLSX: at minimum, extract cell text (no formula evaluation needed)
-- Handling files with no extractable text (images, encrypted PDFs)
-- Read-only enforcement -- agent must never propose writes to personal documents
-- Mixed language content (if documents are in multiple languages)
+- PDF text extraction via PDFium (older RFCs via the auto-rendered
+  `/pdfrfc/` path -- worst-case for PDFium quality)
+- DOCX text extraction (miniz + pugixml)
+- XLSX cell text extraction
+- Markdown notes that reference content found in PDFs -- cross-document synthesis
+- Read-only enforcement via `LOCUS.md` policy framing (agent must refuse edits)
 
-### File format support needed
-| Format | Extraction method | Priority |
-|---|---|---|
-| `.md`, `.txt`, `.rst` | Direct read | Already handled |
-| `.pdf` | pdfium or poppler (C API) | High |
-| `.docx` | Unzip + parse `word/document.xml` | High |
-| `.xlsx` | Unzip + parse `xl/sharedStrings.xml` + sheets | Medium |
-| `.html`, `.htm` | Strip tags, extract text | Medium |
-| `.csv` | Direct read as text | Low |
-| Images, audio, video | Filename + metadata only | Low |
-| Encrypted / DRM PDF | Skip, log as unindexable | Required |
+### Setup
 
-### Expected LOCUS.md
-```markdown
-This is a personal documents folder. All files are read-only.
-Never propose creating, editing, or deleting any file in this workspace.
-Documents are in English. Mixed types: PDF, DOCX, text files.
-Focus on finding and summarizing relevant content from existing documents.
+```
+pwsh ./scripts/build_ws3.ps1
 ```
 
-### Success criteria
-- "Find my notes about [topic]" -> returns relevant document sections
-- "What PDFs do I have related to tax?" -> finds relevant files by content
-- "Summarize the key points of [document name]" -> reads and summarizes correctly
-- Encrypted or unreadable files are skipped gracefully with a logged warning
+Downloads 10 IETF RFCs as PDF (rfc-editor.org, public domain), fetches
+one DOCX + one XLSX sample from Apache POI test-data (Apache-2.0),
+writes five hand-authored Markdown notes that cross-reference the RFCs,
+and creates a `LOCUS.md` that frames the workspace as read-only.
+
+To rebuild: `pwsh ./scripts/build_ws3.ps1 -Force`.
+
+If the POI sample URLs rot, the script logs `[fail]` and continues
+without those files -- drop in your own `samples/*.docx` /
+`samples/*.xlsx` to keep extractor coverage complete.
+
+### Disk footprint
+
+Measured 2026-05-19 on the recommended profile (bge-m3):
+
+| Artifact                            | Size      |
+|---|---|
+| RFCs (10 × PDF)                     | ~3 MB     |
+| Samples (DOCX + XLSX)               | ~20 KB    |
+| Markdown notes (5 files)            | ~7 KB     |
+| Locus `.locus/index.db`             | ~2 MB     |
+| Locus `.locus/vectors.db` (bge-m3)  | ~4 MB (609 chunks × 1024-dim Q8_0) |
+
+### Performance notes (measured)
+
+- First index build: ~5 s
+- Embedding queue drain (recommended profile, bge-m3 on CPU): ~2 min
+  (609 chunks; small corpus is tractable on bge-m3)
+- Headline retrieval at full coverage:
+  - search_text: 6/13 (46%) -- formal RFC language doesn't align with
+    natural-language queries
+  - search_semantic: **13/13** (100%), MRR=0.88, nDCG@10=0.88
+  - search_hybrid: **13/13** (100%), MRR=0.87, nDCG@10=0.88
+- Full per-query breakdown: [tests/retrieval_eval/results_ws3.md](tests/retrieval_eval/results_ws3.md).
+
+### Bugs surfaced by the S5.N investigation
+
+Three real issues found while debugging the original 11/13 hit-rate. See
+[roadmap/backlog/README.md](roadmap/backlog/README.md) for production-side
+follow-ups; the WS3 evidence run has the per-workspace mitigations applied
+already.
+
+- **`index.max_file_size_kb = 1024`** silently dropped rfc9114.pdf
+  (1158 KB). Build script now pre-seeds `.locus/config.json` with
+  `max_file_size_kb = 4096`; production default raise is in the backlog.
+- **FTS5 `syntax error near "/"`** on "HTTP/3" queries. Eval harness
+  `sanitise_for_fts` now strips `/`; the same fix in
+  `IndexQuery::search_text` is in the backlog (chat-tool users currently
+  hit the same crash for HTTP/3, Node.js, K&R, etc.).
+- **Acronym vs spelled-out form** ("ARP" query vs RFC 826's literal
+  "Address Resolution Protocol" title). Updated the gold query to the
+  spelled-out form; the general acronym-expansion gap is a separate
+  retrieval-quality problem in the backlog.
+
+### Acceptance prompts
+
+Six WS3 prompts are part of S5.N's 10-prompt acceptance set; the full
+walkthrough lives in [tests/manual/non-code-workspaces.md](tests/manual/non-code-workspaces.md)
+Test 2. Summary of what each probes:
+
+- Which RFC defines HTTP/3 -> direct keyword + cross-format ranking
+- Outline of RFC 7540 -> PDFium heading extraction + outline tool
+- Summarise my web-protocols notes -> Markdown synthesis + RFC cross-ref
+- Find content in `samples/SampleSS.xlsx` -> XLSX extractor
+- "TLS 1.3 in my notes + which RFC" -> notes prose + PDF source synthesis
+- Ask for an edit to a note -> `LOCUS.md` read-only policy honoured
 
 ---
 
