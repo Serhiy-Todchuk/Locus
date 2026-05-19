@@ -1,4 +1,8 @@
-# M5 -- Polish, UX & Performance
+# M5 -- Polish, UX & Performance -- COMPLETE (2026-05-19)
+
+All 18 stages closed. S5.Z remains the parking lot if polish-shaped work
+surfaces post-close; reopening adds tasks to its list without re-opening the
+milestone as a whole.
 
 **Goal**: With the M4 engine in place, sand down the user-visible edges. UX refinements, performance optimization, robustness work, and quality-of-life touches that make the existing capability set feel fast, predictable, and discoverable. No big new subsystems -- this milestone is about the experience of using what we've built.
 

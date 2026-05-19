@@ -237,7 +237,8 @@
       "WebFetch(domain:api.github.com)",
       "Bash(curl -sSLI \"https://raw.githubusercontent.com/python-openxml/python-docx/master/tests/test_files/test.docx\")",
       "Bash(powershell -NoProfile -Command \"Get-ChildItem 'd:\\\\Projects\\\\AICodeAss\\\\src\\\\frontends\\\\gui\\\\chat_panel.cpp','d:\\\\Projects\\\\AICodeAss\\\\build\\\\release\\\\Release\\\\locus_gui.exe' | Select-Object FullName,LastWriteTime | Format-Table -AutoSize\")",
-      "Bash(git -C \"d:/Projects/AICodeAss\" status)"
+      "Bash(git -C \"d:/Projects/AICodeAss\" status)",
+      "WebFetch(domain:github.com)"
     ]
   }
 }

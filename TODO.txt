@@ -4,13 +4,20 @@
 - Voice chat input
 - Add image attachment for LLM prompt
 - FastDebug
+- Chat re-design - more strict shape of messages in chat - don't use round corners, smaller margins for better utilization of screen space; radius of corner rounding was indicating from which side the message came (from LLM or from user), use just line going from bubble to corresponding side of screen. U can apply some creativity here as long as U keep screen space utilization efficient.
+- There is tokens badge near every chat message... add to it tokens per second in case it is LLM response or thinking.
+- Fix "Control surface" section in About window, and in docs (README.md). Remove approval policies as something special. Put there flexibility/efficiency/transparency/control as benefits.
+- When we see tool call in the chat - we don't see the aruments. Shall we add expandable window with arguments? or show short version of pargs near tool name. For example - I would like to see at least search mode/type in the chat
+- Undo right on the tool call (edit_file, any other?)
+- explain me providing tools manifest every turn. Does claude code do the same? Other harnesses?
+- Is it good that we are not reading XLSX, DOCX and PDFs with read_file tool (or any other)? So the agent can search for something, but cannot read full info?
 
 - Claude Blender
 - GoodOldSoftware
 - free nvidia inference
 
 Have you added integration test and UI automation test (if needed)?
-Run integration tests and then AUI tests. The PC is yours until done.
-Run unit tests then integration tests and then AUI tests. The PC is yours until done.
+Run full integration suite and then full UIA suite. Fix if anything fails. The PC is yours until done.
+Run unit tests then integration tests and then UIA tests. The PC is yours until done.
 Short commit message?
 Wrap up - update docs/comments, then we're done.

@@ -38,7 +38,7 @@ VRAM, and models that need clear tools instead of giant pasted prompts.
 
 ## Project Status
 
-**Current stage: M5 -- Polish, UX & Performance** (in progress)
+**Current stage: M6 -- Connected & Misc** (planned). M5 closed 2026-05-19.
 
 | Milestone | Status | Notes |
 |---|---|---|
@@ -47,7 +47,7 @@ VRAM, and models that need clear tools instead of giant pasted prompts.
 | M2 -- Full Workspace Support | Complete | semantic search, document extraction, attachment flow |
 | M3 -- Refactoring | Complete | split agent/index/tools/GUI structure, threading docs, ADRs |
 | M4 -- Agent Quality | Complete | diff editing, undo, plan mode, MCP, memory, git, retrieval quality |
-| M5 -- Polish, UX & Performance | In progress | UI automation, terminal panel, capability toggles, global settings, inline diffs, LLMContext refactor landed; context-management polish still active |
+| M5 -- Polish, UX & Performance | Complete | UI automation, terminal panel, capability toggles, global settings, inline diffs, LLMContext refactor, compaction v2, chat/activity restructure, multi-tab, memory bank UI, permission presets, non-code workspace proof |
 | M6 -- Connected & Misc | Planned | remote access, VS Code shim, web frontend, ZIM reader, plus catch-all non-polish work that doesn't fit M5 |
 
 Two binaries ship from the same codebase:

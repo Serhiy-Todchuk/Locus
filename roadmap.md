@@ -31,7 +31,7 @@ This file is the milestone index. Stage detail lives in each milestone's own doc
 | **[M2 -- Full Workspace Support](roadmap/M2.md)** done | All 3 test workspaces functional | WS1, WS2 (Wikipedia), WS3 (Docs) |
 | **[M3 -- Refactoring](roadmap/M3/README.md)** done | Pay down architectural debt before the next big feature push (split god-classes, regularize layering, document threading model) | WS1 |
 | **[M4 -- Agent Quality](roadmap/M4/README.md)** done | Close the gap vs RooCode/Aider/Cline/OpenCode/Claude Code on the tech fundamentals of a coding agent (editing, verification, undo, planning, extensibility, retrieval quality) | WS1 |
-| **[M5 -- Polish, UX & Performance](roadmap/M5/README.md)** | Sand down the user-visible edges before multiplying frontends -- UX refinements, performance optimization, robustness, quality-of-life touches | WS1, WS2, WS3 |
+| **[M5 -- Polish, UX & Performance](roadmap/M5/README.md)** done | Sand down the user-visible edges before multiplying frontends -- UX refinements, performance optimization, robustness, quality-of-life touches | WS1, WS2, WS3 |
 | **[M6 -- Connected & Misc](roadmap/M6/README.md)** | Remote access, VS Code shim, web frontend, plus catch-all for non-polish work that doesn't fit M5 | All, from any device |
 
 M0-M2 each live in a single milestone file (completed history). M3, M4, M5, M6 use one folder per milestone with a `README.md` index plus one file per stage so each stays individually greppable as it moves from planned -> scoping -> in-progress.
