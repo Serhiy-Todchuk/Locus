@@ -18,7 +18,7 @@
 - [ ] **[S6.7](S6.7-skills.md)** -- Skills (On-Demand Capability Packs)
 - [ ] **[S6.8](S6.8-delta-history-archives.md)** -- Delta History Archives (replace S5.F snapshot chain with per-compaction deltas + chain walker)
 - [ ] **[S6.9](S6.9-macos-port.md)** -- macOS Port (CMake fork + POSIX process/MCP branches + .app bundle, three sub-stages A/B/C)
-- [ ] **[S6.10](S6.10-small-model-robustness.md)** -- Small-Model Robustness (JSON repair pre-pass for tool-call bodies + quality monitor with 4-detector auto-correction + strip past-turn thinking from LLM payload)
+- [ ] **[S6.10](S6.10-small-model-robustness.md)** -- Small-Model Robustness Pass (8 tasks: JSON repair pre-pass for tool-call bodies / quality monitor with 4-detector auto-correction / strip past-turn thinking from LLM payload / server-side grammar-constrained decoding / few-shot examples in tool descriptions / auto-detect model + auto-apply preset / anti-truncation detection for code writes / per-model sampler defaults)
 
 ## Dependencies
 
