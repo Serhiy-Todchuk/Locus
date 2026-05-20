@@ -79,6 +79,27 @@ bool AddMemoryTool::available(IWorkspaceServices& ws) const
     return w ? w->config().capabilities.memory_bank : true;
 }
 
+std::string AddMemoryTool::preview(const ToolCall& call) const
+{
+    std::string c;
+    if (call.args.contains("content") && call.args["content"].is_string())
+        c = call.args["content"].get<std::string>();
+    // Collapse any newlines so the chip-style bubble stays one line; truncate
+    // the body so a multi-paragraph memory doesn't smother the chat.
+    std::replace(c.begin(), c.end(), '\n', ' ');
+    std::replace(c.begin(), c.end(), '\r', ' ');
+    if (c.size() > 80) c = c.substr(0, 77) + "...";
+
+    std::string out = "add_memory: " + (c.empty() ? "(empty)" : c);
+
+    if (call.args.contains("tags")) {
+        auto tags = parse_tag_arg(call.args["tags"]);
+        if (!tags.empty()) out += "  tags=" + std::to_string(tags.size());
+    }
+    if (call.args.value("pinned", false)) out += "  [pinned]";
+    return out;
+}
+
 ToolResult AddMemoryTool::execute(const ToolCall& call, IWorkspaceServices& ws,
                                    const std::atomic<bool>* /*cancel_flag*/)
 {
@@ -140,6 +161,19 @@ bool SearchMemoryTool::available(IWorkspaceServices& ws) const
     if (ws.memory() == nullptr) return false;
     auto* w = ws.workspace();
     return w ? w->config().capabilities.memory_bank : true;
+}
+
+std::string SearchMemoryTool::preview(const ToolCall& call) const
+{
+    std::string q = call.args.value("query", "");
+    if (q.size() > 80) q = q.substr(0, 77) + "...";
+    std::string out = "search_memory";
+    if (!q.empty()) out += ": " + q;
+    if (call.args.contains("tags")) {
+        auto tags = parse_tag_arg(call.args["tags"]);
+        if (!tags.empty()) out += "  tags=" + std::to_string(tags.size());
+    }
+    return out;
 }
 
 ToolResult SearchMemoryTool::execute(const ToolCall& call, IWorkspaceServices& ws,

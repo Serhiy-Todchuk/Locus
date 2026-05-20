@@ -5,9 +5,7 @@
 - Add image attachment for LLM prompt
 - FastDebug
 - Chat re-design - more strict shape of messages in chat - don't use round corners, smaller margins for better utilization of screen space; radius of corner rounding was indicating from which side the message came (from LLM or from user), use just line going from bubble to corresponding side of screen. U can apply some creativity here as long as U keep screen space utilization efficient.
-- There is tokens badge near every chat message... add to it tokens per second in case it is LLM response or thinking.
 - Fix "Control surface" section in About window, and in docs (README.md). Remove approval policies as something special. Put there flexibility/efficiency/transparency/control as benefits.
-- When we see tool call in the chat - we don't see the aruments. Shall we add expandable window with arguments? or show short version of pargs near tool name. For example - I would like to see at least search mode/type in the chat
 - Undo right on the tool call (edit_file, any other?)
 - Is it good that we are not reading XLSX, DOCX and PDFs with read_file tool (or any other)? So the agent can search for something, but cannot read full info?
 - "Build kicked off in the background; harness will notify me when it finishes." - I want this features in Locus :)

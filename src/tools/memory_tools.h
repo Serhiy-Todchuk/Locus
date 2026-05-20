@@ -32,6 +32,7 @@ public:
     }
     ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::ask; }
     bool available(IWorkspaceServices& ws) const override;
+    std::string preview(const ToolCall& call) const override;
     ToolResult execute(const ToolCall& call, IWorkspaceServices& ws,
                        const std::atomic<bool>* cancel_flag = nullptr) override;
 };
@@ -58,6 +59,7 @@ public:
     }
     ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::auto_approve; }
     bool available(IWorkspaceServices& ws) const override;
+    std::string preview(const ToolCall& call) const override;
     ToolResult execute(const ToolCall& call, IWorkspaceServices& ws,
                        const std::atomic<bool>* cancel_flag = nullptr) override;
 };

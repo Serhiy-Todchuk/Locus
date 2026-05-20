@@ -43,6 +43,17 @@ std::vector<std::string> split_lines(const std::string& text)
 
 } // namespace
 
+std::string FilterOutputTool::preview(const ToolCall& call) const
+{
+    std::string mode    = call.args.value("mode", "regex");
+    std::string pattern = call.args.value("pattern", "");
+    if (pattern.size() > 60) pattern = pattern.substr(0, 57) + "...";
+    std::string out = "filter_output [" + mode + "]";
+    if (!pattern.empty()) out += ": " + pattern;
+    if (call.args.value("invert", false)) out += "  (invert)";
+    return out;
+}
+
 ToolResult FilterOutputTool::execute(const ToolCall& call,
                                       IWorkspaceServices& /*ws*/,
                                       const std::atomic<bool>* /*cancel_flag*/)

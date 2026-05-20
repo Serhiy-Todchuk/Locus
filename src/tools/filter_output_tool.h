@@ -47,6 +47,7 @@ public:
     ToolApprovalPolicy approval_policy() const override {
         return ToolApprovalPolicy::auto_approve;
     }
+    std::string preview(const ToolCall& call) const override;
     ToolResult execute(const ToolCall& call, IWorkspaceServices& ws,
                        const std::atomic<bool>* cancel_flag = nullptr) override;
 };

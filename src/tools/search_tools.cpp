@@ -59,6 +59,27 @@ std::string SearchTool::description_for(IWorkspaceServices& ws) const
     return desc;
 }
 
+std::string SearchTool::preview(const ToolCall& call) const
+{
+    std::string mode = call.args.value("mode", "text");
+    // Symbols mode reads `name`; ast mode's `query` is an S-expression -- a
+    // fully expanded one swamps the bubble. Truncate both at 80 chars so the
+    // mode tag stays visible.
+    std::string q;
+    if (mode == "symbols") q = call.args.value("name", "");
+    else                   q = call.args.value("query", "");
+    if (q.size() > 80) q = q.substr(0, 77) + "...";
+
+    std::string out = "search [" + mode + "]";
+    if (!q.empty()) out += ": " + q;
+
+    // A path_glob narrows the scan dramatically -- worth surfacing.
+    std::string glob = call.args.value("path_glob", "");
+    if (!glob.empty()) out += "  in " + glob;
+
+    return out;
+}
+
 ToolResult SearchTool::execute(const ToolCall& call, IWorkspaceServices& ws,
                                 const std::atomic<bool>* /*cancel_flag*/)
 {
