@@ -5,6 +5,8 @@
 #include "index/indexer.h"
 #include "tools/tools.h"
 
+#include <cpr/cpr.h>
+#include <nlohmann/json.hpp>
 #include <spdlog/sinks/rotating_file_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>
@@ -17,6 +19,7 @@
 #include <cstring>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <stdexcept>
 #include <thread>
 
@@ -127,6 +130,39 @@ std::unique_ptr<IntegrationHarness>& instance_slot()
     return slot;
 }
 
+// Probe LM Studio's proprietary /api/v0/models/<id> endpoint for the
+// loaded model's `capabilities[]`. Returns:
+//   - vector with one or more entries  -> server advertised capabilities
+//   - empty vector                     -> endpoint returned 200 but no caps
+//   - std::nullopt                     -> endpoint missing / not JSON / unreachable
+// Non-LM-Studio backends (Ollama, llama-server) don't implement /api/v0/, so
+// `std::nullopt` is the "unknown -- can't enforce" signal. Reachability is
+// already proven separately via `query_model_info()` -- we only call this
+// after that has succeeded.
+std::optional<std::vector<std::string>>
+fetch_model_capabilities(const std::string& base_url, const std::string& model_id)
+{
+    if (base_url.empty() || model_id.empty()) return std::nullopt;
+    std::string url = base_url;
+    if (!url.empty() && url.back() == '/') url.pop_back();
+    url += "/api/v0/models/" + model_id;
+
+    cpr::Response r = cpr::Get(cpr::Url{url},
+                               cpr::Timeout{std::chrono::milliseconds(3000)});
+    if (r.status_code != 200) return std::nullopt;
+    try {
+        auto j = nlohmann::json::parse(r.text);
+        if (!j.contains("capabilities") || !j["capabilities"].is_array())
+            return std::vector<std::string>{};
+        std::vector<std::string> out;
+        for (const auto& c : j["capabilities"])
+            if (c.is_string()) out.push_back(c.get<std::string>());
+        return out;
+    } catch (...) {
+        return std::nullopt;
+    }
+}
+
 } // namespace
 
 // -- Console logging toggle ---------------------------------------------------
@@ -193,6 +229,40 @@ IntegrationHarness::IntegrationHarness()
 
     spdlog::info("Integration harness: LLM ok -- model='{}', ctx={}",
                  llm_config_.model, llm_config_.context_limit);
+
+    // Capability gate: if the server advertises capabilities (LM Studio's
+    // proprietary /api/v0/models endpoint does), require `tool_use`. The
+    // whole integration suite is tool-driven; a model that rejects a
+    // `tools=[]` payload fails fast with HTTP 400 deep inside the agent loop
+    // and produces a confusing test failure. This trips an explicit error at
+    // harness construction instead. Non-LM-Studio backends don't implement
+    // the v0 endpoint -- we treat that as "unknown" and proceed.
+    auto caps = fetch_model_capabilities(llm_config_.base_url, model_id_);
+    if (caps.has_value()) {
+        bool has_tool_use = std::any_of(
+            caps->begin(), caps->end(),
+            [](const std::string& s) { return s == "tool_use"; });
+        if (!has_tool_use) {
+            std::string advertised;
+            for (size_t i = 0; i < caps->size(); ++i) {
+                if (i) advertised += ", ";
+                advertised += (*caps)[i];
+            }
+            if (advertised.empty()) advertised = "(none)";
+            throw std::runtime_error(
+                "Loaded model '" + model_id_ + "' does not advertise the "
+                "'tool_use' capability (advertised: " + advertised + "). The "
+                "integration suite is tool-driven and will fail. Load a "
+                "tool-calling model in LM Studio (Gemma 4 E4B / Qwen 3 14B / "
+                "Qwen 3.6 / etc.) or pin a specific id via LOCUS_INT_TEST_MODEL.");
+        }
+        spdlog::info("Integration harness: model capabilities verified "
+                     "(tool_use present)");
+    } else {
+        spdlog::info("Integration harness: model capabilities unknown "
+                     "(non-LM-Studio backend or v0 API unavailable) -- "
+                     "proceeding without capability enforcement");
+    }
 
     // Workspace (blocking initial index).
     workspace_ = std::make_unique<Workspace>(workspace_root_);

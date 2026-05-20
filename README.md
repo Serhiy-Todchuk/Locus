@@ -176,7 +176,14 @@ Install:
 
 - **Visual Studio 2026** (C++ workload + Windows SDK)
 - **CMake 4.0+**
-- **vcpkg** -- typically at `C:/vcpkg`. After cloning, run `bootstrap-vcpkg.bat`.
+- **Git** (for vcpkg and CMake `FetchContent` of Tree-sitter grammars and PDFium)
+- **vcpkg** -- typically at `C:/vcpkg`. If you don't have it yet:
+  ```
+  git clone https://github.com/microsoft/vcpkg.git C:\vcpkg
+  C:\vcpkg\bootstrap-vcpkg.bat -disableMetrics
+  ```
+  Substitute your own path if you install elsewhere, and adjust
+  `-DCMAKE_TOOLCHAIN_FILE` in the configure command below accordingly.
 
 Then from the repo root:
 

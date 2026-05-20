@@ -471,6 +471,14 @@ void AgentCore::register_frontend(IFrontend* fe)
         tools::PermissionPreset eff = effective_permission_preset();
         bool from_runtime = dispatcher_ && dispatcher_->runtime_preset().has_value();
         fe->on_permission_preset_changed(eff, from_runtime);
+        // Push current context-meter state so the chip shows the baseline cost
+        // (system prompt + tool manifest) immediately rather than 0/0 until
+        // the first user turn fires on_context_meter.
+        fe->on_context_meter(ctx_->current_tokens(),
+                             ctx_->llm_config().context_limit,
+                             ctx_->budget().last_prompt_tokens(),
+                             ctx_->budget().last_completion_tokens(),
+                             ctx_->budget().reserve());
     }
 }
 

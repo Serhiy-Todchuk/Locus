@@ -51,9 +51,18 @@ same suite and generally pass faster. 8k context is tight; some prompts
 deliberately stay short so the system prompt + tool manifest + turn history
 fit under the limit.
 
-If you swap to a model without tool-calling support, most tests fail with
-no `tool_called(...)` match -- the LLM answers in plain text instead of
-invoking the tool.
+If LM Studio has several models loaded, the harness picks whichever one the
+server returns first from `/v1/models`. Pin a specific id via
+`LOCUS_INT_TEST_MODEL=qwen/qwen3.6-27b` (or similar) when you want determinism
+across runs.
+
+**Capability gate.** Against LM Studio, the harness probes `/api/v0/models/<id>`
+at startup and refuses to construct if the loaded model doesn't advertise the
+`tool_use` capability -- the whole suite is tool-driven and would otherwise
+fail deep in the agent loop with a confusing HTTP 400. Non-LM-Studio backends
+(Ollama, llama-server) don't implement the v0 endpoint; the harness treats
+that as "unknown" and proceeds without enforcement, so the manual rule still
+applies: load a tool-calling-capable model or expect failures.
 
 ### Other
 

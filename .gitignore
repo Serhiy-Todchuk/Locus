@@ -6,6 +6,13 @@ out/
 *.gguf
 *.onnx
 *.user
+*.log
 CMakeUserPresets.json
 third_party/pdfium_download/
 tests/integration_tmp/
+
+# Catch2 / test scratch in repo root
+/test-results.xml
+
+# Claude Code harness state (per-machine)
+.claude/scheduled_tasks.lock

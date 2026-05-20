@@ -19,8 +19,15 @@ C++20. MSVC. No exceptions to the style rules below.
 
 - **CMake** 4.0+
 - **Visual Studio 2026** (MSVC 19.50+) -- the generator string is `Visual Studio 18 2026`
+- **Git** -- for cloning the repo, vcpkg, and the Tree-sitter grammars / PDFium that
+  `FetchContent` pulls during the first configure.
 - **vcpkg** -- typical install at `C:/vcpkg`. The commands below assume that path; substitute
-  your own if it lives elsewhere, or set `VCPKG_ROOT` and use `%VCPKG_ROOT%`.
+  your own if it lives elsewhere, or set `VCPKG_ROOT` and use `%VCPKG_ROOT%`. If you don't
+  have it yet:
+  ```
+  git clone https://github.com/microsoft/vcpkg.git C:\vcpkg
+  C:\vcpkg\bootstrap-vcpkg.bat -disableMetrics
+  ```
 
 The first configure pulls every dependency through vcpkg in `x64-windows-static`
 mode, plus fetches the Tree-sitter grammars via `FetchContent`. Plan for
@@ -167,16 +174,35 @@ build\release\tests\Release\locus_tests.exe --list-tests
 build\release\tests\Release\locus_tests.exe --list-tags
 ```
 
-The first Workspace-creating test loads `bge-small-en-v1.5-Q8_0.gguf` (~80 MB) once
+The first Workspace-creating test loads `bge-small-en-v1.5-Q8_0.gguf` (~35 MB) once
 per process via `tests/support/shared_embedder.h`; the same instance is shared across
 all 38 Workspace tests. Without the shared embedder, the suite would re-load the
 GGUF ~38x and run for several minutes; with it, the full suite runs in ~20 s.
+
+**You must download the small embedder before running the unit tests** -- nine
+tests under `[embed]` / `[search-semantic]` / `[memory]` fail without it. Fetch
+via [models/download-small.ps1](models/download-small.ps1):
+
+```
+powershell -NoProfile -ExecutionPolicy Bypass -File .\models\download-small.ps1
+```
+
+This downloads the small embedder + small reranker (~58 MB total) into `models/`
+at the repo root. The test exe walks up to 6 parent dirs looking for `models/`,
+so the dev layout works without copying.
 
 ### Integration tests (live LLM, manual only)
 
 Not registered with `ctest`. Need [LM Studio](https://lmstudio.ai/) running at
 `http://127.0.0.1:1234` with a tool-calling-capable model loaded (minimum verified:
 Gemma 4 E4B @ 8k context).
+
+The harness verifies the loaded model advertises the `tool_use` capability
+against LM Studio's `/api/v0/models/<id>` endpoint and refuses to start if not.
+If LM Studio has several models loaded, the harness picks whichever the server
+returns first -- pin a specific id with `LOCUS_INT_TEST_MODEL=<id>` to make runs
+deterministic. Non-LM-Studio backends bypass the capability check and rely on
+the existing "minimum verified model" rule.
 
 ```
 # All scenarios with the live trace console window
