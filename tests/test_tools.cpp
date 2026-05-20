@@ -285,6 +285,114 @@ TEST_CASE("DeleteFileTool: preview contains warning", "[s0.6]")
     REQUIRE_THAT(preview, ContainsSubstring("important.cpp"));
 }
 
+// -- Preview tests for tools whose args carry the most signal ---------------
+// The chat panel renders preview() as a one-liner under the tool name; these
+// guard against accidental regression to "tool name only".
+
+TEST_CASE("SearchTool: preview surfaces mode and query", "[preview]")
+{
+    locus::SearchTool tool;
+    locus::ToolCall call{"c1", "search",
+        {{"query", "fts5 sanitise"}, {"mode", "hybrid"}}};
+
+    auto preview = tool.preview(call);
+    REQUIRE_THAT(preview, ContainsSubstring("hybrid"));
+    REQUIRE_THAT(preview, ContainsSubstring("fts5 sanitise"));
+}
+
+TEST_CASE("SearchTool: preview defaults mode to text", "[preview]")
+{
+    locus::SearchTool tool;
+    locus::ToolCall call{"c1", "search", {{"query", "hello"}}};
+
+    auto preview = tool.preview(call);
+    REQUIRE_THAT(preview, ContainsSubstring("text"));
+    REQUIRE_THAT(preview, ContainsSubstring("hello"));
+}
+
+TEST_CASE("SearchTool: preview reads `name` for symbols mode", "[preview]")
+{
+    locus::SearchTool tool;
+    locus::ToolCall call{"c1", "search",
+        {{"mode", "symbols"}, {"name", "AgentCore"}}};
+
+    auto preview = tool.preview(call);
+    REQUIRE_THAT(preview, ContainsSubstring("symbols"));
+    REQUIRE_THAT(preview, ContainsSubstring("AgentCore"));
+}
+
+TEST_CASE("SearchTool: preview truncates long queries", "[preview]")
+{
+    locus::SearchTool tool;
+    std::string long_q(200, 'x');
+    locus::ToolCall call{"c1", "search", {{"query", long_q}}};
+
+    auto preview = tool.preview(call);
+    REQUIRE(preview.size() < 200);
+    REQUIRE_THAT(preview, ContainsSubstring("..."));
+}
+
+TEST_CASE("ListDirectoryTool: preview names the path", "[preview]")
+{
+    locus::ListDirectoryTool tool;
+    locus::ToolCall call{"c1", "list_directory",
+        {{"path", "src/agent"}, {"depth", 2}}};
+
+    auto preview = tool.preview(call);
+    REQUIRE_THAT(preview, ContainsSubstring("src/agent"));
+    REQUIRE_THAT(preview, ContainsSubstring("depth"));
+}
+
+TEST_CASE("ListDirectoryTool: preview handles empty path", "[preview]")
+{
+    locus::ListDirectoryTool tool;
+    locus::ToolCall call{"c1", "list_directory", {{"path", ""}}};
+
+    auto preview = tool.preview(call);
+    REQUIRE_THAT(preview, ContainsSubstring("workspace root"));
+}
+
+TEST_CASE("FilterOutputTool: preview shows mode and pattern", "[preview]")
+{
+    locus::FilterOutputTool tool;
+    locus::ToolCall call{"c1", "filter_output",
+        {{"pattern", "error:"}, {"mode", "substring"}, {"invert", true}}};
+
+    auto preview = tool.preview(call);
+    REQUIRE_THAT(preview, ContainsSubstring("substring"));
+    REQUIRE_THAT(preview, ContainsSubstring("error:"));
+    REQUIRE_THAT(preview, ContainsSubstring("invert"));
+}
+
+TEST_CASE("AddMemoryTool: preview truncates and flattens content", "[preview]")
+{
+    locus::AddMemoryTool tool;
+    nlohmann::json args = {
+        {"content", "build command is\ncmake --build build/release"},
+        {"tags",    nlohmann::json::array({"build", "windows"})},
+        {"pinned",  true},
+    };
+    locus::ToolCall call{"c1", "add_memory", args};
+
+    auto preview = tool.preview(call);
+    // Newline collapsed -> single space.
+    REQUIRE(preview.find('\n') == std::string::npos);
+    REQUIRE_THAT(preview, ContainsSubstring("build command"));
+    REQUIRE_THAT(preview, ContainsSubstring("tags=2"));
+    REQUIRE_THAT(preview, ContainsSubstring("pinned"));
+}
+
+TEST_CASE("SearchMemoryTool: preview shows query", "[preview]")
+{
+    locus::SearchMemoryTool tool;
+    locus::ToolCall call{"c1", "search_memory",
+        {{"query", "compaction strategy"}}};
+
+    auto preview = tool.preview(call);
+    REQUIRE_THAT(preview, ContainsSubstring("search_memory"));
+    REQUIRE_THAT(preview, ContainsSubstring("compaction strategy"));
+}
+
 // -- RunCommandTool tests ---------------------------------------------------
 
 #ifdef _WIN32
