@@ -27,13 +27,6 @@ std::string get_string(const ScriptRunner::Json& j, const std::string& key,
     return default_value;
 }
 
-int get_int(const ScriptRunner::Json& j, const std::string& key, int default_value)
-{
-    if (j.is_object() && j.contains(key) && j[key].is_number_integer())
-        return j[key].get<int>();
-    return default_value;
-}
-
 } // namespace
 
 nlohmann::json load_script(const std::filesystem::path& path)
@@ -85,23 +78,16 @@ ScriptResult ScriptRunner::run()
             workspace_dir = ws;
         }
 
-        // Per-script setup options.
         if (setup.contains("allow_first_time_prompts") &&
             setup["allow_first_time_prompts"].is_boolean())
         {
             allow_first_time_prompts_ = setup["allow_first_time_prompts"].get<bool>();
         }
 
-        // setup.env -- map of env-var name to value, applied via
-        // SetEnvironmentVariableA in this process; the launched locus_gui
-        // inherits the harness's environment. Used by global-defaults tests
-        // to point LOCUS_GLOBAL_DIR at a fresh tmp dir.
         if (setup.contains("env") && setup["env"].is_object()) {
             for (auto it = setup["env"].begin(); it != setup["env"].end(); ++it) {
                 if (!it.value().is_string()) continue;
                 std::string val = it.value().get<std::string>();
-                // Allow {workspace} substitution so scripts can reference the
-                // resolved workspace dir without having to know it up front.
                 size_t p = val.find("{workspace}");
                 while (p != std::string::npos) {
                     val.replace(p, 11, workspace_dir.string());
@@ -118,23 +104,11 @@ ScriptResult ScriptRunner::run()
     }
     workspace_path_used_ = workspace_dir.string();
 
-    // For tmp workspaces, pre-seed .locus/config.json with auto-approve for
-    // the mutating tools so unattended scripts don't hang on the approval
-    // panel. Real workspaces are left untouched -- scripts targeting an
-    // existing workspace inherit its policies. The semantic_search=false
-    // hint mirrors what --no-first-time-prompts writes; with this file
-    // already on disk, LocusApp's first-open guard becomes a no-op.
-    //
-    // Scripts that want to exercise the first-open dialog set
-    // setup.allow_first_time_prompts=true to skip the pre-seed.
     if (is_tmp && !allow_first_time_prompts_) {
         try {
             auto cfg_path = workspace_dir / ".locus" / "config.json";
             std::error_code ec;
             std::filesystem::create_directories(cfg_path.parent_path(), ec);
-            // Schema mirrors src/core/workspace.cpp::load_config -- root-level
-            // `tool_approvals` keyed by tool name, values "auto"/"ask"/"deny".
-            // Per-tool policy strings parsed by policy_from_string in tool.h.
             Json cfg;
             cfg["index"]["semantic_search"]["enabled"] = false;
             cfg["tool_approvals"] = {
@@ -144,9 +118,6 @@ ScriptResult ScriptRunner::run()
                 {"run_command",    "auto"},
                 {"run_command_bg", "auto"}
             };
-            // S5.I -- scripts can override session cleanup thresholds; the
-            // default is "off" so existing scripts don't get an unexpected
-            // dialog at launch.
             cfg["sessions"]["auto_cleanup_enabled"] = false;
             cfg["sessions"]["restore_last"]        = false;
             if (script_.contains("setup") && script_["setup"].is_object()) {
@@ -160,9 +131,6 @@ ScriptResult ScriptRunner::run()
                     }
                 }
             }
-            // Scripts can override / extend the pre-seed via
-            // setup.tool_approvals_override -- used by tool_approval_dialog.json
-            // to flip write_file back to "ask" so the approval gate fires.
             if (script_.contains("setup") && script_["setup"].is_object()) {
                 const auto& setup = script_["setup"];
                 if (setup.contains("tool_approvals_override") &&
@@ -175,12 +143,6 @@ ScriptResult ScriptRunner::run()
                     }
                 }
             }
-            // S5.Z task 4 -- scripts can opt in to specific capability buckets
-            // (e.g. background processes) via setup.capabilities_override. The
-            // default suppress-first-time-prompts path writes a config without
-            // a capabilities block, so subsystems fall back to off; this hook
-            // lets a script flip the relevant bucket on for the duration of
-            // the test without touching the global Capabilities dialog.
             if (script_.contains("setup") && script_["setup"].is_object()) {
                 const auto& setup = script_["setup"];
                 if (setup.contains("capabilities_override") &&
@@ -196,21 +158,9 @@ ScriptResult ScriptRunner::run()
             std::ofstream f(cfg_path);
             f << cfg.dump(2) << '\n';
         } catch (const std::exception& ex) {
-            // Best-effort -- a missing config just means the script hangs
-            // on the approval panel, which is loud enough.
             (void)ex;
         }
 
-        // S5.I -- optional `setup.sessions_seed`: list of fake saved-session
-        // entries to drop into <ws>/.locus/sessions/ before launching the GUI.
-        // Each entry is an object with:
-        //   id              session id (filename stem, defaults to a
-        //                   timestamp-prefixed slug if omitted)
-        //   title           tab title to persist
-        //   last_opened_at  unix epoch seconds (used by cleanup criteria);
-        //                   may be a negative number meaning "N seconds ago"
-        // Lets the auto-cleanup-at-workspace-open script exercise the
-        // ManageSessionsDialog without driving the menu via UIA.
         try {
             if (script_.contains("setup") && script_["setup"].is_object() &&
                 script_["setup"].contains("sessions_seed") &&
@@ -229,7 +179,7 @@ ScriptResult ScriptRunner::run()
                         std::string("seed_") + std::to_string(++counter));
                     std::string title = entry.value("title", id);
                     long long when = entry.value("last_opened_at", now_s);
-                    if (when < 0) when = now_s + when;  // negative = relative
+                    if (when < 0) when = now_s + when;
                     Json j;
                     j["id"]                = id;
                     j["message_count"]     = 1;
@@ -248,13 +198,11 @@ ScriptResult ScriptRunner::run()
         }
     }
 
-    // Set up output directory.
     output_dir_ = opts_.output_root / result.name;
     std::error_code ec;
     std::filesystem::create_directories(output_dir_, ec);
     result.output_dir = output_dir_;
 
-    // Open the per-script log.
     std::ofstream log(output_dir_ / "run.log");
     log << "script:     " << opts_.script_path.string() << "\n";
     log << "workspace:  " << workspace_dir.string()     << "\n";
@@ -269,7 +217,11 @@ ScriptResult ScriptRunner::run()
         return result;
     }
 
-    // Steps.
+    // Compose the dispatcher now that workspace + output_dir are known.
+    dispatcher_ = std::make_unique<OpDispatcher>(
+        uia_, opts_.locus_gui_path, output_dir_, workspace_path_used_,
+        allow_first_time_prompts_);
+
     if (!script_.contains("steps") || !script_["steps"].is_array()) {
         result.failure_op     = "script";
         result.failure_reason = "missing 'steps' array";
@@ -285,16 +237,15 @@ ScriptResult ScriptRunner::run()
     bool failed = false;
     for (size_t i = 0; i < steps.size(); ++i) {
         const auto& step = steps[i];
-        step_index_ = (int)(i + 1);
 
         std::string op = get_string(step, "op");
-        log << "[" << step_index_ << "/" << steps.size() << "] op=" << op;
+        log << "[" << (i + 1) << "/" << steps.size() << "] op=" << op;
 
         StepResult sr = run_step(step);
 
         ++result.steps_executed;
         std::ostringstream line;
-        line << "step " << step_index_ << " op=" << op
+        line << "step " << (i + 1) << " op=" << op
              << " result=" << (sr.ok ? "ok" : "FAIL");
         if (!sr.detail.empty()) line << " detail=" << sr.detail;
         if (!sr.ok)             line << " reason=" << sr.failure;
@@ -313,13 +264,12 @@ ScriptResult ScriptRunner::run()
         }
     }
 
-    // Cleanup steps (best-effort -- failures here don't change pass/fail).
     if (script_.contains("cleanup") && script_["cleanup"].is_array()) {
         log << "\n-- cleanup --\n";
         for (const auto& step : script_["cleanup"]) {
             std::string op = get_string(step, "op");
             log << "cleanup op=" << op << "\n";
-            run_step(step);  // ignore failures
+            run_step(step);
         }
     }
 
@@ -333,457 +283,16 @@ ScriptResult ScriptRunner::run()
     return result;
 }
 
-// ---------------------------------------------------------------------------
-// Step dispatch
-// ---------------------------------------------------------------------------
-
 StepResult ScriptRunner::run_step(const Json& step)
 {
     if (!step.is_object())
-        return StepResult{ false, "step must be an object", {} };
+        return StepResult{ false, "step must be an object", {}, nullptr };
     std::string op = get_string(step, "op");
     Json args = step.contains("args") ? step["args"] : Json::object();
-
-    if (op == "launch")                  return op_launch(args);
-    if (op == "wait_for_window")         return op_wait_for_window(args);
-    if (op == "find")                    return op_find(args);
-    if (op == "click")                   return op_click(args);
-    if (op == "type")                    return op_type(args);
-    if (op == "press_key")               return op_press_key(args);
-    if (op == "select_tab")              return op_select_tab(args);
-    if (op == "get_text")                return op_get_text(args);
-    if (op == "assert_text_contains")    return op_assert_text_contains(args);
-    if (op == "assert_visible")          return op_assert_visible(args);
-    if (op == "screenshot")              return op_screenshot(args);
-    if (op == "sleep")                   return op_sleep(args);
-    if (op == "quit")                    return op_quit(args);
-    if (op == "dump_tree")               return op_dump_tree(args);
-    if (op == "assert_file_exists")      return op_assert_file_exists(args);
-    if (op == "assert_file_contains")    return op_assert_file_contains(args);
-
-    return StepResult{ false, "unknown op '" + op + "'", {} };
+    if (!dispatcher_)
+        return StepResult{ false, "dispatcher not initialised", {}, nullptr };
+    return dispatcher_->dispatch(op, args);
 }
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-Element ScriptRunner::find_named(const std::string& automation_id, int timeout_ms)
-{
-    FindQuery q;
-    q.automation_id = automation_id;
-    q.timeout_ms    = timeout_ms;
-    return uia_.find(q);
-}
-
-// Map a string control-type spec ("edit", "document", "button", "tab",
-// "tabitem", "text", "pane", "checkbox", "tree", "treeitem") to a UIA
-// control-type id. Unknown -> 0 (caller treats as "no filter").
-static int parse_control_type(const std::string& s)
-{
-    std::string n; n.reserve(s.size());
-    for (char c : s) n.push_back((char)std::tolower((unsigned char)c));
-    if (n == "edit")     return UIA_EditControlTypeId;
-    if (n == "document") return UIA_DocumentControlTypeId;
-    if (n == "button")   return UIA_ButtonControlTypeId;
-    if (n == "tab")      return UIA_TabControlTypeId;
-    if (n == "tabitem")  return UIA_TabItemControlTypeId;
-    if (n == "text")     return UIA_TextControlTypeId;
-    if (n == "pane")     return UIA_PaneControlTypeId;
-    if (n == "checkbox") return UIA_CheckBoxControlTypeId;
-    if (n == "tree")     return UIA_TreeControlTypeId;
-    if (n == "treeitem") return UIA_TreeItemControlTypeId;
-    if (n == "window")   return UIA_WindowControlTypeId;
-    if (n == "menu")     return UIA_MenuControlTypeId;
-    if (n == "menuitem") return UIA_MenuItemControlTypeId;
-    return 0;
-}
-
-// Resolve the target element for a find / click / type step. Honors:
-//   automation_id      direct lookup (Name OR AutomationId, see uia_session)
-//   name               accessible-name match
-//   parent_aid + control_type
-//                      find the parent by automation_id, then search inside
-//                      for the first element matching control_type (and
-//                      optionally name).
-//
-// Returns an invalid Element on failure with last_error set on uia_.
-Element ScriptRunner::resolve_target(const Json& args, int timeout_ms)
-{
-    std::string aid        = get_string(args, "automation_id");
-    std::string name       = get_string(args, "name");
-    std::string parent_aid = get_string(args, "parent_aid");
-    std::string ct_str     = get_string(args, "control_type");
-    int ct                 = parse_control_type(ct_str);
-
-    if (!parent_aid.empty()) {
-        Element parent = find_named(parent_aid, timeout_ms);
-        if (!parent.valid()) return Element{};
-        FindQuery q;
-        q.name        = name;          // optional
-        if (ct) q.control_type = ct;
-        q.timeout_ms  = timeout_ms;
-        // Default to direct-children scope for parent_aid searches. This
-        // is the intent in 99% of cases ("find the input directly under
-        // this panel") and avoids cross-cutting hits like the WebView2's
-        // own DOM Documents bubbling up through Subtree scope. Callers
-        // who really need a deep walk can pass "deep": true.
-        bool deep = args.is_object() && args.contains("deep")
-                    && args["deep"].is_boolean()
-                    && args["deep"].get<bool>();
-        q.deep = deep;
-        Element first = uia_.find(q, &parent);
-        if (first.valid() || deep) return first;
-        // Fallback: caller didn't ask for deep, but no direct child matched.
-        // Retry under subtree -- still useful for cases where the target is
-        // nested (e.g. tab pages inside a notebook).
-        q.deep = true;
-        return uia_.find(q, &parent);
-    }
-
-    FindQuery q;
-    q.automation_id = aid;
-    q.name          = name;
-    if (ct) q.control_type = ct;
-    q.timeout_ms    = timeout_ms;
-    return uia_.find(q);
-}
-
-// ---------------------------------------------------------------------------
-// Step ops
-// ---------------------------------------------------------------------------
-
-StepResult ScriptRunner::op_launch(const Json& args)
-{
-    // By default pass --no-first-time-prompts so a fresh tmp workspace doesn't
-    // block on the semantic-search modal. Scripts that exercise the first-open
-    // dialog opt out via setup.allow_first_time_prompts=true.
-    std::vector<std::string> extra;
-    if (!allow_first_time_prompts_)
-        extra.push_back("--no-first-time-prompts");
-    if (args.contains("extra_args") && args["extra_args"].is_array()) {
-        for (auto& v : args["extra_args"])
-            if (v.is_string()) extra.push_back(v.get<std::string>());
-    }
-    if (!uia_.launch(opts_.locus_gui_path, workspace_path_used_, extra))
-        return { false, uia_.last_error(), {} };
-    return { true, {}, "pid=" + std::to_string(uia_.process_id()) };
-}
-
-StepResult ScriptRunner::op_wait_for_window(const Json& args)
-{
-    std::string prefix = get_string(args, "title_prefix", "Locus");
-    int timeout = get_int(args, "timeout_ms", 15000);
-    Element el = uia_.wait_for_window(prefix, timeout);
-    if (!el.valid()) return { false, uia_.last_error(), {} };
-    return { true, {}, "hwnd=" + std::to_string((uintptr_t)uia_.window()) };
-}
-
-StepResult ScriptRunner::op_find(const Json& args)
-{
-    int timeout = get_int(args, "timeout_ms", 5000);
-    Element el = resolve_target(args, timeout);
-    if (!el.valid()) return { false, uia_.last_error(), {} };
-    return { true, {}, "name=" + el.name() };
-}
-
-StepResult ScriptRunner::op_click(const Json& args)
-{
-    int timeout = get_int(args, "timeout_ms", 5000);
-    Element el = resolve_target(args, timeout);
-    if (!el.valid()) return { false, uia_.last_error(), {} };
-    if (!uia_.click(el)) return { false, uia_.last_error(), {} };
-    return { true, {}, "clicked" };
-}
-
-StepResult ScriptRunner::op_type(const Json& args)
-{
-    std::string text = get_string(args, "text");
-    int timeout      = get_int(args, "timeout_ms", 5000);
-    Element el = resolve_target(args, timeout);
-    if (!el.valid()) return { false, uia_.last_error(), {} };
-    if (!uia_.type_text(el, text)) return { false, uia_.last_error(), {} };
-    return { true, {}, "typed " + std::to_string(text.size()) + " chars" };
-}
-
-StepResult ScriptRunner::op_press_key(const Json& args)
-{
-    std::string key  = get_string(args, "key");
-    std::string mods = get_string(args, "modifiers");
-    if (key.empty()) return { false, "press_key: requires 'key'", {} };
-
-    // If the caller scoped a target (automation_id / parent_aid /
-    // control_type), route the key directly to that HWND via PostMessage --
-    // reliable regardless of foreground focus. Otherwise fall back to
-    // SendInput against the OS focus.
-    bool has_target = !get_string(args, "automation_id").empty()
-                    || !get_string(args, "name").empty()
-                    || !get_string(args, "parent_aid").empty();
-    if (has_target) {
-        int timeout = get_int(args, "timeout_ms", 5000);
-        Element el = resolve_target(args, timeout);
-        if (!el.valid()) return { false, uia_.last_error(), {} };
-        if (!uia_.press_key_to(el, key, mods))
-            return { false, uia_.last_error(), {} };
-        return { true, {}, "posted " + (mods.empty() ? key : mods + "+" + key) };
-    }
-    if (!uia_.press_key(key, mods)) return { false, uia_.last_error(), {} };
-    return { true, {}, "pressed " + (mods.empty() ? key : mods + "+" + key) };
-}
-
-StepResult ScriptRunner::op_select_tab(const Json& args)
-{
-    // wxNotebook on Windows wraps SysTabControl32; UIA exposes each tab as
-    // a TabItem under a Tab parent. The TabItems have empty Name (native
-    // tab control doesn't propagate labels to MSAA), so name-based lookup
-    // doesn't work for `wxNotebook` -- callers must instead specify either
-    //   `index`             0-based child index under the matched Tab parent
-    //   `parent_aid`        the AutomationId / Name of the containing Tab
-    //   `name`              fallback for wxAuiNotebook / custom tab strips
-    // that DO surface labels.
-    std::string name        = get_string(args, "name");
-    std::string parent_aid  = get_string(args, "parent_aid");
-    int  timeout            = get_int(args, "timeout_ms", 5000);
-    bool has_index          = args.is_object() && args.contains("index")
-                              && args["index"].is_number_integer();
-    int  index              = has_index ? args["index"].get<int>() : -1;
-
-    // Index path -- needs the parent Tab control to enumerate children.
-    if (has_index) {
-        if (parent_aid.empty())
-            return { false, "select_tab: 'index' requires 'parent_aid'", {} };
-        FindQuery pq;
-        pq.automation_id = parent_aid;
-        pq.control_type  = UIA_TabControlTypeId;
-        pq.timeout_ms    = timeout;
-        Element parent = uia_.find(pq);
-        if (!parent.valid()) return { false, uia_.last_error(), {} };
-
-        // Walk Tab children, count TabItems, click the requested index.
-        // Implemented via UIA TreeWalker on TabItem control type.
-        // FindAll under TreeScope_Children would be cleaner, but constructing
-        // the SAFEARRAY-of-conditions there is more code than this loop.
-        IUIAutomationCondition* cond = nullptr;
-        VARIANT v; VariantInit(&v);
-        v.vt = VT_I4;
-        v.lVal = UIA_TabItemControlTypeId;
-        IUIAutomation* automation_raw = nullptr;
-        // Re-acquire automation via CUIAutomation -- the UiaSession owns one
-        // but we don't expose it; cheaper to just borrow Element's raw().
-        CoCreateInstance(__uuidof(CUIAutomation), nullptr, CLSCTX_INPROC_SERVER,
-                         __uuidof(IUIAutomation),
-                         reinterpret_cast<void**>(&automation_raw));
-        if (!automation_raw) return { false, "select_tab: CUIAutomation unavailable", {} };
-        automation_raw->CreatePropertyCondition(
-            UIA_ControlTypePropertyId, v, &cond);
-        VariantClear(&v);
-        IUIAutomationElementArray* arr = nullptr;
-        HRESULT hr = parent.raw()->FindAll(TreeScope_Children, cond, &arr);
-        if (cond) cond->Release();
-        if (FAILED(hr) || !arr) {
-            automation_raw->Release();
-            return { false, "select_tab: failed to enumerate TabItems", {} };
-        }
-        int len = 0;
-        arr->get_Length(&len);
-        if (index < 0 || index >= len) {
-            arr->Release();
-            automation_raw->Release();
-            return { false,
-                "select_tab: index " + std::to_string(index) +
-                " out of range (" + std::to_string(len) + " tabs)",
-                {} };
-        }
-        IUIAutomationElement* tab_raw = nullptr;
-        arr->GetElement(index, &tab_raw);
-        arr->Release();
-        automation_raw->Release();
-        if (!tab_raw) return { false, "select_tab: GetElement returned null", {} };
-        Element tab(tab_raw);
-        if (!uia_.click(tab)) return { false, uia_.last_error(), {} };
-        return { true, {}, "selected tab #" + std::to_string(index) };
-    }
-
-    // Name path (wxAuiNotebook + any control that exposes Name).
-    if (name.empty())
-        return { false, "select_tab: requires either 'name' or 'index'+'parent_aid'", {} };
-    FindQuery q;
-    q.name         = name;
-    q.control_type = UIA_TabItemControlTypeId;
-    q.timeout_ms   = timeout;
-    Element el = uia_.find(q);
-    if (!el.valid()) return op_click(args);  // last resort: generic click
-    if (!uia_.click(el)) return { false, uia_.last_error(), {} };
-    return { true, {}, "selected tab " + name };
-}
-
-StepResult ScriptRunner::op_get_text(const Json& args)
-{
-    int timeout       = get_int(args, "timeout_ms", 5000);
-    bool walk_subtree = args.contains("walk_subtree")
-                        && args["walk_subtree"].is_boolean()
-                        && args["walk_subtree"].get<bool>();
-    Element el = resolve_target(args, timeout);
-    if (!el.valid()) return { false, uia_.last_error(), {} };
-    std::string text = walk_subtree ? uia_.read_all_text(el) : uia_.read_text(el);
-    if (text.size() > 200) text = text.substr(0, 200) + "...";
-    return { true, {}, "text=" + text };
-}
-
-StepResult ScriptRunner::op_assert_text_contains(const Json& args)
-{
-    std::string needle = get_string(args, "substring");
-    int         timeout = get_int(args, "timeout_ms", 5000);
-    bool walk_subtree = args.contains("walk_subtree")
-                        && args["walk_subtree"].is_boolean()
-                        && args["walk_subtree"].get<bool>();
-    if (needle.empty())
-        return { false, "assert_text_contains: requires 'substring'", {} };
-
-    bool ok = uia_.wait_for([&] {
-        Element el = resolve_target(args, 500);
-        if (!el.valid()) return false;
-        std::string text = walk_subtree ? uia_.read_all_text(el) : uia_.read_text(el);
-        return text.find(needle) != std::string::npos;
-    }, timeout);
-
-    if (!ok) {
-        return { false,
-                 "assert_text_contains: '" + needle + "' not seen in " +
-                 std::to_string(timeout) + " ms",
-                 {} };
-    }
-    return { true, {}, "found '" + needle + "'" };
-}
-
-StepResult ScriptRunner::op_assert_visible(const Json& args)
-{
-    int timeout = get_int(args, "timeout_ms", 5000);
-    Element el = resolve_target(args, timeout);
-    if (!el.valid()) return { false, uia_.last_error(), {} };
-    if (el.is_offscreen()) return { false, "element is offscreen", {} };
-    return { true, {}, "visible" };
-}
-
-StepResult ScriptRunner::op_screenshot(const Json& args)
-{
-    std::string name = get_string(args, "name");
-    if (name.empty()) {
-        char buf[32];
-        std::snprintf(buf, sizeof(buf), "step_%02d.png", step_index_);
-        name = buf;
-    } else if (name.find('.') == std::string::npos) {
-        name += ".png";
-    }
-    auto path = output_dir_ / name;
-    if (!uia_.screenshot(path)) return { false, uia_.last_error(), {} };
-    return { true, {}, "saved " + path.string() };
-}
-
-StepResult ScriptRunner::op_sleep(const Json& args)
-{
-    int ms = get_int(args, "ms", 100);
-    std::this_thread::sleep_for(std::chrono::milliseconds(ms));
-    return { true, {}, std::to_string(ms) + " ms" };
-}
-
-StepResult ScriptRunner::op_quit(const Json& args)
-{
-    int wait = get_int(args, "wait_ms", 3000);
-    uia_.close(wait);
-    return { true, {}, {} };
-}
-
-StepResult ScriptRunner::op_dump_tree(const Json& args)
-{
-    int depth = get_int(args, "depth", 8);
-    std::string name = get_string(args, "name", "tree.txt");
-    std::string dump = uia_.dump_tree(nullptr, depth);
-    auto path = output_dir_ / name;
-    std::ofstream out(path);
-    if (!out) return { false, "dump_tree: cannot write " + path.string(), {} };
-    out << dump;
-    return { true, {}, "wrote " + path.string() };
-}
-
-StepResult ScriptRunner::op_assert_file_exists(const Json& args)
-{
-    std::string rel = get_string(args, "path");
-    int timeout    = get_int(args, "timeout_ms", 5000);
-    bool any_match = args.contains("any_of") && args["any_of"].is_array();
-
-    if (rel.empty() && !any_match)
-        return { false, "assert_file_exists: requires 'path' or 'any_of'", {} };
-
-    // Build candidate list. Each path is treated as a workspace-relative
-    // glob fragment -- we currently support literal paths only; if scripts
-    // need glob matching, swap in std::regex later.
-    std::vector<std::string> candidates;
-    if (!rel.empty()) candidates.push_back(rel);
-    if (any_match) {
-        for (auto& v : args["any_of"])
-            if (v.is_string()) candidates.push_back(v.get<std::string>());
-    }
-
-    std::filesystem::path root = workspace_path_used_;
-    bool ok = uia_.wait_for([&] {
-        for (const auto& c : candidates) {
-            std::error_code ec;
-            if (std::filesystem::exists(root / c, ec)) return true;
-        }
-        return false;
-    }, timeout);
-
-    if (!ok) {
-        std::string list;
-        for (auto& c : candidates) {
-            if (!list.empty()) list += ", ";
-            list += c;
-        }
-        return { false,
-                 "assert_file_exists: none of [" + list + "] exist in "
-                 + root.string() + " after " + std::to_string(timeout) + " ms",
-                 {} };
-    }
-    return { true, {}, "file appeared" };
-}
-
-StepResult ScriptRunner::op_assert_file_contains(const Json& args)
-{
-    std::string rel       = get_string(args, "path");
-    std::string substring = get_string(args, "substring");
-    int         timeout   = get_int(args, "timeout_ms", 5000);
-
-    if (rel.empty())
-        return { false, "assert_file_contains: requires 'path'", {} };
-    if (substring.empty())
-        return { false, "assert_file_contains: requires 'substring'", {} };
-
-    std::filesystem::path full = std::filesystem::path(workspace_path_used_) / rel;
-
-    bool ok = uia_.wait_for([&] {
-        std::error_code ec;
-        if (!std::filesystem::exists(full, ec)) return false;
-        std::ifstream in(full, std::ios::binary);
-        if (!in) return false;
-        std::string contents((std::istreambuf_iterator<char>(in)),
-                              std::istreambuf_iterator<char>());
-        return contents.find(substring) != std::string::npos;
-    }, timeout);
-
-    if (!ok) {
-        return { false,
-                 "assert_file_contains: '" + substring +
-                 "' not found in " + full.string() +
-                 " after " + std::to_string(timeout) + " ms",
-                 {} };
-    }
-    return { true, {}, "substring present" };
-}
-
-// ---------------------------------------------------------------------------
-// JUnit XML output
-// ---------------------------------------------------------------------------
 
 bool write_junit_xml(const ScriptResult& result, const std::filesystem::path& xml_path)
 {
@@ -801,7 +310,6 @@ bool write_junit_xml(const ScriptResult& result, const std::filesystem::path& xm
         << "\" time=\"" << duration_s
         << "\">\n";
 
-    // One testcase per executed step.
     for (size_t i = 0; i < result.step_log.size(); ++i) {
         out << "  <testcase classname=\"" << result.name
             << "\" name=\"step_" << (i + 1) << "\" time=\"0\">\n";

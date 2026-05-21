@@ -17,7 +17,9 @@
 add_executable(locus_ui_tests
     main.cpp
     uia_session.cpp
+    op_dispatcher.cpp
     script_runner.cpp
+    agentic_server.cpp
 )
 
 target_include_directories(locus_ui_tests PRIVATE
@@ -53,6 +55,7 @@ target_link_libraries(locus_ui_tests PRIVATE
     windowscodecs
     gdi32
     user32
+    ws2_32
 )
 
 set_target_properties(locus_ui_tests PROPERTIES

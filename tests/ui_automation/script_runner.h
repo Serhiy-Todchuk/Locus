@@ -11,25 +11,23 @@
 //     "cleanup": [ ... ]              // optional
 //   }
 //
-// Each step is `{ "op": "<name>", "args": {...}, "expect"?: {...} }`. The
-// list of supported ops lives in the README.
+// Each step is `{ "op": "<name>", "args": {...} }`. The list of supported ops
+// lives in the README; the actual dispatch table is implemented in
+// op_dispatcher.{h,cpp}, which S5.Z task 9 extracted so AgenticServer could
+// share it.
 
+#include "op_dispatcher.h"
 #include "uia_session.h"
 
 #include <nlohmann/json.hpp>
 
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <string>
 #include <vector>
 
 namespace locus::uia {
-
-struct StepResult {
-    bool        ok = true;
-    std::string failure;  // populated when ok=false
-    std::string detail;   // optional extra info ("found N elements", ...)
-};
 
 struct ScriptResult {
     std::string                name;
@@ -39,16 +37,16 @@ struct ScriptResult {
     int                        steps_executed = 0;
     std::string                failure_op;
     std::string                failure_reason;
-    std::vector<std::string>   step_log;  // one line per executed step
+    std::vector<std::string>   step_log;
     std::filesystem::path      output_dir;
     long long                  duration_ms = 0;
 };
 
 struct RunOptions {
-    std::filesystem::path script_path;       // input .json file
-    std::filesystem::path locus_gui_path;    // locus_gui.exe
-    std::filesystem::path output_root;       // tests/ui_automation/output/
-    std::filesystem::path temp_workspace_root; // %TEMP%/locus_ui_tests/<script>/
+    std::filesystem::path script_path;
+    std::filesystem::path locus_gui_path;
+    std::filesystem::path output_root;
+    std::filesystem::path temp_workspace_root;
 };
 
 class ScriptRunner {
@@ -62,39 +60,12 @@ public:
 private:
     StepResult run_step(const Json& step);
 
-    // Step ops -- each returns a StepResult.
-    StepResult op_launch(const Json& args);
-    StepResult op_wait_for_window(const Json& args);
-    StepResult op_find(const Json& args);
-    StepResult op_click(const Json& args);
-    StepResult op_type(const Json& args);
-    StepResult op_press_key(const Json& args);
-    StepResult op_select_tab(const Json& args);
-    StepResult op_get_text(const Json& args);
-    StepResult op_assert_text_contains(const Json& args);
-    StepResult op_assert_visible(const Json& args);
-    StepResult op_screenshot(const Json& args);
-    StepResult op_sleep(const Json& args);
-    StepResult op_quit(const Json& args);
-    StepResult op_dump_tree(const Json& args);
-    StepResult op_assert_file_exists(const Json& args);
-    StepResult op_assert_file_contains(const Json& args);
-
-    Element find_named(const std::string& automation_id, int timeout_ms);
-    Element resolve_target(const Json& args, int timeout_ms);
-
-    // Per-step bookkeeping for screenshot filenames.
-    int step_index_ = 0;
-
     RunOptions      opts_;
     UiaSession      uia_;
+    std::unique_ptr<OpDispatcher> dispatcher_;
     Json            script_;
     std::filesystem::path output_dir_;
-    std::string     workspace_path_used_;  // resolved at runtime
-    // setup.allow_first_time_prompts -- when true, skip the tmp-workspace
-    // `.locus/config.json` pre-seed AND the auto-injection of the
-    // `--no-first-time-prompts` launch flag, so the capabilities first-open
-    // modal can fire for the capabilities_first_open.json script.
+    std::string     workspace_path_used_;
     bool            allow_first_time_prompts_ = false;
 };
 

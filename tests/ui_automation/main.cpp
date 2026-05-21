@@ -1,14 +1,20 @@
 // S5.L -- locus_ui_tests entry point.
+// S5.Z task 9 -- added `--agentic` mode for interactive QA-LLM-driven testing.
 //
-// Usage:
+// Usage (scripted, S5.L):
 //   locus_ui_tests --script <path> [--script <path> ...]
 //                  [--output-root <dir>]
 //                  [--gui <path/to/locus_gui.exe>]
 //                  [--list]
 //
+// Usage (agentic, S5.Z task 9):
+//   locus_ui_tests --agentic --workspace <path|tmp> [--port N]
+//                  [--allow-first-time-prompts] [--no-seed-config]
+//                  [--output-root <dir>] [--gui <path>]
+//
 // Exit codes:
-//   0   all scripts passed
-//   1   one or more scripts failed
+//   0   all scripts passed / agentic server clean shutdown
+//   1   one or more scripts failed / agentic server error
 //   2   bad usage / configuration error
 //   77  every script skipped (e.g. preconditions not met) -- matches the
 //       Unix convention also used by tests/integration/.
@@ -17,6 +23,7 @@
 #define NOMINMAX
 #endif
 
+#include "agentic_server.h"
 #include "script_runner.h"
 
 #include <algorithm>
@@ -36,11 +43,15 @@ namespace {
 void print_usage()
 {
     std::cerr <<
-        "Usage: locus_ui_tests --script <path.json> [--script <path.json> ...]\n"
-        "                     [--output-root <dir>]\n"
-        "                     [--gui <path/to/locus_gui.exe>]\n"
-        "                     [--list]\n"
-        "                     [--all]    # run every .json in default scripts/ folder\n"
+        "Usage:\n"
+        "  scripted mode:\n"
+        "    locus_ui_tests --script <path.json> [--script <path.json> ...]\n"
+        "                   [--output-root <dir>] [--gui <path/to/locus_gui.exe>]\n"
+        "                   [--list] [--all]\n"
+        "  agentic mode (interactive QA-LLM driver):\n"
+        "    locus_ui_tests --agentic --workspace <path|tmp> [--port N]\n"
+        "                   [--allow-first-time-prompts] [--no-seed-config]\n"
+        "                   [--output-root <dir>] [--gui <path>]\n"
         "Exit codes: 0=pass  1=fail  2=usage error  77=all skipped\n";
 }
 
@@ -82,9 +93,7 @@ fs::path default_temp_workspace_root()
 #endif
 }
 
-} // namespace
-
-int main(int argc, char** argv)
+int run_scripted(int argc, char** argv)
 {
     std::vector<fs::path> scripts;
     fs::path output_root  = default_output_root();
@@ -110,6 +119,8 @@ int main(int argc, char** argv)
         } else if (a == "-h" || a == "--help") {
             print_usage();
             return 0;
+        } else if (a == "--agentic") {
+            continue;  // handled by caller; should never reach here
         } else {
             std::cerr << "Unknown argument: " << a << "\n";
             print_usage();
@@ -117,8 +128,6 @@ int main(int argc, char** argv)
         }
     }
 
-    // Resolve relative paths against the exe location so the binary works
-    // from any CWD. This matches the integration tests' behavior.
     fs::path exe_dir = fs::path{ argv[0] }.parent_path();
     auto resolve = [&](fs::path p) {
         if (p.is_absolute()) return p;
@@ -150,7 +159,7 @@ int main(int argc, char** argv)
     }
 
     if (scripts.empty()) {
-        std::cerr << "No scripts requested. Use --script <path> or --all.\n";
+        std::cerr << "No scripts requested. Use --script <path>, --all, or --agentic.\n";
         print_usage();
         return 2;
     }
@@ -200,4 +209,103 @@ int main(int argc, char** argv)
     if (fail > 0) return 1;
     if (pass == 0) return 77;
     return 0;
+}
+
+int run_agentic(int argc, char** argv)
+{
+    std::string workspace_spec;
+    fs::path output_root = default_output_root();
+    fs::path gui_path    = default_locus_gui();
+    int port             = 7878;
+    bool allow_first_time_prompts = false;
+    bool seed_config              = true;
+    std::string bind_host = "127.0.0.1";
+
+    for (int i = 1; i < argc; ++i) {
+        std::string a = argv[i];
+        if (a == "--agentic") continue;
+        if (a == "--workspace" && i + 1 < argc) {
+            workspace_spec = argv[++i];
+        } else if (a == "--port" && i + 1 < argc) {
+            port = std::atoi(argv[++i]);
+        } else if (a == "--bind-host" && i + 1 < argc) {
+            bind_host = argv[++i];
+        } else if (a == "--allow-first-time-prompts") {
+            allow_first_time_prompts = true;
+        } else if (a == "--no-seed-config") {
+            seed_config = false;
+        } else if (a == "--output-root" && i + 1 < argc) {
+            output_root = argv[++i];
+        } else if (a == "--gui" && i + 1 < argc) {
+            gui_path = argv[++i];
+        } else if (a == "-h" || a == "--help") {
+            print_usage();
+            return 0;
+        } else {
+            std::cerr << "Unknown agentic argument: " << a << "\n";
+            print_usage();
+            return 2;
+        }
+    }
+
+    if (workspace_spec.empty()) {
+        std::cerr << "agentic: --workspace <path|tmp> is required\n";
+        return 2;
+    }
+
+    fs::path exe_dir = fs::path{ argv[0] }.parent_path();
+    auto resolve = [&](fs::path p) {
+        if (p.is_absolute()) return p;
+        if (fs::exists(p))   return fs::absolute(p);
+        fs::path with_exe = exe_dir / p;
+        return fs::absolute(with_exe);
+    };
+    output_root = resolve(output_root);
+    gui_path    = resolve(gui_path);
+
+    if (!fs::exists(gui_path)) {
+        std::cerr << "locus_gui.exe not found at " << gui_path.string()
+                  << " (override with --gui)\n";
+        return 2;
+    }
+
+    fs::path temp_root = default_temp_workspace_root();
+    auto prep = locus::uia::prepare_agentic_workspace(
+        workspace_spec, temp_root, seed_config, allow_first_time_prompts);
+    if (!prep.error.empty()) {
+        std::cerr << "agentic: " << prep.error << "\n";
+        return 2;
+    }
+
+    // Per-run output dir under output_root, named for the workspace dir.
+    // Strip a redundant "agentic_" prefix on tmp dirs (they already carry it).
+    std::string workspace_label = prep.resolved_dir.filename().string();
+    std::string prefix = "agentic_";
+    if (workspace_label.rfind(prefix, 0) == 0)
+        workspace_label.erase(0, prefix.size());
+    fs::path output_dir = output_root / ("agentic_" + workspace_label);
+    std::error_code ec;
+    fs::create_directories(output_dir, ec);
+
+    locus::uia::AgenticOptions opts;
+    opts.locus_gui_path           = gui_path;
+    opts.workspace_dir            = prep.resolved_dir;
+    opts.output_dir               = output_dir;
+    opts.allow_first_time_prompts = allow_first_time_prompts;
+    opts.seed_config              = seed_config;
+    opts.port                     = port;
+    opts.bind_host                = bind_host;
+
+    return locus::uia::run_agentic_server(opts);
+}
+
+} // namespace
+
+int main(int argc, char** argv)
+{
+    for (int i = 1; i < argc; ++i) {
+        std::string a = argv[i];
+        if (a == "--agentic") return run_agentic(argc, argv);
+    }
+    return run_scripted(argc, argv);
 }
