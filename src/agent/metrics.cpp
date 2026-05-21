@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdio>
 #include <sstream>
 
 namespace locus {
@@ -446,6 +447,31 @@ std::optional<int> parse_search_result_count(const std::string& tool_name,
     }
     if (n > 1'000'000) return std::nullopt;  // sanity
     return static_cast<int>(n);
+}
+
+// -- format_tok_per_sec -----------------------------------------------------
+
+std::optional<std::string> format_tok_per_sec(int completion_tokens,
+                                              long long stream_ms)
+{
+    // Floor: short replies / micro-streams produce noise (network jitter,
+    // model warm-up). 16 tokens and 500 ms is the smallest sample we trust
+    // enough to surface.
+    if (completion_tokens < 16) return std::nullopt;
+    if (stream_ms          < 500) return std::nullopt;
+
+    double seconds = static_cast<double>(stream_ms) / 1000.0;
+    double rate    = static_cast<double>(completion_tokens) / seconds;
+
+    // 1 decimal place under 100 t/s, none above -- "163 t/s" reads cleaner
+    // than "163.2 t/s" and the precision is below the model's own jitter at
+    // that speed anyway.
+    char buf[32];
+    if (rate < 100.0)
+        std::snprintf(buf, sizeof(buf), "%.1f t/s", rate);
+    else
+        std::snprintf(buf, sizeof(buf), "%.0f t/s", rate);
+    return std::string(buf);
 }
 
 } // namespace locus

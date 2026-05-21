@@ -22,6 +22,10 @@ struct AgentStepResult {
     ChatMessage           assistant_msg;
     std::vector<ToolCall> tool_calls;
     bool                  had_error = false;
+    // Wall-clock duration of the LLM stream call that produced this step.
+    // Paired with the round's completion_tokens via the context_meter
+    // broadcast so the chat panel can show a per-bubble tok/s rate.
+    long long             stream_ms = 0;
 };
 
 // Drives a single LLM call: builds the tool schema, streams tokens,

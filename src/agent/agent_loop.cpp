@@ -275,6 +275,7 @@ AgentStepResult AgentLoop::run_step(const ConversationHistory& history,
                          std::chrono::steady_clock::now() - stream_t0).count();
     if (metrics_)
         metrics_->record_llm_step(usage_reported, stream_ms, prev_total_for_metrics);
+    out.stream_ms = stream_ms;
 
     // S4.F diagnostic log per LLM POST. One line covers everything you need
     // to root-cause a cache miss: the system-prompt hash (byte-stable across

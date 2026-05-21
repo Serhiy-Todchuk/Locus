@@ -102,7 +102,8 @@ void WxFrontend::on_turn_complete()
 
 void WxFrontend::on_context_meter(int used_tokens, int limit,
                                    int prompt_tokens, int completion_tokens,
-                                   int reserve_tokens)
+                                   int reserve_tokens,
+                                   long long stream_ms_last_round)
 {
     auto* evt = new_evt(EVT_AGENT_CONTEXT_METER, tab_id_);
     evt->SetInt(used_tokens);
@@ -111,6 +112,7 @@ void WxFrontend::on_context_meter(int used_tokens, int limit,
     payload["prompt"]     = prompt_tokens;
     payload["completion"] = completion_tokens;
     payload["reserve"]    = reserve_tokens;
+    payload["stream_ms"]  = stream_ms_last_round;
     evt->SetString(wxString::FromUTF8(payload.dump()));
     wxQueueEvent(handler_, evt);
 }

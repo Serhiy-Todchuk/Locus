@@ -177,7 +177,8 @@ void HarnessFrontend::on_turn_complete()
 
 void HarnessFrontend::on_context_meter(int /*used*/, int /*limit*/,
                                        int /*prompt*/, int /*completion*/,
-                                       int /*reserve*/) {}
+                                       int /*reserve*/,
+                                       long long /*stream_ms*/) {}
 void HarnessFrontend::on_compaction_needed(int /*used*/, int /*limit*/) {}
 void HarnessFrontend::on_session_reset() {}
 

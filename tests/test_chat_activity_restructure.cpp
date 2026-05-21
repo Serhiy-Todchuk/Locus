@@ -63,7 +63,7 @@ public:
                               bool, const std::vector<std::string>&) override {}
     void on_tool_result(const std::string&, const std::string&, bool) override {}
     void on_turn_complete() override {}
-    void on_context_meter(int, int, int, int, int) override {}
+    void on_context_meter(int, int, int, int, int, long long) override {}
     void on_compaction_needed(int, int) override {}
     void on_session_reset() override {}
     void on_error(const std::string&) override {}
@@ -231,6 +231,68 @@ TEST_CASE("ConversationHistory: from_json re-numbers history_ids 1..N",
     // After load, ids are re-walked: gap is gone, counter resumes from N+1.
     REQUIRE(restored.messages()[0].history_id == 1);
     REQUIRE(restored.messages()[1].history_id == 2);
+}
+
+TEST_CASE("ConversationHistory: from_json drops empty assistants without tool_calls",
+          "[conversation][session][sanitize]")
+{
+    // Hand-craft the malformed shape we saw in the wild: a session that
+    // includes an empty-content, no-tool-calls assistant left over from an
+    // older build that appended it after a mid-stream cancel. The sanitizer
+    // must drop it on load so the loaded history is shape-valid (otherwise
+    // LM Studio's jinja template chokes with "No user query found in messages").
+    nlohmann::json j = nlohmann::json::array();
+    j.push_back({{"role", "system"},    {"content", "sys"}});
+    j.push_back({{"role", "assistant"}, {"content", ""}});      // <-- bad
+    j.push_back({{"role", "user"},      {"content", "hello"}});
+
+    auto h = ConversationHistory::from_json(j);
+    REQUIRE(h.size() == 2);
+    REQUIRE(h.messages()[0].role == MessageRole::system);
+    REQUIRE(h.messages()[1].role == MessageRole::user);
+}
+
+TEST_CASE("ConversationHistory: from_json keeps assistants that have tool_calls "
+          "even if content is empty",
+          "[conversation][session][sanitize]")
+{
+    // A tool-call-only assistant is the normal shape during a multi-round
+    // tool turn -- content is empty but tool_calls carries the real payload.
+    // The sanitizer must NOT drop these or it would break every multi-step
+    // session. Shape follows OpenAI's chat-completions tool_calls schema:
+    // {id, function:{name, arguments(string)}} -- see ChatMessage::from_json.
+    nlohmann::json tc = nlohmann::json::object();
+    tc["id"]                  = "call_42";
+    tc["function"]            = nlohmann::json::object();
+    tc["function"]["name"]    = "search";
+    tc["function"]["arguments"] = "{}";
+
+    nlohmann::json j = nlohmann::json::array();
+    j.push_back({{"role", "system"},    {"content", "sys"}});
+    j.push_back({{"role", "user"},      {"content", "q"}});
+    j.push_back({{"role", "assistant"}, {"content", ""}, {"tool_calls", {tc}}});
+    j.push_back({{"role", "tool"},      {"content", "result"}, {"tool_call_id", "call_42"}});
+
+    auto h = ConversationHistory::from_json(j);
+    REQUIRE(h.size() == 4);
+    REQUIRE(h.messages()[2].role == MessageRole::assistant);
+    REQUIRE(h.messages()[2].tool_calls.size() == 1);
+}
+
+TEST_CASE("ConversationHistory: from_json keeps assistants with content even "
+          "without tool_calls",
+          "[conversation][session][sanitize]")
+{
+    // The common case: a normal text-only assistant reply. Sanitizer must
+    // pass it through untouched.
+    nlohmann::json j = nlohmann::json::array();
+    j.push_back({{"role", "system"},    {"content", "sys"}});
+    j.push_back({{"role", "user"},      {"content", "q"}});
+    j.push_back({{"role", "assistant"}, {"content", "answer text"}});
+
+    auto h = ConversationHistory::from_json(j);
+    REQUIRE(h.size() == 3);
+    REQUIRE(h.messages()[2].content == "answer text");
 }
 
 // ---------------------------------------------------------------------------

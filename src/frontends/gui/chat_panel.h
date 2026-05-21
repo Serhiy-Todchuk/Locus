@@ -119,10 +119,13 @@ public:
     // the OS default app on chip click. Pass count == 0 to hide.
     void set_compacted_count(int count, const wxString& archive_dir);
 
-    // Footer updates.
+    // Footer updates. `stream_ms_last_round` is the wall-clock duration of
+    // the most recent LLM stream call; ChatPanel pairs it with completion
+    // tokens to render a tok/s rate next to the bubble's token chip.
     void set_context_meter(int used, int limit,
                            int prompt_tokens = 0, int completion_tokens = 0,
-                           int reserve_tokens = 0);
+                           int reserve_tokens = 0,
+                           long long stream_ms_last_round = 0);
     // S5.D -- show/hide per-message token chips.
     void set_show_per_message_tokens(bool show);
     void set_generation_progress(int chars, int est_tokens);
@@ -327,6 +330,9 @@ private:
     // S5.D -- per-message token chip state.
     bool show_per_message_tokens_   = true;
     int  last_completion_tokens_    = 0;
+    // Wall-clock of the most recent LLM stream round, paired with
+    // last_completion_tokens_ to compute tok/s on the assistant bubble.
+    long long last_stream_ms_       = 0;
 
     // S5.G -- chat-side bookkeeping for per-message delete.
     // Most recent user bubble dom_id (refreshed on every submit_current_input).

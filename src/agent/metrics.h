@@ -184,4 +184,16 @@ private:
 std::optional<int> parse_search_result_count(const std::string& tool_name,
                                              const std::string& content);
 
+// -- Per-bubble tokens-per-second formatter ---------------------------------
+// Returns "<value> t/s" (e.g. "27.3 t/s") sized to be useful, or std::nullopt
+// when the inputs are too small for the ratio to be meaningful. ChatPanel
+// pairs this with the existing token chip on the assistant bubble; suppressing
+// noisy short-reply rates keeps the chip readable.
+//
+// Floor: at least 16 completion tokens and at least 500 ms of stream time.
+// Below either, returns nullopt -- a 10-token / 80 ms reply reads 125 t/s and
+// tells the user nothing useful.
+std::optional<std::string> format_tok_per_sec(int completion_tokens,
+                                              long long stream_ms);
+
 } // namespace locus

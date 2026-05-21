@@ -87,12 +87,17 @@ public:
     // LLM round; 0 means "not yet reported" (e.g. session-open broadcast
     // before any LLM call). `reserve_tokens` (S5.D) is the headroom the
     // agent loop keeps free for the response; 0 means no reserve.
-    // Frontends are free to ignore the split/reserve and render only
+    // `stream_ms_last_round` is the wall-clock duration of the most recent
+    // LLM stream call (0 when this broadcast was not triggered by a stream
+    // completion -- session open, compaction, reset, etc.); paired with
+    // completion_tokens it gives a per-bubble tok/s rate.
+    // Frontends are free to ignore any of the extra params and render only
     // `used_tokens` -- the context meter still works.
     virtual void on_context_meter(int used_tokens, int limit,
                                   int prompt_tokens = 0,
                                   int completion_tokens = 0,
-                                  int reserve_tokens = 0) = 0;
+                                  int reserve_tokens = 0,
+                                  long long stream_ms_last_round = 0) = 0;
 
     // Context is critically full. Frontend should offer compaction options.
     virtual void on_compaction_needed(int used_tokens, int limit) = 0;

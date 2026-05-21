@@ -304,3 +304,47 @@ TEST_CASE("S4.F: record_prompt_prefix_hash keeps the first round's value",
     REQUIRE(snap.size() == 1);
     REQUIRE(snap[0].prompt_prefix_hash == 0x1111);
 }
+
+// -- format_tok_per_sec -----------------------------------------------------
+
+TEST_CASE("format_tok_per_sec: typical mid-range rate is formatted with one decimal",
+          "[preview][tok_per_sec]")
+{
+    auto s = format_tok_per_sec(/*completion_tokens=*/300, /*stream_ms=*/10000);
+    REQUIRE(s.has_value());
+    REQUIRE_THAT(*s, ContainsSubstring("30.0"));
+    REQUIRE_THAT(*s, ContainsSubstring("t/s"));
+}
+
+TEST_CASE("format_tok_per_sec: rates above 100 t/s drop the decimal",
+          "[preview][tok_per_sec]")
+{
+    // 200 tokens in 1 second -> 200 t/s, no decimal.
+    auto s = format_tok_per_sec(200, 1000);
+    REQUIRE(s.has_value());
+    REQUIRE_THAT(*s, ContainsSubstring("200"));
+    REQUIRE(s->find('.') == std::string::npos);
+}
+
+TEST_CASE("format_tok_per_sec: floor on completion tokens", "[preview][tok_per_sec]")
+{
+    // 15 tokens (below floor of 16) returns nullopt even with plenty of time.
+    auto s = format_tok_per_sec(15, 5000);
+    REQUIRE_FALSE(s.has_value());
+}
+
+TEST_CASE("format_tok_per_sec: floor on stream_ms", "[preview][tok_per_sec]")
+{
+    // 200 ms (below floor of 500) returns nullopt even with plenty of tokens.
+    auto s = format_tok_per_sec(200, 200);
+    REQUIRE_FALSE(s.has_value());
+}
+
+TEST_CASE("format_tok_per_sec: boundary cases", "[preview][tok_per_sec]")
+{
+    // Exactly at floor passes.
+    REQUIRE(format_tok_per_sec(16, 500).has_value());
+    // Zero stream_ms / zero tokens are guarded.
+    REQUIRE_FALSE(format_tok_per_sec(0, 5000).has_value());
+    REQUIRE_FALSE(format_tok_per_sec(100, 0).has_value());
+}

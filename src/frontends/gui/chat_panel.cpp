@@ -12,6 +12,7 @@
 
 #include "../../agent/conversation.h"
 #include "../../agent/mention_parser.h"
+#include "../../agent/metrics.h"
 #include "../../llm/token_counter.h"
 
 #include <spdlog/spdlog.h>
@@ -628,12 +629,12 @@ function removeClassFromMsg(id, cls) {
     var d = document.getElementById('msg-' + id);
     if (d) d.classList.remove(cls);
 }
-function setMsgTokenChip(id, n) {
+function setMsgTokenChip(id, n, rate) {
     var d = document.getElementById('msg-' + id);
     if (!d) return;
     var chip = d.querySelector('.token-chip');
     if (!chip) { chip = document.createElement('span'); chip.className = 'token-chip'; d.appendChild(chip); }
-    chip.textContent = '(' + n + ' t)';
+    chip.textContent = '(' + n + ' t' + (rate ? '  ' + rate : '') + ')';
 }
 /* S5.G -- inject the hover-reveal X for a deletable bubble. msgId is the
    dom message_id_ ChatPanel allocated when creating the bubble; historyId
@@ -1400,12 +1401,26 @@ void ChatPanel::on_turn_complete()
 
     // S5.D -- annotate the assistant bubble with server-reported completion
     // tokens once the turn is sealed (end_turn has finalized the HTML).
+    // Append a tokens-per-second figure when the last LLM round was long
+    // enough to make the rate meaningful (format_tok_per_sec applies the
+    // floor); short replies or instant cached responses drop the rate.
     if (show_per_message_tokens_ && last_completion_tokens_ > 0) {
         int aid = renderer_->current_assistant_id();
-        if (aid > 0)
-            run_script(wxString::Format("setMsgTokenChip(%d, %d);",
-                                        aid, last_completion_tokens_));
+        if (aid > 0) {
+            auto rate = format_tok_per_sec(last_completion_tokens_, last_stream_ms_);
+            if (rate)
+                run_script(wxString::Format("setMsgTokenChip(%d, %d, '%s');",
+                                            aid, last_completion_tokens_,
+                                            chat_js_escape(*rate)));
+            else
+                run_script(wxString::Format("setMsgTokenChip(%d, %d);",
+                                            aid, last_completion_tokens_));
+        }
     }
+    // Drop the round-scoped sample so the NEXT turn starts clean -- without
+    // this, a turn whose final round was untracked (e.g. cancelled) would
+    // pick up the previous turn's rate.
+    last_stream_ms_ = 0;
 
     footer_chips_->clear_live_estimate();
     refresh_action_btn();
@@ -1685,9 +1700,15 @@ void ChatPanel::on_tool_result(const wxString& call_id,
 
 void ChatPanel::set_context_meter(int used, int limit,
                                    int prompt_tokens, int completion_tokens,
-                                   int reserve_tokens)
+                                   int reserve_tokens,
+                                   long long stream_ms_last_round)
 {
     if (completion_tokens > 0) last_completion_tokens_ = completion_tokens;
+    // stream_ms is only non-zero on the broadcast that fires immediately
+    // after an LLM round; the session-open, compaction, reset, and
+    // mid-turn meter broadcasts all pass 0 and should NOT clobber the
+    // value the chat panel needs at on_turn_complete time.
+    if (stream_ms_last_round > 0) last_stream_ms_ = stream_ms_last_round;
     footer_chips_->set_context_meter(used, limit, prompt_tokens,
                                       completion_tokens, reserve_tokens);
 }

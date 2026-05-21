@@ -750,7 +750,8 @@ void AgentCore::process_message(const std::string& content)
             fe.on_context_meter(ctx_->current_tokens(), ctx_->llm_config().context_limit,
                             ctx_->budget().last_prompt_tokens(),
                             ctx_->budget().last_completion_tokens(),
-                            ctx_->budget().reserve());
+                            ctx_->budget().reserve(),
+                            step.stream_ms);
         });
 
         if (step.had_error) {
@@ -758,8 +759,21 @@ void AgentCore::process_message(const std::string& content)
             break;
         }
 
+        // Skip useless assistant messages -- empty content AND no tool_calls
+        // means the LLM returned nothing actionable. Most often happens on a
+        // mid-stream cancel before any token arrived, or on an LM Studio
+        // stream that died after finish_reason but before content. Appending
+        // such a message would leave a permanent orphan in history that has
+        // no UI bubble (render_loaded_history skips empty-content assistants)
+        // and corrupts the [user, assistant, ...] alternation some local LLM
+        // jinja templates require -- LM Studio's "No user query found in
+        // messages" rejection is the symptom.
+        const bool useless = step.assistant_msg.content.empty()
+                          && step.assistant_msg.tool_calls.empty();
+
         if (cancel_requested_.load()) {
-            ctx_->add_message(std::move(step.assistant_msg));
+            if (!useless)
+                ctx_->add_message(std::move(step.assistant_msg));
             spdlog::info("AgentCore: turn cancelled mid-stream");
             frontends_.broadcast([](IFrontend& fe) {
                 fe.on_error("Turn cancelled.");
@@ -767,7 +781,8 @@ void AgentCore::process_message(const std::string& content)
             break;
         }
 
-        ctx_->add_message(std::move(step.assistant_msg));
+        if (!useless)
+            ctx_->add_message(std::move(step.assistant_msg));
 
         if (step.tool_calls.empty())
             break;

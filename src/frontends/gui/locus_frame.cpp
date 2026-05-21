@@ -1349,6 +1349,7 @@ void LocusFrame::on_agent_context_meter(wxThreadEvent& evt)
     int used  = evt.GetInt();
     int limit = static_cast<int>(evt.GetExtraLong());
     int prompt = 0, completion = 0, reserve = 0;
+    long long stream_ms = 0;
     auto payload_str = evt.GetString().ToUTF8();
     if (payload_str.length() > 0) {
         try {
@@ -1356,9 +1357,10 @@ void LocusFrame::on_agent_context_meter(wxThreadEvent& evt)
             prompt     = j.value("prompt", 0);
             completion = j.value("completion", 0);
             reserve    = j.value("reserve", 0);
+            stream_ms  = j.value("stream_ms", 0LL);
         } catch (...) {}
     }
-    ui->chat->set_context_meter(used, limit, prompt, completion, reserve);
+    ui->chat->set_context_meter(used, limit, prompt, completion, reserve, stream_ms);
 
     int effective = limit - reserve;
     if (effective <= 0) effective = limit > 0 ? limit : 1;

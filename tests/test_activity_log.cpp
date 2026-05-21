@@ -35,7 +35,7 @@ struct Recorder : IFrontend {
                               const std::vector<std::string>&) override {}
     void on_tool_result(const std::string&, const std::string&, bool) override {}
     void on_turn_complete() override {}
-    void on_context_meter(int, int, int, int, int) override {}
+    void on_context_meter(int, int, int, int, int, long long) override {}
     void on_compaction_needed(int, int) override {}
     void on_session_reset() override {}
     void on_error(const std::string&) override {}

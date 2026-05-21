@@ -218,6 +218,18 @@ ConversationHistory ConversationHistory::from_json(const nlohmann::json& j)
     if (j.is_array()) {
         for (auto& item : j) {
             auto msg = ChatMessage::from_json(item);
+            // Defense for sessions written by older builds that could append
+            // assistants whose stream ended with no content AND no tool_calls
+            // (e.g. mid-stream cancel before any token arrived). Such a message
+            // has no UI bubble and breaks LM Studio's jinja template alternation
+            // rules; drop it on load so the loaded history is valid by
+            // construction. AgentCore stopped appending these in the current
+            // build but the on-disk format may still carry them.
+            if (msg.role == MessageRole::assistant
+                && msg.content.empty()
+                && msg.tool_calls.empty()) {
+                continue;
+            }
             // S5.D -- back-fill estimate for messages loaded from pre-S5.D sessions.
             if (msg.token_estimate == 0)
                 msg.token_estimate = TokenCounter::estimate_message(msg);

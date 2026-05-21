@@ -121,7 +121,8 @@ void CliFrontend::on_session_reset()
 void CliFrontend::on_context_meter(int used_tokens, int limit,
                                     int /*prompt_tokens*/,
                                     int /*completion_tokens*/,
-                                    int /*reserve_tokens*/)
+                                    int /*reserve_tokens*/,
+                                    long long /*stream_ms_last_round*/)
 {
     last_used_ = used_tokens;
     last_limit_ = limit;
