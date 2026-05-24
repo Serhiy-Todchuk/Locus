@@ -1565,6 +1565,117 @@ AgentCore::SlashOutcome AgentCore::try_slash_command(const std::string& content)
             frontends_.broadcast([&](IFrontend& fe) { fe.on_token(msg); });
             return handled();
         }
+        if (cmd == "breakdown") {
+            // Per-message token table. Tells the user where their context
+            // budget is actually going -- the chat usually surfaces only the
+            // "visible" assistant + user bubbles, but the system prompt and
+            // tool-call argument payloads are often the actual whales. Uses
+            // TokenCounter so the per-row numbers reconcile with the
+            // chat-footer ctx counter (modulo the volatile attached-context
+            // / file-change prepends, which aren't in `history()`).
+            const auto& msgs = ctx_->history().messages();
+            std::ostringstream o;
+            o << "Context breakdown -- " << msgs.size() << " message"
+              << (msgs.size() == 1 ? "" : "s")
+              << ", ~" << ctx_->history().estimate_tokens() << " tokens\n";
+            o << "(estimator: ~4 chars/tok + 4 framing/msg)\n\n";
+            o << "```\n";
+            o << "  #  role        toks   chars  preview\n";
+            o << "  ---------------------------------------------------------------\n";
+            int total = 0;
+            // First pass -- compute and collect for the top-contributors view.
+            std::vector<std::pair<int,int>> rows;  // (msg_idx, tokens)
+            rows.reserve(msgs.size());
+            for (std::size_t i = 0; i < msgs.size(); ++i) {
+                const auto& m = msgs[i];
+                int toks  = TokenCounter::estimate_message(m);
+                int chars = static_cast<int>(m.content.size());
+                for (auto& tc : m.tool_calls) {
+                    chars += static_cast<int>(tc.name.size() + tc.arguments.size());
+                }
+                total += toks;
+                rows.emplace_back(static_cast<int>(i), toks);
+
+                // Role label
+                const char* role_str = "?";
+                switch (m.role) {
+                    case MessageRole::system:    role_str = "system";    break;
+                    case MessageRole::user:      role_str = "user";      break;
+                    case MessageRole::assistant: role_str = "assistant"; break;
+                    case MessageRole::tool:      role_str = "tool";      break;
+                }
+
+                // Preview: prefer content; on tool-call assistants with no
+                // content, show "[tool_call: name1, name2]" so the user sees
+                // which tools are responsible for the payload.
+                std::string preview;
+                if (m.content.empty() && !m.tool_calls.empty()) {
+                    preview = "[tool_call: ";
+                    for (std::size_t k = 0; k < m.tool_calls.size(); ++k) {
+                        if (k) preview += ", ";
+                        preview += m.tool_calls[k].name;
+                    }
+                    preview += "]";
+                } else {
+                    preview = m.content;
+                }
+                // Collapse newlines + cap at 60 chars so the table stays
+                // single-line per row.
+                for (auto& c : preview) if (c == '\n' || c == '\r') c = ' ';
+                if (preview.size() > 60) preview = preview.substr(0, 57) + "...";
+
+                o << "  " << std::setw(2) << i
+                  << "  " << std::left << std::setw(10) << role_str << std::right
+                  << "  " << std::setw(5) << toks
+                  << "  " << std::setw(6) << chars
+                  << "  " << preview << "\n";
+            }
+            o << "  ---------------------------------------------------------------\n";
+            o << "  total: ~" << total << " tokens\n";
+            o << "```\n";
+
+            // Top contributors: any single message that ate > 5% of total.
+            if (total > 0) {
+                std::vector<std::pair<int,int>> top = rows;
+                std::sort(top.begin(), top.end(),
+                          [](const auto& a, const auto& b) { return a.second > b.second; });
+                bool any = false;
+                for (auto& [idx, toks] : top) {
+                    double pct = (toks * 100.0) / total;
+                    if (pct < 5.0) break;
+                    if (!any) {
+                        o << "\nTop contributors (>5%):\n";
+                        any = true;
+                    }
+                    const auto& m = msgs[idx];
+                    const char* role_str = "?";
+                    switch (m.role) {
+                        case MessageRole::system:    role_str = "system";    break;
+                        case MessageRole::user:      role_str = "user";      break;
+                        case MessageRole::assistant: role_str = "assistant"; break;
+                        case MessageRole::tool:      role_str = "tool";      break;
+                    }
+                    o << "  #" << idx << " " << role_str
+                      << "  " << toks << " tok  "
+                      << std::fixed << std::setprecision(0) << pct << "%\n";
+                }
+            }
+
+            // Volatile prepends: attached-context block + file-change notes
+            // are spliced onto the next user message and never appear in
+            // `history()`. Surface their cost separately so the user can
+            // reconcile this breakdown with the chat-footer counter.
+            std::string attached_block = ctx_->compose_attached_context_block();
+            int attached_toks = attached_block.empty()
+                ? 0
+                : TokenCounter::estimate(attached_block);
+            o << "\nVolatile prepends (not in history above, added next turn):\n";
+            o << "  attached context: ~" << attached_toks << " tokens\n";
+
+            std::string msg = o.str();
+            frontends_.broadcast([&](IFrontend& fe) { fe.on_token(msg); });
+            return handled();
+        }
         if (cmd == "compact") {
             CompactionLayerSelection sel;
             if (auto* ws = services_.workspace()) {

@@ -494,10 +494,11 @@ void LocusFrame::configure_chat_panel(ChatPanel* chat, LocusTab& tab)
 
     {
         std::vector<SlashItem> items = {
-            {"help",     "Show available slash commands",         false},
-            {"compact",  "Open the context compaction dialog",    false},
-            {"settings", "Open the Settings dialog",              false},
-            {"undo",     "Revert files mutated by the last turn", false},
+            {"help",      "Show available slash commands",            false},
+            {"compact",   "Open the context compaction dialog",       false},
+            {"settings",  "Open the Settings dialog",                 false},
+            {"undo",      "Revert files mutated by the last turn",    false},
+            {"breakdown", "Per-message token table for this session", false},
         };
         for (const auto& c : agent_ptr->slash_dispatcher().complete("")) {
             std::string desc = c.signature.empty()
