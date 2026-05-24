@@ -116,6 +116,14 @@ public:
                         const wxString& branch,
                         const wxString& subject);
 
+    // Footer-declutter pass: plan + commit chips moved out of the chat
+    // footer into LocusFrame's status bar. The status bar is global (one
+    // per main window), so it reads the active tab's cached strings via
+    // these accessors -- both on plan/commit events and on tab switch.
+    // Empty string means "no info; clear the status bar field".
+    wxString plan_status_text()   const;
+    wxString commit_status_text() const;
+
     // S5.Z task 6 -- compactions counter chip. `archive_dir` is opened with
     // the OS default app on chip click. Pass count == 0 to hide.
     void set_compacted_count(int count, const wxString& archive_dir);
@@ -280,9 +288,10 @@ private:
     wxToggleButton* mode_plan_btn_    = nullptr;
     wxToggleButton* mode_execute_btn_ = nullptr;
 
-    // S5.S permission preset chip + dropdown.
+    // S5.S permission preset dropdown. The constant "Permission:" prefix
+    // label was retired in the footer declutter pass; combo carries its
+    // own tooltip + colour cue.
     wxChoice*              preset_choice_      = nullptr;
-    wxStaticText*          preset_chip_        = nullptr;
     tools::PermissionPreset preset_effective_   = tools::PermissionPreset::ask_before_edits;
     bool                   preset_is_runtime_  = false;
     PermissionPresetPickFn on_permission_preset_pick_;
@@ -305,9 +314,8 @@ private:
     long          find_index_       = 0;       // 1-based current match (0 when none)
     wxString      find_active_query_;          // last non-empty query handed to Find()
 
-    // S5.Z task 6 -- archive folder to open when the compactions chip is
-    // clicked. Empty when the chip is hidden / not yet computed.
-    wxString compacted_archive_dir_;
+    // (S5.Z task 6 archive-dir state moved into ChatFooterChips alongside
+    // the compacted_btn_ click handler.)
 
     // Attached-context chip row.
     wxPanel*      attach_panel_  = nullptr;

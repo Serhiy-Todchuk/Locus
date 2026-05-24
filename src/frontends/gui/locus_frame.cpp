@@ -347,11 +347,24 @@ void LocusFrame::detach_from_session()
 
 void LocusFrame::create_status_bar()
 {
-    CreateStatusBar(2);
-    const int widths[] = { -1, -3 };
-    SetStatusWidths(2, widths);
+    // Field 0 (flex 1): general status messages ("Ready", "Agent working...",
+    //                   "Auto-compact enabled", etc.) -- written by the
+    //                   existing one-line SetStatusText(..., 0) sites.
+    // Field 1 (flex 3): ops_status_.compose() string (indexer / embedder
+    //                   progress).
+    // Field 2 (fixed):  current plan progress for the active tab (footer-
+    //                   declutter pass: moved out of the chat footer chip).
+    // Field 3 (fixed):  last auto-commit short SHA + branch for the active
+    //                   tab (also moved out of the chat footer chip).
+    // refresh_active_tab_footer_status() pushes fields 2+3 from the active
+    // tab's ChatFooterChips on plan/commit events and on tab switch.
+    CreateStatusBar(4);
+    const int widths[] = { -1, -3, 280, 220 };
+    SetStatusWidths(4, widths);
     SetStatusText("Ready", 0);
     SetStatusText("", 1);
+    SetStatusText("", 2);
+    SetStatusText("", 3);
 }
 
 void LocusFrame::setup_aui_layout()
@@ -685,6 +698,33 @@ LocusFrame::TabUi& LocusFrame::active_tab_ui()
     return tabs_ui_.begin()->second;
 }
 
+void LocusFrame::refresh_active_tab_footer_status()
+{
+    // Footer-declutter pass: plan + commit chips moved out of the chat
+    // footer into status-bar fields 2 + 3. Called from the per-tab
+    // plan/auto-commit event paths AND from on_notebook_page_changed so
+    // a tab switch re-renders the strings.
+    if (tabs_ui_.empty() || !notebook_) {
+        SetStatusText("", 2);
+        SetStatusText("", 3);
+        return;
+    }
+    int sel = notebook_->GetSelection();
+    if (sel < 0 || is_placeholder_index(sel)) {
+        SetStatusText("", 2);
+        SetStatusText("", 3);
+        return;
+    }
+    auto& ui = active_tab_ui();
+    if (!ui.chat) {
+        SetStatusText("", 2);
+        SetStatusText("", 3);
+        return;
+    }
+    SetStatusText(ui.chat->plan_status_text(),   2);
+    SetStatusText(ui.chat->commit_status_text(), 3);
+}
+
 LocusTab& LocusFrame::active_tab() { return *active_tab_ui().tab; }
 
 wxString LocusFrame::compose_tab_label(const TabUi& ui) const
@@ -805,6 +845,9 @@ void LocusFrame::on_notebook_page_changed(wxAuiNotebookEvent& evt)
         }
         terminal_panel_->set_state(state);
     }
+    // Footer-declutter pass: plan + commit chips read from the active
+    // tab's ChatPanel; refresh their status-bar slots on tab switch.
+    refresh_active_tab_footer_status();
     if (menu_) menu_->rebuild_sessions_menu(session_.sessions().list());
     evt.Skip();
 }
@@ -1512,6 +1555,7 @@ void LocusFrame::on_agent_plan_proposed(wxThreadEvent& evt)
 {
     if (auto* ui = find_tab_ui(evt.GetId()))
         ui->chat->on_plan_proposed(evt.GetString());
+    refresh_active_tab_footer_status();
 }
 
 void LocusFrame::on_agent_plan_step_advanced(wxThreadEvent& evt)
@@ -1528,6 +1572,7 @@ void LocusFrame::on_agent_plan_step_advanced(wxThreadEvent& evt)
     } catch (const std::exception& ex) {
         spdlog::warn("Failed to parse plan_step_advanced payload: {}", ex.what());
     }
+    refresh_active_tab_footer_status();
 }
 
 void LocusFrame::on_agent_plan_completed(wxThreadEvent& evt)
@@ -1542,6 +1587,7 @@ void LocusFrame::on_agent_plan_completed(wxThreadEvent& evt)
     } catch (const std::exception& ex) {
         spdlog::warn("Failed to parse plan_completed payload: {}", ex.what());
     }
+    refresh_active_tab_footer_status();
 }
 
 void LocusFrame::on_agent_auto_commit(wxThreadEvent& evt)
@@ -1557,6 +1603,7 @@ void LocusFrame::on_agent_auto_commit(wxThreadEvent& evt)
     } catch (const std::exception& ex) {
         spdlog::warn("Failed to parse auto_commit payload: {}", ex.what());
     }
+    refresh_active_tab_footer_status();
 }
 
 void LocusFrame::on_agent_gen_progress(wxThreadEvent& evt)

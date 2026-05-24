@@ -52,6 +52,11 @@ public:
 
 private:
     void create_status_bar();
+    // Push the active tab's plan_text() + commit_text() into status bar
+    // fields 2 + 3. Called from the per-tab on_agent_plan_*/auto_commit
+    // event paths (when the firing tab IS the active tab) and from the
+    // notebook page-changed handler so a tab switch re-renders.
+    void refresh_active_tab_footer_status();
     void setup_aui_layout();
     void apply_saved_window_geometry();
 

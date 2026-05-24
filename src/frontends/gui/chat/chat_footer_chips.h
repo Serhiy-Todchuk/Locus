@@ -2,87 +2,99 @@
 
 #include <string>
 
-#include <wx/gauge.h>
 #include <wx/wx.h>
 
 namespace locus {
 
-// Owns the four footer chips in ChatPanel's bottom bar:
-//   ctx_gauge / ctx_label : context meter (used/limit/prompt/completion split)
-//   plan_chip             : current plan progress ("Plan: 3/7 - building ...")
-//   commit_chip           : last auto-commit short SHA + branch
+// Owns the chat footer's lightweight chip widgets. After the footer
+// declutter pass, only three things still live IN the footer:
 //
-// All widgets are parented to the ChatPanel. Getters expose them for sizer
-// assembly in ChatPanel::create_footer. Internally tracks plan progress
-// (which plan is active, step counts) to keep chip text up to date.
+//   ctx_label       : "ctx: 123456/200000 (62%)" (in/out split in tooltip)
+//   round_chip      : "round 7/500" while a turn is in flight
+//   compacted_btn   : a small numeric button (e.g. "12") that opens the
+//                     session's history-archive folder on click
+//
+// Plan progress and last auto-commit moved to the main-window status bar
+// (their underlying state is still tracked here so the status bar can read
+// `plan_text()` / `commit_text()` and re-render on tab switch). The chat-
+// side widgets for those two chips were retired.
 class ChatFooterChips {
 public:
     // All widgets are parented to `parent` (the ChatPanel itself).
     explicit ChatFooterChips(wxWindow* parent);
 
-    // Widget accessors for ChatPanel sizer assembly.
-    wxGauge*      gauge()           const { return ctx_gauge_; }
+    // Widget accessors for ChatPanel sizer assembly. The compacted button
+    // is a button now (was a wxStaticText) so it gets standard hover +
+    // click feel.
     wxStaticText* ctx_label()       const { return ctx_label_; }
-    wxStaticText* plan_chip()       const { return plan_chip_; }
-    wxStaticText* commit_chip()     const { return commit_chip_; }
-    wxStaticText* compacted_chip()  const { return compacted_chip_; }
+    wxButton*     compacted_btn()   const { return compacted_btn_; }
     wxStaticText* round_chip()      const { return round_chip_; }
 
-    // Context meter. Called from ChatPanel::set_context_meter.
-    // Returns true when a Layout() call is needed (label width may have changed).
-    // reserve_tokens (S5.D) is the headroom the agent loop keeps free; gauge
-    // color thresholds are applied against effective_limit = limit - reserve.
+    // Context meter. Called from ChatPanel::set_context_meter. The visible
+    // label only carries "ctx: <used>/<limit> (P%)"; the prompt /
+    // completion / reserve breakdown is in the tooltip.
+    // Returns true when a Layout() call is needed (label width changed).
     bool set_context_meter(int used, int limit,
                            int prompt_tokens, int completion_tokens,
                            int reserve_tokens = 0);
 
-    // Live generation estimate update. Called from set_generation_progress.
+    // Live generation estimate update -- consumed by the tooltip only.
     void set_generation_progress(int chars, int est_tokens);
 
     // Clear the live estimate after turn complete so the exact server value wins.
     void clear_live_estimate();
 
-    // Auto-commit chip. Returns true if Layout() is needed.
+    // Auto-commit cache update. Stores the latest commit; the rendered
+    // string is exposed via commit_text() so LocusFrame can write it to
+    // the status bar. Returns true so callers know commit_text() changed
+    // and the active tab may need to push a status-bar refresh.
     bool on_auto_commit(const wxString& short_sha,
                         const wxString& branch,
                         const wxString& subject);
 
-    // S5.Z task 6 -- compactions counter chip. `count == 0` keeps it hidden;
-    // any positive value renders "compacted: N" with a tooltip naming the
-    // archive folder. `archive_dir` is the user-facing path that opens on
-    // click; pass empty when the click handler should be disabled. Returns
-    // true if Layout() is needed (shown for the first time, or text width
-    // grew enough to need re-layout).
+    // S5.Z task 6 -- compactions counter button. `count <= 0` hides it;
+    // positive values render the number itself as the label.
+    // `archive_dir` is the user-facing path that opens on click; pass
+    // empty to disable the click handler. Returns true if Layout() is
+    // needed (visibility flip or label width change).
     bool set_compacted_count(int count, const wxString& archive_dir);
 
-    // Agentic Tetris findings #5 -- in-flight round counter. `max_rounds == 0`
-    // renders just "round N"; positive value renders "round N/M". Returns
-    // true if Layout() is needed (only on first surface). Paired with
-    // hide_round_progress() which the chat panel calls on turn complete.
+    // Agentic Tetris findings #5 -- in-flight round counter.
     bool set_round_progress(int round, int max_rounds);
     bool hide_round_progress();
 
-    // Plan chip updates. Each returns true if Layout() is needed.
+    // Plan-chip state updates (no chat-side widget after the declutter
+    // pass; LocusFrame reads `plan_text()` and writes it to a status-bar
+    // field). Return value flags "the rendered string changed; refresh
+    // anyone listening".
     bool on_plan_proposed(const std::string& plan_id, int total_steps,
                           const std::string& first_step_desc);
     bool on_plan_step_advanced(const std::string& plan_id, const wxString& status);
     bool on_plan_completed(const std::string& plan_id, bool success);
 
-    // Hide the plan chip and clear plan state (e.g. on_mode_changed to chat,
-    // or session reset). Returns true if Layout() is needed.
+    // Drop plan state (e.g. on_mode_changed to chat, or session reset).
+    // Returns true if the rendered text changed (so the status-bar field
+    // should be cleared by the caller).
     bool hide_plan_chip();
 
-    // Getter used by ChatPanel to pass to ChatLinkHandler::handle_url.
+    // Active-plan id is still kept here so ChatPanel can hand it to
+    // ChatLinkHandler::handle_url.
     const std::string& current_plan_id() const { return current_plan_id_; }
+
+    // Rendered text accessors for LocusFrame's status bar -- empty string
+    // means "no info; clear the field".
+    wxString plan_text()   const;
+    wxString commit_text() const;
+
+    // Click target for the compacted button. ChatPanel binds the handler
+    // (it knows the archive_dir to launch).
+    const wxString& compacted_archive_dir() const { return compacted_archive_dir_; }
 
 private:
     void refresh_ctx_label();
 
-    wxGauge*      ctx_gauge_      = nullptr;
     wxStaticText* ctx_label_      = nullptr;
-    wxStaticText* plan_chip_      = nullptr;
-    wxStaticText* commit_chip_    = nullptr;
-    wxStaticText* compacted_chip_ = nullptr;
+    wxButton*     compacted_btn_  = nullptr;
     wxStaticText* round_chip_     = nullptr;
 
     int last_ctx_used_            = 0;
@@ -92,10 +104,21 @@ private:
     int last_ctx_reserve_         = 0;
     int live_completion_estimate_ = 0;
 
+    // Plan state -- no widget; status bar reads `plan_text()`.
     std::string current_plan_id_;
     int         current_plan_total_steps_ = 0;
     int         current_plan_done_steps_  = 0;
     std::string current_plan_step_label_;
+    bool        plan_done_           = false;
+    bool        plan_done_success_   = true;
+
+    // Auto-commit state -- no widget; status bar reads `commit_text()`.
+    wxString    commit_short_sha_;
+    wxString    commit_branch_;
+    wxString    commit_subject_;
+
+    // Path the compacted button opens on click; surfaced via accessor.
+    wxString    compacted_archive_dir_;
 };
 
 } // namespace locus

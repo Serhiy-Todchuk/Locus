@@ -1000,33 +1000,40 @@ ChatPanel::ChatPanel(wxWindow* parent,
     attach_panel_->SetSizer(attach_sizer);
     attach_panel_->Hide();
 
-    // Mode switcher row.
+    // Mode switcher row. Footer-declutter pass: Find lives in the centre
+    // and the Permission combo lives on the right of this row so the
+    // bottom footer only carries the ctx meter + round/compacted chips
+    // + the right-edge action group (Auto / Compact / Undo / Submit).
+    //   [Mode: Chat][Plan][Execute]   (stretch)   [Find]   (stretch)   [combo]
     auto* mode_row = new wxBoxSizer(wxHORIZONTAL);
     mode_row->Add(new wxStaticText(this, wxID_ANY, "Mode:"),
                   0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
     mode_row->Add(mode_chat_btn_,    0, wxRIGHT, 2);
     mode_row->Add(mode_plan_btn_,    0, wxRIGHT, 2);
     mode_row->Add(mode_execute_btn_, 0);
+    mode_row->AddStretchSpacer();
+    mode_row->Add(find_btn_,         0, wxALIGN_CENTER_VERTICAL);
+    mode_row->AddStretchSpacer();
+    mode_row->Add(preset_choice_,    0, wxALIGN_CENTER_VERTICAL);
 
-    // Footer bar.
+    // Footer bar. Order: ctx_label (flex) -- round_chip -- compacted_btn --
+    // stretch -- Auto / Compact / Undo / Submit. The user explicitly asked
+    // for round to precede compacted so they read left-to-right "this turn
+    // is at round 7/500, and you've compacted 12 times so far."
     auto* footer = new wxBoxSizer(wxHORIZONTAL);
-    footer->Add(footer_chips_->gauge(),       0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
-    footer->Add(footer_chips_->ctx_label(),   1, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
-    footer->Add(footer_chips_->plan_chip(),      0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
-    footer->Add(footer_chips_->commit_chip(),    0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
-    footer->Add(footer_chips_->compacted_chip(), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
-    footer->Add(footer_chips_->round_chip(),     0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
-    // S5.Z task 6 -- left-click on the chip opens the session's archive
+    footer->Add(footer_chips_->ctx_label(),   1, wxALIGN_CENTER_VERTICAL | wxRIGHT, 12);
+    footer->Add(footer_chips_->round_chip(),  0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 12);
+    footer->Add(footer_chips_->compacted_btn(), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
+    // S5.Z task 6 -- click the compacted button opens the session's archive
     // folder. wxLaunchDefaultApplication is unreliable for directories on
     // Windows (silently no-ops in some shell configurations); use the same
     // ShellExecuteW path FileTreePanel uses for files. Create the dir on
-    // demand so the chip works even before the very first archive write
-    // (counter > 0 with the dir missing happens when an old session is
-    // reloaded with archives GC'd away).
-    footer_chips_->compacted_chip()->Bind(wxEVT_LEFT_DOWN,
-        [this](wxMouseEvent&) {
-            if (compacted_archive_dir_.empty()) return;
-            std::filesystem::path p(compacted_archive_dir_.ToStdWstring());
+    // demand so the click works even before the very first archive write.
+    footer_chips_->compacted_btn()->Bind(wxEVT_BUTTON,
+        [this](wxCommandEvent&) {
+            const wxString& dir = footer_chips_->compacted_archive_dir();
+            if (dir.empty()) return;
+            std::filesystem::path p(dir.ToStdWstring());
             std::error_code ec;
             std::filesystem::create_directories(p, ec);
 #ifdef _WIN32
@@ -1045,10 +1052,6 @@ ChatPanel::ChatPanel(wxWindow* parent,
                              "for '{}'", p.string());
 #endif
         });
-    footer_chips_->compacted_chip()->SetCursor(wxCursor(wxCURSOR_HAND));
-    footer->Add(preset_chip_,    0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
-    footer->Add(preset_choice_,  0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
-    footer->Add(find_btn_,       0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
     footer->AddStretchSpacer();
     footer->Add(auto_compact_cb_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
     footer->Add(compact_btn_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
@@ -1179,14 +1182,11 @@ void ChatPanel::create_footer()
         toggle_find_bar();
     });
 
-    // S5.S -- permission preset chip + dropdown. The chip used to mirror the
-    // dropdown selection's display name (duplicating what the combo already
-    // showed); it now carries a constant "Permission:" label, while the
-    // elevation-level colour cue still updates in on_permission_preset_changed.
-    preset_chip_ = new wxStaticText(this, wxID_ANY, "Permission:");
-    preset_chip_->SetName(ui_names::kChatPresetChip);
-    gui::apply_locus_accessible_name(preset_chip_);
-
+    // S5.S -- permission preset dropdown. The static "Permission:" prefix
+    // label was retired in the footer declutter pass; the combo carries
+    // its own tooltip + accessible name. The combo's foreground colour is
+    // updated in on_permission_preset_changed to keep the elevation cue
+    // (gray / amber / orange / blue) visible at a glance.
     {
         wxArrayString preset_labels;
         for (auto p : tools::all_presets_in_order())
@@ -1646,9 +1646,18 @@ void ChatPanel::on_auto_commit(const wxString& short_sha,
     if (footer_chips_->on_auto_commit(short_sha, branch, subject)) Layout();
 }
 
+wxString ChatPanel::plan_status_text() const
+{
+    return footer_chips_ ? footer_chips_->plan_text() : wxString{};
+}
+
+wxString ChatPanel::commit_status_text() const
+{
+    return footer_chips_ ? footer_chips_->commit_text() : wxString{};
+}
+
 void ChatPanel::set_compacted_count(int count, const wxString& archive_dir)
 {
-    compacted_archive_dir_ = archive_dir;
     if (footer_chips_->set_compacted_count(count, archive_dir)) Layout();
 }
 
@@ -1856,30 +1865,23 @@ void ChatPanel::on_permission_preset_changed(tools::PermissionPreset effective,
             if (order[i] == effective) { idx = static_cast<int>(i); break; }
         }
         preset_choice_->SetSelection(idx);
-    }
 
-    if (preset_chip_) {
-        // Label is constant ("Permission:") -- the combo to the right shows
-        // the active preset's name, so duplicating it here is just visual
-        // noise. We still recolour the chip by elevation level so the user
-        // can glance-detect "I'm in allow_all" without reading the combo.
-        wxColour fg = wxColour(80, 80, 80);  // gray default
+        // Elevation cue moves from the retired "Permission:" chip onto the
+        // combo's foreground colour. Native wxChoice on Windows respects
+        // SetForegroundColour for the closed-state selected-item text.
+        wxColour fg = wxColour(80, 80, 80);
         switch (effective) {
         case tools::PermissionPreset::read_only:
         case tools::PermissionPreset::ask_before_edits:
-            fg = wxColour(80, 80, 80);     // gray
-            break;
+            fg = wxColour(80, 80, 80);     break;
         case tools::PermissionPreset::allow_edits:
-            fg = wxColour(178, 130, 0);    // yellow / amber
-            break;
+            fg = wxColour(178, 130, 0);    break;
         case tools::PermissionPreset::allow_all:
-            fg = wxColour(200, 90, 0);     // orange
-            break;
+            fg = wxColour(200, 90, 0);     break;
         case tools::PermissionPreset::custom:
-            fg = wxColour(60, 90, 180);    // blue
-            break;
+            fg = wxColour(60, 90, 180);    break;
         }
-        preset_chip_->SetForegroundColour(fg);
+        preset_choice_->SetForegroundColour(fg);
 
         wxString tip;
         switch (effective) {
@@ -1898,8 +1900,8 @@ void ChatPanel::on_permission_preset_changed(tools::PermissionPreset effective,
             tip += " (runtime override -- closes with this tab)";
         else
             tip += " (from workspace setting)";
-        preset_chip_->SetToolTip(tip);
-        preset_chip_->Refresh();
+        preset_choice_->SetToolTip(tip);
+        preset_choice_->Refresh();
     }
     Layout();
 }
