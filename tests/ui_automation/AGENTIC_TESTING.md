@@ -103,12 +103,40 @@ instrumentation that lives in the default logger:
 - `LLM stream: first chunk after X ms` / `inter-chunk gap X ms` (warn at >60s)
   / end-of-stream summary (chunks, bytes, max gap) -- pinpoints "model slow"
   vs "model stalled" without needing -verbose.
+- `LLM stream: chunk #N (+B B, gap G ms, total T B)` -- info-level heartbeat
+  fires every 32 chunks OR every 10 s (whichever first) so a long reasoning
+  round writes to the log even when the chat WebView shows nothing visible.
+  Closes the TestLocalVibe finding where `wait_for_agent_idle` reported
+  `status: "stuck"` during 25-minute reasoning rounds because the previous
+  per-chunk trace was gated at trace level (and `--agentic-mute-noise` drops
+  the spdlog flush threshold to info, so trace lines stayed buffered).
 - `run_command[pid=N]: spawned` / `child exited` / `reader joined after Y ms`,
   plus a 30s heartbeat that fires only when the reader is still draining
   after the child exited (the signature of the inherited-pipe leak from
   findings 7+8).
 - `AgentCore: round N start (turn T)` info line bookends every LLM round.
 - `tool 'X' result: ... exec_ms=Y` for every tool dispatch.
+
+### What the agentic seed config sets
+
+The default `tmp` workspace (or any workspace where `--no-seed-config`
+isn't passed) gets a `.locus/config.json` with these knobs pre-set:
+
+- `tool_approvals` -- write/edit/delete/run_command/run_command_bg all `auto`,
+  so the agent isn't blocked on a modal you can't click from the QA-LLM driver.
+- `index.semantic_search.enabled = false` -- skip the embedder load cost,
+  keeps tmp-workspace bring-up fast. Pair with `capabilities.semantic_search
+  = false` (also seeded off) so the tool description matches.
+- `capabilities.background_processes = true` -- enable the `run_command_bg`
+  / `read_process_output` / `stop_process` / `list_processes` tools so
+  Task 5-style "test stdin to a long-running process" scenarios work
+  out of the box. Without this the agent silently falls back to the
+  synchronous `run_command` with the 30 min default timeout.
+- `capabilities.memory_bank = true` -- ships on by default; agentic tests
+  for `/memory add` + `/memory search` round-trip exercise this path.
+- `sessions.auto_cleanup_enabled = false`, `sessions.restore_last = false`
+  -- each `launch` starts a fresh session; prior session bodies stay on
+  disk for the harness to read via `dump_history` / `read_workspace_file`.
 
 ### Recovery knobs you may want to set in `.locus/config.json`
 
@@ -148,11 +176,35 @@ send a `launch` op. This lets you stage files (e.g. write a custom
   content, file contents, listings). `detail` is free-text. `id` is
   echoed back if you sent one.
 
-### PowerShell helper -- copy this into every Bash invocation
+### PowerShell helper -- ship-and-use, or inline-paste
 
 Future-you will not have a persistent shell across `Bash` tool calls.
-The simplest pattern is connection-per-op via PowerShell. Paste this
-helper at the top of any PowerShell command that talks to the server:
+Two options for talking to the server from PowerShell:
+
+**Option A (recommended) -- use the shipped helper.** The repo includes
+`tests/ui_automation/locus-op.ps1`. From any cwd, invoke it by absolute
+path. Two parameter sets:
+
+```powershell
+# Raw JSON request:
+& "d:\Projects\AICodeAss\tests\ui_automation\locus-op.ps1" -Json '{"op":"ping"}'
+
+# Op + args shorthand (script builds JSON via ConvertTo-Json):
+& "d:\Projects\AICodeAss\tests\ui_automation\locus-op.ps1" `
+    -Op "submit_chat" -Args @{ text = "write a snake game in C++" }
+
+# Pipe straight into ConvertFrom-Json:
+$resp = & "d:\Projects\AICodeAss\tests\ui_automation\locus-op.ps1" `
+            -Op "read_chat" -Args @{ max_chars = 4000 } | ConvertFrom-Json
+$resp.data.text
+```
+
+Exit codes: 0 = response returned (whether ok=true or false), 2 = socket
+error / server not running, 3 = bad argument combo. The script is one
+~80-line file with no external dependencies -- copy-deployable.
+
+**Option B (legacy) -- inline preamble.** If you'd rather not depend on
+the shipped helper, the same logic in one function:
 
 ```powershell
 function locus-op([string]$Json, [int]$Port = 7878) {
@@ -165,14 +217,7 @@ function locus-op([string]$Json, [int]$Port = 7878) {
         $r.ReadLine()
     } finally { $c.Close() }
 }
-```
-
-Then use it:
-
-```powershell
-locus-op '{"op":"launch"}'
-locus-op '{"op":"submit_chat","args":{"text":"write a snake game in C++"}}'
-locus-op '{"op":"read_chat","args":{"max_chars":4000}}'
+locus-op '{"op":"ping"}'
 ```
 
 For long arguments (file contents, multi-line prompts) compose the JSON
@@ -245,8 +290,10 @@ Targeting reference (any op that takes a target):
 
 | Op | Args | Returns / notes |
 |---|---|---|
-| `submit_chat` | `text` | Types into the chat input and presses Enter. Single round-trip way to ask Locus a question. |
-| `read_chat` | optional `max_chars` (default 20000), `from_webview` (default true), `timeout_ms` | Returns `data: { text, truncated, length }`. Reads the chat WebView DOM via UIA, so user + assistant bubbles + tool-result bubbles all surface as a flat text dump. |
+| `submit_chat` | `text` | Types into the chat input and presses Enter. Returns `data: { chars, dispatched, since_byte }` where `dispatched` is one of `"slash" \| "unknown_slash" \| "template" \| "agent" \| "unknown"`, derived from a 300ms log-tail. `unknown` means the dispatch class couldn't be classified quickly -- poll `get_chat_status` or `read_locus_log` for the eventual ground truth. |
+| `read_chat` | optional `max_chars` (default 20000), `from_webview` (default true), `timeout_ms` | Returns `data: { text, truncated, length }`. Reads the chat WebView DOM via UIA. **Limitations to know about:** (a) long tool-call / write_file bubbles are collapsed behind a "Show N more lines" chevron the UIA scrape can't expand; (b) tool ERROR results render as `<name>  Error  Error  (Nt)` with the error body scrubbed regardless of size; (c) on turn cancel the in-flight assistant bubble is discarded -- a `read_chat` taken mid-stream will shrink to just the committed history on the next read. **Use `dump_history` instead** when you need the verbatim tool args / tool results -- it pulls from the persisted session JSON which carries everything. |
+| `dump_history` | optional `session_id`, `max_messages` (default 0 = all), `include_system` (default false), `max_content_chars` (default 0 = no cap) | Returns `data: { messages: [...], session_id, session_file, present, full_message_count, estimated_tokens }`. Reads the most-recently-modified `.locus/sessions/*.json` (or the named one) and surfaces the verbatim message array with full `tool_calls` args + tool-result `content`. Closes the gaps in `read_chat`. NOTE: the session file reflects state through the most recent turn boundary -- an in-flight assistant message only appears once the turn completes (auto-save fires on `on_turn_complete`). |
+| `slash` | `command` (string, with or without leading `/`), optional `wait_ms` (default 3000) | Types `/command ...` into the chat input and tails the log for the dispatch marker. Returns `data: { dispatched, command, name, log_marker, since_byte }` where `dispatched` is one of `"slash" \| "unknown_slash" \| "parse_error" \| "template" \| "agent" \| "unknown"`. Use this instead of `submit_chat` when you want a clean dispatch contract for slash testing. |
 | `wait_for_text_stable` | target, `stable_ms` (default 3000), `timeout_ms` (default 120000), `poll_ms`, `walk_subtree` (default true), `min_chars` | Polls the target's text until it stops changing for `stable_ms`. Primary way to detect "agent finished streaming". Returns `data: { polls, length, elapsed_ms }`. |
 | `wait_for_log_contains` | `substring`, `timeout_ms` (default 60000), `since_byte`, `poll_ms` | Polls `.locus/locus.log` for a substring. Returns `data: { matched_at_byte, log_size }`. Use `since_byte` from a previous `read_locus_log` to skip over already-seen output. |
 | `list_workspace` | optional `path`, `depth` (default 3), `max_entries` (default 500), `include_hidden` (default false; `.locus/` is always included) | Recursively lists files under a workspace-relative path. Excludes build/node_modules/etc. Returns `data: { entries: [{path, is_dir, size?}], count, truncated }`. |
@@ -254,9 +301,9 @@ Targeting reference (any op that takes a target):
 | `write_workspace_file` | `path`, `content` | Creates parent dirs. Use for staging test inputs (e.g. a custom `.locus/config.json`) before launch. |
 | `delete_workspace_file` | `path` | -- |
 | `read_locus_log` | optional `tail_lines` (default 200), `since_byte` | Returns `data: { lines, size, present }`. Pass `since_byte` to get only new output since the last call. |
-| `get_chat_status` | optional `timeout_ms` (default 1000) | Snapshots the chat-footer status: context label, plan/commit/compacted/preset chips, action button. Returns `data: { context_label, plan_chip, commit_chip, compacted_chip, preset_chip, stop_btn_visible, action_label, agent_busy }`. `agent_busy` is the boolean callers usually want -- true when the action button reads "Stop" or "Queue", false when it reads "Submit". `stop_btn_visible` stays for back-compat but only reports presence, not state. |
-| `list_named_widgets` | optional `depth` (default 12) | Walks the UIA tree and returns every line whose `Name` or `AutomationId` mentions `locus.`. Use when you need to discover what's addressable in a state you haven't seen before. Returns `data: { lines, count }`. |
-| `wait_for_agent_idle` | optional `timeout_ms` (default 600000 = 10 min), `poll_ms` (default 1000), `quiet_ms` (default 4000), `stuck_after_quiet_ms` (default 300000 = 5 min) | Combines log-mtime stability + action-button state to detect end-of-turn. Returns `{status, action_label, log_quiet_ms, elapsed_ms}` where `status` is `"idle"` (button = Submit AND log quiet for `quiet_ms`), `"stuck"` (button = Stop/Queue AND log silent for `stuck_after_quiet_ms` -- agent thread hung), or `"timeout"`. **Prefer this over `wait_for_text_stable parent_aid=locus.chat.webview`** -- DOM stability lies during long reasoning / tool-call rounds where nothing visible streams. |
+| `get_chat_status` | optional `timeout_ms` (default 1000) | Snapshots the chat-footer status. Returns `data: { context_label, plan_chip, commit_chip, compacted_chip, stop_btn_visible, action_label, agent_busy, cancel_in_progress }`. **`context_label`** is the rendered ctx meter text (e.g. `"6431 / 16384"`); empty when the widget is missing. `plan_chip` / `commit_chip` / `compacted_chip` are kept for back-compat with older agentic scripts -- footer-declutter retired the dedicated widgets, so they may return empty strings on current builds. **`agent_busy`** is the boolean callers usually want -- true when the action button reads "Stop" or "Queue", false when it reads "Submit". **`cancel_in_progress`** is true when the LAST `AgentCore: cancellation requested` log line has no matching `turn cancelled` / `LLM stream aborted` / `agent thread stopped` line after it -- the Stop button flips to "Submit" within ~4s but the cancel can take minutes to propagate through a streaming LLM call. Check this before queuing a follow-up `submit_chat` so the new prompt doesn't collide with a still-cancelling turn. |
+| `list_named_widgets` | optional `depth` (default 12) | Walks the UIA tree and returns every line whose AutomationId / Name mentions `locus.`. Use when you need to discover what's addressable in a state you haven't seen before. Returns `data: { lines, count }`. Lines are formatted as `[ControlType] aid="..." wx_id="..."` -- **the `aid="..."` field is what you pass as `automation_id` in `find` / `click`** (matches the UIA Name property because LocusAccessible::GetName surfaces SetName there). `wx_id` is the internal wxWidgets numeric id; NOT addressable. |
+| `wait_for_agent_idle` | optional `timeout_ms` (default 600000 = 10 min), `poll_ms` (default 1000), `quiet_ms` (default 4000), `stuck_after_quiet_ms` (default 300000 = 5 min) | Combines log-mtime stability + action-button state to detect end-of-turn. Returns `{status, action_label, log_quiet_ms, elapsed_ms}` where `status` is `"idle"` (button = Submit AND log quiet for `quiet_ms`), `"stuck"` (button = Stop/Queue AND log silent for `stuck_after_quiet_ms` -- agent thread hung), or `"timeout"`. **Prefer this over `wait_for_text_stable parent_aid=locus.chat.webview`** -- DOM stability lies during long reasoning / tool-call rounds where nothing visible streams. The `stuck` false-positive rate is now low because the LLM stream emits an info-level chunk heartbeat every 32 chunks / 10s (see "What agentic mode turns on automatically" above) -- a 5-minute log silence really does indicate a frozen agent thread, not just a deep reasoning round. |
 
 ---
 
@@ -335,8 +382,15 @@ $wait = @{ op="wait_for_agent_idle";
                    stuck_after_quiet_ms=300000 } } | ConvertTo-Json -Compress
 locus-op $wait
 
-# Snapshot state
+# Snapshot state. For tool args / tool results, prefer dump_history
+# over read_chat -- read_chat collapses long write_file bubbles behind
+# "Show N more lines" chevrons and scrubs error bodies regardless of
+# size. dump_history pulls the verbatim message array from the saved
+# session JSON.
 locus-op '{"op":"screenshot","args":{"name":"after_first_turn.png"}}'
+$history = (locus-op '{"op":"dump_history"}' | ConvertFrom-Json).data
+$history.messages.Count                                    # all messages
+$history.messages | Where-Object { $_.role -eq "tool" }    # tool results
 $chat = (locus-op '{"op":"read_chat","args":{"max_chars":10000}}' | ConvertFrom-Json).data.text
 $files = (locus-op '{"op":"list_workspace"}' | ConvertFrom-Json).data.entries
 $log   = (locus-op '{"op":"read_locus_log","args":{"tail_lines":300}}' | ConvertFrom-Json).data
@@ -438,6 +492,41 @@ locus-op '{"op":"select_tab","args":{"parent_aid":"locus.settings.notebook","ind
 
 Tedious to script; usually easier to `write_workspace_file
 '.locus/config.json'` directly between launches.
+
+---
+
+## Writing prompts for slow local models
+
+The canonical "create a small C++ minigame" recipe assumes a model fast
+enough to keep tool-call latency under ~30s per round. Reasoning-heavy
+models at 16k context (Qwen 3.x 27B, Gemma-3 reasoning variants, GPT-OSS)
+spend 5-25 min in reasoning per round and run a real risk of either
+exhausting context or never emitting a tool call before the QA-LLM gives
+up. The TestLocalVibe session (Qwen 3.6 27B, May 2026) caught this: a
+wide-scope edit prompt produced 25 minutes of reasoning and zero tool
+calls, while a tight-scope retry of the same edit landed in 3 minutes.
+
+When you must use a slow / reasoning-heavy local model:
+
+- **Disable reasoning where the model supports it.** Qwen's `/no_think`
+  suffix is the canonical example; append it to the prompt and per-round
+  latency drops by an order of magnitude.
+- **Forbid plan-making explicitly.** "Do not produce a plan. One-sentence
+  acknowledgement, then tool calls." cuts the per-round reasoning bubble
+  from minutes to ~20s.
+- **Provide exact line anchors / file paths.** Don't make the model
+  search for what to edit -- it'll re-read three files before deciding.
+  "Edit src/foo.cpp:42, change `static const int X` to `static int X`."
+- **Pick the tool upfront.** "Use `edit_file` (not `write_file`)." saves
+  a round where the model is deciding which to call.
+- **Cap scope.** A single one-line change is reliably round-tripable;
+  a "refactor X into multiple files" prompt is not.
+
+For agentic test runs that need to verify FUNCTIONALITY rather than
+PROBE model behaviour, swap to a smaller / faster model for the run --
+Gemma 4 E4B and Qwen 3.5 9B both round-trip a "create snake.cpp + cmake
+build" scenario in under 10 minutes. Reserve the 27B+ models for sessions
+where the slow / reasoning behaviour is itself what you're testing.
 
 ---
 

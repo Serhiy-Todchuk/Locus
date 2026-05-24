@@ -172,6 +172,20 @@ WorkspacePrep prepare_agentic_workspace(const std::string& workspace_spec,
                 };
                 cfg["sessions"]["auto_cleanup_enabled"] = false;
                 cfg["sessions"]["restore_last"]        = false;
+                // L2 finding follow-up: enable the background-process tools by
+                // default in agentic workspaces. Without this, the manifest is
+                // missing `run_command_bg` / `read_process_output` / `stop_process`
+                // / `list_processes` (capability is off-by-default at the
+                // workspace level) and Task 5 / "test stdin" scenarios silently
+                // fall through to `run_command` + 30 min default. Memory bank
+                // tools stay on by default (Capabilities::memory_bank=true).
+                cfg["capabilities"] = {
+                    {"background_processes", true},
+                    {"semantic_search",      false},
+                    {"code_aware_search",    true},
+                    {"memory_bank",          true},
+                    {"web_retrieval",        false}
+                };
                 std::ofstream f(cfg_path);
                 f << cfg.dump(2) << '\n';
             }
@@ -365,9 +379,12 @@ int run_agentic_server(const AgenticOptions& opts)
             }
             if (op == "info") {
                 nlohmann::json data;
-                data["workspace_dir"] = opts.workspace_dir.string();
-                data["output_dir"]    = opts.output_dir.string();
-                data["locus_gui"]     = opts.locus_gui_path.string();
+                // generic_string() = forward slashes, consistent across all
+                // path-bearing JSON fields. Closes finding H6 (the mixed
+                // separator output broke `$path1 -eq $path2` checks in PS).
+                data["workspace_dir"] = opts.workspace_dir.generic_string();
+                data["output_dir"]    = opts.output_dir.generic_string();
+                data["locus_gui"]     = opts.locus_gui_path.generic_string();
                 data["port"]          = actual_port;
                 data["step_index"]    = dispatcher.step_index();
                 send_line(client,

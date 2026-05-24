@@ -86,6 +86,23 @@ private:
     StepResult op_get_chat_status(const Json& args);
     StepResult op_list_named_widgets(const Json& args);
     StepResult op_wait_for_agent_idle(const Json& args);
+    // Reads the most-recently-modified `.locus/sessions/*.json` (or a named
+    // one via args.session_id) and returns the full message array verbatim --
+    // tool_calls with their JSON args, tool-result messages with their full
+    // content, etc. Sidesteps the chat WebView collapse / token-count
+    // placeholders that hide tool error bodies and long file writes from
+    // `read_chat`. NOTE: the session JSON reflects state through the most
+    // recent turn boundary -- an in-flight assistant message only appears
+    // after the turn completes (auto-save fires on on_turn_complete).
+    StepResult op_dump_history(const Json& args);
+    // Routes a `/slash command ...` through the same path the chat input
+    // takes when the user types one (focus the input, type, press Enter).
+    // The response carries `dispatched: "slash" | "agent"` derived from
+    // post-hoc log inspection -- it tails `.locus/locus.log` for the
+    // marker line `slash command dispatched: <name>` written by
+    // SlashCommandDispatcher and the marker `queuing user message (` written
+    // by AgentCore. Falls back to `unknown` if neither fires within the wait.
+    StepResult op_slash(const Json& args);
 
     Element find_named(const std::string& automation_id, int timeout_ms);
     Element resolve_target(const Json& args, int timeout_ms);

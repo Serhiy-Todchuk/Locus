@@ -76,8 +76,11 @@ public:
                "(use a single element for one change, multiple for an atomic batch). "
                "Each `old_string` must match byte-for-byte (including whitespace) and "
                "must be unique in the file unless `replace_all` is true. Edits apply in "
-               "order and either all succeed or none are written. You must have read "
-               "the file earlier in this session before editing it.";
+               "order and either all succeed or none are written. "
+               "PRECONDITION: read_file must have been called on the same path during "
+               "this session. Call read_file first if you have not already -- "
+               "edit_file will return an error otherwise. This guard catches blind "
+               "edits against stale assumptions about file contents.";
     }
     std::vector<ToolParam> params() const override {
         return {

@@ -131,6 +131,8 @@ StepResult OpDispatcher::dispatch(const std::string& op, const Json& args)
     if (op == "get_chat_status")         return op_get_chat_status(args);
     if (op == "list_named_widgets")      return op_list_named_widgets(args);
     if (op == "wait_for_agent_idle")     return op_wait_for_agent_idle(args);
+    if (op == "dump_history")            return op_dump_history(args);
+    if (op == "slash")                   return op_slash(args);
 
     return StepResult{ false, "unknown op '" + op + "'", {}, nullptr };
 }
@@ -418,8 +420,12 @@ StepResult OpDispatcher::op_screenshot(const Json& args)
     auto path = output_dir_ / name;
     if (!uia_.screenshot(path)) return { false, uia_.last_error(), {}, nullptr };
     Json data;
-    data["path"] = path.string();
-    return { true, {}, "saved " + path.string(), std::move(data) };
+    // Forward slashes throughout JSON for cross-shell `-eq` equality
+    // (PowerShell + Python both compare strings byte-wise; mixed-separator
+    // output was the H6 finding). Native-style paths still flow into log
+    // messages where they're consumed by humans, not equality checks.
+    data["path"] = path.generic_string();
+    return { true, {}, "saved " + path.generic_string(), std::move(data) };
 }
 
 StepResult OpDispatcher::op_sleep(const Json& args)
@@ -446,9 +452,9 @@ StepResult OpDispatcher::op_dump_tree(const Json& args)
     if (!out) return { false, "dump_tree: cannot write " + path.string(), {}, nullptr };
     out << dump;
     Json data;
-    data["path"] = path.string();
+    data["path"] = path.generic_string();
     data["bytes"] = (int)dump.size();
-    return { true, {}, "wrote " + path.string(), std::move(data) };
+    return { true, {}, "wrote " + path.generic_string(), std::move(data) };
 }
 
 StepResult OpDispatcher::op_assert_file_exists(const Json& args)
@@ -559,10 +565,58 @@ StepResult OpDispatcher::op_submit_chat(const Json& args)
         }
         if (!el.valid()) return { false, "submit_chat: chat input not found", {}, nullptr };
     }
+    // Snapshot log size BEFORE typing, so a brief post-submit tail can tell
+    // whether the input went through the slash dispatcher or fell through to
+    // the LLM (closes finding H10). Best-effort -- a missing log is fine,
+    // we just leave `dispatched` at "unknown".
+    fs::path log_path = fs::path(workspace_path_) / ".locus" / "locus.log";
+    std::error_code ec;
+    long long since_byte = fs::exists(log_path, ec)
+                              ? (long long)fs::file_size(log_path, ec) : 0LL;
+
     if (!uia_.type_text(el, text)) return { false, uia_.last_error(), {}, nullptr };
     if (!uia_.press_key_to(el, "ENTER", {}))
         return { false, uia_.last_error(), {}, nullptr };
-    return { true, {}, "submitted " + std::to_string(text.size()) + " chars", nullptr };
+
+    // Brief log-tail (up to 300 ms) for a dispatch marker. Fire-and-forget
+    // -- if no marker appears in that window we return "unknown" and the
+    // caller can poll get_chat_status / read_locus_log themselves. Keeps
+    // the op responsive for chained ops; matches the H10 decision.
+    std::string dispatched = "unknown";
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(300);
+    while (std::chrono::steady_clock::now() < deadline) {
+        auto sz = fs::exists(log_path, ec)
+                      ? (long long)fs::file_size(log_path, ec) : 0LL;
+        if (sz > since_byte) {
+            std::ifstream lin(log_path, std::ios::binary);
+            if (lin) {
+                lin.seekg((std::streamoff)since_byte);
+                std::string chunk((std::istreambuf_iterator<char>(lin)),
+                                   std::istreambuf_iterator<char>());
+                if (chunk.find("Slash command:") != std::string::npos) {
+                    dispatched = "slash"; break;
+                }
+                if (chunk.find("Unknown command '/") != std::string::npos) {
+                    dispatched = "unknown_slash"; break;
+                }
+                if (chunk.find("AgentCore: prompt template expanded") != std::string::npos) {
+                    dispatched = "template"; break;
+                }
+                if (chunk.find("AgentCore: queuing user message") != std::string::npos) {
+                    dispatched = "agent"; break;
+                }
+            }
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(25));
+    }
+
+    Json data;
+    data["chars"]      = (int)text.size();
+    data["dispatched"] = dispatched;
+    data["since_byte"] = since_byte;
+    return { true, {},
+             "submitted " + std::to_string(text.size()) + " chars (" + dispatched + ")",
+             std::move(data) };
 }
 
 StepResult OpDispatcher::op_read_chat(const Json& args)
@@ -818,7 +872,7 @@ StepResult OpDispatcher::op_write_workspace_file(const Json& args)
     out.write(text.data(), (std::streamsize)text.size());
     out.close();
     Json data;
-    data["path"]  = full.string();
+    data["path"]  = full.generic_string();
     data["bytes"] = (int)text.size();
     return { true, {}, "wrote " + std::to_string(text.size()) + " bytes",
              std::move(data) };
@@ -893,11 +947,27 @@ StepResult OpDispatcher::op_read_locus_log(const Json& args)
 StepResult OpDispatcher::op_get_chat_status(const Json& args)
 {
     int timeout = get_int(args, "timeout_ms", 1000);
+    // Helper: read the visible label of a chip / status widget. read_text()
+    // already prefers ValuePattern -> TextPattern -> Name fallback; we then
+    // suppress the Name fallback iff it equals the locator AID, because for
+    // wxStaticText pre-2026-05 the LocusAccessible::GetValue path was a
+    // no-op and read_text returned the literal automation_id "locus.chat.
+    // ctx_label". That's the H3 finding. With the GetValue fix in place
+    // this guard is defensive: if a future widget ships without a Value
+    // pattern, the caller still gets "" rather than the AID string.
     auto safe_read = [&](const char* aid) -> std::string {
         Element el = find_named(aid, timeout);
         if (!el.valid()) return {};
         std::string t = uia_.read_text(el);
-        if (t.empty()) t = el.name();
+        // If the only thing read_text could give us was the automation_id,
+        // treat it as "no text available" -- the QA-LLM driver should never
+        // see "locus.chat.ctx_label" as a value (the meter would say it
+        // every read, which defeats the chip's whole point).
+        if (t == aid) t.clear();
+        if (t.empty()) {
+            std::string n = el.name();
+            if (n != aid) t = n;
+        }
         return t;
     };
     Json data;
@@ -925,6 +995,44 @@ StepResult OpDispatcher::op_get_chat_status(const Json& args)
     const bool agent_busy = !action_label.empty()
                          && (action_label == "Stop" || action_label == "Queue");
     data["agent_busy"]   = agent_busy;
+
+    // H9 -- cancel_in_progress. The Stop button flips to "Submit" within
+    // ~4s of user click, but cancel propagation through a streaming LLM
+    // call can take minutes (the model emits until libcurl re-enters the
+    // WriteCallback and notices should_cancel). During that gap agent_busy
+    // reads false but the previous turn is still draining.
+    //
+    // Detection strategy: tail .locus/locus.log for the LAST
+    // "cancellation requested" line; if no "turn cancelled" / "agent thread
+    // stopped" / "LLM stream aborted" line follows it, cancel is in flight.
+    // Report-only field (per H9 decision); does NOT alter submit_chat.
+    bool cancel_in_progress = false;
+    {
+        fs::path log_path = fs::path(workspace_path_) / ".locus" / "locus.log";
+        std::error_code ec;
+        if (fs::exists(log_path, ec)) {
+            auto sz = (long long)fs::file_size(log_path, ec);
+            // Last ~32 KB is more than enough -- the relevant lines appear
+            // within seconds of each other on the agent thread.
+            const long long tail = 32 * 1024;
+            long long start = sz > tail ? sz - tail : 0;
+            std::ifstream lin(log_path, std::ios::binary);
+            if (lin) {
+                lin.seekg((std::streamoff)start);
+                std::string chunk((std::istreambuf_iterator<char>(lin)),
+                                   std::istreambuf_iterator<char>());
+                auto last_req = chunk.rfind("AgentCore: cancellation requested");
+                if (last_req != std::string::npos) {
+                    auto tail_after = chunk.substr(last_req);
+                    bool done = tail_after.find("AgentCore: turn cancelled") != std::string::npos
+                             || tail_after.find("LLM stream aborted by user") != std::string::npos
+                             || tail_after.find("AgentCore: agent thread stopped") != std::string::npos;
+                    cancel_in_progress = !done;
+                }
+            }
+        }
+    }
+    data["cancel_in_progress"] = cancel_in_progress;
     return { true, {}, "status snapshot", std::move(data) };
 }
 
@@ -1052,6 +1160,251 @@ StepResult OpDispatcher::op_wait_for_agent_idle(const Json& args)
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(poll_ms));
     }
+}
+
+// ---------------------------------------------------------------------------
+// dump_history -- bypasses the chat WebView's collapse/token-count placeholder
+// rendering and surfaces verbatim tool args / tool results from the persisted
+// session JSON. Closes findings H2 (long write_file bubble collapsed), H12
+// (short tool error bodies scrubbed), H13 (retry pattern invisible in chat).
+//
+// Args:
+//   session_id   -- optional. If set, load `.locus/sessions/<id>.json`.
+//                   Otherwise pick the most-recently-modified session file.
+//   max_messages -- optional. 0 (default) returns all; positive N returns
+//                   the last N messages (preserves chronological order).
+//   include_system -- bool, default false. Drop the leading system message
+//                   from the result unless the caller opts in. System prompts
+//                   are large and rarely informative for debugging a turn.
+//   max_content_chars -- per-message content cap (default 0 = no cap).
+//                   When >0, truncates `content` / per-tool-result strings
+//                   to N chars with a "...[truncated, K of M shown]" tail.
+//                   Use to keep a wire-protocol response under the harness
+//                   client's buffer limit when a long file write is in
+//                   history.
+StepResult OpDispatcher::op_dump_history(const Json& args)
+{
+    std::string session_id  = get_string(args, "session_id");
+    int  max_messages       = get_int(args, "max_messages", 0);
+    bool include_system     = get_bool(args, "include_system", false);
+    int  max_content_chars  = get_int(args, "max_content_chars", 0);
+
+    fs::path sessions_dir = fs::path(workspace_path_) / ".locus" / "sessions";
+    std::error_code ec;
+    if (!fs::exists(sessions_dir, ec) || !fs::is_directory(sessions_dir, ec)) {
+        Json data;
+        data["messages"]   = Json::array();
+        data["session_id"] = "";
+        data["present"]    = false;
+        return { true, {}, "no sessions dir yet", std::move(data) };
+    }
+
+    fs::path target;
+    if (!session_id.empty()) {
+        target = sessions_dir / (session_id + ".json");
+        if (!fs::exists(target, ec))
+            return { false,
+                     "dump_history: session '" + session_id + "' not found",
+                     {}, nullptr };
+    } else {
+        fs::file_time_type best_mtime{};
+        for (auto& entry : fs::directory_iterator(sessions_dir, ec)) {
+            if (!entry.is_regular_file()) continue;
+            if (entry.path().extension() != ".json") continue;
+            auto mt = fs::last_write_time(entry.path(), ec);
+            if (ec) continue;
+            if (target.empty() || mt > best_mtime) {
+                target = entry.path();
+                best_mtime = mt;
+            }
+        }
+        if (target.empty()) {
+            Json data;
+            data["messages"]   = Json::array();
+            data["session_id"] = "";
+            data["present"]    = false;
+            return { true, {}, "no session files yet (agent hasn't completed a turn)",
+                     std::move(data) };
+        }
+    }
+
+    std::ifstream in(target, std::ios::binary);
+    if (!in)
+        return { false, "dump_history: cannot open " + target.string(),
+                 {}, nullptr };
+    Json parsed;
+    try {
+        in >> parsed;
+    } catch (const std::exception& ex) {
+        return { false, std::string("dump_history: JSON parse failed: ") + ex.what(),
+                 {}, nullptr };
+    }
+
+    if (!parsed.is_object() || !parsed.contains("messages")
+        || !parsed["messages"].is_array())
+    {
+        return { false, "dump_history: session file missing 'messages' array",
+                 {}, nullptr };
+    }
+
+    // Pre-truncate any single content string so the response stays bounded.
+    // We mutate copies, not the on-disk file.
+    auto truncate_string = [&](std::string& s) {
+        if (max_content_chars <= 0) return;
+        if ((int)s.size() <= max_content_chars) return;
+        size_t orig = s.size();
+        s.resize((size_t)max_content_chars);
+        s += "\n...[truncated, " + std::to_string(max_content_chars) +
+             " of " + std::to_string(orig) + " chars shown]";
+    };
+
+    Json out_messages = Json::array();
+    for (auto& m : parsed["messages"]) {
+        if (!m.is_object()) continue;
+        std::string role = m.value("role", "user");
+        if (!include_system && role == "system") continue;
+        Json cm = m;  // shallow copy; mutate string fields only.
+        if (cm.contains("content") && cm["content"].is_string()) {
+            std::string s = cm["content"].get<std::string>();
+            truncate_string(s);
+            cm["content"] = std::move(s);
+        }
+        if (cm.contains("tool_calls") && cm["tool_calls"].is_array()) {
+            for (auto& tc : cm["tool_calls"]) {
+                if (!tc.is_object() || !tc.contains("function")
+                    || !tc["function"].is_object()) continue;
+                auto& fn = tc["function"];
+                if (fn.contains("arguments") && fn["arguments"].is_string()) {
+                    std::string a = fn["arguments"].get<std::string>();
+                    truncate_string(a);
+                    fn["arguments"] = std::move(a);
+                }
+            }
+        }
+        out_messages.push_back(std::move(cm));
+    }
+
+    if (max_messages > 0 && (int)out_messages.size() > max_messages) {
+        out_messages.erase(out_messages.begin(),
+                           out_messages.end() - max_messages);
+    }
+
+    Json data;
+    data["messages"]      = std::move(out_messages);
+    data["session_id"]    = target.stem().string();
+    data["present"]       = true;
+    data["session_file"]  = target.generic_string();
+    if (parsed.contains("message_count"))
+        data["full_message_count"] = parsed["message_count"];
+    if (parsed.contains("estimated_tokens"))
+        data["estimated_tokens"] = parsed["estimated_tokens"];
+
+    return { true, {},
+             "loaded " + std::to_string(data["messages"].size()) + " message(s)"
+             " from " + target.filename().string(),
+             std::move(data) };
+}
+
+// ---------------------------------------------------------------------------
+// slash -- typed-as-a-real-slash submit + log-tail dispatch detection.
+//
+// Closes finding H7: today a QA-LLM driver can't tell if its `/memory add ...`
+// went through the slash dispatcher or fell through to the LLM. The chat-input
+// path also has a UX bug where the leading "/" gets stripped from the
+// rendered bubble for unknown slashes (see chat_panel.cpp::submit_current_input).
+//
+// This op submits via the same chat-input path (for fidelity to user typing)
+// but immediately tails .locus/locus.log for one of the marker lines a
+// dispatcher writes within ~2s:
+//
+//   "Slash command: /<name>"   -- SlashCommandDispatcher hit
+//   "Unknown command '/<name>" -- slash parsed but no tool matched
+//   "Slash command error:"     -- parser threw (malformed args)
+//   "AgentCore: prompt template expanded ->" -- /name was a user template
+//   "AgentCore: processing user message ("   -- fell through to LLM
+//
+// Returns the matching dispatch class so the caller knows what happened
+// without having to grep the log themselves.
+StepResult OpDispatcher::op_slash(const Json& args)
+{
+    std::string command = get_string(args, "command");
+    int wait_ms = get_int(args, "wait_ms", 3000);
+    if (command.empty())
+        return { false, "slash: requires 'command' (e.g. \"/help\")", {}, nullptr };
+    // Tolerate caller passing the command without the leading "/".
+    if (command.front() != '/') command = "/" + command;
+
+    fs::path log_path = fs::path(workspace_path_) / ".locus" / "locus.log";
+    std::error_code ec;
+    long long since_byte = fs::exists(log_path, ec)
+                              ? (long long)fs::file_size(log_path, ec)
+                              : 0LL;
+
+    // Reuse op_submit_chat for the actual UI submit, but pass the command
+    // verbatim including the leading "/".
+    Json submit_args;
+    submit_args["text"] = command;
+    submit_args["timeout_ms"] = get_int(args, "timeout_ms", 5000);
+    StepResult sub = op_submit_chat(submit_args);
+    if (!sub.ok) return sub;
+
+    // Tail the log for a dispatch marker. The slash dispatcher logs synchronously
+    // on the agent thread; for ephemeral tool slashes (most of them) the marker
+    // appears within tens of ms. Template expansion + LLM fallthrough also log
+    // within the same window because we're still pre-LLM.
+    auto deadline = std::chrono::steady_clock::now()
+                  + std::chrono::milliseconds(wait_ms);
+    std::string body = command.substr(1); // strip leading /
+    size_t sp = body.find_first_of(" \t");
+    std::string name = sp == std::string::npos ? body : body.substr(0, sp);
+
+    std::string slash_marker     = "Slash command: /" + name;
+    std::string unknown_marker   = "Unknown command '/" + name;
+    std::string template_marker  = "AgentCore: prompt template expanded";
+    std::string fallthrough_mark = "AgentCore: processing user message";
+    std::string parse_err_marker = "Slash command error:";
+
+    std::string dispatched = "unknown";
+    std::string match_text;
+
+    while (std::chrono::steady_clock::now() < deadline) {
+        auto sz = fs::exists(log_path, ec)
+                      ? (long long)fs::file_size(log_path, ec) : 0LL;
+        if (sz > since_byte) {
+            std::ifstream lin(log_path, std::ios::binary);
+            if (lin) {
+                lin.seekg((std::streamoff)since_byte);
+                std::string chunk((std::istreambuf_iterator<char>(lin)),
+                                   std::istreambuf_iterator<char>());
+                if (chunk.find(slash_marker) != std::string::npos) {
+                    dispatched = "slash"; match_text = slash_marker; break;
+                }
+                if (chunk.find(unknown_marker) != std::string::npos) {
+                    dispatched = "unknown_slash"; match_text = unknown_marker; break;
+                }
+                if (chunk.find(parse_err_marker) != std::string::npos) {
+                    dispatched = "parse_error"; match_text = parse_err_marker; break;
+                }
+                if (chunk.find(template_marker) != std::string::npos) {
+                    dispatched = "template"; match_text = template_marker; break;
+                }
+                if (chunk.find(fallthrough_mark) != std::string::npos) {
+                    dispatched = "agent"; match_text = fallthrough_mark; break;
+                }
+            }
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+
+    Json data;
+    data["dispatched"]   = dispatched;
+    data["command"]      = command;
+    data["name"]         = name;
+    data["log_marker"]   = match_text;
+    data["since_byte"]   = since_byte;
+    return { true, {},
+             "slash " + command + " -> " + dispatched,
+             std::move(data) };
 }
 
 } // namespace locus::uia

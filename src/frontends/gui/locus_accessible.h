@@ -47,13 +47,24 @@ public:
 
     // For wxButton (and subclasses) also expose the visible label via UIA
     // Value, so the agentic harness can read state without losing the
-    // accessible-name override that find_named relies on. Other widgets
-    // fall through (NOT_IMPLEMENTED) -- only buttons opt in.
+    // accessible-name override that find_named relies on. Same path now
+    // covers wxStaticText (and its subclass wxGenericHyperlinkCtrl) so the
+    // chat-footer chips (ctx_label / plan_chip / commit_chip / etc.) return
+    // their RENDERED text instead of the automation_id literal -- closes
+    // TestLocalVibe finding H3.
+    //
+    // wxControl::GetLabelText covers the (very rare) other label-bearing
+    // wx widgets too; fall back to GetLabel() for anything that doesn't
+    // implement GetLabelText cleanly.
     wxAccStatus GetValue(int childId, wxString* value) override
     {
         if (!value || childId != 0 || !GetWindow()) return wxACC_FAIL;
         if (auto* btn = wxDynamicCast(GetWindow(), wxButton)) {
             *value = btn->GetLabelText();
+            return value->empty() ? wxACC_NOT_IMPLEMENTED : wxACC_OK;
+        }
+        if (auto* st = wxDynamicCast(GetWindow(), wxStaticText)) {
+            *value = st->GetLabelText();
             return value->empty() ? wxACC_NOT_IMPLEMENTED : wxACC_OK;
         }
         return wxACC_NOT_IMPLEMENTED;

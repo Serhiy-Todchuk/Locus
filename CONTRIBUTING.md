@@ -265,6 +265,32 @@ secondary Windows session if you don't want your mouse hijacked. See
 [tests/ui_automation/README.md](tests/ui_automation/README.md) for step ops,
 naming conventions, and the focus-stealing caveat.
 
+### Agentic testing (manual, Windows only -- S5.Z)
+
+Same binary in a different mode -- `--agentic` opens a TCP/JSON service on
+`127.0.0.1:<port>` and lets a QA-LLM (a separate Claude session) drive Locus
+interactively. The point: catch the failure modes a scripted `.json` can't
+anticipate -- "build a small C++ minigame", small-LLM tool-calling robustness,
+"how does the local agent recover when its first plan doesn't work".
+
+```
+build\release\tests\ui_automation\Release\locus_ui_tests.exe ^
+    --agentic --workspace tmp --port 7878
+```
+
+Talk to the server with the shipped helper:
+
+```
+& tests\ui_automation\locus-op.ps1 -Op ping
+& tests\ui_automation\locus-op.ps1 -Op submit_chat -Args @{ text = "hi" }
+& tests\ui_automation\locus-op.ps1 -Op dump_history | ConvertFrom-Json
+```
+
+See [tests/ui_automation/AGENTIC_TESTING.md](tests/ui_automation/AGENTIC_TESTING.md)
+for the launch flags, op catalog (existing UIA primitives + agentic
+extensions like `submit_chat` / `read_chat` / `dump_history` / `slash` /
+`wait_for_agent_idle`), and recipes for the canonical scenarios.
+
 ## Adding tests
 
 - Catch2. One `tests/test_<topic>.cpp` per subsystem. Tag with stage + topic:

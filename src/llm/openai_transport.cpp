@@ -40,10 +40,19 @@ void OpenAiTransport::do_post(const std::string& body, const Callbacks& cbs, boo
     // Per-stream pacing instrumentation. Lets the agentic post-mortem tell
     // "model stalled" (zero bytes for many seconds) apart from "model slow"
     // (steady trickle of small chunks). Time-to-first-byte logged at info;
-    // long inter-chunk gaps logged at warn; per-chunk traces gated to every
-    // 64 chunks so a chatty stream doesn't flood the log.
+    // long inter-chunk gaps logged at warn; periodic alive heartbeat logged
+    // at info every 32 chunks OR every 10s (whichever first) so the
+    // `--agentic-mute-noise` flush-on-info threshold lets agentic clients
+    // see "stream still alive" without trace-level chatter.
+    //
+    // Why both? Fast streams (4+ chunks/s) get the 32-chunk cadence (~8s).
+    // Slow reasoning streams (one chunk every few seconds) get the 10s
+    // wall-clock cadence -- without it a stream emitting one chunk every
+    // 20s would look stuck to wait_for_agent_idle for 64*20s = ~20 min
+    // before its info-level beacon arrived.
     const auto t_request_start = std::chrono::steady_clock::now();
-    auto t_last_chunk = t_request_start;
+    auto t_last_chunk     = t_request_start;
+    auto t_last_heartbeat = t_request_start;
     bool first_chunk_seen = false;
     uint64_t total_bytes = 0;
     uint64_t chunks = 0;
@@ -63,6 +72,7 @@ void OpenAiTransport::do_post(const std::string& body, const Callbacks& cbs, boo
                 now - t_last_chunk).count();
         if (!first_chunk_seen) {
             first_chunk_seen = true;
+            t_last_heartbeat = now;
             const long long ttfb_ms =
                 std::chrono::duration_cast<std::chrono::milliseconds>(
                     now - t_request_start).count();
@@ -79,10 +89,17 @@ void OpenAiTransport::do_post(const std::string& body, const Callbacks& cbs, boo
         t_last_chunk = now;
         ++chunks;
         total_bytes += data.size();
-        // Per-chunk trace only every 64th chunk so a long stream stays readable.
-        if ((chunks & 63) == 0) {
-            spdlog::trace("LLM stream: chunk #{} (+{} B, gap {} ms, total {} B)",
-                          chunks, data.size(), gap_ms, total_bytes);
+        // Heartbeat: every 32 chunks OR every 10s since last emit. Info-level
+        // so agentic mute lets it through to .locus/locus.log immediately
+        // (trace lines hang in the buffer for tens of minutes when flush_on
+        // is info, which is exactly what TestLocalVibe finding #1 hit).
+        const long long since_hb_ms =
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                now - t_last_heartbeat).count();
+        if ((chunks & 31) == 0 || since_hb_ms >= 10000) {
+            spdlog::info("LLM stream: chunk #{} (+{} B, gap {} ms, total {} B)",
+                         chunks, data.size(), gap_ms, total_bytes);
+            t_last_heartbeat = now;
         }
         parser.feed(std::string(data));
         return true;

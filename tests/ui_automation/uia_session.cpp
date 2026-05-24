@@ -1050,10 +1050,17 @@ static void dump_recurse(IUIAutomationElement* el, int depth, int max_depth,
     BSTR baid  = nullptr; el->get_CurrentAutomationId(&baid);
     std::string name = bstr_to_utf8(bname); if (bname) SysFreeString(bname);
     std::string aid  = bstr_to_utf8(baid);  if (baid)  SysFreeString(baid);
+    // Column labels are chosen so QA-LLM readers can map them straight to
+    // find/click op parameters. The UIA Name property (set via wxWindow::
+    // SetName + LocusAccessible::GetName) is what `automation_id="..."` in
+    // find/click matches against -- so we label it `aid=`. The UIA
+    // AutomationId property (wx's internal numeric id, usually negative for
+    // wxID_ANY allocations) is NOT addressable from find/click, so we label
+    // it `wx_id=` to discourage callers from trying. Closes finding H5.
     for (int i = 0; i < depth; ++i) out << "  ";
     out << "[" << control_type_name(ct) << "]"
-        << "  name=\"" << name << "\""
-        << "  aid=\"" << aid << "\"\n";
+        << "  aid=\""   << name << "\""
+        << "  wx_id=\"" << aid  << "\"\n";
 
     if (depth == max_depth) return;
     IUIAutomationCondition* tcond = nullptr;
