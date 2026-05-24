@@ -26,6 +26,13 @@
 #include <sstream>
 #include <unordered_set>
 
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+#include <shellapi.h>
+#endif
+
 namespace locus {
 
 // Timer interval for flushing token buffer to WebView (ms).
@@ -704,7 +711,14 @@ function setReasoningBody(id, text) {
     var d = document.getElementById('msg-' + id);
     if (d) {
         var body = d.querySelector('.reasoning-body');
-        if (body) { body.textContent = text; }
+        if (body) {
+            body.textContent = text;
+            // .reasoning-body has its own max-height + overflow-y:auto, so
+            // scrolling the page only doesn't follow new tokens once the
+            // inner body fills its 240px box. Pin the inner element to the
+            // bottom too so streaming reasoning stays visible.
+            body.scrollTop = body.scrollHeight;
+        }
         if (d.open) window.scrollTo(0, document.body.scrollHeight);
     }
 }
@@ -950,12 +964,33 @@ ChatPanel::ChatPanel(wxWindow* parent,
     footer->Add(footer_chips_->compacted_chip(), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
     footer->Add(footer_chips_->round_chip(),     0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
     // S5.Z task 6 -- left-click on the chip opens the session's archive
-    // folder via the OS default. Hand-off matches the MenuController
-    // "Open Global Config..." pattern.
+    // folder. wxLaunchDefaultApplication is unreliable for directories on
+    // Windows (silently no-ops in some shell configurations); use the same
+    // ShellExecuteW path FileTreePanel uses for files. Create the dir on
+    // demand so the chip works even before the very first archive write
+    // (counter > 0 with the dir missing happens when an old session is
+    // reloaded with archives GC'd away).
     footer_chips_->compacted_chip()->Bind(wxEVT_LEFT_DOWN,
         [this](wxMouseEvent&) {
             if (compacted_archive_dir_.empty()) return;
-            wxLaunchDefaultApplication(compacted_archive_dir_);
+            std::filesystem::path p(compacted_archive_dir_.ToStdWstring());
+            std::error_code ec;
+            std::filesystem::create_directories(p, ec);
+#ifdef _WIN32
+            p.make_preferred();
+            HINSTANCE r = ShellExecuteW(nullptr, L"open", p.wstring().c_str(),
+                                        nullptr, nullptr, SW_SHOWNORMAL);
+            if (reinterpret_cast<INT_PTR>(r) <= 32) {
+                spdlog::warn("ChatPanel: ShellExecute open failed for '{}' "
+                             "(code {})",
+                             p.string(), reinterpret_cast<INT_PTR>(r));
+            }
+#else
+            if (!wxLaunchDefaultApplication(
+                    wxString::FromUTF8(p.string())))
+                spdlog::warn("ChatPanel: wxLaunchDefaultApplication failed "
+                             "for '{}'", p.string());
+#endif
         });
     footer_chips_->compacted_chip()->SetCursor(wxCursor(wxCURSOR_HAND));
     footer->Add(preset_chip_,    0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);

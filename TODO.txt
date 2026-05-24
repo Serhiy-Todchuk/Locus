@@ -9,16 +9,13 @@
 - Undo right on the tool call (edit_file, any other?)
 - Is it good that we are not reading XLSX, DOCX and PDFs with read_file tool (or any other)? So the agent can search for something, but cannot read full info?
 - "Build kicked off in the background; harness will notify me when it finishes." - I want this features in Locus :)
-- Pin plan in context so it's not get compacted
-- When I click on "compacted: 1" nothing happens - hover message says it should open archive folder
 
-- In activity - add tool preview in the list item name
-- When thinking is opened and llm generates more content into it - eventually it stops autoscrolling and I see only ~18 top lines of thinking text and scroll bar “growing”
+- when I queue one more prompt in the middle while Locus works on something - it will be inserted only when Locus is done, but when I do the same in Claude Code - it inserts enqued prompt somewhere in between tool calls I guess so the agent knows what user said in the middle of the run.
 - How to make llm that starts process tool see only specified part of output, for example only few last lines of build output of c++ project (or only errors/warnings, or 5 first errors or 5 last errors), so it doesn’t polute context, but get only useful info
 - Compaction seems doesn’t work as expected - it frees up too little part of context, but I can see wrong numbers - think out integration or agentic test for it involving a lot of communication with LLM, so we get near real scenario tested
-- Remove max number of tool calls per session
 - Do we really need to let llm choose what mode of search to perform?
-- Do we hide LLM's "thinking" from context? "Check the box for "Show Debug Thoughts" (or Expose Reasoning Tokens over API). This ensures that the hidden chain-of-thought tokens are cleanly passed to your IDE so your agent can read the model's internal logic before executing code edits. "
+- Do we hide LLM's "thinking" from context? "Check the box for "Show Debug Thoughts" (or Expose Reasoning Tokens over API). This ensures that the hidden chain-of-thought tokens are cleanly passed to your agent so your agent can read the model's internal logic before executing code edits. "
+
 
 - Claude Blender
 - GoodOldSoftware

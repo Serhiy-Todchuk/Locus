@@ -31,6 +31,7 @@ Three tests covering the new layer cascade, the manual dialog, and the chained h
    - Short user messages (your typed prompts) survive even when a turn is dropped around them.
    - A user message containing `[Attached file: ...]` survives.
    - The two most recent turns (default `keep_recent_turns: 3` -- per stage doc -- counts user/assistant pairs) are intact.
+   - If a plan was proposed earlier in the session, the assistant message that called `propose_plan` and every `mark_step_done` call still appear in the post-compaction history (any size). Drop them and the LLM loses its view of the plan that AgentCore still tracks server-side.
 4. Open the chat: the synthetic user-role footnote reads `[Earlier context compacted; full pre-compaction history archived at .locus/sessions/<id>/history.before-compact-N.json]` and lives right after the system prompt (not inside it -- the system message stays byte-stable for S4.F KV-cache reasons; verify by hashing the leading system content before and after compaction).
 5. Disable auto-compact: set `compaction.auto_enabled: false`. Drive the same big turn -- the warn band still updates the footer chip but no automatic cascade fires; instead, you must click Compact or run `/compact` yourself.
 

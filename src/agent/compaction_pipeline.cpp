@@ -321,6 +321,14 @@ bool CompactionPipeline::is_preserved(const std::vector<ChatMessage>& msgs,
         }
     }
     if (m.role == MessageRole::assistant && !m.tool_calls.empty()) {
+        // Always preserve plan-mode tool calls regardless of size: the plan
+        // structure is the agent's working memory across many turns, and
+        // dropping a propose_plan / mark_step_done message orphans the plan
+        // state on the LLM side even though AgentCore still tracks it.
+        for (const auto& tc : m.tool_calls) {
+            if (tc.name == "propose_plan" || tc.name == "mark_step_done")
+                return true;
+        }
         if (cfg.preserve_short_tool_calls_max_tokens > 0) {
             int tok = TokenCounter::estimate_message(m);
             if (tok <= cfg.preserve_short_tool_calls_max_tokens)

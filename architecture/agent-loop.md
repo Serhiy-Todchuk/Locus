@@ -305,10 +305,10 @@ sequenceDiagram
 ```
 
 Each round is one `AgentLoop::run_step()` call. Round count is bounded by
-`WorkspaceConfig::max_rounds_per_message` (default 100, 0 = unbounded); hitting the cap emits
+`WorkspaceConfig::max_rounds_per_message` (default 500, 0 = unbounded); hitting the cap emits
 `on_error("Agent reached the maximum number of tool call rounds (N). Raise
 agent.max_rounds_per_message ...")` and ends the turn. The chat-footer round chip
-(`set_round_progress`) updates every round so the user can see "round 7/100" while a turn is
+(`set_round_progress`) updates every round so the user can see "round 7/500" while a turn is
 in flight.
 
 ---

@@ -22,6 +22,10 @@ namespace locus {
 //   - short user messages (content <= preserve_short_user_msgs_max_tokens)
 //   - short tool-call assistant messages
 //     (content <= preserve_short_tool_calls_max_tokens)
+//   - assistant messages whose tool_calls include `propose_plan` or
+//     `mark_step_done` (any size) -- the plan structure is shared working
+//     memory across many turns; dropping it orphans the LLM's view of a
+//     plan that AgentCore still tracks server-side
 // A threshold of 0 on either short-msg knob disables that heuristic.
 
 // Layer toggles + per-layer knobs. AgentCore snapshots WorkspaceConfig into

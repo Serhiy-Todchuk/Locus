@@ -13,6 +13,7 @@
 #include <wx/stc/stc.h>
 
 #include <chrono>
+#include <cstring>
 #include <ctime>
 #include <cstdio>
 
@@ -192,7 +193,33 @@ wxString ActivityPanel::list_text_for(long item, long col) const
                       tm.tm_hour, tm.tm_min, tm.tm_sec);
         return wxString::FromAscii(buf);
     }
-    case 1: return wxString::FromAscii(to_string(ev.kind));
+    case 1: {
+        // For tool_call / tool_result, prefer "tool: <name>" over the bare
+        // "tool_call" so the column visually discriminates rows. The summary
+        // is the only place the tool name lives on the event today
+        // (ActivityEvent has no tool_name field). Tool-dispatcher emits
+        // "Tool call: <name>" and "Tool result: <name> (ok/failed) -- ...".
+        if (ev.kind == ActivityKind::tool_call ||
+            ev.kind == ActivityKind::tool_result)
+        {
+            constexpr const char* k_call_prefix   = "Tool call: ";
+            constexpr const char* k_result_prefix = "Tool result: ";
+            const std::string& s = ev.summary;
+            const char* prefix = (ev.kind == ActivityKind::tool_call)
+                                     ? k_call_prefix : k_result_prefix;
+            const std::size_t plen = std::strlen(prefix);
+            if (s.rfind(prefix, 0) == 0) {
+                std::string rest = s.substr(plen);
+                // tool_result summary continues with " (ok)" or " (failed)";
+                // truncate at the first space so the column stays "tool: name".
+                auto sp = rest.find(' ');
+                if (sp != std::string::npos) rest.resize(sp);
+                if (!rest.empty())
+                    return wxString::FromUTF8("tool: " + rest);
+            }
+        }
+        return wxString::FromAscii(to_string(ev.kind));
+    }
     case 2: return wxString::FromUTF8(ev.summary);
     case 3: {
         if (ev.tokens_delta && *ev.tokens_delta != 0) {

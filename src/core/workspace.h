@@ -158,8 +158,9 @@ struct WorkspaceConfig {
     // "Agent reached the maximum number of tool call rounds." Raise for
     // long-horizon work; the only ceiling is your patience. Set to 0 to
     // remove the cap entirely (the loop still ends naturally when the LLM
-    // stops emitting tool calls).
-    int max_rounds_per_message = 100;
+    // stops emitting tool calls). 500 is a sanity-net high enough that
+    // realistic "read 200 files, edit 50" workloads don't trip it.
+    int max_rounds_per_message = 500;
 
     // S5.Z follow-up -- when the run_command reader-thread heartbeat fires
     // (reader still draining 30s+ after child exit, which is the inherited-
