@@ -81,40 +81,79 @@ body {
     font-size: 14px;
     line-height: 1.5;
     background: #fafafa;
-    padding: 12px;
+    padding: 6px 12px;
     overflow-y: auto;
+    /* `overflow-x: clip` lets the side-tether pseudo-elements extend off-
+       screen without producing a horizontal scrollbar. Was implicit when the
+       message bubbles fit inside the viewport; now load-bearing because the
+       ::before/::after lines on every .msg point outward by 100vw. */
+    overflow-x: clip;
 }
-#chat { display: flex; flex-direction: column; gap: 12px; }
+/* Chat redesign: strict-shape bubbles + per-side tether line.
+   Goals: maximise vertical screen utilisation (small gap + small padding),
+   drop round corners (visual noise on dense logs), and let a horizontal
+   1-px line from the bubble edge to the corresponding screen edge carry
+   the "who sent this" cue. User -> right; assistant / tool / reasoning ->
+   left. Tools and reasoning bubbles already lived on the agent side, so
+   they share the assistant-side tether. */
+#chat { display: flex; flex-direction: column; gap: 4px; }
 
 .msg {
-    max-width: 85%;
-    padding: 10px 14px;
-    border-radius: 12px;
+    max-width: 92%;
+    padding: 6px 10px;
+    border-radius: 0;
     word-wrap: break-word;
     overflow-wrap: break-word;
+}
+/* Side tether: a horizontal line extending from the bubble's outer edge
+   to the screen edge on the bubble's "side". The line is anchored at the
+   vertical midpoint of the bubble and runs 100vw outward; body sets
+   `overflow-x: clip` so the off-screen extent doesn't create scrollbars. */
+.msg-user::after,
+.msg-assistant::before,
+.msg-tool::before,
+.msg-reasoning::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    height: 1px;
+    width: 100vw;
+    pointer-events: none;
 }
 .msg-user {
     align-self: flex-end;
     background: #0078d4;
     color: #fff;
-    border-bottom-right-radius: 4px;
     white-space: pre-wrap;
+    margin-right: 14px;          /* leaves room for the tether segment */
+}
+.msg-user::after {
+    right: -100vw;
+    background: #0078d4;
 }
 .msg-assistant {
     align-self: flex-start;
     background: #fff;
     color: #1a1a1a;
     border: 1px solid #e0e0e0;
-    border-bottom-left-radius: 4px;
+    margin-left: 14px;
+}
+.msg-assistant::before {
+    left: -100vw;
+    background: #b8c0c8;
 }
 .msg-tool {
     align-self: flex-start;
     background: #f0f4f8;
     color: #555;
     border: 1px solid #d0d8e0;
-    border-radius: 8px;
     font-size: 12px;
-    max-width: 90%;
+    max-width: 92%;
+    margin-left: 14px;
+}
+.msg-tool::before {
+    left: -100vw;
+    background: #c8d0d8;
 }
 .msg-tool .tool-name {
     font-weight: 600;
@@ -161,7 +200,7 @@ body {
 }
 .tool-diff {
     border: 1px solid #d8dce0;
-    border-radius: 4px;
+    border-radius: 0;
     overflow: hidden;
     font-family: "Cascadia Code", "Consolas", monospace;
     font-size: 12px;
@@ -247,20 +286,21 @@ body {
     background: #fdecea;
     color: #b71c1c;
     border: 1px solid #f5c6cb;
-    border-radius: 8px;
+    border-radius: 0;
     font-size: 13px;
 }
 
-/* S4.D plan bubble */
+/* S4.D plan bubble. Spans full width and keeps its yellow rail on the
+   left as the plan-source cue; corner rounding goes away with the rest. */
 .msg-plan {
     align-self: stretch;
     background: #fff8e6;
     color: #3a2f00;
     border: 1px solid #ffd66b;
     border-left: 4px solid #ffb300;
-    border-radius: 8px;
+    border-radius: 0;
     font-size: 13px;
-    padding: 10px 12px;
+    padding: 8px 10px;
     max-width: 100%;
 }
 .msg-plan .plan-title {
@@ -351,15 +391,15 @@ body {
 }
 .msg-assistant pre {
     margin: 0.5em 0;
-    border-radius: 6px;
+    border-radius: 0;
     overflow-x: auto;
 }
 .msg-assistant pre code {
     display: block;
-    padding: 10px;
+    padding: 8px;
     background: #f5f5f5;
     border: 1px solid #e0e0e0;
-    border-radius: 6px;
+    border-radius: 0;
     font-size: 13px;
     line-height: 1.4;
 }
@@ -427,10 +467,10 @@ body {
     background: #f5f7fa;
     color: #3a444f;
     border: 1px dashed #c8d0d8;
-    border-radius: 8px;
+    border-radius: 0;
     font-size: 12px;
     max-width: 100%;
-    padding: 8px 12px;
+    padding: 6px 10px;
 }
 .msg-system-prompt > summary {
     cursor: pointer;
@@ -464,7 +504,7 @@ body {
     padding: 8px;
     background: #ffffff;
     border: 1px solid #d8dce0;
-    border-radius: 4px;
+    border-radius: 0;
     font-family: "Cascadia Code", "Consolas", monospace;
     font-size: 11px;
     white-space: pre-wrap;
@@ -477,10 +517,19 @@ body {
     background: transparent;
     color: #888;
     border: 1px dashed #d0d0d0;
-    border-radius: 8px;
+    border-radius: 0;
     font-size: 12px;
-    max-width: 90%;
-    padding: 6px 10px;
+    max-width: 92%;
+    padding: 4px 10px;
+    margin-left: 14px;
+}
+.msg-reasoning::before {
+    left: -100vw;
+    /* Dashed line mirrors the bubble's dashed border so the source cue
+       feels consistent across the bubble + tether. */
+    background: transparent;
+    border-top: 1px dashed #d0d0d0;
+    height: 0;
 }
 .msg-reasoning summary {
     cursor: pointer;
@@ -511,10 +560,12 @@ body {
 @media (prefers-color-scheme: dark) {
     body { background: #1e1e1e; color: #d4d4d4; }
     .msg-user { background: #264f78; color: #e0e0e0; }
+    .msg-user::after { background: #4a9eff; }
     .msg-assistant {
         background: #2d2d2d; color: #d4d4d4;
         border-color: #444;
     }
+    .msg-assistant::before { background: #555c66; }
     .msg-assistant code { background: #3a3a3a; color: #d4d4d4; }
     .msg-assistant pre code {
         background: #1e1e1e; border-color: #444; color: #d4d4d4;
@@ -526,6 +577,7 @@ body {
         background: #252830; color: #aaa;
         border-color: #3a3f4b;
     }
+    .msg-tool::before { background: #4a525e; }
     .msg-tool .tool-name { color: #ccc; }
     .msg-tool .tool-preview { color: #888; }
     .msg-tool .tool-result-details summary { color: #999; }
@@ -580,6 +632,7 @@ body {
     .msg-reasoning {
         border-color: #444; color: #888;
     }
+    .msg-reasoning::before { border-top-color: #555; }
     .msg-reasoning summary { color: #888; }
     .msg-reasoning .reasoning-body {
         border-top-color: #444; color: #999;
@@ -1126,8 +1179,11 @@ void ChatPanel::create_footer()
         toggle_find_bar();
     });
 
-    // S5.S -- permission preset chip + dropdown.
-    preset_chip_ = new wxStaticText(this, wxID_ANY, "Ask before edits");
+    // S5.S -- permission preset chip + dropdown. The chip used to mirror the
+    // dropdown selection's display name (duplicating what the combo already
+    // showed); it now carries a constant "Permission:" label, while the
+    // elevation-level colour cue still updates in on_permission_preset_changed.
+    preset_chip_ = new wxStaticText(this, wxID_ANY, "Permission:");
     preset_chip_->SetName(ui_names::kChatPresetChip);
     gui::apply_locus_accessible_name(preset_chip_);
 
@@ -1803,11 +1859,10 @@ void ChatPanel::on_permission_preset_changed(tools::PermissionPreset effective,
     }
 
     if (preset_chip_) {
-        preset_chip_->SetLabel(wxString::FromUTF8(tools::display_name(effective)));
-
-        // Colour the chip by elevation level. SetForegroundColour applied to
-        // the static text -- background stays the panel default so the chip
-        // visually attaches to the surrounding bar.
+        // Label is constant ("Permission:") -- the combo to the right shows
+        // the active preset's name, so duplicating it here is just visual
+        // noise. We still recolour the chip by elevation level so the user
+        // can glance-detect "I'm in allow_all" without reading the combo.
         wxColour fg = wxColour(80, 80, 80);  // gray default
         switch (effective) {
         case tools::PermissionPreset::read_only:

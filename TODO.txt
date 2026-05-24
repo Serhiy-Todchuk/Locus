@@ -4,7 +4,6 @@
 - Voice chat input
 - Add image attachment for LLM prompt
 - FastDebug
-- Chat re-design - more strict shape of messages in chat - don't use round corners, smaller margins for better utilization of screen space; radius of corner rounding was indicating from which side the message came (from LLM or from user), use just line going from bubble to corresponding side of screen instead. U can apply some creativity here as long as U keep screen space utilization efficient.
 - Fix "Control surface" section in About window: there approval policies mentioned as something special, but it's common thing for all harnesses. Put there something about flexibility/efficiency/transparency/control as benefits, but keep overall About text consistent. Same fixes in docs (README.md?, other?).
 - Is it good that we are not reading XLSX, DOCX and PDFs with read_file tool (or any other)? So the agent can search for something, but cannot read full info?
 - Compaction seems doesn’t work as expected - it frees up too little part of context, but I can see wrong numbers - think out integration or agentic test for it involving a lot of communication with LLM, so we get near real scenario tested
