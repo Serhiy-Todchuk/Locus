@@ -902,10 +902,15 @@ StepResult OpDispatcher::op_get_chat_status(const Json& args)
     };
     Json data;
     data["context_label"]  = safe_read("locus.chat.ctx_label");
+    // Footer-declutter pass retired the chat-side widgets for plan, commit,
+    // and the static "Permission:" prefix; their info now lives in the
+    // main-window status bar (plan + commit) and on the combo's tooltip
+    // (preset). These fields stay in the response for backward compat with
+    // QA-LLM agentic scripts that already read them -- they just return the
+    // empty string when the widgets are absent.
     data["plan_chip"]      = safe_read("locus.chat.plan_chip");
     data["commit_chip"]    = safe_read("locus.chat.commit_chip");
     data["compacted_chip"] = safe_read("locus.chat.compacted_chip");
-    data["preset_chip"]    = safe_read("locus.chat.preset_chip");
     // The stop_btn is always present in the chat footer; its visible label
     // is the signal -- "Submit" = idle, "Stop" / "Queue" = streaming/busy.
     // We read it via UIA Value (LocusAccessible::GetValue surfaces the

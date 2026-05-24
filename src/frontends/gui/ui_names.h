@@ -37,7 +37,6 @@ inline constexpr const char* kChatCompactedChip  = "locus.chat.compacted_chip";
 // Agentic Tetris findings #5 -- in-flight round counter chip ("round 7/100");
 // shown only while the agent is busy, hidden on turn complete.
 inline constexpr const char* kChatRoundChip      = "locus.chat.round_chip";
-inline constexpr const char* kChatPresetChip     = "locus.chat.preset_chip";
 inline constexpr const char* kChatPresetChoice   = "locus.chat.preset_choice";
 inline constexpr const char* kChatSlashPopup     = "locus.chat.slash_popup";
 inline constexpr const char* kChatMentionPopup   = "locus.chat.mention_popup";

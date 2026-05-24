@@ -1,6 +1,6 @@
 {
   "name": "permission_presets_chat_footer",
-  "description": "S5.S -- assert the chat-footer permission preset chip + dropdown are addressable. Validates the widgets render with their ui_names::kChatPreset* automation ids without requiring an LLM round-trip. Picking 'Allow all' from the dropdown pops a warning modal; the script cancels it and asserts the chip text didn't change.",
+  "description": "S5.S -- assert the chat-side permission preset dropdown is addressable. Footer-declutter pass moved the combo from the bottom footer to mode_row (above input) and retired the constant 'Permission:' static-text prefix (`kChatPresetChip`). The combo carries its tooltip + colour cue; this script just verifies the kChatPresetChoice widget renders.",
   "setup": {
     "workspace": "tmp"
   },
@@ -18,13 +18,9 @@
 
     {
       "op": "find",
-      "args": { "automation_id": "locus.chat.preset_chip", "timeout_ms": 5000 }
-    },
-    {
-      "op": "find",
       "args": { "automation_id": "locus.chat.preset_choice", "timeout_ms": 5000 }
     },
-    { "op": "screenshot", "args": { "name": "01_chat_footer_with_preset_chip" } },
+    { "op": "screenshot", "args": { "name": "01_chat_mode_row_with_preset_choice" } },
 
     { "op": "quit", "args": { "wait_ms": 5000 } }
   ]
