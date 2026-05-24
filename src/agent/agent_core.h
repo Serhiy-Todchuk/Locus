@@ -138,6 +138,7 @@ public:
 
     bool is_busy() const override;
     void cancel_turn() override;
+    void request_commit_now() override;
 
     std::string undo_turn(int turn_id = 0) override;
 
@@ -244,6 +245,15 @@ private:
     std::atomic<bool>        running_{false};
     std::atomic<bool>        busy_{false};
     std::atomic<bool>        cancel_requested_{false};
+
+    // S6.13 -- "Commit now" requested (by UI button or by the AgentLoop's
+    // auto-nudge path). Set in tandem with cancel_requested_ so the round
+    // loop can distinguish "user wanted Stop" (turn aborts) from "watchdog
+    // wanted Commit now" (turn continues with an injected steering message).
+    // `nudges_this_turn_` is the per-turn counter; reset at the top of
+    // process_message; capped at 2 nudges before the turn force-aborts.
+    std::atomic<bool>        nudge_requested_{false};
+    int                      nudges_this_turn_ = 0;
 
     // Compaction request from a non-agent thread (GUI).
     std::atomic<bool>            pending_compact_{false};

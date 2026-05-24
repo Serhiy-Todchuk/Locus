@@ -606,6 +606,10 @@ void AgentCore::process_message(const std::string& content)
 
     busy_.store(true);
     cancel_requested_.store(false);
+    // S6.13 -- reset per-turn watchdog state. nudge_requested_ can survive
+    // across turns only if a frontend bug fires it while not busy; defensive.
+    nudge_requested_.store(false);
+    nudges_this_turn_ = 0;
 
     frontends_.broadcast([](IFrontend& fe) { fe.on_turn_start(); });
 
@@ -849,11 +853,58 @@ void AgentCore::process_message(const std::string& content)
                           && step.assistant_msg.tool_calls.empty();
 
         if (cancel_requested_.load()) {
+            // S6.13 -- distinguish three reasons the cancel flag is hot:
+            //   (a) user clicked Stop                       -> abort turn
+            //   (b) UI clicked Commit now                   -> nudge + continue
+            //   (c) AgentLoop's auto-nudge tripped the flag -> nudge + continue
+            const bool is_nudge =
+                nudge_requested_.exchange(false) || step.watchdog_auto_nudge;
+            if (is_nudge) {
+                if (++nudges_this_turn_ > 2) {
+                    spdlog::warn("AgentCore: 3 reasoning watchdog trips in one turn; aborting");
+                    frontends_.broadcast([](IFrontend& fe) {
+                        fe.on_error(
+                            "Agent appears stuck (3 reasoning watchdog trips "
+                            "in one turn). Stopping. Adjust the prompt or raise "
+                            "agent.reasoning_max_chars / reasoning_max_seconds "
+                            "thresholds if the model genuinely needs more room.");
+                        fe.on_reasoning_watchdog_cleared();
+                    });
+                    break;
+                }
+                // Soft cancel: clear the abort flag, append the steering
+                // message, and continue the round loop. The new round will
+                // re-enter the LLM with the message visible in history.
+                cancel_requested_.store(false);
+                std::string nudge =
+                    "[Auto-nudge] Stop reasoning. Commit to a tool call now, "
+                    "or give a brief final answer if no tool is needed.";
+                ctx_->add_message({MessageRole::user, nudge});
+                int tok = ctx_->history().messages().back().token_estimate;
+                activity_->emit(
+                    ActivityKind::user_message,
+                    "Reasoning watchdog nudge (#" + std::to_string(nudges_this_turn_)
+                        + ", trigger=" + (step.watchdog_trigger.empty()
+                                              ? std::string("manual")
+                                              : step.watchdog_trigger) + ")",
+                    nudge,
+                    /*tokens_in=*/tok);
+                frontends_.broadcast([](IFrontend& fe) {
+                    fe.on_reasoning_watchdog_cleared();
+                });
+                spdlog::info("AgentCore: reasoning-watchdog nudge #{} injected "
+                             "(trigger={})", nudges_this_turn_,
+                             step.watchdog_trigger.empty() ? "manual"
+                                                            : step.watchdog_trigger);
+                continue;  // re-enter while-loop body for next round
+            }
+
             if (!useless)
                 ctx_->add_message(std::move(step.assistant_msg));
             spdlog::info("AgentCore: turn cancelled mid-stream");
             frontends_.broadcast([](IFrontend& fe) {
                 fe.on_error("Turn cancelled.");
+                fe.on_reasoning_watchdog_cleared();
             });
             break;
         }
@@ -973,6 +1024,21 @@ void AgentCore::cancel_turn()
         dispatcher_->wake();
         spdlog::info("AgentCore: cancellation requested");
     }
+}
+
+void AgentCore::request_commit_now()
+{
+    if (!busy_.load()) return;
+    // Set BOTH flags. cancel_requested_ breaks the LLM stream cleanly via
+    // the existing path in AgentLoop. nudge_requested_ is the differentiator
+    // that tells the round loop "this was a commit-now, not a full Stop --
+    // inject the steering message and keep going". Order matters: set the
+    // nudge flag first so the cancel-handling branch in the round loop sees
+    // it as a consistent pair.
+    nudge_requested_.store(true);
+    cancel_requested_.store(true);
+    dispatcher_->wake();
+    spdlog::info("AgentCore: commit-now requested (manual)");
 }
 
 // -- tool_decision ------------------------------------------------------------

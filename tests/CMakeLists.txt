@@ -53,6 +53,7 @@ add_executable(locus_tests
     test_describe_tool.cpp
     test_lazy_manifest.cpp
     test_system_prompt_profiles.cpp
+    test_reasoning_watchdog.cpp
     retrieval_eval/metrics.cpp
     support/shared_embedder.cpp
 )

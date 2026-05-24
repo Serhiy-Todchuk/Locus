@@ -164,6 +164,51 @@ AgentStepResult AgentLoop::run_step(const ConversationHistory& history,
     bool first_token_seen = false;
     long long ttft_ms = 0;
 
+    // S6.13 -- reasoning watchdog. Triggers fire at most once per round;
+    // `out.watchdog_tripped` survives onto AgentCore so the round-loop sees
+    // it even after the stream callback returned.
+    int  wd_max_seconds       = 0;
+    int  wd_max_chars         = 0;
+    bool wd_auto_nudge        = false;
+    if (auto* ws = services_.workspace()) {
+        wd_max_seconds = ws->config().reasoning_max_seconds;
+        wd_max_chars   = ws->config().reasoning_max_chars;
+        wd_auto_nudge  = ws->config().reasoning_auto_nudge;
+    }
+    auto check_watchdog = [&]() {
+        if (out.watchdog_tripped) return;  // one trip per round
+        // chars trigger counts reasoning + text -- a model that streams a long
+        // plain-text answer without calling a tool is just as stuck for the
+        // watchdog's purposes as one buried in <think> content.
+        std::string trigger;
+        int combined = static_cast<int>(accumulated_reasoning.size()
+                                          + accumulated_text.size());
+        if (wd_max_chars > 0 && combined > wd_max_chars) {
+            trigger = "chars";
+        } else if (wd_max_seconds > 0) {
+            auto elapsed_s = std::chrono::duration_cast<std::chrono::seconds>(
+                                 std::chrono::steady_clock::now() - stream_t0).count();
+            if (elapsed_s > wd_max_seconds) trigger = "seconds";
+        }
+        if (trigger.empty()) return;
+
+        out.watchdog_tripped = true;
+        out.watchdog_trigger = trigger;
+        spdlog::warn("AgentLoop: reasoning watchdog tripped (trigger={}, "
+                     "chars={}, auto_nudge={})",
+                     trigger, combined, wd_auto_nudge);
+        if (wd_auto_nudge) {
+            out.watchdog_auto_nudge = true;
+            // Break the stream cleanly via the existing cancel pathway. The
+            // round-loop in AgentCore treats step.watchdog_auto_nudge as a
+            // soft-cancel and re-enters with an injected steering message.
+            cancel_flag_.store(true, std::memory_order_release);
+        }
+        frontends_.broadcast([&](IFrontend& fe) {
+            fe.on_reasoning_watchdog_tripped(trigger, combined);
+        });
+    };
+
     // S4.F generation-progress throttle: 150 ms between callbacks. The
     // frontend receives accumulated chars + an estimate of tokens via the
     // shared ~4 chars/token heuristic. The exact completion_tokens still
@@ -232,6 +277,10 @@ AgentStepResult AgentLoop::run_step(const ConversationHistory& history,
     cbs.on_token = [&](const std::string& token) {
         mark_first_token();
         accumulated_text += token;
+        // S6.13 -- a model that streams a long plain-text answer without
+        // ever calling a tool can also trip the watchdog. The trigger sees
+        // total stream chars (reasoning + text), not reasoning-only.
+        check_watchdog();
         // Don't render tokens after the user clicked Stop. The HTTP abort
         // happens at the next chunk boundary in the transport layer;
         // suppressing here avoids painting up to that boundary's worth of
@@ -243,6 +292,10 @@ AgentStepResult AgentLoop::run_step(const ConversationHistory& history,
     cbs.on_reasoning_token = [&](const std::string& token) {
         mark_first_token();
         accumulated_reasoning += token;
+        // S6.13 -- check watchdog before propagating. If auto-nudge fires,
+        // cancel_flag_ goes hot here so the next chunk in the stream tail
+        // is suppressed below.
+        check_watchdog();
         if (cancel_flag_.load(std::memory_order_relaxed)) return;
         frontends_.broadcast([&](IFrontend& fe) { fe.on_reasoning_token(token); });
         maybe_fire_progress(false);

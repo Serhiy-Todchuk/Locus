@@ -95,6 +95,15 @@ WorkspaceConfig workspace_config_from_json(const json& j)
         // S6.12 -- system-prompt profile
         if (ag.contains("system_prompt_profile"))
             cfg.system_prompt_profile = ag["system_prompt_profile"].get<std::string>();
+        // S6.13 -- reasoning watchdog
+        if (ag.contains("reasoning_max_seconds"))
+            cfg.reasoning_max_seconds = ag["reasoning_max_seconds"].get<int>();
+        if (ag.contains("reasoning_max_chars"))
+            cfg.reasoning_max_chars = ag["reasoning_max_chars"].get<int>();
+        if (ag.contains("reasoning_max_rounds_silent"))
+            cfg.reasoning_max_rounds_silent = ag["reasoning_max_rounds_silent"].get<int>();
+        if (ag.contains("reasoning_auto_nudge"))
+            cfg.reasoning_auto_nudge = ag["reasoning_auto_nudge"].get<bool>();
     }
 
     if (j.contains("memory")) {
@@ -300,7 +309,11 @@ json workspace_config_to_json(const WorkspaceConfig& cfg)
             {"notify_external_changes",   cfg.notify_external_changes},
             {"require_read_before_edit",  cfg.require_read_before_edit},
             {"lazy_tool_manifest",        cfg.lazy_tool_manifest},
-            {"system_prompt_profile",     cfg.system_prompt_profile}
+            {"system_prompt_profile",     cfg.system_prompt_profile},
+            {"reasoning_max_seconds",       cfg.reasoning_max_seconds},
+            {"reasoning_max_chars",         cfg.reasoning_max_chars},
+            {"reasoning_max_rounds_silent", cfg.reasoning_max_rounds_silent},
+            {"reasoning_auto_nudge",        cfg.reasoning_auto_nudge}
         }},
         {"memory", {
             {"enabled",                    cfg.memory_enabled},

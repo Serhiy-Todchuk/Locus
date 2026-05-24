@@ -192,6 +192,21 @@ public:
     // clean. Paired with on_turn_complete: the chip is hidden then.
     virtual void on_round_progress(int /*round*/, int /*max_rounds*/) {}
 
+    // S6.13 -- reasoning watchdog tripped on the current LLM round.
+    // `trigger` is "chars" or "seconds"; `value` is the count that crossed
+    // the threshold (combined reasoning+text chars for "chars"; elapsed
+    // seconds for "seconds"). Frontends typically reveal a non-modal
+    // "Commit now" button that calls ILocusCore::request_commit_now()
+    // when clicked. In auto_nudge mode the action fires inside AgentCore
+    // and the frontend just logs the event. Default no-op.
+    virtual void on_reasoning_watchdog_tripped(const std::string& /*trigger*/,
+                                                int /*value*/) {}
+
+    // S6.13 -- watchdog state cleared (new round started, agent went idle,
+    // or a tool call landed). Frontends hide the Commit-now button on this.
+    // Default no-op.
+    virtual void on_reasoning_watchdog_cleared() {}
+
     // S5.G -- a ChatMessage was just appended to ConversationHistory. Frontends
     // build their dom-id -> history-id map here so per-message delete can route
     // back to the right ConversationHistory entry. `role` is the message role
@@ -261,6 +276,16 @@ public:
     // the current LLM call or tool execution finishes (not instant).
     // No-op if not busy.
     virtual void cancel_turn() = 0;
+
+    // S6.13 -- "Commit now" -- cancel the in-flight LLM stream and start a
+    // new round with a synthetic user message telling the model to stop
+    // reasoning and either commit to a tool call or give a brief answer.
+    // Distinct from cancel_turn (which aborts the whole turn); this keeps
+    // the turn alive. No-op if not busy. Hard-capped at 2 nudges per turn;
+    // a 3rd request aborts with "Agent appears stuck (3 reasoning watchdog
+    // trips in one turn)." Default impl is a no-op so non-core frontends
+    // (CLI, tests) don't have to implement it.
+    virtual void request_commit_now() {}
 
     // Snapshot of buffered activity events with id > since_id. Used by
     // late-joining frontends (e.g. web clients) to catch up.

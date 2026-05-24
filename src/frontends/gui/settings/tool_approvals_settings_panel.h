@@ -58,6 +58,10 @@ private:
     wxCheckBox*               lazy_tool_manifest_ctrl_       = nullptr;
     // S6.12 -- system-prompt profile dropdown.
     wxChoice*                 system_prompt_profile_ctrl_    = nullptr;
+    // S6.13 -- reasoning watchdog controls. All 0/false = watchdog off.
+    wxSpinCtrl*               reasoning_max_seconds_ctrl_    = nullptr;
+    wxSpinCtrl*               reasoning_max_chars_ctrl_      = nullptr;
+    wxCheckBox*               reasoning_auto_nudge_ctrl_     = nullptr;
     std::vector<std::string>  tool_names_;
     std::vector<wxChoice*>    approval_choices_;
     std::vector<int>          approval_prev_sel_;

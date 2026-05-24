@@ -156,6 +156,26 @@ struct WorkspaceConfig {
     // Companion to lazy_tool_manifest above. ADR-0007 carries the rationale.
     std::string system_prompt_profile = "full";
 
+    // S6.13 -- reasoning watchdog. Three OR-semantics triggers; each = 0
+    // disables that trigger. When any non-zero threshold trips during an LLM
+    // round, the watchdog fires its action:
+    //
+    //   reasoning_auto_nudge = false (default): non-modal "Commit now" button
+    //     surfaces in the chat-footer action row. User clicks -> AgentCore
+    //     cancels the current LLM stream and starts a new round with an
+    //     injected steering message ("Stop reasoning and commit to a tool
+    //     call now or give a brief final answer.").
+    //   reasoning_auto_nudge = true: same action fires automatically without
+    //     waiting for user click. Designed for agentic-harness driving.
+    //
+    // Hard cap: 2 nudges per user-message turn. A 3rd would-fire aborts the
+    // turn with "Agent appears stuck (3 reasoning watchdog trips in one
+    // turn)." All defaults 0/false -> watchdog off, no behaviour change.
+    int  reasoning_max_seconds       = 0;  // wall-clock seconds since round start
+    int  reasoning_max_chars         = 0;  // reasoning-channel chars in current round
+    int  reasoning_max_rounds_silent = 0;  // consecutive rounds since last tool call
+    bool reasoning_auto_nudge        = false;
+
     // S4.I -- per-background-process output ring buffer cap. The reader thread
     // appends stdout+stderr until this many bytes are buffered; older bytes
     // are dropped from the front (the LLM is told how many it missed). 256 KB

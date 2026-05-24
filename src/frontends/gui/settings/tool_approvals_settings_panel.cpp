@@ -150,6 +150,59 @@ ToolApprovalsSettingsPanel::ToolApprovalsSettingsPanel(wxWindow* parent,
         outer->Add(row, 0, wxLEFT | wxRIGHT | wxTOP, 8);
     }
 
+    // S6.13 -- reasoning watchdog. Three fields here (seconds, chars,
+    // auto-nudge). All 0/off -> watchdog disabled (matches today's behaviour).
+    {
+        auto* row = new wxBoxSizer(wxHORIZONTAL);
+        row->Add(new wxStaticText(this, wxID_ANY,
+                                  "Reasoning max seconds (0 = off):"),
+                 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+        reasoning_max_seconds_ctrl_ = new wxSpinCtrl(this, wxID_ANY);
+        reasoning_max_seconds_ctrl_->SetRange(0, 3600);
+        reasoning_max_seconds_ctrl_->SetValue(config.reasoning_max_seconds);
+        reasoning_max_seconds_ctrl_->SetName(
+            "locus.settings.agent.reasoning_max_seconds");
+        gui::apply_locus_accessible_name(reasoning_max_seconds_ctrl_);
+        reasoning_max_seconds_ctrl_->SetToolTip(
+            "Wall-clock seconds the LLM may spend in a single round before "
+            "the reasoning watchdog trips. 0 = off. Companion to "
+            "Reasoning max chars below (OR-semantics: whichever trips first).");
+        row->Add(reasoning_max_seconds_ctrl_, 0, wxALIGN_CENTER_VERTICAL);
+        outer->Add(row, 0, wxLEFT | wxRIGHT | wxTOP, 8);
+    }
+    {
+        auto* row = new wxBoxSizer(wxHORIZONTAL);
+        row->Add(new wxStaticText(this, wxID_ANY,
+                                  "Reasoning max chars (0 = off):"),
+                 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+        reasoning_max_chars_ctrl_ = new wxSpinCtrl(this, wxID_ANY);
+        reasoning_max_chars_ctrl_->SetRange(0, 1000000);
+        reasoning_max_chars_ctrl_->SetValue(config.reasoning_max_chars);
+        reasoning_max_chars_ctrl_->SetName(
+            "locus.settings.agent.reasoning_max_chars");
+        gui::apply_locus_accessible_name(reasoning_max_chars_ctrl_);
+        reasoning_max_chars_ctrl_->SetToolTip(
+            "Combined reasoning + text channel chars per round before the "
+            "watchdog trips. 0 = off. ~30000 is a reasonable starting "
+            "value for Qwen 3.x; smaller for stricter budgets.");
+        row->Add(reasoning_max_chars_ctrl_, 0, wxALIGN_CENTER_VERTICAL);
+        outer->Add(row, 0, wxLEFT | wxRIGHT | wxTOP, 8);
+    }
+    reasoning_auto_nudge_ctrl_ = new wxCheckBox(this, wxID_ANY,
+        "Reasoning watchdog: auto-nudge (no user click needed)");
+    reasoning_auto_nudge_ctrl_->SetValue(config.reasoning_auto_nudge);
+    reasoning_auto_nudge_ctrl_->SetToolTip(
+        "When checked, the watchdog automatically cancels the current LLM "
+        "stream and injects a 'Stop reasoning, commit to a tool call now' "
+        "message instead of waiting for the user to click the Commit now "
+        "button. Hard cap: 2 nudges per turn; a 3rd would-fire aborts the "
+        "turn entirely with 'Agent appears stuck.' Designed for agentic-"
+        "mode driving where no user is at the keyboard.");
+    reasoning_auto_nudge_ctrl_->SetName(
+        "locus.settings.agent.reasoning_auto_nudge_cb");
+    gui::apply_locus_accessible_name(reasoning_auto_nudge_ctrl_);
+    outer->Add(reasoning_auto_nudge_ctrl_, 0, wxLEFT | wxRIGHT | wxTOP, 8);
+
     // run_command / read_process_output default head+tail truncation. The
     // per-call output_filter_lines arg overrides this; 0 disables the
     // smart-truncate default entirely (raw output flows back, capped only
@@ -402,6 +455,12 @@ void ToolApprovalsSettingsPanel::load_from_config(const WorkspaceConfig& cfg)
         else if (cfg.system_prompt_profile == "minimal") sel = 2;
         system_prompt_profile_ctrl_->SetSelection(sel);
     }
+    if (reasoning_max_seconds_ctrl_)
+        reasoning_max_seconds_ctrl_->SetValue(cfg.reasoning_max_seconds);
+    if (reasoning_max_chars_ctrl_)
+        reasoning_max_chars_ctrl_->SetValue(cfg.reasoning_max_chars);
+    if (reasoning_auto_nudge_ctrl_)
+        reasoning_auto_nudge_ctrl_->SetValue(cfg.reasoning_auto_nudge);
 
     // Refresh wildcard overrides from the reloaded config.
     wildcard_overrides_.clear();
@@ -476,6 +535,12 @@ void ToolApprovalsSettingsPanel::commit_to_config(WorkspaceConfig& cfg) const
             default: cfg.system_prompt_profile = "full";    break;
         }
     }
+    if (reasoning_max_seconds_ctrl_)
+        cfg.reasoning_max_seconds = reasoning_max_seconds_ctrl_->GetValue();
+    if (reasoning_max_chars_ctrl_)
+        cfg.reasoning_max_chars = reasoning_max_chars_ctrl_->GetValue();
+    if (reasoning_auto_nudge_ctrl_)
+        cfg.reasoning_auto_nudge = reasoning_auto_nudge_ctrl_->IsChecked();
 }
 
 } // namespace locus

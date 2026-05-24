@@ -26,6 +26,17 @@ struct AgentStepResult {
     // Paired with the round's completion_tokens via the context_meter
     // broadcast so the chat panel can show a per-bubble tok/s rate.
     long long             stream_ms = 0;
+
+    // S6.13 -- reasoning watchdog telemetry. `tripped` = a threshold fired
+    // during this round; `trigger` names which one ("chars"|"seconds").
+    // `auto_nudge_fired` = the loop also cancelled the stream so the
+    // AgentCore round handler should inject the steering message instead
+    // of treating the cancel as a user-stop. `rounds_silent_at_trip` is
+    // included for the activity event but is read from AgentCore's
+    // turn-level counter, not from the loop.
+    bool        watchdog_tripped       = false;
+    bool        watchdog_auto_nudge    = false;
+    std::string watchdog_trigger;
 };
 
 // Drives a single LLM call: builds the tool schema, streams tokens,
