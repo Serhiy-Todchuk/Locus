@@ -1478,7 +1478,7 @@ void ChatPanel::on_session_reset()
     pending_tool_info_.clear();
     // S5.G -- reset chat-side delete bookkeeping.
     history_to_dom_.clear();
-    last_user_dom_id_ = 0;
+    pending_user_dom_ids_.clear();
     pending_tool_history_id_ = 0;
     // S5.Z task 2 -- previous find state references DOM that no longer exists.
     if (is_find_bar_visible()) hide_find_bar();
@@ -1896,8 +1896,15 @@ void ChatPanel::on_history_message_added(int history_id, MessageRole role,
     }
     int target_dom_id = 0;
     if (role == MessageRole::user) {
-        target_dom_id = last_user_dom_id_;
-        last_user_dom_id_ = 0;
+        // FIFO: each submit pushes a dom_id; the next role=user
+        // on_history_message_added pops the front. With mid-turn injection
+        // (`AgentCore` may pair multiple in-flight user bubbles back-to-back
+        // against multiple queued submits), the deque keeps pairings stable
+        // even when 2+ submits hit before the first one is injected.
+        if (!pending_user_dom_ids_.empty()) {
+            target_dom_id = pending_user_dom_ids_.front();
+            pending_user_dom_ids_.pop_front();
+        }
     } else if (role == MessageRole::assistant) {
         // Live path: the agent loop commits the assistant message to history
         // AFTER the stream renderer has sealed the bubble and zeroed its
@@ -1947,7 +1954,9 @@ void ChatPanel::render_loaded_history(const ConversationHistory& history)
             run_script(wxString::Format(
                 "addMsg(%d, 'msg-user', %s);",
                 message_id_, "'" + chat_js_escape(html) + "'"));
-            last_user_dom_id_ = message_id_;
+            // Saved-session render path always knows history_id, so the
+            // pending-pairing queue stays untouched here -- direct
+            // history_to_dom_ wiring below handles the X-attach.
             if (msg.history_id > 0) {
                 history_to_dom_[msg.history_id] = message_id_;
                 run_script(wxString::Format("addDeleteButton(%d, %d);",
@@ -2159,9 +2168,11 @@ bool ChatPanel::submit_current_input()
         message_id_, "'" + chat_js_escape(user_text_to_html(text)) + "'"));
 
     // S5.G -- remember this dom_id so the matching on_history_message_added
-    // (which fires once the agent thread has appended the user ChatMessage)
-    // can attach a delete X to the right bubble.
-    last_user_dom_id_ = message_id_;
+    // (which fires once the agent thread has appended the user ChatMessage,
+    // either at turn start OR via mid-turn round-boundary injection) can
+    // attach a delete X to the right bubble. FIFO queue handles multiple
+    // submits queued back-to-back while the agent is mid-turn.
+    pending_user_dom_ids_.push_back(message_id_);
 
     // S5.D -- per-message token chip: client-side heuristic estimate on the
     // raw user text (effective_content may be slightly larger due to attached-

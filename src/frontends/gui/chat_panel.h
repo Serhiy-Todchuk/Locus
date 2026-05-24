@@ -13,6 +13,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <deque>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -340,8 +341,12 @@ private:
     long long last_stream_ms_       = 0;
 
     // S5.G -- chat-side bookkeeping for per-message delete.
-    // Most recent user bubble dom_id (refreshed on every submit_current_input).
-    int last_user_dom_id_ = 0;
+    // FIFO queue of user-bubble dom_ids whose history_id is still pending
+    // (one entry pushed per submit, popped per role=user
+    // on_history_message_added). A deque (not a single int) is required for
+    // mid-turn injection (`AgentCore` can pair multiple queued user messages
+    // back-to-back against multiple in-flight bubbles).
+    std::deque<int> pending_user_dom_ids_;
     // Set by on_history_message_added(role=tool); consumed by on_tool_result
     // to bridge the tool history_id with its dom bubble (allocated earlier in
     // on_tool_call_pending).  Needed so tool-call pair-delete can DOM-remove

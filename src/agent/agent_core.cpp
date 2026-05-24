@@ -717,6 +717,55 @@ void AgentCore::process_message(const std::string& content)
         apply_pending_plan_decision();
         apply_pending_deletes();
 
+        // Mid-turn user-message injection: while we were running the previous
+        // round, the user may have queued more prompts. Drain non-slash
+        // entries from the front of `message_queue_` and append them as
+        // user messages so the next LLM call sees them. Slash commands
+        // ('/clear', '/compact', ...) are NOT injected -- they need full
+        // turn-boundary semantics (history mutation, dialog spawn, ...) so
+        // we stop at the first slash entry and let the natural pop-and-
+        // process loop in agent_thread_func handle them once this turn ends.
+        // Cancellation also short-circuits the drain so a Stop-mid-turn
+        // doesn't sneak a queued prompt into history.
+        if (!cancel_requested_.load()) {
+            std::vector<std::string> injected;
+            {
+                std::lock_guard lock(queue_mutex_);
+                while (!message_queue_.empty()) {
+                    const std::string& front = message_queue_.front();
+                    std::size_t i = 0;
+                    while (i < front.size()
+                           && std::isspace(static_cast<unsigned char>(front[i])))
+                        ++i;
+                    if (i < front.size() && front[i] == '/') break;
+                    injected.push_back(std::move(message_queue_.front()));
+                    message_queue_.pop();
+                }
+            }
+            for (auto& m : injected) {
+                spdlog::info("AgentCore: injecting queued user message mid-turn "
+                             "({} chars, round {})", m.size(), round);
+                int chars = static_cast<int>(m.size());
+                ctx_->add_message({MessageRole::user, m});
+                int tok = ctx_->history().messages().back().token_estimate;
+                activity_->emit(ActivityKind::user_message,
+                                "User message (mid-turn, round "
+                                    + std::to_string(round) + ", "
+                                    + std::to_string(chars) + " chars)",
+                                m,
+                                /*tokens_in=*/tok);
+            }
+            if (!injected.empty()) {
+                frontends_.broadcast([&](IFrontend& fe) {
+                    fe.on_context_meter(ctx_->current_tokens(),
+                                        ctx_->llm_config().context_limit,
+                                        ctx_->budget().last_prompt_tokens(),
+                                        ctx_->budget().last_completion_tokens(),
+                                        ctx_->budget().reserve());
+                });
+            }
+        }
+
         // S5.F -- auto-compact band. When usage crosses the configured
         // auto_threshold of effective_limit and auto_enabled is on, queue
         // the cascade (1+2+3+6, layer 5 reserved for explicit user invocation)
