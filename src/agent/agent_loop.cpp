@@ -43,7 +43,13 @@ std::vector<ToolSchema> AgentLoop::build_tool_schemas(ToolMode mode)
 {
     // S3.L: filter the manifest to tools that are available in this workspace
     // and visible in the current mode. S4.D introduced plan/execute modes.
-    auto schema_json = tools_.build_schema_json(services_, mode);
+    // S6.11 -- when `lazy_tool_manifest` is set, collapse parameter schemas to
+    // permissive `additionalProperties:true`; the model fetches the real shape
+    // via describe_tool when it needs to call.
+    bool lazy = false;
+    if (auto* ws = services_.workspace())
+        lazy = ws->config().lazy_tool_manifest;
+    auto schema_json = tools_.build_schema_json(services_, mode, lazy);
 
     std::vector<ToolSchema> schemas;
     schemas.reserve(schema_json.size());

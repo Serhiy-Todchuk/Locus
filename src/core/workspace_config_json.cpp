@@ -89,6 +89,9 @@ WorkspaceConfig workspace_config_from_json(const json& j)
             cfg.notify_external_changes = ag["notify_external_changes"].get<bool>();
         if (ag.contains("require_read_before_edit"))
             cfg.require_read_before_edit = ag["require_read_before_edit"].get<bool>();
+        // S6.11 -- lazy tool manifest
+        if (ag.contains("lazy_tool_manifest"))
+            cfg.lazy_tool_manifest = ag["lazy_tool_manifest"].get<bool>();
     }
 
     if (j.contains("memory")) {
@@ -292,7 +295,8 @@ json workspace_config_to_json(const WorkspaceConfig& cfg)
             {"run_command_truncate_lines", cfg.run_command_truncate_lines},
             {"dump_on_run_command_hang",  cfg.dump_on_run_command_hang},
             {"notify_external_changes",   cfg.notify_external_changes},
-            {"require_read_before_edit",  cfg.require_read_before_edit}
+            {"require_read_before_edit",  cfg.require_read_before_edit},
+            {"lazy_tool_manifest",        cfg.lazy_tool_manifest}
         }},
         {"memory", {
             {"enabled",                    cfg.memory_enabled},

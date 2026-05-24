@@ -103,6 +103,23 @@ ToolApprovalsSettingsPanel::ToolApprovalsSettingsPanel(wxWindow* parent,
         "old_string matches without confirming the file content first.");
     outer->Add(require_read_before_edit_ctrl_, 0, wxLEFT | wxRIGHT | wxTOP, 8);
 
+    // S6.11 -- lazy tool manifest. Trims per-turn tool schemas to one-line
+    // summaries (~2-3K tokens saved) and exposes describe_tool for on-demand
+    // schema fetch. Default off; opt-in for small-context local models.
+    lazy_tool_manifest_ctrl_ = new wxCheckBox(this, wxID_ANY,
+        "Lazy tool manifest (saves ~2-3K tokens per turn)");
+    lazy_tool_manifest_ctrl_->SetValue(config.lazy_tool_manifest);
+    lazy_tool_manifest_ctrl_->SetToolTip(
+        "When checked, the per-turn tool catalog (system prompt + API tools "
+        "array) collapses to one-line summaries; the agent fetches full "
+        "schemas on demand via the describe_tool meta-tool. Saves ~2-3K "
+        "tokens per turn on the default tool roster. Recommended for "
+        "16k-context local models. Costs one extra round-trip when the "
+        "agent uses a tool for the first time in a session.");
+    lazy_tool_manifest_ctrl_->SetName("locus.settings.tools.lazy_manifest_cb");
+    gui::apply_locus_accessible_name(lazy_tool_manifest_ctrl_);
+    outer->Add(lazy_tool_manifest_ctrl_, 0, wxLEFT | wxRIGHT | wxTOP, 8);
+
     // run_command / read_process_output default head+tail truncation. The
     // per-call output_filter_lines arg overrides this; 0 disables the
     // smart-truncate default entirely (raw output flows back, capped only
@@ -347,6 +364,8 @@ void ToolApprovalsSettingsPanel::load_from_config(const WorkspaceConfig& cfg)
         require_read_before_edit_ctrl_->SetValue(cfg.require_read_before_edit);
     if (truncate_lines_ctrl_)
         truncate_lines_ctrl_->SetValue(cfg.run_command_truncate_lines);
+    if (lazy_tool_manifest_ctrl_)
+        lazy_tool_manifest_ctrl_->SetValue(cfg.lazy_tool_manifest);
 
     // Refresh wildcard overrides from the reloaded config.
     wildcard_overrides_.clear();
@@ -412,6 +431,8 @@ void ToolApprovalsSettingsPanel::commit_to_config(WorkspaceConfig& cfg) const
         cfg.require_read_before_edit = require_read_before_edit_ctrl_->IsChecked();
     if (truncate_lines_ctrl_)
         cfg.run_command_truncate_lines = truncate_lines_ctrl_->GetValue();
+    if (lazy_tool_manifest_ctrl_)
+        cfg.lazy_tool_manifest = lazy_tool_manifest_ctrl_->IsChecked();
 }
 
 } // namespace locus

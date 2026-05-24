@@ -77,8 +77,15 @@ AgentCore::AgentCore(ILLMClient& llm,
     // S5.J -- system prompt is an immutable SystemPromptAssembly value. Build
     // once here and hand to LLMContext. There is no setter; a new prompt = a
     // new assembly (and a new LLMContext) by design.
+    // S6.11 -- pass the workspace's lazy_tool_manifest flag so the assembly
+    // renders summaries (not per-param lines) when on, and so describe_tool's
+    // available(ws) filter affects the prompt as well as the API tools array.
+    bool lazy_manifest = false;
+    if (auto* w = services_.workspace())
+        lazy_manifest = w->config().lazy_tool_manifest;
     auto assembly = SystemPromptAssembly::build(
-        locus_md, ws_meta, tools, llm_config.tool_format, memory_section);
+        locus_md, ws_meta, tools, llm_config.tool_format, memory_section,
+        lazy_manifest, &services_);
 
     int sys_tokens = assembly.total_tokens();
     spdlog::info("AgentCore: system prompt ~{} tokens, context limit {}",

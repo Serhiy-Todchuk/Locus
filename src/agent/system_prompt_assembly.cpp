@@ -1,5 +1,6 @@
 #include "system_prompt_assembly.h"
 
+#include "core/workspace_services.h"
 #include "llm/token_counter.h"
 
 #include <spdlog/spdlog.h>
@@ -53,7 +54,9 @@ SystemPromptAssembly SystemPromptAssembly::build(const std::string&       locus_
                                                  const WorkspaceMetadata& meta,
                                                  const IToolRegistry&     tools,
                                                  ToolFormat               tool_format,
-                                                 const std::string&       memory_section)
+                                                 const std::string&       memory_section,
+                                                 bool                     lazy_manifest,
+                                                 IWorkspaceServices*      ws_for_filter)
 {
     SystemPromptAssembly out;
 
@@ -130,15 +133,30 @@ SystemPromptAssembly SystemPromptAssembly::build(const std::string&       locus_
     }
 
     // -- Available tools -----------------------------------------------------
+    // S6.11 -- when `lazy_manifest` is on, the section degrades to per-tool
+    // one-liners (no param breakdown). A header hint tells the model how to
+    // fetch full schemas via the describe_tool meta-tool.
     std::ostringstream tools_ss;
-    tools_ss << "## Available Tools\n\n";
+    if (lazy_manifest)
+        tools_ss << "## Available Tools (summaries -- call describe_tool('<name>') for the full schema)\n\n";
+    else
+        tools_ss << "## Available Tools\n\n";
+
     for (auto* tool : tools.all()) {
         if (!tool->visible_in_mode(ToolMode::agent)) continue;
+        // Mirror the API tools-array filter so describe_tool is hidden from
+        // the system prompt when lazy_manifest=false (its `available(ws)`
+        // returns false in that case). Skip the workspace filter only when
+        // no workspace is available (test builds).
+        if (ws_for_filter && !tool->available(*ws_for_filter)) continue;
+
         tools_ss << "- **" << tool->name() << "**: " << tool->description() << "\n";
-        for (auto& p : tool->params()) {
-            tools_ss << "  - `" << p.name << "` (" << p.type;
-            if (!p.required) tools_ss << ", optional";
-            tools_ss << "): " << p.description << "\n";
+        if (!lazy_manifest) {
+            for (auto& p : tool->params()) {
+                tools_ss << "  - `" << p.name << "` (" << p.type;
+                if (!p.required) tools_ss << ", optional";
+                tools_ss << "): " << p.description << "\n";
+            }
         }
     }
     std::string tools_section = tools_ss.str();

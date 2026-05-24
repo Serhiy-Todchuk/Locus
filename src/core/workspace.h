@@ -131,6 +131,17 @@ struct WorkspaceConfig {
     // too much" signal once M4 adds ~20 more tools.
     int tool_manifest_warn_tokens = 4000;
 
+    // S6.11 -- lazy tool manifest. When true, the per-turn tool catalog
+    // (both the system-prompt "## Available Tools" section AND the OpenAI
+    // tools[] API array) collapses to one-line summaries; the model fetches
+    // full schemas on demand via the describe_tool meta-tool. Saves ~2-3K
+    // tokens per turn on the default 12-tool roster -- enough to make a
+    // 16k-context local model practical. Costs one extra round-trip per
+    // first-use of an unfamiliar tool. Default off (no behaviour change for
+    // existing users); the canonical 16k-local-LLM user opts in once via
+    // Settings. See architecture/decisions/0007-context-budget-reshape-*.md.
+    bool lazy_tool_manifest = false;
+
     // S4.I -- per-background-process output ring buffer cap. The reader thread
     // appends stdout+stderr until this many bytes are buffered; older bytes
     // are dropped from the front (the LLM is told how many it missed). 256 KB

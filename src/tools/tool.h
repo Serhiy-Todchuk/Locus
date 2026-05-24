@@ -167,8 +167,16 @@ public:
     // Filtered variant (S3.L): applies `ITool::available(ws)` and
     // `ITool::visible_in_mode(mode)` so the per-turn manifest only exposes
     // tools that actually work in the current workspace + mode.
+    //
+    // S6.11 -- `lazy` collapses each tool's `parameters` field to a permissive
+    // `{"type":"object","properties":{},"additionalProperties":true}` schema.
+    // The describe_tool meta-tool retains its real schema even when lazy=true
+    // (it is the entry point for fetching the others). Tool `description`
+    // text remains intact in both modes so the model has a hint about each
+    // tool's purpose.
     virtual nlohmann::json build_schema_json(IWorkspaceServices& ws,
-                                             ToolMode mode) const = 0;
+                                             ToolMode mode,
+                                             bool lazy = false) const = 0;
 };
 
 } // namespace locus

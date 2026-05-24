@@ -53,6 +53,8 @@ private:
 
     wxCheckBox*               require_read_before_edit_ctrl_ = nullptr;
     wxSpinCtrl*               truncate_lines_ctrl_           = nullptr;
+    // S6.11 -- lazy tool manifest checkbox.
+    wxCheckBox*               lazy_tool_manifest_ctrl_       = nullptr;
     std::vector<std::string>  tool_names_;
     std::vector<wxChoice*>    approval_choices_;
     std::vector<int>          approval_prev_sel_;

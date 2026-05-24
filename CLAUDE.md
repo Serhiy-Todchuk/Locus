@@ -49,6 +49,8 @@ Write laconically. Engineers, not book writers. Narrow wording, no padding -- bu
 
 ## Current Stage
 
+**M6 -- Connected & Misc -- in progress.** Done: S6.11 (lazy tool manifest -- `WorkspaceConfig::lazy_tool_manifest`, describe_tool meta-tool, summary-mode for both system-prompt `## Available Tools` section and the API tools array). Per-stage detail in [roadmap/M6/](roadmap/M6/). Cross-cutting design rationale in [ADR-0007](architecture/decisions/0007-context-budget-reshape-lazy-manifest-and-profiles.md).
+
 **M5 -- Polish, UX & Performance -- complete.** Done: S5.A, S5.B, S5.C, S5.D, S5.F, S5.G, S5.I, S5.J, S5.K, S5.L, S5.M, S5.N, S5.O, S5.P, S5.Q, S5.R, S5.S, S5.Z (tasks 1-10 + agentic-mode follow-ups from `tests/ui_automation/output/agentic_Tetris/findings.md` and `tests/ui_automation/output/agentic_TestLocalVibe/findings.md`). Per-stage detail in [roadmap/M5/](roadmap/M5/). S5.Z stays the landing pad if new polish-shaped work surfaces post-close.
 
 **M4 -- Agent Quality -- complete.** Done: S4.A, S4.B, S4.D, S4.F, S4.G, S4.I, S4.J, S4.K, S4.L, S4.M, S4.N, S4.P, S4.R (Phase 1), S4.S, S4.T, S4.U, S4.V, S4.W, S4.X, S4.Y. Per-stage detail in [roadmap/M4/](roadmap/M4/). S4.C parked -- see [roadmap/backlog/S4.C-auto-verify.md](roadmap/backlog/S4.C-auto-verify.md).

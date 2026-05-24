@@ -56,34 +56,52 @@ namespace {
 //   { "type": "function", "function": { "name", "description", "parameters" } }
 // When `ws` is non-null, the tool's `description_for(ws)` is used so
 // context-aware descriptions (S5.A SearchTool mode-list pruning) take effect.
-nlohmann::json build_entry(const ITool& t, IWorkspaceServices* ws = nullptr)
+//
+// S6.11 -- `lazy` collapses parameters to a permissive schema for every tool
+// EXCEPT describe_tool itself (the meta-tool needs its real schema so the
+// model knows to pass `name: string`). Descriptions are preserved either way.
+nlohmann::json build_entry(const ITool& t, IWorkspaceServices* ws = nullptr,
+                            bool lazy = false)
 {
-    nlohmann::json parameters = t.parameters_schema();
-    if (parameters.is_object() && !parameters.empty()) {
-        // Tool supplied a fully-formed JSON Schema (MCP); use as-is. Make
-        // sure the outer wrapper at least carries `type:"object"` so models
-        // that reject schema-less function entries (looking at you, some
-        // older Llama tool-call templates) still parse it.
-        if (!parameters.contains("type"))
+    nlohmann::json parameters;
+    const bool keep_full_schema = !lazy || t.name() == "describe_tool";
+
+    if (keep_full_schema) {
+        parameters = t.parameters_schema();
+        if (parameters.is_object() && !parameters.empty()) {
+            // Tool supplied a fully-formed JSON Schema (MCP); use as-is. Make
+            // sure the outer wrapper at least carries `type:"object"` so models
+            // that reject schema-less function entries (looking at you, some
+            // older Llama tool-call templates) still parse it.
+            if (!parameters.contains("type"))
+                parameters["type"] = "object";
+        } else {
+            nlohmann::json props = nlohmann::json::object();
+            nlohmann::json required_list = nlohmann::json::array();
+
+            for (auto& p : t.params()) {
+                nlohmann::json prop;
+                prop["type"] = p.type;
+                prop["description"] = p.description;
+                props[p.name] = prop;
+                if (p.required)
+                    required_list.push_back(p.name);
+            }
+
+            parameters = nlohmann::json::object();
             parameters["type"] = "object";
-    } else {
-        nlohmann::json props = nlohmann::json::object();
-        nlohmann::json required_list = nlohmann::json::array();
-
-        for (auto& p : t.params()) {
-            nlohmann::json prop;
-            prop["type"] = p.type;
-            prop["description"] = p.description;
-            props[p.name] = prop;
-            if (p.required)
-                required_list.push_back(p.name);
+            parameters["properties"] = props;
+            if (!required_list.empty())
+                parameters["required"] = required_list;
         }
-
+    } else {
+        // Lazy mode: permissive schema. Model can emit a syntactically valid
+        // tool call without knowing the real arg shape; ToolDispatcher's
+        // existing arg validation handles the rest.
         parameters = nlohmann::json::object();
-        parameters["type"] = "object";
-        parameters["properties"] = props;
-        if (!required_list.empty())
-            parameters["required"] = required_list;
+        parameters["type"]                 = "object";
+        parameters["properties"]           = nlohmann::json::object();
+        parameters["additionalProperties"] = true;
     }
 
     nlohmann::json func;
@@ -110,13 +128,14 @@ nlohmann::json ToolRegistry::build_schema_json() const
 }
 
 nlohmann::json ToolRegistry::build_schema_json(IWorkspaceServices& ws,
-                                               ToolMode mode) const
+                                               ToolMode mode,
+                                               bool lazy) const
 {
     nlohmann::json arr = nlohmann::json::array();
     for (auto& t : tools_) {
         if (!t->visible_in_mode(mode)) continue;
         if (!t->available(ws))         continue;
-        arr.push_back(build_entry(*t, &ws));
+        arr.push_back(build_entry(*t, &ws, lazy));
     }
     return arr;
 }

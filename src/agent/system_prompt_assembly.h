@@ -9,6 +9,9 @@
 
 namespace locus {
 
+class IWorkspaceServices;
+
+
 // Immutable, byte-stable system-prompt assembly (S5.J).
 //
 // The result of SystemPromptBuilder::build() used to be a raw std::string
@@ -29,11 +32,21 @@ public:
     // The only way to construct a populated SystemPromptAssembly. Mirrors
     // SystemPromptBuilder::build() so the byte output is identical for the
     // same inputs.
+    //
+    // S6.11 -- `lazy_manifest=true` collapses the "## Available Tools" section
+    // to one-line summaries (no per-param lines), and adds a hint pointing the
+    // model at `describe_tool('<name>')` for the full schema. Workspace
+    // metadata / LOCUS.md / memory bank / format addendum are not affected.
+    // The `IWorkspaceServices*` argument is passed so per-tool filtering
+    // (`available(ws)`, `visible_in_mode`) matches the API tools array, which
+    // gates the describe_tool meta-tool when lazy_manifest is off.
     static SystemPromptAssembly build(const std::string&       locus_md,
                                       const WorkspaceMetadata& meta,
                                       const IToolRegistry&     tools,
                                       ToolFormat               tool_format    = ToolFormat::Auto,
-                                      const std::string&       memory_section = "");
+                                      const std::string&       memory_section = "",
+                                      bool                     lazy_manifest  = false,
+                                      IWorkspaceServices*      ws_for_filter  = nullptr);
 
     // Empty default assembly -- useful when an LLMContext needs to be
     // default-constructed in a test and the prompt is set later.
