@@ -1,4 +1,5 @@
 #include "tree_sitter_registry.h"
+#include "../core/log_channels.h"
 
 #include <spdlog/spdlog.h>
 #include <tree_sitter/api.h>
@@ -47,7 +48,7 @@ TreeSitterRegistry::TreeSitterRegistry()
     langs_["swift"]      = tree_sitter_swift();
     langs_["kotlin"]     = tree_sitter_kotlin();
 
-    spdlog::trace("TreeSitterRegistry initialised with {} grammars", langs_.size());
+    log_fs()->trace("TreeSitterRegistry initialised with {} grammars", langs_.size());
 }
 
 TreeSitterRegistry::~TreeSitterRegistry()

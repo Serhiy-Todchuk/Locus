@@ -88,12 +88,14 @@ OpDispatcher::OpDispatcher(UiaSession& uia,
                            fs::path locus_gui_path,
                            fs::path output_dir,
                            std::string workspace_path,
-                           bool allow_first_time_prompts)
+                           bool allow_first_time_prompts,
+                           bool agentic_mode)
   : uia_(uia),
     locus_gui_path_(std::move(locus_gui_path)),
     output_dir_(std::move(output_dir)),
     workspace_path_(std::move(workspace_path)),
-    allow_first_time_prompts_(allow_first_time_prompts)
+    allow_first_time_prompts_(allow_first_time_prompts),
+    agentic_mode_(agentic_mode)
 {}
 
 StepResult OpDispatcher::dispatch(const std::string& op, const Json& args)
@@ -216,6 +218,8 @@ StepResult OpDispatcher::op_launch(const Json& args)
     std::vector<std::string> extra;
     if (!allow_first_time_prompts_)
         extra.push_back("--no-first-time-prompts");
+    if (agentic_mode_)
+        extra.push_back("--agentic-mute-noise");
     if (args.contains("extra_args") && args["extra_args"].is_array()) {
         for (auto& v : args["extra_args"])
             if (v.is_string()) extra.push_back(v.get<std::string>());

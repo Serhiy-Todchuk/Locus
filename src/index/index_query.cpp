@@ -1,5 +1,6 @@
 #include "index_query.h"
 #include "../core/database.h"
+#include "../core/log_channels.h"
 
 #include <spdlog/spdlog.h>
 #include <sqlite3.h>
@@ -158,7 +159,7 @@ IndexQuery::IndexQuery(Database& main_db, Database* vectors_db)
         stmt_path_by_file_id_ = main_db_.prepare("SELECT path FROM files WHERE id = ?1");
     }
 
-    spdlog::trace("IndexQuery initialised");
+    log_fs()->trace("IndexQuery initialised");
 }
 
 IndexQuery::~IndexQuery()
@@ -174,7 +175,7 @@ IndexQuery::~IndexQuery()
     finalize(stmt_path_by_file_id_);
     finalize(stmt_search_semantic_);
 
-    spdlog::trace("IndexQuery destroyed");
+    log_fs()->trace("IndexQuery destroyed");
 }
 
 // -- search_text --------------------------------------------------------------
@@ -206,7 +207,7 @@ static std::string sanitise_fts_query(const std::string& q)
 std::vector<SearchResult> IndexQuery::search_text(const std::string& query,
                                                   const SearchOptions& opts) const
 {
-    spdlog::trace("search_text: query='{}', max_results={}", query, opts.max_results);
+    log_fs()->trace("search_text: query='{}', max_results={}", query, opts.max_results);
 
     std::vector<SearchResult> results;
 
@@ -263,7 +264,7 @@ std::vector<SearchResult> IndexQuery::search_text(const std::string& query,
         results.push_back(std::move(r));
     }
 
-    spdlog::trace("search_text: {} results", results.size());
+    log_fs()->trace("search_text: {} results", results.size());
     return results;
 }
 
@@ -273,7 +274,7 @@ std::vector<SymbolResult> IndexQuery::search_symbols(const std::string& name,
                                                      const std::string& kind,
                                                      const std::string& language) const
 {
-    spdlog::trace("search_symbols: name='{}', kind='{}', language='{}'", name, kind, language);
+    log_fs()->trace("search_symbols: name='{}', kind='{}', language='{}'", name, kind, language);
 
     std::vector<SymbolResult> results;
 
@@ -301,7 +302,7 @@ std::vector<SymbolResult> IndexQuery::search_symbols(const std::string& name,
         results.push_back(std::move(r));
     }
 
-    spdlog::trace("search_symbols: {} results", results.size());
+    log_fs()->trace("search_symbols: {} results", results.size());
     return results;
 }
 
@@ -309,7 +310,7 @@ std::vector<SymbolResult> IndexQuery::search_symbols(const std::string& name,
 
 std::vector<OutlineEntry> IndexQuery::get_file_outline(const std::string& path) const
 {
-    spdlog::trace("get_file_outline: path='{}'", path);
+    log_fs()->trace("get_file_outline: path='{}'", path);
 
     std::vector<OutlineEntry> entries;
 
@@ -344,7 +345,7 @@ std::vector<OutlineEntry> IndexQuery::get_file_outline(const std::string& path) 
     std::sort(entries.begin(), entries.end(),
               [](const OutlineEntry& a, const OutlineEntry& b) { return a.line < b.line; });
 
-    spdlog::trace("get_file_outline: {} entries", entries.size());
+    log_fs()->trace("get_file_outline: {} entries", entries.size());
     return entries;
 }
 
@@ -352,7 +353,7 @@ std::vector<OutlineEntry> IndexQuery::get_file_outline(const std::string& path) 
 
 std::vector<FileEntry> IndexQuery::list_directory(const std::string& path, int depth) const
 {
-    spdlog::trace("list_directory: path='{}', depth={}", path, depth);
+    log_fs()->trace("list_directory: path='{}', depth={}", path, depth);
 
     std::vector<FileEntry> results;
 
@@ -428,7 +429,7 @@ std::vector<FileEntry> IndexQuery::list_directory(const std::string& path, int d
         return a.path < b.path;
     });
 
-    spdlog::trace("list_directory: {} entries", results.size());
+    log_fs()->trace("list_directory: {} entries", results.size());
     return results;
 }
 
@@ -438,13 +439,13 @@ std::vector<SearchResult> IndexQuery::search_semantic(
     const std::vector<float>& query_embedding,
     const SearchOptions& opts) const
 {
-    spdlog::trace("search_semantic: dim={}, max_results={}",
+    log_fs()->trace("search_semantic: dim={}, max_results={}",
                   query_embedding.size(), opts.max_results);
 
     std::vector<SearchResult> results;
 
     if (!stmt_search_semantic_) {
-        spdlog::trace("search_semantic: vectors DB not present, returning empty");
+        log_fs()->trace("search_semantic: vectors DB not present, returning empty");
         return results;
     }
 
@@ -499,7 +500,7 @@ std::vector<SearchResult> IndexQuery::search_semantic(
         results.push_back(std::move(r));
     }
 
-    spdlog::trace("search_semantic: {} results", results.size());
+    log_fs()->trace("search_semantic: {} results", results.size());
     return results;
 }
 
@@ -510,7 +511,7 @@ std::vector<SearchResult> IndexQuery::search_hybrid(
     const std::vector<float>& query_embedding,
     const SearchOptions& opts) const
 {
-    spdlog::trace("search_hybrid: query='{}', max_results={}", query_text, opts.max_results);
+    log_fs()->trace("search_hybrid: query='{}', max_results={}", query_text, opts.max_results);
 
     // Run both searches with 2x results for better fusion
     SearchOptions wider_opts;
@@ -568,7 +569,7 @@ std::vector<SearchResult> IndexQuery::search_hybrid(
         results.push_back(std::move(entry.result));
     }
 
-    spdlog::trace("search_hybrid: {} results (from {} BM25 + {} semantic)",
+    log_fs()->trace("search_hybrid: {} results (from {} BM25 + {} semantic)",
                   results.size(), bm25_results.size(), vec_results.size());
     return results;
 }

@@ -250,7 +250,8 @@ int run_agentic_server(const AgenticOptions& opts)
 
     OpDispatcher dispatcher(uia, opts.locus_gui_path, opts.output_dir,
                             opts.workspace_dir.string(),
-                            opts.allow_first_time_prompts);
+                            opts.allow_first_time_prompts,
+                            /*agentic_mode=*/true);
 
     SOCKET listener = socket(AF_INET, SOCK_STREAM, 0);
     if (listener == INVALID_SOCKET) {

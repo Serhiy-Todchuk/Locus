@@ -1,6 +1,7 @@
 #include "locus_app.h"
 #include "capabilities_dialog.h"
 #include "core/global_paths.h"
+#include "core/log_channels.h"
 #include "locus_frame.h"
 #include "recent_workspaces.h"
 
@@ -105,6 +106,14 @@ static void prompt_capabilities_if_first_open(const fs::path& locus_dir,
 // later by open_workspace() so a script-driven workspace switch stays quiet.
 static bool s_suppress_first_time_prompts = false;
 
+// Module-local: set by OnInit when --agentic-mute-noise is on argv. Causes
+// init_logging to demote the 'db' and 'fs' loggers to info after the default
+// sinks are installed, so trace-level SQL prepare/exec + file-watcher event
+// chatter doesn't drown out LLM / tool / agent traces in agentic test runs.
+// open_workspace() re-applies the demote after each workspace switch (which
+// runs its own init_logging) so tab swaps don't accidentally re-enable noise.
+static bool s_agentic_mute_noise = false;
+
 void LocusApp::OnInitCmdLine(wxCmdLineParser& parser)
 {
     // Declare every argv shape locus_gui accepts so wxApp::OnInit's default
@@ -125,6 +134,11 @@ void LocusApp::OnInitCmdLine(wxCmdLineParser& parser)
     // `--no-first-time-prompts`, not `-no-first-time-prompts`.
     parser.AddSwitch(wxEmptyString, "no-first-time-prompts",
         "Skip first-time-open modal dialogs",
+        wxCMD_LINE_PARAM_OPTIONAL);
+    // Agentic-test launches pass --agentic-mute-noise so the trace file in
+    // .locus/locus.log isn't drowned in SQL / file-watcher chatter.
+    parser.AddSwitch(wxEmptyString, "agentic-mute-noise",
+        "Demote db and fs trace logging to info (used by agentic tests)",
         wxCMD_LINE_PARAM_OPTIONAL);
     parser.SetSwitchChars("-");
 }
@@ -212,6 +226,8 @@ bool LocusApp::OnInit()
         }
         else if (a == "--no-first-time-prompts")
             s_suppress_first_time_prompts = true;
+        else if (a == "--agentic-mute-noise")
+            s_agentic_mute_noise = true;
     }
 
     // If no workspace path given, prompt user.
@@ -247,6 +263,8 @@ bool LocusApp::OnInit()
         return false;
     }
     init_logging(locus_dir);
+    if (s_agentic_mute_noise)
+        mute_noise_loggers();
 
     // Record in recent workspaces list.
     RecentWorkspaces::add(ws_path.string());
@@ -335,6 +353,8 @@ void LocusApp::open_workspace(const std::string& path)
         return;
     }
     init_logging(locus_dir);
+    if (s_agentic_mute_noise)
+        mute_noise_loggers();
 
     prompt_capabilities_if_first_open(locus_dir, s_suppress_first_time_prompts);
 

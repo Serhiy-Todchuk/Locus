@@ -317,6 +317,7 @@ add_library(locus_core STATIC
     src/core/file_watcher.cpp
     src/core/global_config.cpp
     src/core/global_paths.cpp
+    src/core/log_channels.cpp
     src/core/memory_store.cpp
     src/core/memory_filter.cpp
     src/index/indexer.cpp

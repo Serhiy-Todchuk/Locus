@@ -694,7 +694,12 @@ void AgentCore::process_message(const std::string& content)
         }
 
         ++round;
-        spdlog::trace("AgentCore: LLM round {}", round);
+        // Round bookend at info level (was trace, bumped after agentic
+        // testing showed the chronology was unreadable at info without
+        // -verbose). Paired with the LLM POST summary line later in the
+        // same round, plus the per-tool dispatch lines, this gives a
+        // greppable round-by-round timeline in .locus/locus.log.
+        spdlog::info("AgentCore: round {} start (turn {})", round, turn_id);
 
         apply_pending_compaction();
         apply_pending_mode_change();

@@ -1,4 +1,5 @@
 #include "gitignore.h"
+#include "../core/log_channels.h"
 
 #include <spdlog/spdlog.h>
 
@@ -72,7 +73,7 @@ parse_gitignore_text(const std::string& text,
         // V1 deliberately skips negation -- documented in the header. Just
         // drop the line so it can't accidentally re-include something.
         if (line[0] == '!') {
-            spdlog::trace("gitignore: skipping negation '{}' (not supported in v1)", line);
+            log_fs()->trace("gitignore: skipping negation '{}' (not supported in v1)", line);
             continue;
         }
 
@@ -149,7 +150,7 @@ load_workspace_gitignore(const fs::path&                  root,
         std::stringstream buf;
         buf << f.rdbuf();
         auto pats = parse_gitignore_text(buf.str(), dir_rel);
-        spdlog::trace("gitignore: parsed {} patterns from {}",
+        log_fs()->trace("gitignore: parsed {} patterns from {}",
                       pats.size(), gi_path.string());
         out.insert(out.end(), pats.begin(), pats.end());
     };

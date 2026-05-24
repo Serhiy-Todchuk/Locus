@@ -344,8 +344,8 @@ void ToolDispatcher::dispatch(const ToolCall& call, const AppendFn& append_resul
     auto exec_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                        std::chrono::steady_clock::now() - exec_t0).count();
 
-    spdlog::info("ToolDispatcher: tool '{}' result: success={}, content={} chars",
-                 call.tool_name, result.success, result.content.size());
+    spdlog::info("ToolDispatcher: tool '{}' result: success={}, content={} chars, exec_ms={}",
+                 call.tool_name, result.success, result.content.size(), (long long)exec_ms);
     spdlog::trace("ToolDispatcher: tool result content: {}", result.content);
 
     if (metrics_) {

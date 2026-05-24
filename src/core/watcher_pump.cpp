@@ -1,5 +1,6 @@
 #include "watcher_pump.h"
 #include "../index/indexer.h"
+#include "log_channels.h"
 
 #include <spdlog/spdlog.h>
 
@@ -62,7 +63,7 @@ void WatcherPump::flush_now()
         pending_.insert(pending_.end(),
                         std::make_move_iterator(drained.begin()),
                         std::make_move_iterator(drained.end()));
-        spdlog::trace("WatcherPump: flush_now +{} events (pending {})",
+        log_fs()->trace("WatcherPump: flush_now +{} events (pending {})",
                       n, pending_.size());
     }
     if (!pending_.empty())
@@ -103,7 +104,7 @@ void WatcherPump::drain_locked()
     pending_.insert(pending_.end(),
                     std::make_move_iterator(drained.begin()),
                     std::make_move_iterator(drained.end()));
-    spdlog::trace("WatcherPump: +{} events (pending {})", n, pending_.size());
+    log_fs()->trace("WatcherPump: +{} events (pending {})", n, pending_.size());
 }
 
 void WatcherPump::flush_locked(std::unique_lock<std::mutex>& lock)

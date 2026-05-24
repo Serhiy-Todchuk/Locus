@@ -109,7 +109,7 @@ struct LLMConfig {
     // and trigger spurious auto-compaction on big context windows.
     int         context_limit = 0;
 
-    int         timeout_ms    = 600000;      // stream stall timeout: abort if no bytes flow for this long. Not a total-request cap -- long reasoning streams are fine. 600s default covers prefill + a buffered <think> block on a 35B-MoE thinking model with multi-K-token context on consumer GPU; configurable per workspace via .locus/config.json llm.timeout_ms.
+    int         timeout_ms    = 1800000;     // stream stall timeout: abort if no bytes flow for this long. Not a total-request cap -- long reasoning streams are fine. 1800s default covers prefill + a buffered <think> block on a 27B+ thinking model with multi-K-token context on a consumer GPU running at low t/s; configurable per workspace via .locus/config.json llm.timeout_ms. Was 600s pre-S5; bumped after agentic testing (tests/ui_automation/output/agentic_Tetris/findings.md) showed qwen3.6-27b reasoning rounds routinely exceeded the old default on tool-call-heavy payloads.
     ToolFormat  tool_format   = ToolFormat::Auto;
 
     // S4.V Task 7 -- optional samplers. Sentinel 0 means "don't include in

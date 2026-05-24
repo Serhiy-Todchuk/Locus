@@ -10,6 +10,8 @@
 #include <spdlog/spdlog.h>
 
 #include <atomic>
+#include <chrono>
+#include <condition_variable>
 #include <mutex>
 #include <sstream>
 #include <string>
@@ -127,6 +129,16 @@ ToolResult RunCommandTool::execute(const ToolCall& call, IWorkspaceServices& ws,
 
     ResumeThread(pi.hThread);
 
+    // Instrumentation (added after Tetris agentic testing exposed a
+    // reproducible reader-thread hang on second/later run_command calls --
+    // see tests/ui_automation/output/agentic_Tetris/findings.md findings 7+8).
+    // Every signal here is at info so the post-mortem `read_locus_log` op
+    // surfaces them without needing -verbose; under the agentic mute-noise
+    // mode they stay visible (only db + fs noise loggers are demoted).
+    const DWORD child_pid = pi.dwProcessId;
+    const auto t_spawn = std::chrono::steady_clock::now();
+    spdlog::info("run_command[pid={}]: spawned ({} chars)", child_pid, cmd_line.size());
+
     // Drain the pipe on a background thread so the terminal panel (if any)
     // sees chunks live rather than as one wall of text after exit. We still
     // capture the full output for the agent's tool result. WaitForSingleObject
@@ -134,13 +146,58 @@ ToolResult RunCommandTool::execute(const ToolCall& call, IWorkspaceServices& ws,
     // write end so the reader thread observes EOF and joins.
     std::string  output;
     std::mutex   output_mu;
+
+    // Reader-state snapshot shared with a heartbeat thread. The heartbeat
+    // logs every 30s while the reader is alive so a stuck ReadFile is
+    // immediately visible in the log (the bug from findings 7+8 left the
+    // log silent for 40+ min with no indication anything was wrong).
+    std::atomic<uint64_t> reader_bytes_total{0};
+    std::atomic<uint32_t> reader_read_calls{0};
+    std::atomic<DWORD>    reader_last_err{ERROR_SUCCESS};
+    std::atomic<bool>     reader_done{false};
+    std::atomic<bool>     child_exited{false};
+
     std::thread reader([&]{
+        spdlog::trace("run_command[pid={}]: reader thread start", child_pid);
         char buf[4096];
         DWORD bytes_read = 0;
         while (ReadFile(read_pipe, buf, sizeof(buf), &bytes_read, nullptr) && bytes_read > 0) {
+            reader_bytes_total.fetch_add(bytes_read, std::memory_order_relaxed);
+            reader_read_calls.fetch_add(1, std::memory_order_relaxed);
             if (sink) sink->emit_sync_chunk(buf, bytes_read);
             std::lock_guard l(output_mu);
             output.append(buf, bytes_read);
+        }
+        reader_last_err.store(GetLastError(), std::memory_order_relaxed);
+        reader_done.store(true, std::memory_order_release);
+        spdlog::trace(
+            "run_command[pid={}]: reader thread done ({} bytes, {} reads, last_err={})",
+            child_pid, reader_bytes_total.load(), reader_read_calls.load(),
+            reader_last_err.load());
+    });
+
+    // Heartbeat -- fires only if the reader is still running after the child
+    // has exited, which is the symptom of the inherited-handle pipe-leak bug.
+    // Quiet while everything is healthy.
+    std::mutex hb_mu;
+    std::condition_variable hb_cv;
+    bool hb_stop = false;
+    std::thread heartbeat([&]{
+        constexpr auto interval = std::chrono::seconds(30);
+        std::unique_lock<std::mutex> lk(hb_mu);
+        while (!hb_stop) {
+            if (hb_cv.wait_for(lk, interval, [&]{ return hb_stop; }))
+                break;
+            if (reader_done.load(std::memory_order_acquire))
+                break;
+            auto wall_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - t_spawn).count();
+            spdlog::warn(
+                "run_command[pid={}]: reader still draining after {} ms "
+                "({} bytes, {} reads, child_exited={})",
+                child_pid, (long long)wall_ms,
+                reader_bytes_total.load(), reader_read_calls.load(),
+                child_exited.load() ? "true" : "false");
         }
     });
 
@@ -187,6 +244,13 @@ ToolResult RunCommandTool::execute(const ToolCall& call, IWorkspaceServices& ws,
     } else {
         GetExitCodeProcess(pi.hProcess, &exit_code);
     }
+    child_exited.store(true, std::memory_order_release);
+    const auto t_child_exit = std::chrono::steady_clock::now();
+    spdlog::info(
+        "run_command[pid={}]: child exited (code={}, after {} ms{})",
+        child_pid, exit_code,
+        std::chrono::duration_cast<std::chrono::milliseconds>(t_child_exit - t_spawn).count(),
+        cancelled ? ", cancelled" : (timed_out ? ", timed_out" : ""));
 
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
@@ -196,6 +260,34 @@ ToolResult RunCommandTool::execute(const ToolCall& call, IWorkspaceServices& ws,
     // indirectly; on normal exit, write handle was closed earlier so the
     // reader is already winding down.
     reader.join();
+    const auto t_reader_joined = std::chrono::steady_clock::now();
+    const long long reader_join_delay_ms =
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            t_reader_joined - t_child_exit).count();
+    // Anything more than a few hundred ms here is the pipe-drain hang bug --
+    // see findings 7+8. Promote to warn for >1s, info otherwise.
+    if (reader_join_delay_ms > 1000) {
+        spdlog::warn(
+            "run_command[pid={}]: reader join delayed {} ms after child exit "
+            "(inherited-pipe leak symptom; {} bytes drained, last_err={})",
+            child_pid, reader_join_delay_ms, reader_bytes_total.load(),
+            reader_last_err.load());
+    } else {
+        spdlog::trace(
+            "run_command[pid={}]: reader joined {} ms after child exit",
+            child_pid, reader_join_delay_ms);
+    }
+
+    // Stop the heartbeat thread -- it may already be exiting due to
+    // reader_done, but stop_flag ensures it wakes immediately rather than
+    // waiting out its 30s tick.
+    {
+        std::lock_guard<std::mutex> lk(hb_mu);
+        hb_stop = true;
+    }
+    hb_cv.notify_all();
+    heartbeat.join();
+
     CloseHandle(read_pipe);
     CloseHandle(job);
 

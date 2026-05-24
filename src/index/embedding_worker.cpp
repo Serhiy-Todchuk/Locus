@@ -1,5 +1,6 @@
 #include "embedding_worker.h"
 #include "../core/database.h"
+#include "../core/log_channels.h"
 #include "embedder.h"
 
 #include <spdlog/spdlog.h>
@@ -158,7 +159,7 @@ void EmbeddingWorker::thread_func()
         }
 
         if (current_done % 100 == 0 || current_done == current_total) {
-            spdlog::trace("Embedding progress: {}/{}", current_done, current_total);
+            log_fs()->trace("Embedding progress: {}/{}", current_done, current_total);
         }
 
         // S5.G -- throttled activity-row emission. Two independent gates: every

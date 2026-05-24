@@ -337,16 +337,19 @@ log file then captures every SQL query, tool call, and LLM token.
 **"Cannot connect to LLM server"** -- LM Studio isn't running, or its server
 isn't started. Open LM Studio, load a model, click *Start Server*.
 
-**"LLM stream stalled after retry (no data for 600s)"** -- a local LLM took
-longer than 600 s to send the first byte. Common with large models on a fresh
-prompt where prefill alone takes minutes. Raise the watchdog in
-`<workspace>/.locus/config.json`:
+**"LLM stream stalled after retry (no data for 1800s)"** -- a local LLM took
+longer than 1800 s (30 min) to send the next chunk. Common with large models
+on a fresh prompt where prefill alone takes many minutes, or on tool-call-heavy
+rounds where the model buffers a long string payload. Raise the watchdog
+further in `<workspace>/.locus/config.json`:
 
 ```json
 "llm": {
-  "timeout_ms": 600000
+  "timeout_ms": 3600000
 }
 ```
+
+(Default is 1800000 ms = 30 min. Was 600000 in earlier builds.)
 
 **"Semantic search enabled but model 'bge-m3-Q8_0.gguf' not found"** -- you
 haven't run the model download script yet, or the `models/` folder isn't next

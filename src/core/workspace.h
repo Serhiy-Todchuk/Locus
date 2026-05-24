@@ -96,7 +96,10 @@ struct WorkspaceConfig {
     // 30-40B-class thinking model with multi-K-token context on consumer
     // GPU. Bump higher if your hardware needs it; drop to 60000 to match
     // pre-S4 Locus behaviour.
-    int         llm_timeout_ms = 600000;
+    // Bumped from 600000 to 1800000 after agentic testing showed slow
+    // local models (qwen3.6-27b @ ~2 t/s) routinely exceed the old default
+    // on tool-call-heavy rounds. See tests/ui_automation/output/agentic_Tetris/findings.md.
+    int         llm_timeout_ms = 1800000;
 
     // S4.N -- tool-call wire format. Stored as a string so a config.json
     // edited by the user reads naturally; parsed via tool_format_from_string.

@@ -5,6 +5,7 @@
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
+#include <chrono>
 
 namespace locus {
 
@@ -36,10 +37,18 @@ void OpenAiTransport::do_post(const std::string& body, const Callbacks& cbs, boo
         return true;
     });
 
-    // Use cpr WriteCallback to feed the parser incrementally. Polling the
-    // cancel predicate here (rather than only between SSE events) means a
-    // Stop click is honoured within one HTTP read -- typically a few hundred
-    // bytes or less of further output, not the rest of the response.
+    // Per-stream pacing instrumentation. Lets the agentic post-mortem tell
+    // "model stalled" (zero bytes for many seconds) apart from "model slow"
+    // (steady trickle of small chunks). Time-to-first-byte logged at info;
+    // long inter-chunk gaps logged at warn; per-chunk traces gated to every
+    // 64 chunks so a chatty stream doesn't flood the log.
+    const auto t_request_start = std::chrono::steady_clock::now();
+    auto t_last_chunk = t_request_start;
+    bool first_chunk_seen = false;
+    uint64_t total_bytes = 0;
+    uint64_t chunks = 0;
+    long long max_gap_ms = 0;
+
     cpr::WriteCallback write_cb{[&](std::string_view data,
                                     intptr_t /*userdata*/) -> bool {
         if (cbs.should_cancel && cbs.should_cancel()) {
@@ -47,6 +56,33 @@ void OpenAiTransport::do_post(const std::string& body, const Callbacks& cbs, boo
             // CURLE_WRITE_ERROR; OpenAiTransport::do_post detects that
             // below via cbs.should_cancel() and treats it as clean exit.
             return false;
+        }
+        const auto now = std::chrono::steady_clock::now();
+        const long long gap_ms =
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                now - t_last_chunk).count();
+        if (!first_chunk_seen) {
+            first_chunk_seen = true;
+            const long long ttfb_ms =
+                std::chrono::duration_cast<std::chrono::milliseconds>(
+                    now - t_request_start).count();
+            spdlog::info("LLM stream: first chunk after {} ms ({} bytes)",
+                         ttfb_ms, data.size());
+        } else if (gap_ms > 60000) {
+            // Quiet stretch longer than 60 s -- useful early warning before
+            // the LowSpeed watchdog fires (which only triggers at config_.timeout_ms,
+            // typically 1800 s for local-LLM setups).
+            spdlog::warn("LLM stream: inter-chunk gap {} ms ({} bytes so far, {} chunks)",
+                         gap_ms, total_bytes, chunks);
+        }
+        if (gap_ms > max_gap_ms) max_gap_ms = gap_ms;
+        t_last_chunk = now;
+        ++chunks;
+        total_bytes += data.size();
+        // Per-chunk trace only every 64th chunk so a long stream stays readable.
+        if ((chunks & 63) == 0) {
+            spdlog::trace("LLM stream: chunk #{} (+{} B, gap {} ms, total {} B)",
+                          chunks, data.size(), gap_ms, total_bytes);
         }
         parser.feed(std::string(data));
         return true;
@@ -73,6 +109,19 @@ void OpenAiTransport::do_post(const std::string& body, const Callbacks& cbs, boo
 
     // Flush any remaining data in the SSE buffer.
     parser.finish();
+
+    // End-of-stream pacing summary. Logged regardless of success/failure so
+    // a stalled call still surfaces what it managed to receive.
+    {
+        const auto t_end = std::chrono::steady_clock::now();
+        const long long total_ms =
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                t_end - t_request_start).count();
+        spdlog::info(
+            "LLM stream: end ({} chunks, {} bytes, total {} ms, max inter-chunk gap {} ms{})",
+            chunks, total_bytes, total_ms, max_gap_ms,
+            first_chunk_seen ? "" : ", NO chunks received");
+    }
 
     // User-requested cancellation -- treat any transport error (libcurl
     // surfaces it as a write error when the WriteCallback returns false) as

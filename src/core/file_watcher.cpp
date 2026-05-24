@@ -1,5 +1,6 @@
 #include "file_watcher.h"
 #include "index/glob_match.h"
+#include "log_channels.h"
 
 #include <spdlog/spdlog.h>
 #include <efsw/efsw.hpp>
@@ -77,7 +78,7 @@ void FileWatcher::stop()
     // efsw thread is still alive -- racing with handleFileAction -> push_raw.
     if (watcher_) {
         watcher_.reset();
-        spdlog::trace("File watcher stopped");
+        log_fs()->trace("File watcher stopped");
     }
 }
 
@@ -111,7 +112,7 @@ void FileWatcher::push_raw(FileAction action, const fs::path& dir,
     if (ec || rel_path.empty()) {
         rel_path = abs_path.lexically_relative(root_);
         if (rel_path.empty() || rel_path == fs::path(".")) {
-            spdlog::trace("File watcher: dropping unresolvable {}/{}",
+            log_fs()->trace("File watcher: dropping unresolvable {}/{}",
                           dir.string(), filename);
             return;
         }
@@ -123,13 +124,13 @@ void FileWatcher::push_raw(FileAction action, const fs::path& dir,
         std::string rel_str = rel_path.string();
         std::lock_guard<std::mutex> lock(mutex_);
         if (excluded_logged_.insert(rel_str).second) {
-            spdlog::trace("File watcher: excluded {} (further events suppressed)",
+            log_fs()->trace("File watcher: excluded {} (further events suppressed)",
                           rel_str);
         }
         return;
     }
 
-    spdlog::trace("File watcher: {} {}", static_cast<int>(action), rel_path.string());
+    log_fs()->trace("File watcher: {} {}", static_cast<int>(action), rel_path.string());
 
     std::lock_guard<std::mutex> lock(mutex_);
 

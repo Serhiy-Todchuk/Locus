@@ -39,7 +39,8 @@ public:
                  std::filesystem::path locus_gui_path,
                  std::filesystem::path output_dir,
                  std::string           workspace_path,
-                 bool                  allow_first_time_prompts);
+                 bool                  allow_first_time_prompts,
+                 bool                  agentic_mode = false);
 
     // Look up `op` in the dispatch table, hand `args` to the matching handler.
     // Unknown ops yield ok=false. Each dispatch increments step_index_ so
@@ -100,6 +101,11 @@ private:
     std::string             workspace_path_;
     int                     step_index_ = 0;
     bool                    allow_first_time_prompts_ = false;
+    // When true (agentic-server only), op_launch injects --agentic-mute-noise
+    // so the trace stream in .locus/locus.log isn't drowned in SQL / file-
+    // watcher chatter. Scripted-runner stays false (it captures stdout/stderr
+    // for parallel runs, not the workspace log).
+    bool                    agentic_mode_ = false;
 };
 
 } // namespace locus::uia

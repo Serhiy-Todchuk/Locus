@@ -1,5 +1,6 @@
 #include "database.h"
 
+#include "log_channels.h"
 #include <spdlog/spdlog.h>
 #include <sqlite3.h>
 
@@ -32,7 +33,7 @@ Database::Database(const fs::path& db_path, DbKind kind)
     exec("PRAGMA synchronous=NORMAL");
     exec("PRAGMA foreign_keys=ON");
 
-    spdlog::trace("SQLite opened: {}", db_path.string());
+    log_db()->trace("SQLite opened: {}", db_path.string());
 
     if (kind_ == DbKind::Main) {
         create_main_schema();
@@ -46,13 +47,13 @@ Database::~Database()
 {
     if (db_) {
         sqlite3_close(db_);
-        spdlog::trace("SQLite closed");
+        log_db()->trace("SQLite closed");
     }
 }
 
 void Database::exec(const char* sql)
 {
-    spdlog::trace("SQL exec: {}", sql);
+    log_db()->trace("SQL exec: {}", sql);
 
     char* err_msg = nullptr;
     int rc = sqlite3_exec(db_, sql, nullptr, nullptr, &err_msg);
@@ -65,7 +66,7 @@ void Database::exec(const char* sql)
 
 sqlite3_stmt* Database::prepare(const char* sql)
 {
-    spdlog::trace("SQL prepare: {}", sql);
+    log_db()->trace("SQL prepare: {}", sql);
     sqlite3_stmt* stmt = nullptr;
     int rc = sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr);
     if (rc != SQLITE_OK) {
@@ -84,7 +85,7 @@ void Database::load_sqlite_vec()
         sqlite3_free(err_msg);
         spdlog::warn("sqlite-vec init failed: {}", err);
     } else {
-        spdlog::trace("sqlite-vec {} loaded", SQLITE_VEC_VERSION);
+        log_db()->trace("sqlite-vec {} loaded", SQLITE_VEC_VERSION);
     }
 }
 

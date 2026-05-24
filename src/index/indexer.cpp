@@ -6,6 +6,7 @@
 #include "gitignore.h"
 #include "glob_match.h"
 #include "../core/workspace.h"
+#include "../core/log_channels.h"
 
 #include <spdlog/spdlog.h>
 #include <sqlite3.h>
@@ -25,7 +26,7 @@ static std::string read_file_content(const fs::path& abs_path, int max_size_kb)
     if (ec) return {};
 
     if (max_size_kb > 0 && file_size > static_cast<uintmax_t>(max_size_kb) * 1024) {
-        spdlog::trace("Skipping large file ({} KB): {}", file_size / 1024, abs_path.string());
+        log_fs()->trace("Skipping large file ({} KB): {}", file_size / 1024, abs_path.string());
         return {};
     }
 
@@ -68,13 +69,13 @@ Indexer::Indexer(Database& main_db, Database* vectors_db,
             root_,
             {".git", ".locus", "node_modules", "build", "dist", "out", "target"});
     }
-    spdlog::trace("Indexer initialised ({} gitignore patterns)",
+    log_fs()->trace("Indexer initialised ({} gitignore patterns)",
                   gitignore_patterns_.size());
 }
 
 Indexer::~Indexer()
 {
-    spdlog::trace("Indexer destroyed");
+    log_fs()->trace("Indexer destroyed");
 }
 
 // -- Language & binary detection ----------------------------------------------
@@ -311,7 +312,7 @@ void Indexer::extract_symbols(int64_t file_id, const std::string& content,
         ++stats_.symbols_total;
         out_spans.push_back({sym.line_start, sym.line_end});
 
-        spdlog::trace("Symbol: {} {} '{}' lines {}-{}", sym.kind, language, sym.name,
+        log_fs()->trace("Symbol: {} {} '{}' lines {}-{}", sym.kind, language, sym.name,
                       sym.line_start, sym.line_end);
     }
 
@@ -393,7 +394,7 @@ void Indexer::index_file(const fs::path& rel_path)
         // Check file size before invoking extractor
         if (config_.max_file_size_kb > 0 &&
             fsize > static_cast<uintmax_t>(config_.max_file_size_kb) * 1024) {
-            spdlog::trace("Skipping large file ({} KB): {}", fsize / 1024, abs_path.string());
+            log_fs()->trace("Skipping large file ({} KB): {}", fsize / 1024, abs_path.string());
             binary = true;
         } else {
             auto result = extractor->extract(abs_path);
@@ -425,7 +426,7 @@ void Indexer::index_file(const fs::path& rel_path)
 
     if (binary) {
         ++stats_.files_binary;
-        spdlog::trace("Indexed (binary, skipped content): {}", rel_str);
+        log_fs()->trace("Indexed (binary, skipped content): {}", rel_str);
         return;
     }
 
@@ -508,7 +509,7 @@ void Indexer::index_file(const fs::path& rel_path)
         }
     }
 
-    spdlog::trace("Indexed: {} (lang={}, {} bytes)", rel_str, language, content.size());
+    log_fs()->trace("Indexed: {} (lang={}, {} bytes)", rel_str, language, content.size());
 }
 
 void Indexer::remove_file(const fs::path& rel_path)
@@ -549,7 +550,7 @@ void Indexer::remove_file(const fs::path& rel_path)
     sqlite3_bind_text(stmts_.delete_file, 1, rel_str.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_step(stmts_.delete_file);
 
-    spdlog::trace("Removed from index: {}", rel_str);
+    log_fs()->trace("Removed from index: {}", rel_str);
 }
 
 // -- Full traversal -----------------------------------------------------------
@@ -706,7 +707,7 @@ void Indexer::process_events(const std::vector<FileEvent>& events)
     }
 
     if (filtered.empty()) {
-        spdlog::trace("Processed 0 file events ({} dropped as non-files)",
+        log_fs()->trace("Processed 0 file events ({} dropped as non-files)",
                       events.size());
         return;
     }
@@ -739,7 +740,7 @@ void Indexer::process_events(const std::vector<FileEvent>& events)
     main_db_.exec("COMMIT");
     if (vectors_db_) vectors_db_->exec("COMMIT");
 
-    spdlog::trace("Processed {} file events ({} raw, {} dropped as non-files)",
+    log_fs()->trace("Processed {} file events ({} raw, {} dropped as non-files)",
                   filtered.size(), events.size(),
                   events.size() - filtered.size());
 
