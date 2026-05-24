@@ -62,4 +62,16 @@ void mute_noise_loggers()
     spdlog::info("Noise loggers muted: db, fs (trace -> info); flush_on=info");
 }
 
+std::string truncate_for_log(std::string_view s, std::size_t cap)
+{
+    if (s.size() <= cap) return std::string(s);
+    std::string out;
+    out.reserve(cap + 48);
+    out.assign(s.data(), cap);
+    out.append(" ... [truncated, ");
+    out.append(std::to_string(s.size()));
+    out.append(" bytes total]");
+    return out;
+}
+
 } // namespace locus

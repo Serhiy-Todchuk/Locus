@@ -9,6 +9,8 @@
 
 #include <spdlog/logger.h>
 #include <memory>
+#include <string>
+#include <string_view>
 
 namespace locus {
 
@@ -25,5 +27,14 @@ std::shared_ptr<spdlog::logger> log_fs();
 // chatter stops while the rest of the 'locus' logger keeps trace output.
 // Idempotent.
 void mute_noise_loggers();
+
+// Cap a payload string for inclusion in a trace/info log line. A model that
+// emits a multi-KB tool-call args blob (or a stripped tool-result that still
+// dwarfs the rest of the round) otherwise produces multi-page log entries
+// that crowd out the structural lines. When `s.size() <= cap`, returns a
+// copy unchanged. Otherwise returns `s.substr(0, cap)` followed by
+// `... [truncated, N bytes total]`. Default cap matches typical structural
+// log lines plus a small body; raise for callers that genuinely need more.
+std::string truncate_for_log(std::string_view s, std::size_t cap = 1024);
 
 } // namespace locus

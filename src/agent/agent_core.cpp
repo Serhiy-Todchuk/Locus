@@ -682,9 +682,17 @@ void AgentCore::process_message(const std::string& content)
 
     int round = 0;
     bool turn_had_error = false;
-    static constexpr int k_max_rounds = 20;
 
-    while (round < k_max_rounds) {
+    // Per-workspace cap (Agentic Tetris findings #5). 0 = unbounded.
+    int max_rounds = 0;
+    if (auto* ws = services_.workspace())
+        max_rounds = ws->config().max_rounds_per_message;
+
+    auto under_cap = [&]() {
+        return max_rounds <= 0 || round < max_rounds;
+    };
+
+    while (under_cap()) {
         if (cancel_requested_.load()) {
             spdlog::info("AgentCore: turn cancelled by user");
             frontends_.broadcast([](IFrontend& fe) {
@@ -700,6 +708,9 @@ void AgentCore::process_message(const std::string& content)
         // same round, plus the per-tool dispatch lines, this gives a
         // greppable round-by-round timeline in .locus/locus.log.
         spdlog::info("AgentCore: round {} start (turn {})", round, turn_id);
+        frontends_.broadcast([&](IFrontend& fe) {
+            fe.on_round_progress(round, max_rounds);
+        });
 
         apply_pending_compaction();
         apply_pending_mode_change();
@@ -813,11 +824,16 @@ void AgentCore::process_message(const std::string& content)
         }
     }
 
-    if (round >= k_max_rounds) {
+    if (max_rounds > 0 && round >= max_rounds) {
         turn_had_error = true;
-        spdlog::warn("AgentCore: hit max round limit ({})", k_max_rounds);
-        frontends_.broadcast([](IFrontend& fe) {
-            fe.on_error("Agent reached the maximum number of tool call rounds.");
+        spdlog::warn("AgentCore: hit max round limit ({})", max_rounds);
+        const int hit = max_rounds;
+        frontends_.broadcast([hit](IFrontend& fe) {
+            fe.on_error("Agent reached the maximum number of tool call "
+                        "rounds (" + std::to_string(hit) +
+                        "). Raise agent.max_rounds_per_message in "
+                        ".locus/config.json if the task legitimately needs "
+                        "more (set to 0 to remove the cap).");
         });
     }
 

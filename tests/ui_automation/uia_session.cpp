@@ -234,9 +234,38 @@ bool UiaSession::launch(const std::filesystem::path& exe_path,
     return true;
 }
 
+bool UiaSession::is_launched_process_alive() const
+{
+    if (!process_handle_) return true;  // no launch yet; nothing to check
+    return WaitForSingleObject(process_handle_, 0) == WAIT_TIMEOUT;
+}
+
+namespace {
+
+// Helper: format the "gui process exited" diagnostic. Includes the pid +
+// exit code so a user comparing the log with the actual crashed process
+// has the unambiguous handle.
+std::string gui_exited_message(const std::string& op_prefix,
+                               HANDLE process_handle, DWORD pid)
+{
+    DWORD exit_code = 0;
+    if (process_handle)
+        GetExitCodeProcess(process_handle, &exit_code);
+    return op_prefix + ": launched gui process (pid=" + std::to_string(pid) +
+           ") has exited (exit_code=" + std::to_string(exit_code) +
+           "). Relaunch via `launch` after fixing the underlying crash; "
+           "see .locus/locus.log and any .locus/dumps/*.dmp for the cause.";
+}
+
+} // namespace
+
 Element UiaSession::wait_for_window(const std::string& title_prefix, int timeout_ms)
 {
     if (!ready()) return Element{};
+    if (process_handle_ && !is_launched_process_alive()) {
+        set_error(gui_exited_message("wait_for_window", process_handle_, process_id_));
+        return Element{};
+    }
 
     std::wstring prefix_w = utf8_to_wide(title_prefix);
 
@@ -452,6 +481,10 @@ static std::vector<HWND> enum_process_top_level(DWORD pid)
 Element UiaSession::find(const FindQuery& query, const Element* root)
 {
     if (!ready()) return Element{};
+    if (process_handle_ && !is_launched_process_alive()) {
+        set_error(gui_exited_message("find", process_handle_, process_id_));
+        return Element{};
+    }
 
     // When the caller supplies an explicit root, search inside that subtree.
     // Otherwise, iterate every visible top-level HWND of our process so the

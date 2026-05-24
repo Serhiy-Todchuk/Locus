@@ -6,6 +6,8 @@
 #include "llm/stream_decoders/claude_xml_decoder.h"
 #include "llm/stream_decoders/auto_decoder.h"
 
+#include "core/log_channels.h"
+
 #include <cpr/cpr.h>
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
@@ -562,7 +564,8 @@ void LMStudioClient::stream_completion(
         spdlog::trace("LLM tool calls: {} delivered, {} dropped",
                       calls.size(), dropped);
         for (auto& c : calls)
-            spdlog::trace("  tool: {} id={} args={}", c.name, c.id, c.arguments);
+            spdlog::trace("  tool: {} id={} args={}",
+                          c.name, c.id, truncate_for_log(c.arguments));
 
         if (!calls.empty())
             callbacks.on_tool_calls(calls);

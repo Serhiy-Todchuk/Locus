@@ -83,8 +83,10 @@ Key rules:
 ## 3. Turn lifecycle
 
 A "turn" is one user message -> zero or more LLM calls with tool dispatch in between -> final
-text-only assistant message. The loop caps at `k_max_rounds = 20` to prevent runaway tool
-chains.
+text-only assistant message. The loop caps at `WorkspaceConfig::max_rounds_per_message`
+(default 100, 0 = unbounded) to prevent runaway tool chains. The cap was a hardcoded
+`k_max_rounds = 20` until the agentic-Tetris run-2 build-fix loop hit it at round 20 mid-edit;
+see findings.md #5 in the same output dir.
 
 ### 3.1 Entry points
 
@@ -106,7 +108,8 @@ process_message(content)
  ├─ activity_->emit(user_message)
  ├─ on_context_meter broadcast
  │
- ├─ for round = 1..k_max_rounds:
+ ├─ for round = 1..max_rounds_per_message:        // ws->config().max_rounds_per_message; 0 = unbounded
+ │    on_round_progress(round, max_rounds) broadcast      ──> all frontends (chip)
  │    ├─ if cancel_requested_: emit on_error, break
  │    ├─ budget_->check_overflow(current_token_count())  ── may emit on_compaction_needed, break if full
  │    ├─ step = loop_->run_step(history_)                <── AgentLoop
@@ -118,7 +121,7 @@ process_message(content)
  │         ├─ if cancel_requested_: break
  │         └─ dispatcher_->dispatch(call, append_fn)     <── ToolDispatcher
  │
- ├─ if round >= k_max_rounds: on_error broadcast
+ ├─ if max_rounds > 0 && round >= max_rounds: on_error broadcast
  ├─ on_turn_complete broadcast
  └─ busy_ = false
 ```
@@ -301,9 +304,12 @@ sequenceDiagram
     Note over AG: loop exits (has_tool_calls=false)
 ```
 
-Each round is one `AgentLoop::run_step()` call. Round count is bounded by `k_max_rounds = 20`;
-hitting the cap emits `on_error("Agent reached the maximum number of tool call rounds.")` and
-ends the turn.
+Each round is one `AgentLoop::run_step()` call. Round count is bounded by
+`WorkspaceConfig::max_rounds_per_message` (default 100, 0 = unbounded); hitting the cap emits
+`on_error("Agent reached the maximum number of tool call rounds (N). Raise
+agent.max_rounds_per_message ...")` and ends the turn. The chat-footer round chip
+(`set_round_progress`) updates every round so the user can see "round 7/100" while a turn is
+in flight.
 
 ---
 

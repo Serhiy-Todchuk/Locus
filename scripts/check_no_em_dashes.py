@@ -101,7 +101,12 @@ def main():
         for dirpath, dirs, files in os.walk(scan_root):
             dirs[:] = sorted(d for d in dirs
                              if d not in {'build', '.git', '.locus', 'vcpkg',
-                                          'models', 'node_modules'})
+                                          'models', 'node_modules',
+                                          # tests/ui_automation/output/ holds
+                                          # agentic-test artifacts (captured
+                                          # source files, run logs, etc.) -- not
+                                          # repo source, so don't lint it.
+                                          'output'})
             for fname in sorted(files):
                 ext = os.path.splitext(fname)[1].lower()
                 if ext not in EXTENSIONS:

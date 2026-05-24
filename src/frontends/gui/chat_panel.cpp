@@ -948,6 +948,7 @@ ChatPanel::ChatPanel(wxWindow* parent,
     footer->Add(footer_chips_->plan_chip(),      0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
     footer->Add(footer_chips_->commit_chip(),    0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
     footer->Add(footer_chips_->compacted_chip(), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+    footer->Add(footer_chips_->round_chip(),     0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
     // S5.Z task 6 -- left-click on the chip opens the session's archive
     // folder via the OS default. Hand-off matches the MenuController
     // "Open Global Config..." pattern.
@@ -1423,6 +1424,7 @@ void ChatPanel::on_turn_complete()
     last_stream_ms_ = 0;
 
     footer_chips_->clear_live_estimate();
+    if (footer_chips_->hide_round_progress()) Layout();
     refresh_action_btn();
     if (undo_btn_) undo_btn_->Enable();
     input_->SetFocus();
@@ -1541,6 +1543,7 @@ void ChatPanel::on_error(const wxString& message)
     if (renderer_ && renderer_->is_streaming())
         renderer_->end_turn();
     footer_chips_->clear_live_estimate();
+    if (footer_chips_->hide_round_progress()) Layout();
     refresh_action_btn();
     if (undo_btn_) undo_btn_->Enable();
 }
@@ -1556,6 +1559,11 @@ void ChatPanel::set_compacted_count(int count, const wxString& archive_dir)
 {
     compacted_archive_dir_ = archive_dir;
     if (footer_chips_->set_compacted_count(count, archive_dir)) Layout();
+}
+
+void ChatPanel::set_round_progress(int round, int max_rounds)
+{
+    if (footer_chips_->set_round_progress(round, max_rounds)) Layout();
 }
 
 void ChatPanel::on_tool_pending(const wxString& call_id,

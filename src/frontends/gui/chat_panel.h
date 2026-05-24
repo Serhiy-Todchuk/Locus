@@ -119,6 +119,11 @@ public:
     // the OS default app on chip click. Pass count == 0 to hide.
     void set_compacted_count(int count, const wxString& archive_dir);
 
+    // Agentic Tetris findings #5 -- in-flight round counter ("round N/M").
+    // Pass round <= 0 to hide. `max_rounds == 0` means "unbounded" and
+    // renders just "round N".
+    void set_round_progress(int round, int max_rounds);
+
     // Footer updates. `stream_ms_last_round` is the wall-clock duration of
     // the most recent LLM stream call; ChatPanel pairs it with completion
     // tokens to render a tok/s rate next to the bubble's token chip.

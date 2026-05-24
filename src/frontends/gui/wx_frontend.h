@@ -40,6 +40,8 @@ wxDECLARE_EVENT(EVT_AGENT_HISTORY_MSG_ADDED,   wxThreadEvent);
 wxDECLARE_EVENT(EVT_AGENT_HISTORY_MSG_DELETED, wxThreadEvent);
 // S5.S permission preset change.
 wxDECLARE_EVENT(EVT_AGENT_PRESET_CHANGED,      wxThreadEvent);
+// Agentic Tetris findings #5 round-progress chip update.
+wxDECLARE_EVENT(EVT_AGENT_ROUND_PROGRESS,      wxThreadEvent);
 
 // Thread bridge: IFrontend callbacks (fired on the agent thread) are
 // marshalled to the wxWidgets main thread via wxQueueEvent + wxThreadEvent.
@@ -102,6 +104,8 @@ public:
     // S5.S
     void on_permission_preset_changed(tools::PermissionPreset effective,
                                        bool from_runtime) override;
+    // Agentic Tetris findings #5
+    void on_round_progress(int round, int max_rounds) override;
 
 private:
     wxEvtHandler* handler_;

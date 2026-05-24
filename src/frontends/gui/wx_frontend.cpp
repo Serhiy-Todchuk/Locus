@@ -30,6 +30,7 @@ wxDEFINE_EVENT(EVT_AGENT_GEN_PROGRESS,        wxThreadEvent);
 wxDEFINE_EVENT(EVT_AGENT_HISTORY_MSG_ADDED,   wxThreadEvent);
 wxDEFINE_EVENT(EVT_AGENT_HISTORY_MSG_DELETED, wxThreadEvent);
 wxDEFINE_EVENT(EVT_AGENT_PRESET_CHANGED,      wxThreadEvent);
+wxDEFINE_EVENT(EVT_AGENT_ROUND_PROGRESS,      wxThreadEvent);
 
 WxFrontend::WxFrontend(wxEvtHandler* handler, int tab_id)
     : handler_(handler), tab_id_(tab_id)
@@ -270,6 +271,14 @@ void WxFrontend::on_permission_preset_changed(tools::PermissionPreset effective,
     int packed = static_cast<int>(effective) & 0xff;
     if (from_runtime) packed |= 0x100;
     evt->SetInt(packed);
+    wxQueueEvent(handler_, evt);
+}
+
+void WxFrontend::on_round_progress(int round, int max_rounds)
+{
+    auto* evt = new_evt(EVT_AGENT_ROUND_PROGRESS, tab_id_);
+    evt->SetInt(round);
+    evt->SetExtraLong(max_rounds);
     wxQueueEvent(handler_, evt);
 }
 

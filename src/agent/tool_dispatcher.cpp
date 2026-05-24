@@ -6,9 +6,12 @@
 #include "metrics.h"
 #include "tools/command_path_scanner.h"
 #include "tools/shared.h"
+#include "../core/log_channels.h"
 #include "../core/workspace.h"
 
 #include <spdlog/spdlog.h>
+
+#include <exception>
 
 #include <chrono>
 #include <condition_variable>
@@ -184,7 +187,8 @@ void ToolDispatcher::dispatch(const ToolCall& call, const AppendFn& append_resul
     }
 
     spdlog::info("ToolDispatcher: tool call '{}' id={}", call.tool_name, call.id);
-    spdlog::trace("ToolDispatcher: tool args: {}", call.args.dump());
+    spdlog::trace("ToolDispatcher: tool args: {}",
+                  truncate_for_log(call.args.dump()));
 
     activity_.emit(ActivityKind::tool_call,
                    "Tool call: " + call.tool_name,
@@ -378,7 +382,33 @@ void ToolDispatcher::dispatch(const ToolCall& call, const AppendFn& append_resul
         });
     }
 
-    auto result = tool->execute(effective_call, services_, &cancel_flag_);
+    // Defence-in-depth: any unhandled exception from a tool's execute()
+    // would otherwise unwind through the agent thread's run loop, hit
+    // std::terminate, and crash the whole process (the GUI included).
+    // Surface it to the LLM as a clean tool-result error so the agent can
+    // self-correct on the next round and the user keeps their session.
+    // See tests/ui_automation/output/agentic_Tetris/findings.md #8 for the
+    // observed locus_gui exit after a malformed `edit_file` payload.
+    ToolResult result;
+    try {
+        result = tool->execute(effective_call, services_, &cancel_flag_);
+    } catch (const std::exception& ex) {
+        spdlog::error("ToolDispatcher: tool '{}' threw: {}",
+                      call.tool_name, ex.what());
+        result.success = false;
+        result.content = std::string("[tool '") + call.tool_name +
+                         "' failed with an internal error: " + ex.what() +
+                         ". Try a different argument shape or a different tool.]";
+        result.display = result.content;
+    } catch (...) {
+        spdlog::error("ToolDispatcher: tool '{}' threw an unknown exception",
+                      call.tool_name);
+        result.success = false;
+        result.content = std::string("[tool '") + call.tool_name +
+                         "' failed with an unknown internal error. "
+                         "Try a different argument shape or a different tool.]";
+        result.display = result.content;
+    }
 
     if (watchdog.joinable()) {
         {

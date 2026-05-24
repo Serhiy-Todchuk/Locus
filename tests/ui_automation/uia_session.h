@@ -166,6 +166,14 @@ public:
     HWND        window() const { return target_hwnd_; }
     DWORD       process_id() const { return process_id_; }
 
+    // True when no process has been launched yet, OR the launched process is
+    // still running. False ONLY when launch() succeeded but the child has
+    // since exited. Callers like find() / wait_for_window() use this to fail
+    // fast with a "gui process exited" diagnostic instead of letting the
+    // long UIA timeout elapse and reporting a misleading
+    // "find: timeout waiting for element" message.
+    bool is_launched_process_alive() const;
+
 private:
     bool ensure_automation();
     Element find_in_root(IUIAutomationElement* root, const FindQuery& query);

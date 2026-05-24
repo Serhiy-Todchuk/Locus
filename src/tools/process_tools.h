@@ -10,15 +10,14 @@ public:
     std::string description() const override {
         return "Execute a shell command synchronously in the workspace directory and "
                "return stdout/stderr + exit code. Use this for commands you expect to "
-               "terminate -- builds, tests, scripts, queries. Default timeout 30 minutes. "
+               "terminate -- builds, tests, scripts, queries. The harness applies a "
+               "30-minute wall-clock; the user can hit Stop at any time. "
                "For dev servers, watchers, and anything that streams output without "
                "terminating, use `run_command_bg` instead.";
     }
     std::vector<ToolParam> params() const override {
         return {
-            {"command",    "string",  "The command to execute", true},
-            {"timeout_ms", "integer",
-             "Timeout in milliseconds (default 1800000 = 30 minutes).", false},
+            {"command", "string", "The command to execute", true},
         };
     }
     std::string preview(const ToolCall& call) const override;

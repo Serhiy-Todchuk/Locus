@@ -182,6 +182,16 @@ public:
     // `on_turn_complete`. Default no-op so existing frontends keep compiling.
     virtual void on_generation_progress(int /*chars*/, int /*est_tokens*/) {}
 
+    // Agentic Tetris findings #5 -- round progress signal. Fired at the top
+    // of every AgentLoop round (after ++round, before the LLM POST). `round`
+    // is 1-based; `max_rounds` is the per-message cap from WorkspaceConfig
+    // (`agent.max_rounds_per_message`) -- 0 means "unbounded". Frontends use
+    // this to render a "round N/M" chip while a turn is in flight so the
+    // user can see whether the agent is making forward progress on long
+    // build-fix loops vs. spinning. Default no-op so CLI / test stubs stay
+    // clean. Paired with on_turn_complete: the chip is hidden then.
+    virtual void on_round_progress(int /*round*/, int /*max_rounds*/) {}
+
     // S5.G -- a ChatMessage was just appended to ConversationHistory. Frontends
     // build their dom-id -> history-id map here so per-message delete can route
     // back to the right ConversationHistory entry. `role` is the message role

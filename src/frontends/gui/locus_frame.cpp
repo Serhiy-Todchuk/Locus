@@ -275,6 +275,7 @@ LocusFrame::LocusFrame(LocusSession& session)
     Bind(EVT_AGENT_HISTORY_MSG_ADDED,   &LocusFrame::on_agent_history_msg_added,   this);
     Bind(EVT_AGENT_HISTORY_MSG_DELETED, &LocusFrame::on_agent_history_msg_deleted, this);
     Bind(EVT_AGENT_PRESET_CHANGED,      &LocusFrame::on_agent_preset_changed,      this);
+    Bind(EVT_AGENT_ROUND_PROGRESS,      &LocusFrame::on_agent_round_progress,      this);
 
     // Notebook events.
     if (notebook_) {
@@ -1390,6 +1391,15 @@ void LocusFrame::on_agent_compaction_archived(wxThreadEvent& evt)
                        ui->tab->session_id();
     ui->chat->set_compacted_count(counter,
         wxString::FromUTF8(archive_dir.string()));
+}
+
+void LocusFrame::on_agent_round_progress(wxThreadEvent& evt)
+{
+    int round      = evt.GetInt();
+    int max_rounds = static_cast<int>(evt.GetExtraLong());
+    if (auto* ui = find_tab_ui(evt.GetId())) {
+        if (ui->chat) ui->chat->set_round_progress(round, max_rounds);
+    }
 }
 
 void LocusFrame::on_agent_session_reset(wxThreadEvent& evt)

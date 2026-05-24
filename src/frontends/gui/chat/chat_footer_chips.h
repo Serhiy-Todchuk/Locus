@@ -26,6 +26,7 @@ public:
     wxStaticText* plan_chip()       const { return plan_chip_; }
     wxStaticText* commit_chip()     const { return commit_chip_; }
     wxStaticText* compacted_chip()  const { return compacted_chip_; }
+    wxStaticText* round_chip()      const { return round_chip_; }
 
     // Context meter. Called from ChatPanel::set_context_meter.
     // Returns true when a Layout() call is needed (label width may have changed).
@@ -54,6 +55,13 @@ public:
     // grew enough to need re-layout).
     bool set_compacted_count(int count, const wxString& archive_dir);
 
+    // Agentic Tetris findings #5 -- in-flight round counter. `max_rounds == 0`
+    // renders just "round N"; positive value renders "round N/M". Returns
+    // true if Layout() is needed (only on first surface). Paired with
+    // hide_round_progress() which the chat panel calls on turn complete.
+    bool set_round_progress(int round, int max_rounds);
+    bool hide_round_progress();
+
     // Plan chip updates. Each returns true if Layout() is needed.
     bool on_plan_proposed(const std::string& plan_id, int total_steps,
                           const std::string& first_step_desc);
@@ -75,6 +83,7 @@ private:
     wxStaticText* plan_chip_      = nullptr;
     wxStaticText* commit_chip_    = nullptr;
     wxStaticText* compacted_chip_ = nullptr;
+    wxStaticText* round_chip_     = nullptr;
 
     int last_ctx_used_            = 0;
     int last_ctx_limit_           = 0;

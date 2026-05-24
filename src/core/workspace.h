@@ -149,6 +149,18 @@ struct WorkspaceConfig {
     // for users hitting the bug: 600 (10 min, well over any normal build).
     int tool_max_runtime_s = 0;
 
+    // Agentic Tetris findings #5 -- hard cap on tool-call rounds per user
+    // message. Was a 20 hardcoded constant in AgentCore; surfaced as a knob
+    // because small local models on multi-step build-fix loops genuinely
+    // need 30+ rounds (agentic Tetris run 2 hit the previous 20-cap at
+    // round 20 mid-edit). The agent surfaces "round N/M" in the chat footer
+    // while a turn is in flight; when the cap is hit the dispatcher emits
+    // "Agent reached the maximum number of tool call rounds." Raise for
+    // long-horizon work; the only ceiling is your patience. Set to 0 to
+    // remove the cap entirely (the loop still ends naturally when the LLM
+    // stops emitting tool calls).
+    int max_rounds_per_message = 100;
+
     // S5.Z follow-up -- when the run_command reader-thread heartbeat fires
     // (reader still draining 30s+ after child exit, which is the inherited-
     // pipe leak symptom), and `procdump.exe` is on PATH, write a full-memory

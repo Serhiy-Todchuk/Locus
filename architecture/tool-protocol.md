@@ -187,6 +187,15 @@ public:
 
 No changes to the agent core, no changes to the approval flow, no changes to the prompt builder.
 
+### `execute` may throw
+
+`ToolDispatcher` wraps the `tool->execute()` call in a `try/catch (std::exception)` (and `...`) fence
+since the agentic Tetris follow-up: an unhandled exception from a tool would otherwise unwind through
+the agent thread, hit `std::terminate`, and crash the GUI process. A throwing tool surfaces as
+`ToolResult{success=false, content="[tool 'X' failed with an internal error: ...]"}` so the LLM can
+self-correct on the next round. Prefer returning a `ToolResult{false, ...}` over throwing when the
+error is recoverable (the wrapper is defence-in-depth, not the primary error path).
+
 ---
 
 ## Platform-Specific Tools

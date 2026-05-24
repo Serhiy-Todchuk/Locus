@@ -24,3 +24,5 @@ Start a python server for this folder so I an access html files through localhos
 Start "python -u -m http.server 8000" command as background process.
 run this exact command via run_command_bg:
 python -u -c "import sys; sys.stderr.write('TEST OUTPUT\n'); sys.stderr.flush(); import time; time.sleep(60)"
+
+do agentic testing — make Locus build a small C++ tetris minigame in empty folder (D:\Projects\Tetris). If it won't during first run - document what was wrong and continue with next run  and so on untill done

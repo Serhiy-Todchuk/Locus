@@ -117,6 +117,7 @@ instrumentation that lives in the default logger:
 | `llm.timeout_ms` | 1800000 (30 min) | Stream-stall watchdog. The default was bumped from 600000; raise further for very slow local models. Also editable via Settings -> LLM -> Stream stall timeout. |
 | `agent.tool_max_runtime_s` | 0 (off) | Defence-in-depth wall-clock guardrail on every `tool->execute` call. When >0, the dispatcher trips `cancel_flag_` after that many seconds and synthesizes a "tool timed out" result. Recommended starter value if you hit the `run_command` hang: 600. |
 | `agent.dump_on_run_command_hang` | false | When the reader-heartbeat catches a stuck `run_command` after child exit, shell out to `procdump.exe -ma <self_pid> .locus/dumps/<...>.dmp` so the agent-thread stack survives a force-kill. Requires Sysinternals `procdump.exe` on PATH. |
+| `agent.max_rounds_per_message` | 100 | Hard cap on tool-call rounds per user message. Was a hardcoded 20 until small-model build-fix loops kept hitting it (agentic Tetris run 2 stopped at round 20 mid-edit). Raise for long-horizon tasks; set to `0` to remove the cap entirely. The chat-footer "round N/M" chip surfaces the in-flight count, and the `on_error` message when the cap fires now names this knob. |
 
 **The server launches with NO GUI window open.** It is waiting for you to
 send a `launch` op. This lets you stage files (e.g. write a custom
@@ -470,6 +471,7 @@ Do NOT delete the tmp workspace dir until you've copied what you need.
 | Tool approvals stop the agent | Either pre-seed `.locus/config.json` with `"auto"` for the relevant tool, or watch for `locus.tool_approval.dialog` and click `locus.tool_approval.approve_btn`. The default config seeded for `tmp` workspaces auto-approves write/edit/delete/run_command. |
 | The screen is busy with other windows | UIA captures the launched Locus window specifically; other windows on the desktop don't matter. But focus theft is real -- the safer pattern is to run on a session you control or in a secondary Windows session. |
 | Server exits unexpectedly | Check `agentic.log` for the final lines. The GUI process going away does NOT shut down the server -- you must send `shutdown` explicitly. |
+| `find` / `wait_for_window` / `read_chat` returns `error: "<op>: launched gui process (pid=N) has exited (exit_code=K) ..."` | The `locus_gui.exe` child crashed or exited after `launch`. The harness now fails fast with the pid + exit code instead of letting the find timeout elapse and reporting a misleading "timeout waiting for element". Check `.locus/locus.log` (last few lines before exit), `.locus/dumps/*.dmp` if `agent.dump_on_run_command_hang` was on, and the `agentic.log` op trail. Recover with `quit` followed by `launch` to spawn a fresh GUI; the server stays up across crashes. |
 | Build errors | Make sure you built the `locus_ui_tests` target after pulling -- the new files (`op_dispatcher.cpp`, `agentic_server.cpp`) need to be in the binary. |
 
 ---

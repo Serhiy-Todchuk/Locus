@@ -32,18 +32,22 @@ ChatFooterChips::ChatFooterChips(wxWindow* parent)
     plan_chip_      = new wxStaticText(parent, wxID_ANY, "");
     commit_chip_    = new wxStaticText(parent, wxID_ANY, "");
     compacted_chip_ = new wxStaticText(parent, wxID_ANY, "");
+    round_chip_     = new wxStaticText(parent, wxID_ANY, "");
     plan_chip_->Hide();
     commit_chip_->Hide();
     compacted_chip_->Hide();
+    round_chip_->Hide();
 
     ctx_label_->SetName(ui_names::kChatCtxLabel);
     plan_chip_->SetName(ui_names::kChatPlanChip);
     commit_chip_->SetName(ui_names::kChatCommitChip);
     compacted_chip_->SetName(ui_names::kChatCompactedChip);
+    round_chip_->SetName(ui_names::kChatRoundChip);
     gui::apply_locus_accessible_name(ctx_label_);
     gui::apply_locus_accessible_name(plan_chip_);
     gui::apply_locus_accessible_name(commit_chip_);
     gui::apply_locus_accessible_name(compacted_chip_);
+    gui::apply_locus_accessible_name(round_chip_);
 }
 
 bool ChatFooterChips::set_context_meter(int used, int limit,
@@ -91,6 +95,36 @@ bool ChatFooterChips::on_auto_commit(const wxString& short_sha,
     const bool was_hidden = !commit_chip_->IsShown();
     commit_chip_->Show();
     return was_hidden;  // layout needed only when just shown
+}
+
+bool ChatFooterChips::set_round_progress(int round, int max_rounds)
+{
+    if (!round_chip_) return false;
+    if (round <= 0) return hide_round_progress();
+    wxString label = (max_rounds > 0)
+        ? wxString::Format("round %d/%d", round, max_rounds)
+        : wxString::Format("round %d", round);
+    round_chip_->SetLabel(label);
+    round_chip_->SetToolTip(
+        max_rounds > 0
+            ? wxString::Format("Agent is on tool-call round %d of %d.\n"
+                               "Raise agent.max_rounds_per_message in "
+                               ".locus/config.json to lift the cap.",
+                               round, max_rounds)
+            : wxString::Format("Agent is on tool-call round %d (cap disabled).",
+                               round));
+    const bool was_hidden = !round_chip_->IsShown();
+    round_chip_->Show();
+    return was_hidden;  // re-layout only when first surfaced
+}
+
+bool ChatFooterChips::hide_round_progress()
+{
+    if (!round_chip_) return false;
+    if (!round_chip_->IsShown()) return false;
+    round_chip_->SetLabel("");
+    round_chip_->Hide();
+    return true;
 }
 
 bool ChatFooterChips::set_compacted_count(int count, const wxString& archive_dir)

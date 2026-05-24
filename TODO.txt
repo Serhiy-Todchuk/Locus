@@ -12,6 +12,14 @@
 - Pin plan in context so it's not get compacted
 - When I click on "compacted: 1" nothing happens - hover message says it should open archive folder
 
+- In activity - add tool preview in the list item name
+- When thinking is opened and llm generates more content into it - eventually it stops autoscrolling and I see only ~18 top lines of thinking text and scroll bar “growing”
+- How to make llm that starts process tool see only specified part of output, for example only few last lines of build output of c++ project (or only errors/warnings, or 5 first errors or 5 last errors), so it doesn’t polute context, but get only useful info
+- Compaction seems doesn’t work as expected - it frees up too little part of context, but I can see wrong numbers - think out integration or agentic test for it involving a lot of communication with LLM, so we get near real scenario tested
+- Remove max number of tool calls per session
+- Do we really need to let llm choose what mode of search to perform?
+- Do we hide LLM's "thinking" from context? "Check the box for "Show Debug Thoughts" (or Expose Reasoning Tokens over API). This ensures that the hidden chain-of-thought tokens are cleanly passed to your IDE so your agent can read the model's internal logic before executing code edits. "
+
 - Claude Blender
 - GoodOldSoftware
 - free nvidia inference
