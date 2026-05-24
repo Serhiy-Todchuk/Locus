@@ -92,6 +92,9 @@ WorkspaceConfig workspace_config_from_json(const json& j)
         // S6.11 -- lazy tool manifest
         if (ag.contains("lazy_tool_manifest"))
             cfg.lazy_tool_manifest = ag["lazy_tool_manifest"].get<bool>();
+        // S6.12 -- system-prompt profile
+        if (ag.contains("system_prompt_profile"))
+            cfg.system_prompt_profile = ag["system_prompt_profile"].get<std::string>();
     }
 
     if (j.contains("memory")) {
@@ -296,7 +299,8 @@ json workspace_config_to_json(const WorkspaceConfig& cfg)
             {"dump_on_run_command_hang",  cfg.dump_on_run_command_hang},
             {"notify_external_changes",   cfg.notify_external_changes},
             {"require_read_before_edit",  cfg.require_read_before_edit},
-            {"lazy_tool_manifest",        cfg.lazy_tool_manifest}
+            {"lazy_tool_manifest",        cfg.lazy_tool_manifest},
+            {"system_prompt_profile",     cfg.system_prompt_profile}
         }},
         {"memory", {
             {"enabled",                    cfg.memory_enabled},

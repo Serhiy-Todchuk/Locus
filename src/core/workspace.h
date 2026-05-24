@@ -142,6 +142,20 @@ struct WorkspaceConfig {
     // Settings. See architecture/decisions/0007-context-budget-reshape-*.md.
     bool lazy_tool_manifest = false;
 
+    // S6.12 -- system-prompt profile. Controls which prose body the
+    // SystemPromptAssembly renders (Rules / Editing / Shell / MSVC). Workspace
+    // metadata, LOCUS.md, memory bank, tools section, and format addendum are
+    // identical across profiles. Stored as a string for friendly config.json
+    // editing; parsed via SystemPromptProfile profile_from_string.
+    //
+    //   "full"    -- today's verbose prompt (~700-1000 t prose). Default.
+    //   "compact" -- load-bearing rules only, no examples (~300 t prose).
+    //   "minimal" -- only the invariants a fine-tuned coding agent must be
+    //                told explicitly (~80 t prose). Power-user opt-in.
+    //
+    // Companion to lazy_tool_manifest above. ADR-0007 carries the rationale.
+    std::string system_prompt_profile = "full";
+
     // S4.I -- per-background-process output ring buffer cap. The reader thread
     // appends stdout+stderr until this many bytes are buffered; older bytes
     // are dropped from the front (the LLM is told how many it missed). 256 KB

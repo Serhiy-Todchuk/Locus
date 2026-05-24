@@ -11,6 +11,28 @@ namespace locus {
 
 class IWorkspaceServices;
 
+// S6.12 -- which prose body the system-prompt assembly renders.
+//
+// Full     -- today's prompt: Rules / Editing / Shell / MSVC pitfalls in full
+//             prose form. ~700-1000 t.
+// Compact  -- load-bearing rules only, no examples or per-arg explanations.
+//             MSVC pitfalls retained (they pay for themselves). ~300 t.
+// Minimal  -- only the invariants a fine-tuned coding agent must be told
+//             explicitly. ~80 t. Power-user opt-in.
+//
+// Affects ONLY the prose body. Workspace metadata, LOCUS.md, memory bank,
+// tools section (gated separately by lazy_manifest), and format addendum
+// render identically across profiles. See
+// architecture/decisions/0007-context-budget-reshape-lazy-manifest-and-profiles.md.
+enum class SystemPromptProfile {
+    Full,
+    Compact,
+    Minimal
+};
+
+const char*          to_string(SystemPromptProfile p);
+SystemPromptProfile  profile_from_string(const std::string& s);
+
 
 // Immutable, byte-stable system-prompt assembly (S5.J).
 //
@@ -46,7 +68,8 @@ public:
                                       ToolFormat               tool_format    = ToolFormat::Auto,
                                       const std::string&       memory_section = "",
                                       bool                     lazy_manifest  = false,
-                                      IWorkspaceServices*      ws_for_filter  = nullptr);
+                                      IWorkspaceServices*      ws_for_filter  = nullptr,
+                                      SystemPromptProfile      profile        = SystemPromptProfile::Full);
 
     // Empty default assembly -- useful when an LLMContext needs to be
     // default-constructed in a test and the prompt is set later.
@@ -60,6 +83,7 @@ public:
     const std::string& full_text() const { return full_text_; }
     bool empty()  const { return full_text_.empty(); }
     std::size_t hash() const { return hash_; }
+    SystemPromptProfile profile() const { return profile_; }
 
     int base_tokens()              const { return base_tokens_; }
     int metadata_tokens()          const { return metadata_tokens_; }
@@ -76,8 +100,9 @@ public:
     }
 
 private:
-    std::string full_text_;
-    std::size_t hash_                = 0;
+    std::string         full_text_;
+    std::size_t         hash_     = 0;
+    SystemPromptProfile profile_  = SystemPromptProfile::Full;
     int         base_tokens_         = 0;
     int         metadata_tokens_     = 0;
     int         locus_md_tokens_     = 0;

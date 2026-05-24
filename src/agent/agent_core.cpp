@@ -80,16 +80,21 @@ AgentCore::AgentCore(ILLMClient& llm,
     // S6.11 -- pass the workspace's lazy_tool_manifest flag so the assembly
     // renders summaries (not per-param lines) when on, and so describe_tool's
     // available(ws) filter affects the prompt as well as the API tools array.
+    // S6.12 -- pass the system_prompt_profile so the prose body (Rules /
+    // Editing / Shell / MSVC pitfalls) renders at the chosen verbosity.
     bool lazy_manifest = false;
-    if (auto* w = services_.workspace())
+    SystemPromptProfile profile = SystemPromptProfile::Full;
+    if (auto* w = services_.workspace()) {
         lazy_manifest = w->config().lazy_tool_manifest;
+        profile       = profile_from_string(w->config().system_prompt_profile);
+    }
     auto assembly = SystemPromptAssembly::build(
         locus_md, ws_meta, tools, llm_config.tool_format, memory_section,
-        lazy_manifest, &services_);
+        lazy_manifest, &services_, profile);
 
     int sys_tokens = assembly.total_tokens();
-    spdlog::info("AgentCore: system prompt ~{} tokens, context limit {}",
-                 sys_tokens, llm_config.context_limit);
+    spdlog::info("AgentCore: system prompt ~{} tokens (profile={}), context limit {}",
+                 sys_tokens, to_string(profile), llm_config.context_limit);
 
     activity_   = std::make_unique<ActivityLog>(frontends_);
     metrics_    = std::make_unique<MetricsAggregator>();

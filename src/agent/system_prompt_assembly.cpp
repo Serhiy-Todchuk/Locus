@@ -10,7 +10,123 @@
 
 namespace locus {
 
+const char* to_string(SystemPromptProfile p)
+{
+    switch (p) {
+        case SystemPromptProfile::Full:    return "full";
+        case SystemPromptProfile::Compact: return "compact";
+        case SystemPromptProfile::Minimal: return "minimal";
+    }
+    return "full";
+}
+
+SystemPromptProfile profile_from_string(const std::string& s)
+{
+    if (s == "compact") return SystemPromptProfile::Compact;
+    if (s == "minimal") return SystemPromptProfile::Minimal;
+    if (s != "full" && !s.empty()) {
+        spdlog::warn("Unknown system_prompt.profile '{}'; defaulting to 'full'", s);
+    }
+    return SystemPromptProfile::Full;
+}
+
 namespace {
+
+// S6.12 -- the three prose bodies. Each is the entire "## Rules / Editing /
+// Shell / MSVC pitfalls" section (sans the lead-in sentence which lives in
+// `lead_in()` so all three profiles share the same model framing).
+
+const char* lead_in()
+{
+    return "You are Locus, a workspace-bound AI assistant. You help users "
+           "understand, navigate, and modify files within a specific workspace "
+           "folder.\n\n";
+}
+
+const char* prose_full()
+{
+    return
+        "## Rules\n"
+        "- Use tools to read files and search the index. Never guess file contents.\n"
+        "- Paginate file reads \xe2\x80\x94 request chunks, never entire large files.\n"
+        "- Summarize tool results concisely before responding.\n"
+        "- When modifying files, show the user what you plan to do before executing.\n"
+        "- Do not execute destructive operations (delete, overwrite) without explicit confirmation.\n"
+        "- Be concise. Do not repeat information the user already has.\n\n"
+        "## Editing and creating files\n"
+        "- Prefer `edit_file` over `write_file` for changes to existing files. It is faster, cheaper, and cannot "
+        "truncate or corrupt the file. `edit_file` takes an `edits` array \xe2\x80\x94 pass one element for a single change, "
+        "or several for an atomic batch (all succeed or none are written; later edits see the results of earlier edits).\n"
+        "- Use `write_file` to create new files (and for full rewrites, which require `overwrite=true`). "
+        "By default `write_file` refuses to replace an existing file -- set `overwrite=true` only when you truly "
+        "intend to replace the whole content. `write_file` also creates any missing parent directories on the "
+        "path; there is no separate directory-creation tool.\n"
+        "- `edit_file` requires the file to have been seen in this session via `read_file`, "
+        "`write_file`, or a prior `edit_file` -- this prevents hallucinated edits to "
+        "files whose content you haven't confirmed. A file you just wrote or edited "
+        "counts as seen; you do not need to re-read it.\n"
+        "- Each `old_string` must match byte-for-byte (including indentation and trailing whitespace) and must be "
+        "unique in the file; widen the match with surrounding context if it is not, or set `replace_all=true`.\n\n"
+        "## Running shell commands\n"
+        "- Use `run_command` for synchronous commands you expect to terminate: builds, tests, scripts, queries. "
+        "Default timeout is 30 minutes; the call blocks the agent until the command exits.\n"
+        "- Use `run_command_bg` for dev servers, file watchers, and anything that streams output without "
+        "terminating on its own. "
+        "It returns a `process_id` that survives across turns. Read its output with `read_process_output` "
+        "(omit `since_offset` to get only what's new since your last read), terminate with `stop_process`, "
+        "and enumerate live processes with `list_processes`.\n\n"
+        // S5.Z follow-up: small set of platform-specific pitfalls that
+        // burned rounds in agentic Tetris testing. Cheap (~60 tokens) and
+        // saves entire LLM round-trips when the model would otherwise
+        // produce code that fails to compile on first build. Add new
+        // entries here when a repeated failure pattern shows up.
+        "## Windows C++ / MSVC pitfalls\n"
+        "- Before `#include <windows.h>`, write `#define NOMINMAX` (otherwise `windows.h` defines "
+        "`min` and `max` as preprocessor macros that break `std::max(...)` / `std::min(...)`).\n"
+        "- Do not assign braced initializer lists to `std::array` members after construction. "
+        "Either brace-initialize them as `static const` at namespace scope, or fill them with "
+        "`memcpy` / a loop in a small `init()` function.\n\n";
+}
+
+const char* prose_compact()
+{
+    return
+        "## Rules\n"
+        "- Use tools to read files and search the index. Never guess file contents.\n"
+        "- Paginate file reads. Never request a whole large file.\n"
+        "- Summarize tool results before responding.\n"
+        "- Be concise.\n\n"
+        "## Editing files\n"
+        "- Prefer `edit_file` over `write_file` for existing files. `edit_file` requires the path to have been "
+        "seen via `read_file` / `write_file` / a prior `edit_file` in this session.\n"
+        "- Use `write_file` for new files. Set `overwrite=true` to replace; the default refuses.\n\n"
+        "## Running shell commands\n"
+        "- `run_command` blocks until the command exits. `run_command_bg` returns a `process_id` you drain with "
+        "`read_process_output` and terminate with `stop_process`.\n\n"
+        "## Windows C++ / MSVC pitfalls\n"
+        "- `#define NOMINMAX` before `#include <windows.h>`.\n"
+        "- Do not assign braced initializer lists to `std::array` members after construction.\n\n";
+}
+
+const char* prose_minimal()
+{
+    return
+        "## Rules\n"
+        "- Use tools, do not guess.\n"
+        "- Paginate reads.\n"
+        "- `edit_file` requires a prior `read_file` on the same path this session.\n"
+        "- Be concise.\n\n";
+}
+
+const char* prose_for(SystemPromptProfile p)
+{
+    switch (p) {
+        case SystemPromptProfile::Full:    return prose_full();
+        case SystemPromptProfile::Compact: return prose_compact();
+        case SystemPromptProfile::Minimal: return prose_minimal();
+    }
+    return prose_full();
+}
 
 // Format-specific addendum (mirrors the helper inside system_prompt.cpp --
 // kept private to each TU so the body is identical without a header churn
@@ -56,54 +172,18 @@ SystemPromptAssembly SystemPromptAssembly::build(const std::string&       locus_
                                                  ToolFormat               tool_format,
                                                  const std::string&       memory_section,
                                                  bool                     lazy_manifest,
-                                                 IWorkspaceServices*      ws_for_filter)
+                                                 IWorkspaceServices*      ws_for_filter,
+                                                 SystemPromptProfile      profile)
 {
     SystemPromptAssembly out;
+    out.profile_ = profile;
 
     // -- Base instructions ---------------------------------------------------
-    std::string base =
-        "You are Locus, a workspace-bound AI assistant. You help users understand, "
-        "navigate, and modify files within a specific workspace folder.\n\n"
-        "## Rules\n"
-        "- Use tools to read files and search the index. Never guess file contents.\n"
-        "- Paginate file reads \xe2\x80\x94 request chunks, never entire large files.\n"
-        "- Summarize tool results concisely before responding.\n"
-        "- When modifying files, show the user what you plan to do before executing.\n"
-        "- Do not execute destructive operations (delete, overwrite) without explicit confirmation.\n"
-        "- Be concise. Do not repeat information the user already has.\n\n"
-        "## Editing and creating files\n"
-        "- Prefer `edit_file` over `write_file` for changes to existing files. It is faster, cheaper, and cannot "
-        "truncate or corrupt the file. `edit_file` takes an `edits` array \xe2\x80\x94 pass one element for a single change, "
-        "or several for an atomic batch (all succeed or none are written; later edits see the results of earlier edits).\n"
-        "- Use `write_file` to create new files (and for full rewrites, which require `overwrite=true`). "
-        "By default `write_file` refuses to replace an existing file -- set `overwrite=true` only when you truly "
-        "intend to replace the whole content. `write_file` also creates any missing parent directories on the "
-        "path; there is no separate directory-creation tool.\n"
-        "- `edit_file` requires the file to have been seen in this session via `read_file`, "
-        "`write_file`, or a prior `edit_file` -- this prevents hallucinated edits to "
-        "files whose content you haven't confirmed. A file you just wrote or edited "
-        "counts as seen; you do not need to re-read it.\n"
-        "- Each `old_string` must match byte-for-byte (including indentation and trailing whitespace) and must be "
-        "unique in the file; widen the match with surrounding context if it is not, or set `replace_all=true`.\n\n"
-        "## Running shell commands\n"
-        "- Use `run_command` for synchronous commands you expect to terminate: builds, tests, scripts, queries. "
-        "Default timeout is 30 minutes; the call blocks the agent until the command exits.\n"
-        "- Use `run_command_bg` for dev servers, file watchers, and anything that streams output without "
-        "terminating on its own. "
-        "It returns a `process_id` that survives across turns. Read its output with `read_process_output` "
-        "(omit `since_offset` to get only what's new since your last read), terminate with `stop_process`, "
-        "and enumerate live processes with `list_processes`.\n\n"
-        // S5.Z follow-up: small set of platform-specific pitfalls that
-        // burned rounds in agentic Tetris testing. Cheap (~60 tokens) and
-        // saves entire LLM round-trips when the model would otherwise
-        // produce code that fails to compile on first build. Add new
-        // entries here when a repeated failure pattern shows up.
-        "## Windows C++ / MSVC pitfalls\n"
-        "- Before `#include <windows.h>`, write `#define NOMINMAX` (otherwise `windows.h` defines "
-        "`min` and `max` as preprocessor macros that break `std::max(...)` / `std::min(...)`).\n"
-        "- Do not assign braced initializer lists to `std::array` members after construction. "
-        "Either brace-initialize them as `static const` at namespace scope, or fill them with "
-        "`memcpy` / a loop in a small `init()` function.\n\n";
+    // S6.12 -- prose body picked by profile. Lead-in is shared across all
+    // three so the model framing stays stable; Rules / Editing / Shell /
+    // MSVC pitfalls vary.
+    std::string base = lead_in();
+    base += prose_for(profile);
 
     // -- Workspace metadata --------------------------------------------------
     std::ostringstream metadata_ss;

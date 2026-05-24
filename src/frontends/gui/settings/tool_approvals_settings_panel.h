@@ -3,6 +3,7 @@
 #include "settings_panel.h"
 #include "../../../tools/permission_presets.h"
 
+#include <wx/choice.h>
 #include <wx/scrolwin.h>
 #include <wx/spinctrl.h>
 #include <wx/wx.h>
@@ -55,6 +56,8 @@ private:
     wxSpinCtrl*               truncate_lines_ctrl_           = nullptr;
     // S6.11 -- lazy tool manifest checkbox.
     wxCheckBox*               lazy_tool_manifest_ctrl_       = nullptr;
+    // S6.12 -- system-prompt profile dropdown.
+    wxChoice*                 system_prompt_profile_ctrl_    = nullptr;
     std::vector<std::string>  tool_names_;
     std::vector<wxChoice*>    approval_choices_;
     std::vector<int>          approval_prev_sel_;

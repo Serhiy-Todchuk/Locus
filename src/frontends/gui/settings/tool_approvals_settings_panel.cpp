@@ -120,6 +120,36 @@ ToolApprovalsSettingsPanel::ToolApprovalsSettingsPanel(wxWindow* parent,
     gui::apply_locus_accessible_name(lazy_tool_manifest_ctrl_);
     outer->Add(lazy_tool_manifest_ctrl_, 0, wxLEFT | wxRIGHT | wxTOP, 8);
 
+    // S6.12 -- system-prompt profile dropdown. Pairs with the lazy_manifest
+    // checkbox above as a "Prompt Cost" tuning group.
+    {
+        auto* row = new wxBoxSizer(wxHORIZONTAL);
+        row->Add(new wxStaticText(this, wxID_ANY,
+                                  "System prompt profile:"),
+                 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+        wxArrayString profile_labels;
+        profile_labels.Add("Full (default, ~700t)");
+        profile_labels.Add("Compact (~300t)");
+        profile_labels.Add("Minimal (~80t, power users)");
+        system_prompt_profile_ctrl_ = new wxChoice(this, wxID_ANY,
+            wxDefaultPosition, wxDefaultSize, profile_labels);
+        int sel = 0;
+        if (config.system_prompt_profile == "compact") sel = 1;
+        else if (config.system_prompt_profile == "minimal") sel = 2;
+        system_prompt_profile_ctrl_->SetSelection(sel);
+        system_prompt_profile_ctrl_->SetName(
+            "locus.settings.system_prompt.profile_choice");
+        gui::apply_locus_accessible_name(system_prompt_profile_ctrl_);
+        system_prompt_profile_ctrl_->SetToolTip(
+            "Which prose body the system prompt renders. Workspace metadata, "
+            "LOCUS.md, memory bank, and the tools section are identical across "
+            "profiles. Compact drops the examples and per-arg explanations; "
+            "Minimal keeps only the load-bearing invariants (use tools, "
+            "paginate, edit_file requires prior read). See ADR-0007.");
+        row->Add(system_prompt_profile_ctrl_, 0, wxALIGN_CENTER_VERTICAL);
+        outer->Add(row, 0, wxLEFT | wxRIGHT | wxTOP, 8);
+    }
+
     // run_command / read_process_output default head+tail truncation. The
     // per-call output_filter_lines arg overrides this; 0 disables the
     // smart-truncate default entirely (raw output flows back, capped only
@@ -366,6 +396,12 @@ void ToolApprovalsSettingsPanel::load_from_config(const WorkspaceConfig& cfg)
         truncate_lines_ctrl_->SetValue(cfg.run_command_truncate_lines);
     if (lazy_tool_manifest_ctrl_)
         lazy_tool_manifest_ctrl_->SetValue(cfg.lazy_tool_manifest);
+    if (system_prompt_profile_ctrl_) {
+        int sel = 0;
+        if (cfg.system_prompt_profile == "compact") sel = 1;
+        else if (cfg.system_prompt_profile == "minimal") sel = 2;
+        system_prompt_profile_ctrl_->SetSelection(sel);
+    }
 
     // Refresh wildcard overrides from the reloaded config.
     wildcard_overrides_.clear();
@@ -433,6 +469,13 @@ void ToolApprovalsSettingsPanel::commit_to_config(WorkspaceConfig& cfg) const
         cfg.run_command_truncate_lines = truncate_lines_ctrl_->GetValue();
     if (lazy_tool_manifest_ctrl_)
         cfg.lazy_tool_manifest = lazy_tool_manifest_ctrl_->IsChecked();
+    if (system_prompt_profile_ctrl_) {
+        switch (system_prompt_profile_ctrl_->GetSelection()) {
+            case 1:  cfg.system_prompt_profile = "compact"; break;
+            case 2:  cfg.system_prompt_profile = "minimal"; break;
+            default: cfg.system_prompt_profile = "full";    break;
+        }
+    }
 }
 
 } // namespace locus
