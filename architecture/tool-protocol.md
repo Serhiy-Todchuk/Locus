@@ -92,8 +92,26 @@ public:
     // Builds the JSON schema block injected into the LLM system prompt
     // Format: OpenAI function-calling schema (compatible with LM Studio)
     virtual nlohmann::json build_schema_json() const = 0;
+    virtual nlohmann::json build_schema_json(IWorkspaceServices&, ToolMode,
+                                             bool lazy = false) const = 0;
 };
 ```
+
+### Lazy manifest (S6.11)
+
+When `WorkspaceConfig::lazy_tool_manifest` is true, both the system-prompt
+"## Available Tools" section AND the API `tools: [...]` array degrade to
+one-line summaries per tool -- the model fetches the full schema on demand
+via a new built-in `describe_tool('<name>')` meta-tool. Saves ~2-3K tokens
+per turn on the default roster and is what makes 16k-context local models
+practical for multi-step coding tasks. See
+[ADR-0007](decisions/0007-context-budget-reshape-lazy-manifest-and-profiles.md)
+for the full rationale and the cost / win tradeoff.
+
+The describe_tool tool is registered always; its `available(ws)` returns the
+lazy_manifest flag, so it appears in the per-turn manifest only when lazy
+mode is on. Inspection from the tools panel / slash commands works in any
+mode (those bypass the manifest filter).
 
 ---
 

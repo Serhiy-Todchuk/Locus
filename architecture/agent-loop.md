@@ -409,6 +409,47 @@ The seed system message at `history_.messages()[0]` is **never compacted**:
 `refresh_system_prompt()` rewrites it in place when `AttachedContext` changes. Compaction
 routines start from index 1.
 
+### System-prompt size knobs (S6.11 + S6.12)
+
+Two `WorkspaceConfig` knobs reshape the per-turn budget at the *source* rather
+than via compaction. Both reset the LM Studio prefix cache when toggled (the
+prompt bytes change), but the byte-stable-within-a-config invariant from S4.F
+still holds.
+
+- `lazy_tool_manifest` (S6.11): the per-turn tool catalog (both the
+  prompt's "## Available Tools" section and the API `tools: [...]` array)
+  degrades to one-line summaries. The model fetches full schemas on demand
+  via the `describe_tool('<name>')` meta-tool. Saves ~2-3K tokens per turn
+  on the default roster.
+- `system_prompt_profile` (S6.12): selects which prose body the assembly
+  renders -- `full` (today's verbose Rules / Editing / Shell / MSVC,
+  ~700-1000 t), `compact` (load-bearing rules only, ~300 t), or `minimal`
+  (just the invariants, ~80 t). Workspace metadata, LOCUS.md, memory bank,
+  tools section, and format addendum are identical across profiles.
+
+Cross-cutting rationale: [ADR-0007](decisions/0007-context-budget-reshape-lazy-manifest-and-profiles.md).
+
+### Reasoning watchdog (S6.13)
+
+`AgentLoop` polls combined reasoning + text channel size and elapsed wall-clock
+on every stream chunk. If `WorkspaceConfig::reasoning_max_chars` /
+`reasoning_max_seconds` (both default 0 = off; OR-semantics) trip, it broadcasts
+`IFrontend::on_reasoning_watchdog_tripped(trigger, value)` and -- in auto-nudge
+mode -- sets `cancel_flag_` plus `out.watchdog_auto_nudge=true` so the stream
+breaks cleanly. The round loop in `AgentCore` then:
+
+1. Distinguishes user-Stop from commit-now-nudge from auto-nudge via
+   `nudge_requested_` and `step.watchdog_auto_nudge`.
+2. In the nudge case clears `cancel_flag_`, appends a synthetic user message
+   "Stop reasoning. Commit to a tool call now, or give a brief final answer.",
+   increments `nudges_this_turn_`, and continues the loop (does NOT break).
+3. Caps at 2 nudges per turn; the 3rd would-fire aborts with
+   "Agent appears stuck (3 reasoning watchdog trips in one turn)."
+
+`ILocusCore::request_commit_now()` is the programmatic entry point (used by
+the chat-footer Commit-now button and by future agentic-mode harness ops);
+it sets both flags atomically so the round loop sees them as a consistent pair.
+
 ---
 
 ## 7. Activity events
