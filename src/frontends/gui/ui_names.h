@@ -26,6 +26,9 @@ inline constexpr const char* kChatCompactBtn = "locus.chat.compact_btn";
 inline constexpr const char* kChatAutoCompactToggle = "locus.chat.auto_compact_cb";
 inline constexpr const char* kChatStopBtn    = "locus.chat.stop_btn";
 inline constexpr const char* kChatUndoBtn    = "locus.chat.undo_btn";
+// S6.13 follow-up -- Commit-now button. Hidden by default; surfaces when the
+// reasoning watchdog trips and `agent.reasoning_auto_nudge=false`.
+inline constexpr const char* kChatCommitBtn  = "locus.chat.commit_btn";
 inline constexpr const char* kChatModeChat   = "locus.chat.mode_chat";
 inline constexpr const char* kChatModePlan   = "locus.chat.mode_plan";
 inline constexpr const char* kChatModeExec   = "locus.chat.mode_execute";

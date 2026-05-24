@@ -174,6 +174,10 @@ private:
     void on_agent_history_msg_deleted(wxThreadEvent& evt);
     void on_agent_preset_changed(wxThreadEvent& evt);
     void on_agent_round_progress(wxThreadEvent& evt);
+    // S6.13 follow-up -- reasoning watchdog routed to the active tab's chat
+    // panel: show / hide the Commit-now button.
+    void on_agent_watchdog_tripped(wxThreadEvent& evt);
+    void on_agent_watchdog_cleared(wxThreadEvent& evt);
 
     // S5.R observer callbacks (forwarded from TabProcessObserver via
     // CallAfter -- safe to call wx from here, runs on UI thread). Sync

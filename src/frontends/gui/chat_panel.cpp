@@ -1056,6 +1056,10 @@ ChatPanel::ChatPanel(wxWindow* parent,
     footer->Add(auto_compact_cb_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
     footer->Add(compact_btn_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
     footer->Add(undo_btn_,    0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
+    // S6.13 follow-up -- Commit-now sits just before Stop. Reserves no
+    // horizontal space when hidden (wxSizer skips hidden items in default
+    // layout) so the footer is unchanged in the common case.
+    footer->Add(commit_btn_,  0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
     footer->Add(stop_btn_,    0, wxALIGN_CENTER_VERTICAL);
 
     // Main vertical layout.
@@ -1160,6 +1164,28 @@ void ChatPanel::create_footer()
         } else {
             submit_current_input();
         }
+    });
+
+    // S6.13 follow-up -- Commit-now button. Sits inline next to Stop. Hidden
+    // by default; surfaces when the reasoning watchdog trips (manual mode,
+    // i.e. `agent.reasoning_auto_nudge=false`) and disappears again when the
+    // round resolves (a tool call lands, the agent goes idle, or another
+    // nudge fires). Click cancels the in-flight LLM stream and injects a
+    // "Stop reasoning, commit to a tool call now" steering message instead
+    // of aborting the whole turn (which is what the Stop button does).
+    commit_btn_ = new wxButton(this, wxID_ANY, "Commit now",
+                               wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+    commit_btn_->SetName(ui_names::kChatCommitBtn);
+    gui::apply_locus_accessible_name(commit_btn_);
+    commit_btn_->SetToolTip(
+        "Cancel the current LLM round and tell the model to commit to a "
+        "tool call now (or give a brief final answer). Distinct from Stop "
+        "(which aborts the whole turn). Surfaces automatically when the "
+        "reasoning watchdog detects the model has been thinking past the "
+        "configured budget without committing.");
+    commit_btn_->Hide();
+    commit_btn_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
+        if (on_commit_now_) on_commit_now_();
     });
 
     undo_btn_ = new wxButton(this, wxID_ANY, "Undo",
@@ -1664,6 +1690,14 @@ void ChatPanel::set_compacted_count(int count, const wxString& archive_dir)
 void ChatPanel::set_round_progress(int round, int max_rounds)
 {
     if (footer_chips_->set_round_progress(round, max_rounds)) Layout();
+}
+
+void ChatPanel::set_commit_now_visible(bool visible)
+{
+    if (!commit_btn_) return;
+    if (commit_btn_->IsShown() == visible) return;  // idempotent / no Layout churn
+    commit_btn_->Show(visible);
+    Layout();
 }
 
 void ChatPanel::on_tool_pending(const wxString& call_id,

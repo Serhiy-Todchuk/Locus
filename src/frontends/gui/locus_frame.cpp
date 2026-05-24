@@ -276,6 +276,8 @@ LocusFrame::LocusFrame(LocusSession& session)
     Bind(EVT_AGENT_HISTORY_MSG_DELETED, &LocusFrame::on_agent_history_msg_deleted, this);
     Bind(EVT_AGENT_PRESET_CHANGED,      &LocusFrame::on_agent_preset_changed,      this);
     Bind(EVT_AGENT_ROUND_PROGRESS,      &LocusFrame::on_agent_round_progress,      this);
+    Bind(EVT_AGENT_WATCHDOG_TRIPPED,    &LocusFrame::on_agent_watchdog_tripped,    this);
+    Bind(EVT_AGENT_WATCHDOG_CLEARED,    &LocusFrame::on_agent_watchdog_cleared,    this);
 
     // Notebook events.
     if (notebook_) {
@@ -494,6 +496,10 @@ void LocusFrame::configure_chat_panel(ChatPanel* chat, LocusTab& tab)
             if (picked) agent_ptr->set_runtime_permission_preset(*picked);
             else        agent_ptr->clear_runtime_permission_preset();
         });
+    // S6.13 follow-up -- Commit-now click cancels the in-flight LLM stream
+    // and injects a "Stop reasoning, commit to a tool call now" steering
+    // message via the existing request_commit_now() core API.
+    chat->set_on_commit_now([agent_ptr]() { agent_ptr->request_commit_now(); });
 
     // S5.Z task 6 -- resync the compactions chip from disk so a loaded
     // session shows its historic count immediately (the live increment path
@@ -1377,6 +1383,10 @@ void LocusFrame::on_agent_turn_complete(wxThreadEvent& evt)
         ui->busy = false;
         refresh_tab_title(tab_id);
         ui->chat->on_turn_complete();
+        // S6.13 follow-up -- ensure Commit-now disappears at end of turn
+        // even if no explicit watchdog_cleared event was emitted (e.g. when
+        // a tool call landed naturally and the watchdog never tripped).
+        ui->chat->set_commit_now_visible(false);
     }
     notification_sounds::play(
         notification_sounds::Kind::turn_complete,
@@ -1443,6 +1453,25 @@ void LocusFrame::on_agent_round_progress(wxThreadEvent& evt)
     int max_rounds = static_cast<int>(evt.GetExtraLong());
     if (auto* ui = find_tab_ui(evt.GetId())) {
         if (ui->chat) ui->chat->set_round_progress(round, max_rounds);
+    }
+}
+
+void LocusFrame::on_agent_watchdog_tripped(wxThreadEvent& evt)
+{
+    if (auto* ui = find_tab_ui(evt.GetId())) {
+        if (ui->chat) ui->chat->set_commit_now_visible(true);
+    }
+    // Status bar hint so the user knows why the button just appeared. The
+    // trigger string is short ("chars" or "seconds"); value is the count
+    // that crossed the configured threshold.
+    SetStatusText(wxString::Format("Watchdog tripped (%s = %d)",
+                                    evt.GetString(), evt.GetInt()), 0);
+}
+
+void LocusFrame::on_agent_watchdog_cleared(wxThreadEvent& evt)
+{
+    if (auto* ui = find_tab_ui(evt.GetId())) {
+        if (ui->chat) ui->chat->set_commit_now_visible(false);
     }
 }
 

@@ -133,6 +133,17 @@ public:
     // renders just "round N".
     void set_round_progress(int round, int max_rounds);
 
+    // S6.13 follow-up -- show / hide the Commit-now button. Called from
+    // WxFrontend::on_reasoning_watchdog_tripped (show) and
+    // on_reasoning_watchdog_cleared / on_turn_complete (hide). Idempotent.
+    void set_commit_now_visible(bool visible);
+
+    // Set the callback invoked when the user clicks Commit-now. LocusFrame
+    // points this at the active tab's `ILocusCore::request_commit_now()`.
+    void set_on_commit_now(std::function<void()> cb) {
+        on_commit_now_ = std::move(cb);
+    }
+
     // Footer updates. `stream_ms_last_round` is the wall-clock duration of
     // the most recent LLM stream call; ChatPanel pairs it with completion
     // tokens to render a tok/s rate next to the bubble's token chip.
@@ -272,6 +283,10 @@ private:
     std::function<void(bool)>                on_auto_compact_toggle_;
     std::function<void()>                    on_stop_;
     std::function<void()>                    on_undo_;
+    // S6.13 follow-up -- invoked when the user clicks Commit-now. LocusFrame
+    // wires to the active tab's request_commit_now(). Default empty -> click
+    // is a silent no-op (the button only surfaces when wired anyway).
+    std::function<void()>                    on_commit_now_;
     std::function<void(AgentMode)>           on_mode_pick_;
     std::function<void(const std::string&)>  on_plan_decision_;
     std::function<bool(const std::string&, const std::string&)> on_slash_command_;
@@ -284,6 +299,11 @@ private:
     wxCheckBox*   auto_compact_cb_ = nullptr;
     wxButton*     stop_btn_      = nullptr;
     wxButton*     undo_btn_      = nullptr;
+    // S6.13 follow-up -- Commit-now button. Hidden by default; visibility
+    // toggled by set_commit_now_visible() in response to reasoning-watchdog
+    // events from the agent thread. Click invokes on_commit_now_ which
+    // LocusFrame wires to the active tab's `ILocusCore::request_commit_now()`.
+    wxButton*     commit_btn_    = nullptr;
     wxToggleButton* mode_chat_btn_    = nullptr;
     wxToggleButton* mode_plan_btn_    = nullptr;
     wxToggleButton* mode_execute_btn_ = nullptr;

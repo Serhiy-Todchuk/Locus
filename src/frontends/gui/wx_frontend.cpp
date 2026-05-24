@@ -31,6 +31,8 @@ wxDEFINE_EVENT(EVT_AGENT_HISTORY_MSG_ADDED,   wxThreadEvent);
 wxDEFINE_EVENT(EVT_AGENT_HISTORY_MSG_DELETED, wxThreadEvent);
 wxDEFINE_EVENT(EVT_AGENT_PRESET_CHANGED,      wxThreadEvent);
 wxDEFINE_EVENT(EVT_AGENT_ROUND_PROGRESS,      wxThreadEvent);
+wxDEFINE_EVENT(EVT_AGENT_WATCHDOG_TRIPPED,    wxThreadEvent);
+wxDEFINE_EVENT(EVT_AGENT_WATCHDOG_CLEARED,    wxThreadEvent);
 
 WxFrontend::WxFrontend(wxEvtHandler* handler, int tab_id)
     : handler_(handler), tab_id_(tab_id)
@@ -279,6 +281,21 @@ void WxFrontend::on_round_progress(int round, int max_rounds)
     auto* evt = new_evt(EVT_AGENT_ROUND_PROGRESS, tab_id_);
     evt->SetInt(round);
     evt->SetExtraLong(max_rounds);
+    wxQueueEvent(handler_, evt);
+}
+
+void WxFrontend::on_reasoning_watchdog_tripped(const std::string& trigger,
+                                                int value)
+{
+    auto* evt = new_evt(EVT_AGENT_WATCHDOG_TRIPPED, tab_id_);
+    evt->SetString(wxString::FromUTF8(trigger));
+    evt->SetInt(value);
+    wxQueueEvent(handler_, evt);
+}
+
+void WxFrontend::on_reasoning_watchdog_cleared()
+{
+    auto* evt = new_evt(EVT_AGENT_WATCHDOG_CLEARED, tab_id_);
     wxQueueEvent(handler_, evt);
 }
 
