@@ -127,6 +127,22 @@ bool Element::is_offscreen() const
     return b == TRUE;
 }
 
+std::string Element::value() const
+{
+    if (!raw_) return {};
+    IUIAutomationValuePattern* vp = nullptr;
+    if (FAILED(raw_->GetCurrentPatternAs(UIA_ValuePatternId, IID_PPV_ARGS(&vp))) || !vp)
+        return {};
+    BSTR b = nullptr;
+    std::string out;
+    if (SUCCEEDED(vp->get_CurrentValue(&b)) && b) {
+        out = bstr_to_utf8(b);
+        SysFreeString(b);
+    }
+    vp->Release();
+    return out;
+}
+
 // ---------------------------------------------------------------------------
 // UiaSession
 // ---------------------------------------------------------------------------

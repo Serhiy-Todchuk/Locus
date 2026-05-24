@@ -11,6 +11,8 @@
 #include <spdlog/spdlog.h>
 
 #include <chrono>
+#include <condition_variable>
+#include <thread>
 #include <utility>
 
 namespace locus {
@@ -340,7 +342,69 @@ void ToolDispatcher::dispatch(const ToolCall& call, const AppendFn& append_resul
     // S5.Z task 7 -- thread the agent's cancel flag through so long-running
     // tools (run_command, MCP) can abort in flight rather than waiting for
     // the natural timeout.
+    //
+    // S5.Z follow-up -- wall-clock guardrail. When WorkspaceConfig::tool_max_runtime_s > 0,
+    // arm a watchdog thread that sets the cancel_flag if the tool hasn't returned
+    // by then. Saves a session from the run_command ReadFile hang documented in
+    // tests/ui_automation/output/agentic_Tetris/findings.md when the tool's own
+    // timeout path is broken. Cleared via the watchdog_stop cv after execute returns.
+    int max_runtime_s = 0;
+    if (auto* ws = services_.workspace())
+        max_runtime_s = ws->config().tool_max_runtime_s;
+
+    std::atomic<bool> watchdog_fired{false};
+    std::mutex                wd_mu;
+    std::condition_variable   wd_cv;
+    bool                      wd_stop = false;
+    std::thread               watchdog;
+    if (max_runtime_s > 0) {
+        watchdog = std::thread([&, tool_name = call.tool_name]{
+            std::unique_lock<std::mutex> lk(wd_mu);
+            if (wd_cv.wait_for(lk, std::chrono::seconds(max_runtime_s),
+                               [&]{ return wd_stop; })) {
+                return;  // tool returned cleanly
+            }
+            // Timed out: trip the cancel_flag and shout in the log. The
+            // tool's own polling loop (process_tools.cpp etc.) sees the flag
+            // and unwinds; the result we synthesize below carries a clear
+            // "timeout" message so the LLM doesn't confuse this with a
+            // user cancel.
+            watchdog_fired.store(true, std::memory_order_release);
+            cancel_flag_.store(true, std::memory_order_release);
+            spdlog::warn(
+                "ToolDispatcher: tool '{}' wall-clock guardrail fired ({}s); "
+                "tripping cancel_flag",
+                tool_name, max_runtime_s);
+        });
+    }
+
     auto result = tool->execute(effective_call, services_, &cancel_flag_);
+
+    if (watchdog.joinable()) {
+        {
+            std::lock_guard<std::mutex> lk(wd_mu);
+            wd_stop = true;
+        }
+        wd_cv.notify_all();
+        watchdog.join();
+    }
+
+    // If the guardrail fired, rewrite the result so the LLM sees a clean
+    // timeout message rather than whatever partial output the tool returned
+    // after its cancel-flag unwound. Also clear cancel_flag_ -- it was set
+    // by our watchdog, not by the user; leaving it set would short-circuit
+    // the next tool dispatch too.
+    if (watchdog_fired.load(std::memory_order_acquire)) {
+        cancel_flag_.store(false, std::memory_order_release);
+        result.success = false;
+        result.content = "[tool wall-clock guardrail fired after " +
+                         std::to_string(max_runtime_s) +
+                         "s without return; the call was cancelled. "
+                         "If this is a legitimate long-running build, "
+                         "raise agent.tool_max_runtime_s in .locus/config.json "
+                         "or set it to 0 to disable the guardrail.]";
+    }
+
     auto exec_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                        std::chrono::steady_clock::now() - exec_t0).count();
 

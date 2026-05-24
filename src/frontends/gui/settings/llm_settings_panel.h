@@ -26,6 +26,7 @@ private:
     wxSpinCtrlDouble*  temperature_ctrl_ = nullptr;
     wxSpinCtrl*        context_ctrl_     = nullptr;
     wxSpinCtrl*        max_tokens_ctrl_  = nullptr;
+    wxSpinCtrl*        timeout_ctrl_     = nullptr;  // stream-stall watchdog, seconds
     wxChoice*          preset_ctrl_      = nullptr;
     wxStaticText*      preset_hint_      = nullptr;
     wxChoice*          tool_format_ctrl_ = nullptr;

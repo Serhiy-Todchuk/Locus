@@ -83,6 +83,41 @@ agentic-server: listening on 127.0.0.1:7878 workspace=C:\...\agentic_xyz
 and the matching port to `<output_root>/agentic_<wslabel>/agentic.port`.
 The output dir also gets `agentic.log` -- a timestamped op-by-op record.
 
+### What agentic mode turns on automatically
+
+The `--agentic` flag isn't just a TCP server. When the harness spawns
+`locus_gui.exe` via the `launch` op it also passes `--agentic-mute-noise`,
+which:
+
+- Demotes the `db` (SQL exec / prepare) and `fs` (file watcher, indexer,
+  list_directory) loggers from trace to info, so `.locus/locus.log` stops
+  drowning the LLM / tool / agent signal you actually want to read.
+- Drops the spdlog flush threshold to info, so `read_locus_log` between
+  rounds sees fresh content instead of buffered-for-warn output.
+- The first log line is always `Noise loggers muted: db, fs (trace -> info); flush_on=info`
+  so you can confirm the harness wired itself up.
+
+Independently, every agentic launch benefits from the post-Tetris-findings
+instrumentation that lives in the default logger:
+
+- `LLM stream: first chunk after X ms` / `inter-chunk gap X ms` (warn at >60s)
+  / end-of-stream summary (chunks, bytes, max gap) -- pinpoints "model slow"
+  vs "model stalled" without needing -verbose.
+- `run_command[pid=N]: spawned` / `child exited` / `reader joined after Y ms`,
+  plus a 30s heartbeat that fires only when the reader is still draining
+  after the child exited (the signature of the inherited-pipe leak from
+  findings 7+8).
+- `AgentCore: round N start (turn T)` info line bookends every LLM round.
+- `tool 'X' result: ... exec_ms=Y` for every tool dispatch.
+
+### Recovery knobs you may want to set in `.locus/config.json`
+
+| Key | Default | What it does |
+|---|---|---|
+| `llm.timeout_ms` | 1800000 (30 min) | Stream-stall watchdog. The default was bumped from 600000; raise further for very slow local models. Also editable via Settings -> LLM -> Stream stall timeout. |
+| `agent.tool_max_runtime_s` | 0 (off) | Defence-in-depth wall-clock guardrail on every `tool->execute` call. When >0, the dispatcher trips `cancel_flag_` after that many seconds and synthesizes a "tool timed out" result. Recommended starter value if you hit the `run_command` hang: 600. |
+| `agent.dump_on_run_command_hang` | false | When the reader-heartbeat catches a stuck `run_command` after child exit, shell out to `procdump.exe -ma <self_pid> .locus/dumps/<...>.dmp` so the agent-thread stack survives a force-kill. Requires Sysinternals `procdump.exe` on PATH. |
+
 **The server launches with NO GUI window open.** It is waiting for you to
 send a `launch` op. This lets you stage files (e.g. write a custom
 `.locus/config.json`) before the GUI starts.
@@ -217,8 +252,9 @@ Targeting reference (any op that takes a target):
 | `write_workspace_file` | `path`, `content` | Creates parent dirs. Use for staging test inputs (e.g. a custom `.locus/config.json`) before launch. |
 | `delete_workspace_file` | `path` | -- |
 | `read_locus_log` | optional `tail_lines` (default 200), `since_byte` | Returns `data: { lines, size, present }`. Pass `since_byte` to get only new output since the last call. |
-| `get_chat_status` | optional `timeout_ms` (default 1000) | Snapshots the chat-footer status: context label, plan/commit/compacted/preset chips, stop_btn visibility. Returns `data: { context_label, plan_chip, commit_chip, compacted_chip, preset_chip, stop_btn_visible }`. |
+| `get_chat_status` | optional `timeout_ms` (default 1000) | Snapshots the chat-footer status: context label, plan/commit/compacted/preset chips, action button. Returns `data: { context_label, plan_chip, commit_chip, compacted_chip, preset_chip, stop_btn_visible, action_label, agent_busy }`. `agent_busy` is the boolean callers usually want -- true when the action button reads "Stop" or "Queue", false when it reads "Submit". `stop_btn_visible` stays for back-compat but only reports presence, not state. |
 | `list_named_widgets` | optional `depth` (default 12) | Walks the UIA tree and returns every line whose `Name` or `AutomationId` mentions `locus.`. Use when you need to discover what's addressable in a state you haven't seen before. Returns `data: { lines, count }`. |
+| `wait_for_agent_idle` | optional `timeout_ms` (default 600000 = 10 min), `poll_ms` (default 1000), `quiet_ms` (default 4000), `stuck_after_quiet_ms` (default 300000 = 5 min) | Combines log-mtime stability + action-button state to detect end-of-turn. Returns `{status, action_label, log_quiet_ms, elapsed_ms}` where `status` is `"idle"` (button = Submit AND log quiet for `quiet_ms`), `"stuck"` (button = Stop/Queue AND log silent for `stuck_after_quiet_ms` -- agent thread hung), or `"timeout"`. **Prefer this over `wait_for_text_stable parent_aid=locus.chat.webview`** -- DOM stability lies during long reasoning / tool-call rounds where nothing visible streams. |
 
 ---
 
@@ -232,7 +268,7 @@ Targeting reference (any op that takes a target):
 3. `launch` -> `wait_for_window`. The GUI window appears.
 4. Drive the scenario. Typical loop:
     - `submit_chat` a prompt.
-    - `wait_for_text_stable parent_aid=locus.chat.webview walk_subtree=true stable_ms=3000 timeout_ms=180000` -- waits for the agent to finish streaming.
+    - `wait_for_agent_idle` -- waits for the chat action button to flip back to "Submit" AND the workspace log to go quiet (4s default). Returns `status: "stuck"` if the agent thread froze (busy button, silent log) so the caller can bail without burning the full timeout. Replaces the older `wait_for_text_stable` recipe -- DOM stability lies on long reasoning rounds.
     - `read_chat` to get the latest content.
     - `read_locus_log since_byte=<previous>` for the diagnostic trail.
     - `list_workspace` / `read_workspace_file` to verify what got written.
@@ -287,11 +323,14 @@ $prompt = "Create a small terminal-based Snake game in C++ as `snake.cpp`. " +
 $req = @{ op="submit_chat"; args=@{ text=$prompt } } | ConvertTo-Json -Compress
 locus-op $req
 
-# Wait for the agent to finish (chat text stops growing for 3s).
-$wait = @{ op="wait_for_text_stable";
-           args=@{ automation_id="locus.chat.webview";
-                   walk_subtree=$true;
-                   stable_ms=3000; timeout_ms=300000 } } | ConvertTo-Json -Compress
+# Wait for the agent to finish.
+# Reads the chat action-button state ("Submit" = idle) AND the .locus/locus.log
+# mtime; returns status "idle" / "stuck" / "timeout". Prefer this over the
+# older DOM-stability recipe -- a long reasoning round can hold the chat DOM
+# still for minutes while the agent is hard at work.
+$wait = @{ op="wait_for_agent_idle";
+           args=@{ timeout_ms=600000; quiet_ms=4000;
+                   stuck_after_quiet_ms=300000 } } | ConvertTo-Json -Compress
 locus-op $wait
 
 # Snapshot state
@@ -425,7 +464,8 @@ Do NOT delete the tmp workspace dir until you've copied what you need.
 | `locus-op` throws "No connection could be made" | Server isn't running, or port mismatch. Read `agentic.port` from the output dir. |
 | `launch` returns ok but `wait_for_window` times out | Another Locus instance holds the workspace lock. Check `.locus/locus.lock` -- only one process per workspace at a time. |
 | Chat input lookup by `locus.chat.input` fails | The chat input is a wxTE_RICH2 control whose native RichEdit `IAccessible` overrides our shim. `submit_chat` already handles the fallback; if you're doing a manual `type`, target `parent_aid="locus.chat.panel"` + `control_type="document"`. |
-| `wait_for_text_stable` returns success too early | The agent paused for a long tool call (e.g. a slow shell command) longer than `stable_ms`. Raise `stable_ms` to 8000+ for scenarios that include long-running tool calls. |
+| `wait_for_text_stable` returns success too early | The agent paused for a long tool call (e.g. a slow shell command) longer than `stable_ms`. Raise `stable_ms` to 8000+ for scenarios that include long-running tool calls, OR switch to `wait_for_agent_idle` which combines log-mtime + action-button state rather than DOM stability. |
+| `wait_for_agent_idle` returns `status: "stuck"` | The agent thread froze mid-tool (the canonical case is the `run_command` ReadFile hang documented in `output/agentic_Tetris/findings.md`). Check `.locus/locus.log` for the `run_command[pid=N]: reader still draining after ...` warning -- that line names the symptom. Setting `agent.tool_max_runtime_s` in `.locus/config.json` is the workaround until the root cause is fixed. |
 | `read_chat` truncates important content | Raise `max_chars`; the cap is just to keep payloads bounded. |
 | Tool approvals stop the agent | Either pre-seed `.locus/config.json` with `"auto"` for the relevant tool, or watch for `locus.tool_approval.dialog` and click `locus.tool_approval.approve_btn`. The default config seeded for `tmp` workspaces auto-approves write/edit/delete/run_command. |
 | The screen is busy with other windows | UIA captures the launched Locus window specifically; other windows on the desktop don't matter. But focus theft is real -- the safer pattern is to run on a session you control or in a secondary Windows session. |

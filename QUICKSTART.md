@@ -102,13 +102,16 @@ wasn't started. Open LM Studio -> load a model -> *Start Server*. The
 endpoint is `http://127.0.0.1:1234`.
 
 **LLM stream stalled after retry.** A large model on first prompt can take
-minutes just to prefill. Raise the watchdog in `<workspace>\.locus\config.json`:
+minutes just to prefill. Raise the watchdog in `<workspace>\.locus\config.json`
+(or via Settings -> LLM -> Stream stall timeout):
 
 ```json
 "llm": {
-  "timeout_ms": 1200000
+  "timeout_ms": 3600000
 }
 ```
+
+(Default is 1800000 = 30 min, raised in S5.Z from the old 600000.)
 
 **Semantic search disabled / model file not found.** You skipped step 3, or
 the `models\` folder isn't next to the exe. The exe walks up to 6 parent dirs

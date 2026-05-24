@@ -130,6 +130,7 @@ StepResult OpDispatcher::dispatch(const std::string& op, const Json& args)
     if (op == "read_locus_log")          return op_read_locus_log(args);
     if (op == "get_chat_status")         return op_get_chat_status(args);
     if (op == "list_named_widgets")      return op_list_named_widgets(args);
+    if (op == "wait_for_agent_idle")     return op_wait_for_agent_idle(args);
 
     return StepResult{ false, "unknown op '" + op + "'", {}, nullptr };
 }
@@ -905,9 +906,20 @@ StepResult OpDispatcher::op_get_chat_status(const Json& args)
     data["commit_chip"]    = safe_read("locus.chat.commit_chip");
     data["compacted_chip"] = safe_read("locus.chat.compacted_chip");
     data["preset_chip"]    = safe_read("locus.chat.preset_chip");
-    // Stop button visibility is a proxy for "agent is busy".
+    // The stop_btn is always present in the chat footer; its visible label
+    // is the signal -- "Submit" = idle, "Stop" / "Queue" = streaming/busy.
+    // We read it via UIA Value (LocusAccessible::GetValue surfaces the
+    // wxButton label there) rather than Name, because Name is the locator
+    // and stays bound to the automation_id. The legacy `stop_btn_visible`
+    // field stays for backward compatibility but only reports presence.
     Element stop = find_named("locus.chat.stop_btn", timeout);
     data["stop_btn_visible"] = stop.valid() && !stop.is_offscreen();
+    std::string action_label;
+    if (stop.valid()) action_label = stop.value();
+    data["action_label"] = action_label;
+    const bool agent_busy = !action_label.empty()
+                         && (action_label == "Stop" || action_label == "Queue");
+    data["agent_busy"]   = agent_busy;
     return { true, {}, "status snapshot", std::move(data) };
 }
 
@@ -933,6 +945,108 @@ StepResult OpDispatcher::op_list_named_widgets(const Json& args)
     data["count"] = (int)matched.size();
     return { true, {}, std::to_string(matched.size()) + " named widgets",
              std::move(data) };
+}
+
+// ---------------------------------------------------------------------------
+// wait_for_agent_idle (S5.Z follow-up)
+// ---------------------------------------------------------------------------
+//
+// Combines the three signals that matter for "is the agent done with this
+// turn": the chat-footer action label (Submit vs Stop/Queue), the workspace
+// log mtime, and an elapsed-time clock. Returns one of three states:
+//
+//   "idle"   -- action_label is Submit AND log mtime has been quiet for >=
+//               `quiet_ms`. This is the normal "round complete" signal.
+//   "stuck"  -- action_label stays Stop/Queue AND log mtime is quiet for
+//               longer than `stuck_after_quiet_ms` (default 5 min). The
+//               agent thread has frozen mid-tool -- the run_command ReADFile
+//               hang from findings 7+8 is the canonical example.
+//   "timeout"-- neither idle nor stuck condition triggered before timeout_ms.
+//
+// This replaces the AGENTIC_TESTING.md recipe's `wait_for_text_stable
+// parent_aid=locus.chat.webview` -- DOM stability is misleading for tool-call
+// heavy turns where reasoning streams without producing visible bubble text.
+StepResult OpDispatcher::op_wait_for_agent_idle(const Json& args)
+{
+    const int timeout_ms             = get_int(args, "timeout_ms", 600000);    // 10 min
+    const int poll_ms                = get_int(args, "poll_ms", 1000);
+    const int quiet_ms               = get_int(args, "quiet_ms", 4000);
+    const int stuck_after_quiet_ms   = get_int(args, "stuck_after_quiet_ms", 300000); // 5 min
+
+    fs::path log_path = fs::path(workspace_path_) / ".locus" / "locus.log";
+    auto t_start = std::chrono::steady_clock::now();
+
+    // Track log mtime. fs::file_time_type stays opaque -- we just compare it.
+    std::error_code ec;
+    auto last_mtime = fs::exists(log_path, ec)
+                          ? fs::last_write_time(log_path, ec)
+                          : fs::file_time_type{};
+    auto t_last_log_change = std::chrono::steady_clock::now();
+
+    auto read_action_label = [&]() -> std::string {
+        Element stop = find_named("locus.chat.stop_btn", 200);
+        return stop.valid() ? stop.value() : std::string{};
+    };
+    auto is_busy_label = [](const std::string& l) {
+        return l == "Stop" || l == "Queue";
+    };
+
+    while (true) {
+        // Refresh mtime
+        auto mt = fs::exists(log_path, ec)
+                      ? fs::last_write_time(log_path, ec)
+                      : fs::file_time_type{};
+        if (mt != last_mtime) {
+            last_mtime = mt;
+            t_last_log_change = std::chrono::steady_clock::now();
+        }
+        const long long log_quiet_ms =
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - t_last_log_change).count();
+
+        std::string label = read_action_label();
+        const bool busy = is_busy_label(label);
+
+        // Idle: not busy AND log has been quiet for quiet_ms
+        if (!busy && log_quiet_ms >= quiet_ms) {
+            Json data;
+            data["status"]       = "idle";
+            data["action_label"] = label;
+            data["log_quiet_ms"] = log_quiet_ms;
+            data["elapsed_ms"]   = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                       std::chrono::steady_clock::now() - t_start).count();
+            return { true, {}, "agent idle", std::move(data) };
+        }
+
+        // Stuck: busy but log silent past the stuck threshold. Strong signal
+        // that the agent thread is hung -- caller should treat as a failure.
+        if (busy && log_quiet_ms >= stuck_after_quiet_ms) {
+            Json data;
+            data["status"]       = "stuck";
+            data["action_label"] = label;
+            data["log_quiet_ms"] = log_quiet_ms;
+            data["elapsed_ms"]   = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                       std::chrono::steady_clock::now() - t_start).count();
+            return { false,
+                     "agent appears stuck (busy + log silent " +
+                     std::to_string(log_quiet_ms) + "ms)",
+                     "stuck", std::move(data) };
+        }
+
+        const long long elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                      std::chrono::steady_clock::now() - t_start).count();
+        if (elapsed >= timeout_ms) {
+            Json data;
+            data["status"]       = "timeout";
+            data["action_label"] = label;
+            data["log_quiet_ms"] = log_quiet_ms;
+            data["elapsed_ms"]   = elapsed;
+            return { false,
+                     "wait_for_agent_idle: " + std::to_string(elapsed) + " ms elapsed without idle/stuck",
+                     "timeout", std::move(data) };
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(poll_ms));
+    }
 }
 
 } // namespace locus::uia

@@ -77,6 +77,10 @@ WorkspaceConfig workspace_config_from_json(const json& j)
             cfg.tool_manifest_warn_tokens = ag["tool_manifest_warn_tokens"].get<int>();
         if (ag.contains("process_output_buffer_kb"))
             cfg.process_output_buffer_kb = ag["process_output_buffer_kb"].get<int>();
+        if (ag.contains("tool_max_runtime_s"))
+            cfg.tool_max_runtime_s = ag["tool_max_runtime_s"].get<int>();
+        if (ag.contains("dump_on_run_command_hang"))
+            cfg.dump_on_run_command_hang = ag["dump_on_run_command_hang"].get<bool>();
         if (ag.contains("notify_external_changes"))
             cfg.notify_external_changes = ag["notify_external_changes"].get<bool>();
         if (ag.contains("require_read_before_edit"))
@@ -279,6 +283,8 @@ json workspace_config_to_json(const WorkspaceConfig& cfg)
         {"agent", {
             {"tool_manifest_warn_tokens", cfg.tool_manifest_warn_tokens},
             {"process_output_buffer_kb",  cfg.process_output_buffer_kb},
+            {"tool_max_runtime_s",        cfg.tool_max_runtime_s},
+            {"dump_on_run_command_hang",  cfg.dump_on_run_command_hang},
             {"notify_external_changes",   cfg.notify_external_changes},
             {"require_read_before_edit",  cfg.require_read_before_edit}
         }},

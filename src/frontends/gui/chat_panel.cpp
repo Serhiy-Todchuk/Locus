@@ -1526,6 +1526,23 @@ void ChatPanel::on_error(const wxString& message)
     run_script(wxString::Format(
         "addMsg(%d, 'msg-error', %s);",
         message_id_, "'" + chat_js_escape(message) + "'"));
+
+    // S5.Z follow-up -- agentic Tetris testing exposed that on_error left
+    // the chat panel pinned in "streaming" state: the renderer's streaming_
+    // flag stayed true, the flush timer kept firing, and the Stop button
+    // never reverted to Submit. The agentic harness watches stop_btn_visible
+    // (and humans hit the same wall on a hung agent), so an error must
+    // unwind the per-turn state symmetrically with on_turn_complete.
+    //
+    // We don't reuse on_turn_complete because it also writes the per-message
+    // token chip and clears the live-token estimate as if the turn succeeded;
+    // both would be misleading on the error path.
+    if (flush_timer_.IsRunning()) flush_timer_.Stop();
+    if (renderer_ && renderer_->is_streaming())
+        renderer_->end_turn();
+    footer_chips_->clear_live_estimate();
+    refresh_action_btn();
+    if (undo_btn_) undo_btn_->Enable();
 }
 
 void ChatPanel::on_auto_commit(const wxString& short_sha,

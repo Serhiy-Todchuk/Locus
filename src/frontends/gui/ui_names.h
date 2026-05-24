@@ -93,6 +93,7 @@ inline constexpr const char* kSettingsLlmModel        = "locus.settings.llm.mode
 inline constexpr const char* kSettingsLlmTemperature  = "locus.settings.llm.temperature";
 inline constexpr const char* kSettingsLlmContextLimit = "locus.settings.llm.context_limit";
 inline constexpr const char* kSettingsLlmMaxTokens    = "locus.settings.llm.max_tokens";
+inline constexpr const char* kSettingsLlmTimeoutSeconds = "locus.settings.llm.timeout_seconds";
 inline constexpr const char* kSettingsLlmPresetChoice = "locus.settings.llm.preset_choice";
 inline constexpr const char* kSettingsLlmPresetApplyBtn = "locus.settings.llm.preset_apply_btn";
 inline constexpr const char* kSettingsLlmToolFormat   = "locus.settings.llm.tool_format";

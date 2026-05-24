@@ -179,6 +179,22 @@ ToolResult RunCommandTool::execute(const ToolCall& call, IWorkspaceServices& ws,
     // Heartbeat -- fires only if the reader is still running after the child
     // has exited, which is the symptom of the inherited-handle pipe-leak bug.
     // Quiet while everything is healthy.
+    //
+    // S5.Z follow-up -- when WorkspaceConfig::dump_on_run_command_hang is on
+    // AND the heartbeat catches a stuck reader past a child exit, the
+    // heartbeat shells out to `procdump.exe -ma <self_pid> <dump_path>` so we
+    // capture an in-vivo snapshot of the agent thread's ReadFile stack. One
+    // dump per RunCommandTool::execute call to keep disk usage bounded.
+    bool dump_on_hang = false;
+    fs::path dumps_dir;
+    if (auto* w = ws.workspace()) {
+        if (w->config().dump_on_run_command_hang) {
+            dump_on_hang = true;
+            dumps_dir = w->root() / ".locus" / "dumps";
+        }
+    }
+    std::atomic<bool> dump_taken{false};
+
     std::mutex hb_mu;
     std::condition_variable hb_cv;
     bool hb_stop = false;
@@ -192,12 +208,51 @@ ToolResult RunCommandTool::execute(const ToolCall& call, IWorkspaceServices& ws,
                 break;
             auto wall_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::steady_clock::now() - t_spawn).count();
+            const bool child_done = child_exited.load();
             spdlog::warn(
                 "run_command[pid={}]: reader still draining after {} ms "
                 "({} bytes, {} reads, child_exited={})",
                 child_pid, (long long)wall_ms,
                 reader_bytes_total.load(), reader_read_calls.load(),
-                child_exited.load() ? "true" : "false");
+                child_done ? "true" : "false");
+
+            if (dump_on_hang && child_done && !dump_taken.load()) {
+                // Compose the dump filename. Best-effort: if procdump isn't
+                // on PATH the CreateProcess call below silently fails -- the
+                // warn line above still pinpoints the bug. We avoid any
+                // synchronous wait because the agent thread is stuck and we
+                // don't want to add a third blocked thread.
+                std::error_code dec;
+                fs::create_directories(dumps_dir, dec);
+                auto now_s = std::chrono::duration_cast<std::chrono::seconds>(
+                    std::chrono::system_clock::now().time_since_epoch()).count();
+                fs::path dump_file = dumps_dir /
+                    ("run_command_hang_" + std::to_string(now_s) + "_pid" +
+                     std::to_string(GetCurrentProcessId()) + ".dmp");
+                std::string cmd_line = "procdump.exe -accepteula -ma " +
+                    std::to_string(GetCurrentProcessId()) + " \"" +
+                    dump_file.string() + "\"";
+                STARTUPINFOA dsi{}; dsi.cb = sizeof(dsi);
+                PROCESS_INFORMATION dpi{};
+                std::vector<char> cl(cmd_line.begin(), cmd_line.end()); cl.push_back('\0');
+                BOOL ok = CreateProcessA(nullptr, cl.data(), nullptr, nullptr,
+                                         FALSE, CREATE_NO_WINDOW, nullptr, nullptr,
+                                         &dsi, &dpi);
+                if (ok) {
+                    spdlog::warn(
+                        "run_command[pid={}]: procdump launched -> {}",
+                        child_pid, dump_file.string());
+                    CloseHandle(dpi.hThread);
+                    CloseHandle(dpi.hProcess);
+                    dump_taken.store(true);
+                } else {
+                    spdlog::warn(
+                        "run_command[pid={}]: procdump launch failed "
+                        "(err={}; install Sysinternals procdump on PATH to enable)",
+                        child_pid, GetLastError());
+                    dump_taken.store(true);  // don't retry this call
+                }
+            }
         }
     });
 

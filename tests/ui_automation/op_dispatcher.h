@@ -85,6 +85,7 @@ private:
     StepResult op_read_locus_log(const Json& args);
     StepResult op_get_chat_status(const Json& args);
     StepResult op_list_named_widgets(const Json& args);
+    StepResult op_wait_for_agent_idle(const Json& args);
 
     Element find_named(const std::string& automation_id, int timeout_ms);
     Element resolve_target(const Json& args, int timeout_ms);

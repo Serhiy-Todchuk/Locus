@@ -141,13 +141,27 @@ void OpenAiTransport::do_post(const std::string& body, const Callbacks& cbs, boo
                       " - is LM Studio running?";
         } else if (response.error.code == cpr::ErrorCode::OPERATION_TIMEDOUT) {
             if (!is_retry) {
-                spdlog::warn("LLM stream stalled (no data for {}s), retrying once...",
-                             stall_seconds);
+                spdlog::warn(
+                    "LLM stream stalled (no data for {}s, received {} chunks / {} bytes "
+                    "before stall), retrying once. If this keeps happening on a slow "
+                    "local model, raise llm.timeout_ms in .locus/config.json (Settings -> "
+                    "LLM -> Stream stall timeout).",
+                    stall_seconds, chunks, total_bytes);
                 do_post(body, cbs, true);
                 return;
             }
+            // Build a user-visible error that names the observed progress AND
+            // points at the fix. The chat-bubble surfaces this verbatim, so
+            // every word is part of the UX.
             err_msg = "LLM stream stalled after retry (no data for " +
-                      std::to_string(stall_seconds) + "s)";
+                      std::to_string(stall_seconds) + "s). " +
+                      "Received " + std::to_string(chunks) + " chunks / " +
+                      std::to_string(total_bytes) + " bytes during the retry attempt"
+                      + (first_chunk_seen
+                            ? "; the model started responding but then went silent."
+                            : "; the model never sent a first byte.") +
+                      " If this is a slow local model, raise llm.timeout_ms in "
+                      ".locus/config.json (Settings -> LLM -> Stream stall timeout).";
         } else {
             err_msg = "LLM request failed: " + response.error.message;
         }

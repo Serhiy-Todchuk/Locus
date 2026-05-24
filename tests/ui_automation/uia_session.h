@@ -51,6 +51,12 @@ public:
     std::string automation_id() const;
     int         control_type() const;  // UIA_*ControlTypeId values
     bool        is_offscreen() const;
+    // The UIA Value pattern's CurrentValue. For wx widgets that go through
+    // LocusAccessible::GetValue (currently only wxButton), this returns the
+    // visible label -- a stable way to read state without touching the
+    // accessible Name (which we already use as the locator). Returns "" when
+    // the element doesn't support the Value pattern.
+    std::string value() const;
 
 private:
     IUIAutomationElement* raw_ = nullptr;

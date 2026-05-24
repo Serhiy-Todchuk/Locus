@@ -35,15 +35,28 @@ class LocusAccessible : public wxAccessible {
 public:
     explicit LocusAccessible(wxWindow* win) : wxAccessible(win) {}
 
-    // The only override we need: report `m_window->GetName()` so the UIA
-    // Name property reflects the SetName() call. Everything else falls
-    // back to wxAccessible's defaults.
+    // Report `m_window->GetName()` so the UIA Name property reflects the
+    // SetName() call. Everything else falls back to wxAccessible's defaults.
     wxAccStatus GetName(int childId, wxString* name) override
     {
         if (!name || childId != 0 || !GetWindow()) return wxACC_FAIL;
         *name = GetWindow()->GetName();
         if (name->empty()) return wxACC_NOT_IMPLEMENTED;
         return wxACC_OK;
+    }
+
+    // For wxButton (and subclasses) also expose the visible label via UIA
+    // Value, so the agentic harness can read state without losing the
+    // accessible-name override that find_named relies on. Other widgets
+    // fall through (NOT_IMPLEMENTED) -- only buttons opt in.
+    wxAccStatus GetValue(int childId, wxString* value) override
+    {
+        if (!value || childId != 0 || !GetWindow()) return wxACC_FAIL;
+        if (auto* btn = wxDynamicCast(GetWindow(), wxButton)) {
+            *value = btn->GetLabelText();
+            return value->empty() ? wxACC_NOT_IMPLEMENTED : wxACC_OK;
+        }
+        return wxACC_NOT_IMPLEMENTED;
     }
 };
 

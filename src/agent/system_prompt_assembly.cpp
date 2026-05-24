@@ -89,7 +89,18 @@ SystemPromptAssembly SystemPromptAssembly::build(const std::string&       locus_
         "terminating on its own. "
         "It returns a `process_id` that survives across turns. Read its output with `read_process_output` "
         "(omit `since_offset` to get only what's new since your last read), terminate with `stop_process`, "
-        "and enumerate live processes with `list_processes`.\n\n";
+        "and enumerate live processes with `list_processes`.\n\n"
+        // S5.Z follow-up: small set of platform-specific pitfalls that
+        // burned rounds in agentic Tetris testing. Cheap (~60 tokens) and
+        // saves entire LLM round-trips when the model would otherwise
+        // produce code that fails to compile on first build. Add new
+        // entries here when a repeated failure pattern shows up.
+        "## Windows C++ / MSVC pitfalls\n"
+        "- Before `#include <windows.h>`, write `#define NOMINMAX` (otherwise `windows.h` defines "
+        "`min` and `max` as preprocessor macros that break `std::max(...)` / `std::min(...)`).\n"
+        "- Do not assign braced initializer lists to `std::array` members after construction. "
+        "Either brace-initialize them as `static const` at namespace scope, or fill them with "
+        "`memcpy` / a loop in a small `init()` function.\n\n";
 
     // -- Workspace metadata --------------------------------------------------
     std::ostringstream metadata_ss;

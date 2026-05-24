@@ -83,6 +83,13 @@ LlmSettingsPanel::LlmSettingsPanel(wxWindow* parent, const WorkspaceConfig& conf
         "default for unknown models. Pin to a specific format only when you "
         "know the model. None skips the tools array entirely (for "
         "non-tool-trained base models).";
+    static constexpr const char* kTipTimeoutSeconds =
+        "Stream-stall watchdog (seconds). Aborts the request if NO bytes flow "
+        "from the LLM for this long. Not a total-request cap -- long thinking "
+        "or generation is fine as long as bytes keep coming. Raise this if you "
+        "see 'LLM stream stalled after retry' on a slow local model; drop it "
+        "if you want a faster fail. Default 1800 s (30 min) covers a 27B+ "
+        "thinking model on a consumer GPU at low t/s.";
     static constexpr const char* kTipTopP =
         "Nucleus sampling (0.01 - 1). Samples from the smallest set of "
         "tokens whose cumulative probability is >= top_p. For example, "
@@ -170,6 +177,19 @@ LlmSettingsPanel::LlmSettingsPanel(wxWindow* parent, const WorkspaceConfig& conf
     max_tokens_ctrl_->SetName(ui_names::kSettingsLlmMaxTokens);
     gui::apply_locus_accessible_name(max_tokens_ctrl_);
     grid->Add(max_tokens_ctrl_, 0);
+
+    auto* lbl_timeout = new wxStaticText(this, wxID_ANY, "Stream stall timeout (s):");
+    lbl_timeout->SetToolTip(kTipTimeoutSeconds);
+    grid->Add(lbl_timeout, 0, wxALIGN_CENTER_VERTICAL);
+    timeout_ctrl_ = new wxSpinCtrl(this, wxID_ANY);
+    timeout_ctrl_->SetRange(10, 36000);   // 10 s .. 10 h
+    timeout_ctrl_->SetValue(config.llm_timeout_ms > 0
+                            ? config.llm_timeout_ms / 1000
+                            : 1800);
+    timeout_ctrl_->SetToolTip(kTipTimeoutSeconds);
+    timeout_ctrl_->SetName(ui_names::kSettingsLlmTimeoutSeconds);
+    gui::apply_locus_accessible_name(timeout_ctrl_);
+    grid->Add(timeout_ctrl_, 0);
 
     auto* lbl_tf = new wxStaticText(this, wxID_ANY, "Tool-call format:");
     lbl_tf->SetToolTip(kTipToolFormat);
@@ -356,6 +376,10 @@ void LlmSettingsPanel::load_from_config(const WorkspaceConfig& cfg)
     if (context_ctrl_)     context_ctrl_->SetValue(cfg.llm_context_limit);
     if (max_tokens_ctrl_)
         max_tokens_ctrl_->SetValue(cfg.llm_max_tokens > 0 ? cfg.llm_max_tokens : 8192);
+    if (timeout_ctrl_)
+        timeout_ctrl_->SetValue(cfg.llm_timeout_ms > 0
+                                ? cfg.llm_timeout_ms / 1000
+                                : 1800);
 
     if (tool_format_ctrl_) {
         ToolFormat tf = tool_format_from_string(cfg.llm_tool_format);
@@ -394,6 +418,8 @@ void LlmSettingsPanel::commit_to_config(WorkspaceConfig& cfg) const
     cfg.llm_temperature   = temperature_ctrl_->GetValue();
     cfg.llm_context_limit = context_ctrl_->GetValue();
     cfg.llm_max_tokens    = max_tokens_ctrl_->GetValue();
+    if (timeout_ctrl_)
+        cfg.llm_timeout_ms = timeout_ctrl_->GetValue() * 1000;
 
     if (tool_format_ctrl_) {
         switch (tool_format_ctrl_->GetSelection()) {

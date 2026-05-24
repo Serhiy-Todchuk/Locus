@@ -138,6 +138,27 @@ struct WorkspaceConfig {
     // thread, and is still cheap (a few processes × 256 KB is negligible).
     int process_output_buffer_kb = 256;
 
+    // S5.Z follow-up -- per-tool wall-clock guardrail. When > 0, the
+    // ToolDispatcher arms a watchdog timer for each tool->execute() call;
+    // if the tool hasn't returned by then, the cancel_flag is set and a
+    // synthesized "tool timed out" result is fed back to the LLM. This is
+    // defence-in-depth for the run_command ReadFile hang documented in
+    // tests/ui_automation/output/agentic_Tetris/findings.md (findings 7+8) --
+    // a buggy tool that pins the agent thread no longer hangs the session.
+    // Default 0 = disabled (existing behaviour). Recommended starting value
+    // for users hitting the bug: 600 (10 min, well over any normal build).
+    int tool_max_runtime_s = 0;
+
+    // S5.Z follow-up -- when the run_command reader-thread heartbeat fires
+    // (reader still draining 30s+ after child exit, which is the inherited-
+    // pipe leak symptom), and `procdump.exe` is on PATH, write a full-memory
+    // minidump of the current locus_gui process to `.locus/dumps/`. One dump
+    // per workspace-session to avoid filling the disk on a chronically stuck
+    // workspace; the agent thread isn't blocked by the dump (procdump.exe is
+    // a separate process). Opt-in because procdump isn't a default Windows
+    // install and the dump can be 1-2 GB.
+    bool dump_on_run_command_hang = false;
+
     // S4.T -- between-turn external file-change awareness. When true, AgentCore
     // snapshots indexed file mtimes at end of each assistant turn; on the next
     // user turn it computes the diff (excluding files the agent itself touched
