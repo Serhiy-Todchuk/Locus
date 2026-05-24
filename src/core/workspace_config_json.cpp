@@ -81,6 +81,8 @@ WorkspaceConfig workspace_config_from_json(const json& j)
             cfg.tool_max_runtime_s = ag["tool_max_runtime_s"].get<int>();
         if (ag.contains("max_rounds_per_message"))
             cfg.max_rounds_per_message = ag["max_rounds_per_message"].get<int>();
+        if (ag.contains("run_command_truncate_lines"))
+            cfg.run_command_truncate_lines = ag["run_command_truncate_lines"].get<int>();
         if (ag.contains("dump_on_run_command_hang"))
             cfg.dump_on_run_command_hang = ag["dump_on_run_command_hang"].get<bool>();
         if (ag.contains("notify_external_changes"))
@@ -287,6 +289,7 @@ json workspace_config_to_json(const WorkspaceConfig& cfg)
             {"process_output_buffer_kb",  cfg.process_output_buffer_kb},
             {"tool_max_runtime_s",        cfg.tool_max_runtime_s},
             {"max_rounds_per_message",    cfg.max_rounds_per_message},
+            {"run_command_truncate_lines", cfg.run_command_truncate_lines},
             {"dump_on_run_command_hang",  cfg.dump_on_run_command_hang},
             {"notify_external_changes",   cfg.notify_external_changes},
             {"require_read_before_edit",  cfg.require_read_before_edit}

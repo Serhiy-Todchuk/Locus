@@ -4,6 +4,7 @@
 #include "../../../tools/permission_presets.h"
 
 #include <wx/scrolwin.h>
+#include <wx/spinctrl.h>
 #include <wx/wx.h>
 
 #include <string>
@@ -51,6 +52,7 @@ private:
     std::unordered_map<std::string, ToolApprovalPolicy> wildcard_overrides_;
 
     wxCheckBox*               require_read_before_edit_ctrl_ = nullptr;
+    wxSpinCtrl*               truncate_lines_ctrl_           = nullptr;
     std::vector<std::string>  tool_names_;
     std::vector<wxChoice*>    approval_choices_;
     std::vector<int>          approval_prev_sel_;

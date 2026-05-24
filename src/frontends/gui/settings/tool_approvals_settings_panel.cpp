@@ -103,6 +103,32 @@ ToolApprovalsSettingsPanel::ToolApprovalsSettingsPanel(wxWindow* parent,
         "old_string matches without confirming the file content first.");
     outer->Add(require_read_before_edit_ctrl_, 0, wxLEFT | wxRIGHT | wxTOP, 8);
 
+    // run_command / read_process_output default head+tail truncation. The
+    // per-call output_filter_lines arg overrides this; 0 disables the
+    // smart-truncate default entirely (raw output flows back, capped only
+    // by the 1 MB hard backstop).
+    {
+        auto* row = new wxBoxSizer(wxHORIZONTAL);
+        row->Add(new wxStaticText(this, wxID_ANY,
+                                  "run_command output: keep first + last N lines:"),
+                 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+        truncate_lines_ctrl_ = new wxSpinCtrl(this, wxID_ANY);
+        truncate_lines_ctrl_->SetRange(0, 5000);
+        truncate_lines_ctrl_->SetValue(config.run_command_truncate_lines);
+        truncate_lines_ctrl_->SetName(ui_names::kSettingsApprovalsTruncateLines);
+        gui::apply_locus_accessible_name(truncate_lines_ctrl_);
+        truncate_lines_ctrl_->SetToolTip(
+            "Default head + tail line count when run_command / "
+            "read_process_output return output to the LLM and the call did "
+            "not pass an explicit output_filter_lines. The middle is replaced "
+            "with a '[... K lines elided ...]' marker. The full pre-filter "
+            "output always goes to .locus/locus.log at trace level (-verbose) "
+            "so you can recover it. Set to 0 to disable smart-truncate (the 1 "
+            "MB raw cap still applies as a safety net).");
+        row->Add(truncate_lines_ctrl_, 0, wxALIGN_CENTER_VERTICAL);
+        outer->Add(row, 0, wxLEFT | wxRIGHT | wxTOP, 8);
+    }
+
     auto* scroll = new wxScrolledWindow(this, wxID_ANY,
         wxDefaultPosition, wxDefaultSize,
         wxVSCROLL | wxBORDER_SIMPLE);
@@ -319,6 +345,8 @@ void ToolApprovalsSettingsPanel::load_from_config(const WorkspaceConfig& cfg)
 {
     if (require_read_before_edit_ctrl_)
         require_read_before_edit_ctrl_->SetValue(cfg.require_read_before_edit);
+    if (truncate_lines_ctrl_)
+        truncate_lines_ctrl_->SetValue(cfg.run_command_truncate_lines);
 
     // Refresh wildcard overrides from the reloaded config.
     wildcard_overrides_.clear();
@@ -382,6 +410,8 @@ void ToolApprovalsSettingsPanel::commit_to_config(WorkspaceConfig& cfg) const
 
     if (require_read_before_edit_ctrl_)
         cfg.require_read_before_edit = require_read_before_edit_ctrl_->IsChecked();
+    if (truncate_lines_ctrl_)
+        cfg.run_command_truncate_lines = truncate_lines_ctrl_->GetValue();
 }
 
 } // namespace locus

@@ -104,6 +104,8 @@ inline constexpr const char* kSettingsLlmToolFormat   = "locus.settings.llm.tool
 // Settings -> Tool Approvals tab.
 inline constexpr const char* kSettingsApprovalsList         = "locus.settings.approvals.list";
 inline constexpr const char* kSettingsApprovalsPresetChoice = "locus.settings.approvals.preset_choice";
+inline constexpr const char* kSettingsApprovalsTruncateLines =
+    "locus.settings.approvals.run_command_truncate_lines";
 // Per-tool dropdowns are named "locus.settings.approvals.choice.<tool_name>"
 // composed at construction; not a constant here.
 

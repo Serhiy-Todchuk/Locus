@@ -1,4 +1,5 @@
 #include "tools/process_tools.h"
+#include "tools/process_output_filter.h"
 #include "tools/process_sink.h"
 #include "tools/shared.h"
 
@@ -346,11 +347,37 @@ ToolResult RunCommandTool::execute(const ToolCall& call, IWorkspaceServices& ws,
     CloseHandle(read_pipe);
     CloseHandle(job);
 
-    constexpr size_t max_output = 8000;
+    // Backstop hard cap on raw bytes before filtering. Was 8 KB, which
+    // amputated useful build-log content before the filter could see it;
+    // bumped to 1 MB so a typical "cmake --build" or full test suite still
+    // fits in raw form and the output_filter / smart-truncate decides what
+    // to return. Pathological multi-MB binary dumps still get clipped here
+    // so the filter doesn't spend time chewing through them.
+    constexpr size_t max_output = 1 * 1024 * 1024;
     if (output.size() > max_output) {
         output.resize(max_output);
-        output += "\n... (output truncated)";
+        output += "\n[... raw output exceeded 1 MB; remainder discarded ...]";
     }
+
+    // Full raw body to the trace log so the user can recover whatever the
+    // filter elided. Cheap because trace is gated by -verbose.
+    spdlog::trace("run_command: exit={} output={} bytes{}\n--- raw ---\n{}\n--- end raw ---",
+                  exit_code, output.size(),
+                  timed_out ? " (timed out)" : "", output);
+
+    // Parse the output_filter_* args and apply. On a parse error we surface
+    // a clean message instead of running with default truncation, since the
+    // LLM probably meant something specific.
+    OutputFilterSpec spec;
+    std::string parse_err;
+    if (!parse_output_filter_args(call.args, spec, parse_err)) {
+        if (sink) sink->emit_sync_exited(static_cast<int>(exit_code), timed_out);
+        return error_result("Error: " + parse_err);
+    }
+    int default_lines = 50;
+    if (auto* wsp = ws.workspace())
+        default_lines = wsp->config().run_command_truncate_lines;
+    std::string filtered = apply_output_filter(output, spec, default_lines);
 
     std::ostringstream content;
     if (cancelled) {
@@ -359,12 +386,9 @@ ToolResult RunCommandTool::execute(const ToolCall& call, IWorkspaceServices& ws,
         content << "[TIMEOUT after " << timeout_ms << "ms]\n";
     }
     content << "[exit code: " << exit_code << "]\n";
-    content << output;
+    content << filtered;
 
     std::string result = content.str();
-
-    spdlog::trace("run_command: exit={} output={} bytes{}", exit_code,
-                  output.size(), timed_out ? " (timed out)" : "");
 
     if (sink) sink->emit_sync_exited(static_cast<int>(exit_code), timed_out);
 
@@ -485,6 +509,22 @@ ToolResult ReadProcessOutputTool::execute(const ToolCall& call, IWorkspaceServic
     auto r = reg->read_output(id, since);
     if (!r) return error_result("Error: unknown process_id " + std::to_string(id));
 
+    // Apply the same output_filter family run_command supports. Defaults
+    // match the workspace knob; explicit args win. Trace-log the full
+    // pre-filter window so the user can recover it from .locus/locus.log.
+    OutputFilterSpec spec;
+    std::string parse_err;
+    if (!parse_output_filter_args(call.args, spec, parse_err))
+        return error_result("Error: " + parse_err);
+    int default_lines = 50;
+    if (auto* wsp = ws.workspace())
+        default_lines = wsp->config().run_command_truncate_lines;
+    spdlog::trace("read_process_output: id={} bytes={} next_offset={} dropped={}\n"
+                  "--- raw ---\n{}\n--- end raw ---",
+                  id, r->data.size(), r->next_offset, r->dropped_before_window,
+                  r->data);
+    std::string filtered_data = apply_output_filter(r->data, spec, default_lines);
+
     std::ostringstream display;
     display << "[process " << id << " | " << status_str(r->status);
     if (r->status != BackgroundProcess::Status::running)
@@ -492,14 +532,14 @@ ToolResult ReadProcessOutputTool::execute(const ToolCall& call, IWorkspaceServic
     display << " | next_offset=" << r->next_offset;
     if (r->dropped_before_window > 0)
         display << " | dropped=" << r->dropped_before_window << "B";
-    display << "]\n" << r->data;
+    display << "]\n" << filtered_data;
 
     nlohmann::json j = {
         {"process_id",            id},
         {"status",                status_str(r->status)},
         {"next_offset",           r->next_offset},
         {"dropped_before_window", r->dropped_before_window},
-        {"data",                  r->data},
+        {"data",                  filtered_data},
     };
     if (r->status != BackgroundProcess::Status::running)
         j["exit_code"] = r->exit_code;

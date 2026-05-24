@@ -13,11 +13,40 @@ public:
                "terminate -- builds, tests, scripts, queries. The harness applies a "
                "30-minute wall-clock; the user can hit Stop at any time. "
                "For dev servers, watchers, and anything that streams output without "
-               "terminating, use `run_command_bg` instead.";
+               "terminating, use `run_command_bg` instead.\n\n"
+               "By default the returned output is smart-truncated to the first 50 + "
+               "last 50 lines with the middle elided (configurable per workspace via "
+               "`agent.run_command_truncate_lines`). The full raw output is always "
+               "written to `.locus/locus.log` at trace level (-verbose). Override "
+               "with `output_filter_mode`: `head` / `tail` (kept lines from the "
+               "start / end), `head_tail` (default; per-side line count), `regex` / "
+               "`substring` (grep-style hits with optional context). For a tight "
+               "build-error pass: "
+               "`output_filter_mode=\"regex\"`, "
+               "`output_filter_pattern=\"error|warning|undefined reference\"`, "
+               "`output_filter_lines=20`, `output_filter_context=2`.";
     }
     std::vector<ToolParam> params() const override {
         return {
             {"command", "string", "The command to execute", true},
+            {"output_filter_mode",    "string",
+             "How to trim the returned stdout/stderr. One of: `head_tail` "
+             "(default; first + last N lines), `head`, `tail`, `regex`, "
+             "`substring`. Leave unset for the default smart-truncate.",
+             false},
+            {"output_filter_pattern", "string",
+             "Required for `regex` / `substring` mode. ECMAScript regex or "
+             "literal needle to keep matching lines from the output.",
+             false},
+            {"output_filter_lines",   "integer",
+             "Per-side line count for head_tail; total kept lines for "
+             "head/tail; max matches for regex/substring. 0 = workspace "
+             "default (see `agent.run_command_truncate_lines`).",
+             false},
+            {"output_filter_context", "integer",
+             "Lines of -B/-A context per match for regex/substring "
+             "(0..10, default 0).",
+             false},
         };
     }
     std::string preview(const ToolCall& call) const override;
@@ -55,13 +84,31 @@ public:
                "everything new since the last read of this process_id; pass `since_offset=0` "
                "to read from the beginning. Returns the data, the next offset to pass back, "
                "the process status (running/exited/killed), and the exit code if it has "
-               "exited. Output is ring-buffered -- extremely chatty processes may drop bytes.";
+               "exited. Output is ring-buffered -- extremely chatty processes may drop bytes.\n\n"
+               "Accepts the same `output_filter_mode` / `_pattern` / `_lines` / `_context` "
+               "params as `run_command` (see that tool's description). Default is smart "
+               "head_tail truncation of the read window; the full pre-filter window is "
+               "always written to `.locus/locus.log` at trace level.";
     }
     std::vector<ToolParam> params() const override {
         return {
             {"process_id",   "integer", "Background process id from run_command_bg",   true},
             {"since_offset", "integer",
              "Byte offset to read from. Omit to continue from the last read.",          false},
+            {"output_filter_mode",    "string",
+             "How to trim the returned read window. Same modes as `run_command`: "
+             "`head_tail` (default), `head`, `tail`, `regex`, `substring`.",
+             false},
+            {"output_filter_pattern", "string",
+             "Required for `regex` / `substring` mode.",
+             false},
+            {"output_filter_lines",   "integer",
+             "Per-side line count for head_tail; total kept lines for "
+             "head/tail; max matches for regex/substring. 0 = workspace default.",
+             false},
+            {"output_filter_context", "integer",
+             "Lines of -B/-A context per match for regex/substring (0..10).",
+             false},
         };
     }
     ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::auto_approve; }

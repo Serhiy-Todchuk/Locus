@@ -362,6 +362,7 @@ add_library(locus_core STATIC
     src/tools/search_tools.cpp
     src/tools/index_tools.cpp
     src/tools/process_tools.cpp
+    src/tools/process_output_filter.cpp
     src/tools/interactive_tools.cpp
     src/tools/plan_tools.cpp
     src/tools/memory_tools.cpp

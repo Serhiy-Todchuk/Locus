@@ -162,6 +162,16 @@ struct WorkspaceConfig {
     // realistic "read 200 files, edit 50" workloads don't trip it.
     int max_rounds_per_message = 500;
 
+    // Number of head + tail lines kept by default when run_command /
+    // read_process_output return output to the LLM without an explicit
+    // output_filter_mode. The middle is replaced with a "[... N lines
+    // elided ...]" marker that names the trace-log path for recovery.
+    // Lowered keeps context tight on chatty build logs; raised approximates
+    // "return everything." Set to 0 to disable the smart-truncate default
+    // (the LLM still receives the existing 8 KB hard cap on raw run_command
+    // output as a backstop). Per-call output_filter_lines overrides this.
+    int run_command_truncate_lines = 50;
+
     // S5.Z follow-up -- when the run_command reader-thread heartbeat fires
     // (reader still draining 30s+ after child exit, which is the inherited-
     // pipe leak symptom), and `procdump.exe` is on PATH, write a full-memory
