@@ -4,9 +4,9 @@
 - Voice chat input
 - Add image attachment for LLM prompt
 - FastDebug
-- when I queue one more prompt in the middle while Locus works on something - it will be inserted only when Locus is done, but when I do the same in Claude Code - it inserts enqued prompt somewhere in between tool calls I guess so the agent knows what user said in the middle of the run.
+- when I queue one more prompt in the middle while Locus works on something - it will be inserted only when Locus is done, but when I do the same in Claude Code - it inserts enqued prompt somewhere in between tool calls (I guess) so the agent knows what user said in the middle of the run. How do we do that in Locus?
 - Chat re-design - more strict shape of messages in chat - don't use round corners, smaller margins for better utilization of screen space; radius of corner rounding was indicating from which side the message came (from LLM or from user), use just line going from bubble to corresponding side of screen instead. U can apply some creativity here as long as U keep screen space utilization efficient.
-- Fix "Control surface" section in About window, and in docs (README.md). Remove approval policies as something special. Put there flexibility/efficiency/transparency/control as benefits.
+- Fix "Control surface" section in About window: there approval policies mentioned as something special, but it's common thing for all harnesses. Put there something about flexibility/efficiency/transparency/control as benefits, but keep overall About text consistent. Same fixes in docs (README.md?, other?).
 - Is it good that we are not reading XLSX, DOCX and PDFs with read_file tool (or any other)? So the agent can search for something, but cannot read full info?
 - Compaction seems doesn’t work as expected - it frees up too little part of context, but I can see wrong numbers - think out integration or agentic test for it involving a lot of communication with LLM, so we get near real scenario tested
 - Do we hide LLM's "thinking" from context? "Check the box for "Show Debug Thoughts" (or Expose Reasoning Tokens over API). This ensures that the hidden chain-of-thought tokens are cleanly passed to your agent so your agent can read the model's internal logic before executing code edits. ". Shall we add a setting for it?

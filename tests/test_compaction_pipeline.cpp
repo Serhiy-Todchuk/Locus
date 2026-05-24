@@ -575,6 +575,143 @@ TEST_CASE("[s5.f][layer5] mechanical drop spares preserved messages",
 }
 
 // ---------------------------------------------------------------------------
+// Plan-pin: propose_plan / mark_step_done tool-call assistants preserved
+// regardless of size. The plan structure is the agent's working memory
+// across many turns; dropping it orphans the LLM's view of a plan that
+// AgentCore still tracks server-side. See [Code Map: compaction_pipeline].
+// ---------------------------------------------------------------------------
+
+TEST_CASE("[s5.f][heuristics][plan-pin] large propose_plan survives Layer 5",
+          "[s5.f][heuristics][plan-pin]")
+{
+    // Plan args big enough to exceed the short-tool-calls threshold (500 tok).
+    // ~4000 chars in the arguments blob plus the message framing puts us
+    // safely above 500 estimated tokens (~4 chars/tok).
+    std::string big_args = R"({"steps":[)";
+    for (int i = 0; i < 40; ++i) {
+        if (i) big_args += ',';
+        big_args += R"({"description":")" + std::string(80, 'x')
+                    + std::to_string(i) + R"("})";
+    }
+    big_args += "]}";
+
+    ConversationHistory h;
+    h.add(make_msg(MessageRole::system, "sys"));
+    h.add(make_msg(MessageRole::user, "first user msg"));
+    // Plan proposal turn -- propose_plan assistant + result. This is the
+    // turn group at indices [2, 3] and should be PRESERVED.
+    h.add(make_tool_call("call_plan", "propose_plan", big_args));
+    h.add(make_tool_result("call_plan", R"({"ok":true})"));
+    // Some intermediate user/assistant churn the cascade should be free to
+    // drop. Body sized large to overshadow the keep_recent_turns sentry.
+    for (int i = 0; i < 4; ++i) {
+        h.add(make_msg(MessageRole::user, std::string(4000, 'q')));
+        h.add(make_msg(MessageRole::assistant, std::string(4000, 'a')));
+    }
+    // Recent tail (kept by keep_recent_turns regardless).
+    h.add(make_msg(MessageRole::user, "tail"));
+    h.add(make_msg(MessageRole::assistant, std::string(500, 'c')));
+
+    CompactionLayerSelection sel;
+    sel.drop_redundant_tool_results = false;
+    sel.strip_large_tool_bodies     = false;
+    sel.drop_old_reasoning          = false;
+    sel.drop_oldest_turns           = true;
+    sel.llm_summary                 = false;
+    sel.keep_recent_turns           = 1;       // recent tail stays
+    sel.preserve_short_user_msgs_max_tokens  = 0;
+    sel.preserve_short_tool_calls_max_tokens = 500;  // default
+
+    // is_preserved direct check -- the propose_plan assistant at index 2
+    // must come back true even though it's larger than the short-msg
+    // threshold.
+    {
+        const auto& msgs = h.messages();
+        REQUIRE(CompactionPipeline::is_preserved(msgs, 2, sel,
+                                                  /*first_user_idx=*/1,
+                                                  /*keep_recent_from=*/msgs.size()));
+    }
+
+    // drop_candidates must NOT list the plan-proposal turn group as a
+    // candidate. The plan-proposal user message lives at index 1 (it's the
+    // first user message); the propose_plan assistant + result sit in the
+    // [1..4) span. Plan-pin makes the span not-droppable.
+    auto cands = CompactionPipeline::drop_candidates(h.messages(), sel);
+    for (const auto& s : cands) {
+        // The plan turn-group begins right after the first user message at
+        // index 1. With the plan-pin heuristic active the cascade must not
+        // mark anything starting at 1 as droppable (first_user already
+        // guards that), and the surrounding turn must still preserve the
+        // propose_plan assistant at idx 2.
+        REQUIRE(s.begin > 2);  // never starts inside the plan turn group
+    }
+
+    int before = h.estimate_tokens();
+    LLMConfig lc;
+    CompactionPipeline::run(h, sel, /*target=*/1, nullptr, lc);
+    REQUIRE(h.estimate_tokens() < before);  // SOMETHING dropped
+
+    // Plan-proposal assistant + its result must both still be present after
+    // the cascade.
+    bool kept_plan_call   = false;
+    bool kept_plan_result = false;
+    for (const auto& m : h.messages()) {
+        if (m.role == MessageRole::assistant && !m.tool_calls.empty()) {
+            for (const auto& tc : m.tool_calls)
+                if (tc.name == "propose_plan") kept_plan_call = true;
+        }
+        if (m.role == MessageRole::tool && m.tool_call_id == "call_plan")
+            kept_plan_result = true;
+    }
+    REQUIRE(kept_plan_call);
+    REQUIRE(kept_plan_result);
+}
+
+TEST_CASE("[s5.f][heuristics][plan-pin] large mark_step_done survives Layer 5",
+          "[s5.f][heuristics][plan-pin]")
+{
+    // mark_step_done is normally small, but a model might emit a verbose
+    // `notes` field. The heuristic must not depend on size.
+    std::string big_args = R"({"step":3,"status":"done","notes":")"
+                           + std::string(3000, 'n') + R"("})";
+
+    ConversationHistory h;
+    h.add(make_msg(MessageRole::system, "sys"));
+    h.add(make_msg(MessageRole::user, "first"));
+    h.add(make_tool_call("call_mark", "mark_step_done", big_args));
+    h.add(make_tool_result("call_mark", R"({"ok":true})"));
+    // Pad with droppable big turns.
+    for (int i = 0; i < 4; ++i) {
+        h.add(make_msg(MessageRole::user, std::string(4000, 'q')));
+        h.add(make_msg(MessageRole::assistant, std::string(4000, 'a')));
+    }
+    h.add(make_msg(MessageRole::user, "tail"));
+    h.add(make_msg(MessageRole::assistant, std::string(500, 'c')));
+
+    CompactionLayerSelection sel;
+    sel.drop_oldest_turns          = true;
+    sel.llm_summary                = false;
+    sel.drop_redundant_tool_results = false;
+    sel.strip_large_tool_bodies     = false;
+    sel.drop_old_reasoning          = false;
+    sel.keep_recent_turns          = 1;
+    sel.preserve_short_user_msgs_max_tokens  = 0;
+    sel.preserve_short_tool_calls_max_tokens = 500;
+
+    LLMConfig lc;
+    CompactionPipeline::run(h, sel, /*target=*/1, nullptr, lc);
+
+    bool kept = false;
+    for (const auto& m : h.messages()) {
+        if (m.role == MessageRole::assistant && !m.tool_calls.empty()) {
+            for (const auto& tc : m.tool_calls)
+                if (tc.name == "mark_step_done") kept = true;
+        }
+    }
+    REQUIRE(kept);
+}
+
+// ---------------------------------------------------------------------------
 // HistoryArchive round-trip + GC
 // ---------------------------------------------------------------------------
 

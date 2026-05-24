@@ -37,6 +37,16 @@ WsWithTools make_ws(const fs::path& root)
 {
     WsWithTools out;
     out.ws    = std::make_unique<locus::Workspace>(root);
+    // Workspace ctor seeds from the developer's ~/.locus/config.json (the
+    // global template), which may flip a capability off and break tests
+    // that assume documented defaults. Snap back to the documented values
+    // here -- each test still flips individual flags as needed afterwards.
+    auto& caps = out.ws->config().capabilities;
+    caps.background_processes = false;
+    caps.semantic_search      = true;
+    caps.code_aware_search    = true;
+    caps.memory_bank          = true;
+    caps.web_retrieval        = false;
     out.tools = std::make_unique<locus::ToolRegistry>();
     locus::register_builtin_tools(*out.tools);
     return out;
