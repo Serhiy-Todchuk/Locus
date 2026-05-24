@@ -10,23 +10,8 @@
 - Do we hide LLM's "thinking" from context? "Check the box for "Show Debug Thoughts" (or Expose Reasoning Tokens over API). This ensures that the hidden chain-of-thought tokens are cleanly passed to your agent so your agent can read the model's internal logic before executing code edits. ". Shall we add a setting for it?
 - Compaction seems doesn’t work as expected - it frees up too little part of context, but I can see wrong numbers - think out integration or agentic test for it involving a lot of communication with LLM, so we get near real scenario tested
 
-Based on what I observed driving Locus with Qwen 27B, the biggest pain point is context-budget pressure: with a 16k context, the system prompt (3577 t) + tool manifest (2854 t) = 6.4k consumed before the user message even lands. That's 39% gone to fixed overhead. Plus reasoning-heavy models like Qwen burn through the remainder fast. Here are the ideas I'd rank highest:
-
-1. Lazy tool manifest (highest impact). Currently the model sees all 12-18 tool schemas every turn. Replace with a 2-tier model: every turn sees only 1-line summaries of all tools (~400 t total), plus a describe_tool(name) meta-tool. The model fetches the full schema only when about to call. Mirrors how Claude Code's own ToolSearch works. Estimated saving: 2000+ tokens per turn, which on 16k context is huge.
-
-2. Trim the system prompt aggressively. 3577 tokens is steep. Probably half of it is "format guidance" / "how to think about tools" that a fine-tuned model already knows. A "small-model" system-prompt variant -- maybe 1200 tokens -- would change the math entirely. Settings dropdown: "System prompt: full / compact / minimal".
-
-3. Implicit pre-read for edit_file. L4 from my findings. The "read the file first" precondition always-fails the first try, costs a full LLM round (~20-60 s with local models). Fix: if no recent read exists in this turn, transparently fetch the file inside the tool dispatcher and verify the old_string match, before failing. Zero LLM cost.
-
-4. Auto-inject /no_think for known reasoning models. Detect from model_info.id (or model presets matrix). Append the directive to every user message, or insert in system prompt. The 30-min vs. 3-min difference I saw between Task 2 and Task 2b came down entirely to this single token. Setting toggle: "Reasoning mode: model default / suppress".
-
-5. Round-time budget with auto-abort. If a single LLM round produces > N seconds of streaming with no tool call emitted, surface a "still thinking..." in the UI and offer one-click "abort & ask the model to commit to a tool call now". Currently the only escape is the Stop button, which discards the partial output entirely.
-
-6. KV-cache verification. The log line I saw was LLM POST: ... prompt=0 cached=0 -- which suggests LM Studio's prefix cache might not be hitting. The S4.F system-prompt byte-stability work was specifically to enable this. Worth a one-time sanity check that the cache is actually being populated on session 2+ of a workspace.
-
-There are also smaller harness-side wins (ship locus-op.ps1, add dump_history op, fix the context_label aid bug) but those are the ones from my findings, not new Locus-side ideas.
-
-Which of these (if any) would you want to go deeper on? Happy to sketch a design or scout the existing code for the relevant entry points -- I'd lean toward #1 (lazy manifest) as the highest leverage but #4 is by far the smallest patch.
+- S6.10 Task I and J
+- 6.10 and manual-tests.txt's prompt
 
 - Claude Blender
 - GoodOldSoftware
