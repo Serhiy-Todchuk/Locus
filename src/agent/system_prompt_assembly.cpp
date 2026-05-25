@@ -216,26 +216,50 @@ SystemPromptAssembly SystemPromptAssembly::build(const std::string&       locus_
     // S6.11 -- when `lazy_manifest` is on, the section degrades to per-tool
     // one-liners (no param breakdown). A header hint tells the model how to
     // fetch full schemas via the describe_tool meta-tool.
+    // S6.10 Task I -- under lazy_manifest, render each tool's curated
+    // `short_description()` instead of the full `description()` so the prose
+    // section shrinks roughly proportionally to the API tools array.
+    // S6.10 Task J -- when lazy_manifest is on AND the wire format is
+    // openai_json / auto, the prose section is pure duplication of the API
+    // tools[] array the LLM already consumes. Render only a one-line pointer
+    // so the model still knows describe_tool exists, but skip the per-tool
+    // bullets entirely. For qwen_xml / claude_xml / none, the prose section
+    // IS the tool listing (those formats don't consume the API array) -- keep
+    // the full per-tool bullets there.
+    const bool skip_prose_tool_list =
+        lazy_manifest &&
+        (tool_format == ToolFormat::OpenAi || tool_format == ToolFormat::Auto);
+
     std::ostringstream tools_ss;
-    if (lazy_manifest)
-        tools_ss << "## Available Tools (summaries -- call describe_tool('<name>') for the full schema)\n\n";
-    else
-        tools_ss << "## Available Tools\n\n";
+    if (skip_prose_tool_list) {
+        tools_ss << "## Tools\n"
+                    "See the API `tools[]` array for the available tools and their summaries. "
+                    "Call `describe_tool('<name>')` for the full JSON schema of any tool "
+                    "before you invoke it.\n\n";
+    } else {
+        if (lazy_manifest)
+            tools_ss << "## Available Tools (summaries -- call describe_tool('<name>') for the full schema)\n\n";
+        else
+            tools_ss << "## Available Tools\n\n";
 
-    for (auto* tool : tools.all()) {
-        if (!tool->visible_in_mode(ToolMode::agent)) continue;
-        // Mirror the API tools-array filter so describe_tool is hidden from
-        // the system prompt when lazy_manifest=false (its `available(ws)`
-        // returns false in that case). Skip the workspace filter only when
-        // no workspace is available (test builds).
-        if (ws_for_filter && !tool->available(*ws_for_filter)) continue;
+        for (auto* tool : tools.all()) {
+            if (!tool->visible_in_mode(ToolMode::agent)) continue;
+            // Mirror the API tools-array filter so describe_tool is hidden from
+            // the system prompt when lazy_manifest=false (its `available(ws)`
+            // returns false in that case). Skip the workspace filter only when
+            // no workspace is available (test builds).
+            if (ws_for_filter && !tool->available(*ws_for_filter)) continue;
 
-        tools_ss << "- **" << tool->name() << "**: " << tool->description() << "\n";
-        if (!lazy_manifest) {
-            for (auto& p : tool->params()) {
-                tools_ss << "  - `" << p.name << "` (" << p.type;
-                if (!p.required) tools_ss << ", optional";
-                tools_ss << "): " << p.description << "\n";
+            const std::string& desc = lazy_manifest
+                                          ? tool->short_description()
+                                          : tool->description();
+            tools_ss << "- **" << tool->name() << "**: " << desc << "\n";
+            if (!lazy_manifest) {
+                for (auto& p : tool->params()) {
+                    tools_ss << "  - `" << p.name << "` (" << p.type;
+                    if (!p.required) tools_ss << ", optional";
+                    tools_ss << "): " << p.description << "\n";
+                }
             }
         }
     }

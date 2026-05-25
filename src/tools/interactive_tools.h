@@ -12,6 +12,9 @@ public:
                "Use this when you need clarification, confirmation, or input "
                "before proceeding. The user's response is returned as the result.";
     }
+    std::string short_description() const override {
+        return "Ask the user a question and return their response.";
+    }
     std::vector<ToolParam> params() const override {
         return {
             {"question", "string", "The question to ask the user", true},

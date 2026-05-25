@@ -15,6 +15,9 @@ public:
                "are extracted to clean text at index time and are fully "
                "searchable. `get_file_outline` also works on them.";
     }
+    std::string short_description() const override {
+        return "Read a line range of a text file (paginates large files).";
+    }
     std::vector<ToolParam> params() const override {
         return {
             {"path",   "string",  "Relative path from workspace root", true},
@@ -43,6 +46,9 @@ public:
                "fresh project tree. Fails if the file already exists unless "
                "`overwrite=true` is set -- set that only when you intend to replace "
                "the whole file. For modifying existing files, prefer `edit_file`.";
+    }
+    std::string short_description() const override {
+        return "Create a new file (set overwrite=true to replace existing).";
     }
     std::vector<ToolParam> params() const override {
         return {
@@ -82,6 +88,9 @@ public:
                "edit_file will return an error otherwise. This guard catches blind "
                "edits against stale assumptions about file contents.";
     }
+    std::string short_description() const override {
+        return "Apply exact-string edits to a file atomically (read_file first).";
+    }
     std::vector<ToolParam> params() const override {
         return {
             {"path",  "string", "Relative path from workspace root", true},
@@ -100,6 +109,9 @@ public:
     std::string name()        const override { return "delete_file"; }
     std::string description() const override {
         return "Permanently delete a file from the workspace. This cannot be undone.";
+    }
+    std::string short_description() const override {
+        return "Permanently delete a file from the workspace.";
     }
     std::vector<ToolParam> params() const override {
         return {

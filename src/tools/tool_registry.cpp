@@ -59,7 +59,11 @@ namespace {
 //
 // S6.11 -- `lazy` collapses parameters to a permissive schema for every tool
 // EXCEPT describe_tool itself (the meta-tool needs its real schema so the
-// model knows to pass `name: string`). Descriptions are preserved either way.
+// model knows to pass `name: string`).
+// S6.10 Task I -- `lazy` also swaps each tool's full `description()` /
+// `description_for(ws)` for the curated `short_description()` one-liner.
+// describe_tool itself keeps its real description since it is the entry
+// point the model needs to understand.
 nlohmann::json build_entry(const ITool& t, IWorkspaceServices* ws = nullptr,
                             bool lazy = false)
 {
@@ -106,7 +110,11 @@ nlohmann::json build_entry(const ITool& t, IWorkspaceServices* ws = nullptr,
 
     nlohmann::json func;
     func["name"] = t.name();
-    func["description"] = ws ? t.description_for(*ws) : t.description();
+    if (lazy && t.name() != "describe_tool") {
+        func["description"] = t.short_description();
+    } else {
+        func["description"] = ws ? t.description_for(*ws) : t.description();
+    }
     func["parameters"] = parameters;
 
     nlohmann::json entry;

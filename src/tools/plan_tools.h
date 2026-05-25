@@ -23,6 +23,9 @@ public:
                "user approves, you will be put into execute mode with the "
                "full tool catalog. The user can also reject and re-prompt.";
     }
+    std::string short_description() const override {
+        return "Propose a numbered plan for the user to approve (plan mode).";
+    }
     std::vector<ToolParam> params() const override {
         return {
             {"title",   "string", "Short label for the plan (one line, ~60 chars).", false},
@@ -57,6 +60,9 @@ public:
         return "Mark a step in the active plan as done or failed. Call this "
                "exactly once per completed step, in order. `step` is the "
                "1-based index of the step you just finished.";
+    }
+    std::string short_description() const override {
+        return "Mark a plan step as done or failed (execute mode).";
     }
     std::vector<ToolParam> params() const override {
         return {

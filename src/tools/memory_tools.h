@@ -20,6 +20,9 @@ public:
                "user preferences, gotchas). Keep entries short -- one to a "
                "few sentences. Tag liberally; the tags are searchable.";
     }
+    std::string short_description() const override {
+        return "Save a verbatim note to the workspace memory bank.";
+    }
     std::vector<ToolParam> params() const override {
         return {
             {"content", "string", "The verbatim text to save. Will be stored "
@@ -47,6 +50,9 @@ public:
                "recency boost. Returns the verbatim entries plus tags. Use "
                "when you suspect something useful was learned in a prior "
                "session and you want it back in context.";
+    }
+    std::string short_description() const override {
+        return "Hybrid search over the workspace memory bank.";
     }
     std::vector<ToolParam> params() const override {
         return {

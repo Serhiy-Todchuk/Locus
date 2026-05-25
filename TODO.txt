@@ -1,17 +1,18 @@
+- 6.10 and manual-tests.txt's prompt
+- Fully restore saved conversation!!!
 - Multi LLM + select toggle in chat panel bottom
+- Refactor big cpp files
+- Shrink CLAUDE.md
+- Fix "Control surface" section in About window: there approval policies mentioned as something special, but it's common thing for all harnesses. Put there something about flexibility/efficiency/transparency/control as benefits, but keep overall About text consistent. Same fixes in docs (README.md?, other?).
+- Compaction seems doesn’t work as expected - it frees up too little part of context, but I can see wrong numbers - think out integration or agentic test for it involving a lot of communication with LLM, so we get near real scenario tested
+- "Build kicked off in the background; harness will notify me when it finishes." - I want this features in Locus for background commands :)
+- Is it good that we are not reading XLSX, DOCX and PDFs with read_file tool (or any other)? So the agent can search for something, but cannot read full info?
+- Add a tool to fetch LLMs own thinking from previous turns, so we don't polute context unless necessary
 - Ask user tool with pre-determined answers
 - Ask user auto answer feature
 - Voice chat input
 - Add image attachment for LLM prompt
 - FastDebug
-- Fix "Control surface" section in About window: there approval policies mentioned as something special, but it's common thing for all harnesses. Put there something about flexibility/efficiency/transparency/control as benefits, but keep overall About text consistent. Same fixes in docs (README.md?, other?).
-- Is it good that we are not reading XLSX, DOCX and PDFs with read_file tool (or any other)? So the agent can search for something, but cannot read full info?
-- "Build kicked off in the background; harness will notify me when it finishes." - I want this features in Locus for background commands :)
-- Do we hide LLM's "thinking" from context? "Check the box for "Show Debug Thoughts" (or Expose Reasoning Tokens over API). This ensures that the hidden chain-of-thought tokens are cleanly passed to your agent so your agent can read the model's internal logic before executing code edits. ". Shall we add a setting for it?
-- Compaction seems doesn’t work as expected - it frees up too little part of context, but I can see wrong numbers - think out integration or agentic test for it involving a lot of communication with LLM, so we get near real scenario tested
-
-- S6.10 Task I and J
-- 6.10 and manual-tests.txt's prompt
 
 - Claude Blender
 - GoodOldSoftware

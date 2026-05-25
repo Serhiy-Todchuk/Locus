@@ -16,6 +16,9 @@ public:
                "(.git, node_modules, build, .locus, ...) are still hidden. Capped at "
                "max_entries (default 200) -- refine the path or use search for large dirs.";
     }
+    std::string short_description() const override {
+        return "List files/dirs at a path with per-entry index annotations.";
+    }
     std::vector<ToolParam> params() const override {
         return {
             {"path",        "string",  "Relative path from workspace root (empty or '.' for root)", false},
@@ -35,6 +38,9 @@ public:
     std::string description() const override {
         return "Get the structure of a file: headings and code symbols with line numbers. "
                "Does not read file content.";
+    }
+    std::string short_description() const override {
+        return "List a file's headings and code symbols with line numbers.";
     }
     std::vector<ToolParam> params() const override {
         return {

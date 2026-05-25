@@ -87,6 +87,15 @@ public:
     virtual std::string              description() const = 0;
     virtual std::vector<ToolParam>   params()      const = 0;
 
+    // S6.10 Task I -- one-line summary used by the lazy-manifest path
+    // (lazy=true on build_schema_json / SystemPromptAssembly::build). Aim
+    // for <60 chars: tool's purpose in a single sentence, no per-param
+    // breakdown -- the model fetches the full schema via describe_tool when
+    // it needs to call. Default forwards to description() so any tool that
+    // hasn't been migrated keeps its current behaviour (lazy mode just
+    // doesn't save anything on those). Built-in tools should override.
+    virtual std::string short_description() const { return description(); }
+
     // S5.A -- context-aware description used by the filtered schema builder
     // (the one that already takes `IWorkspaceServices`). Default: return the
     // static description. `SearchTool` overrides to prune the mode list to

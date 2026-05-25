@@ -26,6 +26,9 @@ public:
                "`output_filter_pattern=\"error|warning|undefined reference\"`, "
                "`output_filter_lines=20`, `output_filter_context=2`.";
     }
+    std::string short_description() const override {
+        return "Run a shell command synchronously and return its output.";
+    }
     std::vector<ToolParam> params() const override {
         return {
             {"command", "string", "The command to execute", true},
@@ -65,6 +68,9 @@ public:
                "servers, file watchers, long builds, or anything you intend to tail. "
                "Read its output with `read_process_output`, terminate with `stop_process`.";
     }
+    std::string short_description() const override {
+        return "Start a long-running shell process; returns a process_id.";
+    }
     std::vector<ToolParam> params() const override {
         return {
             {"command", "string", "The command to launch in the background", true},
@@ -89,6 +95,9 @@ public:
                "params as `run_command` (see that tool's description). Default is smart "
                "head_tail truncation of the read window; the full pre-filter window is "
                "always written to `.locus/locus.log` at trace level.";
+    }
+    std::string short_description() const override {
+        return "Read new stdout/stderr from a background process_id.";
     }
     std::vector<ToolParam> params() const override {
         return {
@@ -125,6 +134,9 @@ public:
         return "Terminate a background process tree and capture its final exit code. "
                "The entry stays listed (status=killed) until removed.";
     }
+    std::string short_description() const override {
+        return "Terminate a background process tree by process_id.";
+    }
     std::vector<ToolParam> params() const override {
         return {
             {"process_id", "integer", "Background process id from run_command_bg", true},
@@ -143,6 +155,9 @@ public:
         return "List every background process tracked by this workspace, including ones "
                "that have already exited. Returns id, command, status, started_at, exit_code, "
                "and bytes of unread output.";
+    }
+    std::string short_description() const override {
+        return "List every tracked background process for this workspace.";
     }
     std::vector<ToolParam> params() const override { return {}; }
     ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::auto_approve; }

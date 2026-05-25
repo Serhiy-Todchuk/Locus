@@ -23,6 +23,9 @@ public:
                "(grep -B / -A). `invert` returns non-matching lines. The "
                "response is capped at `max_matches` lines (default 50).";
     }
+    std::string short_description() const override {
+        return "Filter text by regex/substring (grep-like, with context).";
+    }
     std::vector<ToolParam> params() const override {
         return {
             {"text",          "string",  "The text to filter (typically the "
