@@ -20,6 +20,7 @@ public:
 private:
     void on_preset_choice(wxCommandEvent&);
     void on_preset_apply(wxCommandEvent&);
+    void on_sampler_reset(wxCommandEvent&);
 
     wxTextCtrl*        endpoint_ctrl_    = nullptr;
     wxTextCtrl*        model_ctrl_       = nullptr;
@@ -37,6 +38,11 @@ private:
     wxSpinCtrlDouble*  repeat_penalty_ctrl_  = nullptr;
     wxSpinCtrlDouble*  frequency_penalty_ctrl_ = nullptr;
     wxSpinCtrlDouble*  presence_penalty_ctrl_  = nullptr;
+    // S6.10 Task H -- resets the sampler block ONLY (preserves temperature
+    // and other non-sampler fields that the user may have hand-tuned).
+    wxButton*          sampler_reset_btn_      = nullptr;
+    // S6.10 Task F -- auto-detect preset on workspace open.
+    wxCheckBox*        auto_detect_preset_ctrl_ = nullptr;
 };
 
 } // namespace locus

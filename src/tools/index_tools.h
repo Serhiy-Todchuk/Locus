@@ -14,7 +14,9 @@ public:
                "above the indexer's size cap, [unindexed] for entries the index didn't "
                "track (try read_file if you suspect they are text). Workspace excludes "
                "(.git, node_modules, build, .locus, ...) are still hidden. Capped at "
-               "max_entries (default 200) -- refine the path or use search for large dirs.";
+               "max_entries (default 200) -- refine the path or use search for large dirs.\n"
+               "Example:\n"
+               "  list_directory({\"path\": \"src\", \"depth\": 0})";
     }
     std::string short_description() const override {
         return "List files/dirs at a path with per-entry index annotations.";
@@ -37,7 +39,9 @@ public:
     std::string name()        const override { return "get_file_outline"; }
     std::string description() const override {
         return "Get the structure of a file: headings and code symbols with line numbers. "
-               "Does not read file content.";
+               "Does not read file content.\n"
+               "Example:\n"
+               "  get_file_outline({\"path\": \"src/agent/agent_core.cpp\"})";
     }
     std::string short_description() const override {
         return "List a file's headings and code symbols with line numbers.";

@@ -365,6 +365,7 @@ add_library(locus_core STATIC
     src/tools/index_tools.cpp
     src/tools/process_tools.cpp
     src/tools/process_output_filter.cpp
+    src/tools/truncation_detector.cpp
     src/tools/interactive_tools.cpp
     src/tools/plan_tools.cpp
     src/tools/memory_tools.cpp
@@ -397,6 +398,7 @@ add_library(locus_core STATIC
     src/agent/history_archive.cpp
     src/agent/auto_commit.cpp
     src/agent/mention_parser.cpp
+    src/agent/quality_monitor.cpp
     src/frontends/cli/cli_frontend.cpp
     src/frontends/gui/ansi_parser.cpp
     src/frontends/gui/terminal_panel_state.cpp

@@ -69,6 +69,14 @@ struct ToolResult {
     bool        success;
     std::string content;      // injected into LLM context (compact, token-efficient)
     std::string display;      // shown to user in UI (may be richer / formatted)
+
+    // S6.10 Task G -- optional tag that names a non-default activity-log event
+    // the dispatcher should emit alongside the standard `tool_result`. Used
+    // today by file_tools to surface a `truncation_blocked` event with the
+    // matched phrase + path in the Details panel. Empty = no extra event.
+    std::string activity_tag;       // e.g. "truncation_blocked"
+    std::string activity_summary;   // one-line summary for the event
+    std::string activity_detail;    // full body (matched phrase, path, etc.)
 };
 
 struct ToolCall {

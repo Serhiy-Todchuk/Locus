@@ -317,6 +317,106 @@ TEST_CASE("WriteFileTool: overwrite=false on a fresh path still creates", "[s4.a
     fs::remove_all(tmp);
 }
 
+TEST_CASE("WriteFileTool: refuses bodies with truncation markers",
+          "[s6.10][truncation]")
+{
+    auto tmp = make_temp_workspace();
+    std::error_code ec;
+
+    {
+        locus::Workspace ws(tmp);
+        // detect_write_truncation defaults true.
+        locus::IWorkspaceServices& wctx = ws;
+
+        locus::WriteFileTool tool;
+        std::string body =
+            "void compute() {\n"
+            "    init();\n"
+            "    // rest of the code\n"
+            "}\n";
+        locus::ToolCall call{"c1", "write_file",
+            {{"path", "broken.cpp"}, {"content", body}}};
+
+        auto result = tool.execute(call, wctx);
+        REQUIRE_FALSE(result.success);
+        REQUIRE(result.activity_tag == "truncation_blocked");
+        REQUIRE_THAT(result.content,
+                     ContainsSubstring("rest of the code"));
+        REQUIRE_FALSE(fs::exists(tmp / "broken.cpp"));
+    }
+    fs::remove_all(tmp, ec);
+}
+
+TEST_CASE("WriteFileTool: detector can be disabled via workspace config",
+          "[s6.10][truncation]")
+{
+    auto tmp = make_temp_workspace();
+    std::error_code ec;
+
+    {
+        locus::Workspace ws(tmp);
+        ws.config().detect_write_truncation = false;
+        locus::IWorkspaceServices& wctx = ws;
+
+        locus::WriteFileTool tool;
+        std::string body =
+            "void compute() {\n"
+            "    init();\n"
+            "    // rest of the code\n"
+            "}\n";
+        locus::ToolCall call{"c1", "write_file",
+            {{"path", "still_written.cpp"}, {"content", body}}};
+
+        auto result = tool.execute(call, wctx);
+        REQUIRE(result.success);
+        REQUIRE(fs::exists(tmp / "still_written.cpp"));
+    }
+    fs::remove_all(tmp, ec);
+}
+
+TEST_CASE("EditFileTool: refuses new_string with truncation markers",
+          "[s6.10][truncation]")
+{
+    auto tmp = make_temp_workspace();
+    std::error_code ec;
+    // Original file content must exist + be read by read_file so edit_file
+    // doesn't error at the require_read_before_edit guard.
+    write_test_file(tmp, "src.cpp",
+        "void compute() {\n"
+        "    init();\n"
+        "    do_work();\n"
+        "}\n");
+
+    {
+        locus::Workspace ws(tmp);
+        locus::IWorkspaceServices& wctx = ws;
+
+        // Mark the path as read so the guard doesn't trip first.
+        locus::ReadFileTool reader;
+        locus::ToolCall read_call{"r1", "read_file", {{"path", "src.cpp"}}};
+        auto read_res = reader.execute(read_call, wctx);
+        REQUIRE(read_res.success);
+
+        locus::EditFileTool tool;
+        nlohmann::json edits = nlohmann::json::array();
+        edits.push_back({{"old_string", "do_work();"},
+                         {"new_string",
+                          "do_work();\n    // rest of the implementation\n"}});
+        locus::ToolCall call{"c1", "edit_file",
+            {{"path", "src.cpp"}, {"edits", edits}}};
+
+        auto result = tool.execute(call, wctx);
+        REQUIRE_FALSE(result.success);
+        REQUIRE(result.activity_tag == "truncation_blocked");
+        REQUIRE_THAT(result.content,
+                     ContainsSubstring("rest of the implementation"));
+        // file untouched
+        REQUIRE_THAT(read_entire_file(tmp / "src.cpp"),
+                     ContainsSubstring("do_work();"));
+    }
+    fs::remove_all(tmp, ec);
+}
+
 // -- DeleteFileTool tests ---------------------------------------------------
 
 TEST_CASE("DeleteFileTool: deletes existing file", "[s0.6]")

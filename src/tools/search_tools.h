@@ -16,7 +16,14 @@ public:
                "preserves punctuation/case), symbols (code definitions), "
                "ast (Tree-sitter structural query, e.g. all `malloc` call sites), "
                "semantic (vector similarity), hybrid (BM25 + vector). "
-               "Semantic and hybrid require semantic search to be enabled.";
+               "Semantic and hybrid require semantic search to be enabled.\n"
+               "Examples:\n"
+               "  search({\"query\": \"WorkspaceConfig\"})  // text (default)\n"
+               "  search({\"query\": \"->m_cache\", \"mode\": \"regex\"})\n"
+               "  search({\"query\": \"ToolDispatcher\", \"mode\": \"symbols\", \"kind\": \"class\"})\n"
+               "  search({\"query\": \"(call_expression function: (identifier) @fn (#eq? @fn \\\"malloc\\\"))\", \"mode\": \"ast\", \"language\": \"c\"})\n"
+               "  search({\"query\": \"how does the indexer batch file events\", \"mode\": \"semantic\"})\n"
+               "  search({\"query\": \"reasoning watchdog auto-nudge\", \"mode\": \"hybrid\"})";
     }
     std::string short_description() const override {
         return "Search workspace: text/regex/symbols/ast/semantic/hybrid.";

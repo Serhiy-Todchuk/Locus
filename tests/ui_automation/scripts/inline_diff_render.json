@@ -24,7 +24,7 @@
       "args": {
         "parent_aid": "locus.chat.panel",
         "control_type": "document",
-        "text": "Use the write_file tool to create greeting.txt with the exact contents 'hello-from-inline-diff'. One file, one line. Don't run it."
+        "text": "Use the write_file tool to create greeting.txt with the exact contents 'hello-from-inline-diff'. One file, one line."
       }
     },
     { "op": "sleep", "args": { "ms": 300 } },

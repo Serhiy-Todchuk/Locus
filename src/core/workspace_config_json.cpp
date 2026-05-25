@@ -72,6 +72,11 @@ WorkspaceConfig workspace_config_from_json(const json& j)
         // S6.10 Task D -- grammar-constrained decoding for tool calls.
         if (llm.contains("grammar_mode"))
             cfg.llm_grammar_mode = llm["grammar_mode"].get<std::string>();
+        // S6.10 Task F -- auto-detect model and apply preset
+        if (llm.contains("auto_detect_preset"))
+            cfg.auto_detect_model_preset = llm["auto_detect_preset"].get<bool>();
+        if (llm.contains("preset_name"))
+            cfg.llm_preset_name = llm["preset_name"].get<std::string>();
     }
 
     if (j.contains("agent")) {
@@ -92,6 +97,15 @@ WorkspaceConfig workspace_config_from_json(const json& j)
             cfg.notify_external_changes = ag["notify_external_changes"].get<bool>();
         if (ag.contains("require_read_before_edit"))
             cfg.require_read_before_edit = ag["require_read_before_edit"].get<bool>();
+        // S6.10 Task G -- anti-truncation detector
+        if (ag.contains("detect_write_truncation"))
+            cfg.detect_write_truncation = ag["detect_write_truncation"].get<bool>();
+        // S6.10 Task B -- quality monitor
+        if (ag.contains("quality_monitor_enabled"))
+            cfg.quality_monitor_enabled = ag["quality_monitor_enabled"].get<bool>();
+        // S6.10 Task C -- strip past-turn reasoning_content from LLM payload
+        if (ag.contains("strip_past_thinking"))
+            cfg.strip_past_thinking = ag["strip_past_thinking"].get<bool>();
         // S6.11 -- lazy tool manifest
         if (ag.contains("lazy_tool_manifest"))
             cfg.lazy_tool_manifest = ag["lazy_tool_manifest"].get<bool>();
@@ -301,7 +315,9 @@ json workspace_config_to_json(const WorkspaceConfig& cfg)
             {"repeat_penalty", cfg.llm_repeat_penalty},
             {"frequency_penalty", cfg.llm_frequency_penalty},
             {"presence_penalty",  cfg.llm_presence_penalty},
-            {"grammar_mode",      cfg.llm_grammar_mode}
+            {"grammar_mode",      cfg.llm_grammar_mode},
+            {"auto_detect_preset", cfg.auto_detect_model_preset},
+            {"preset_name",       cfg.llm_preset_name}
         }},
         {"agent", {
             {"tool_manifest_warn_tokens", cfg.tool_manifest_warn_tokens},
@@ -312,6 +328,9 @@ json workspace_config_to_json(const WorkspaceConfig& cfg)
             {"dump_on_run_command_hang",  cfg.dump_on_run_command_hang},
             {"notify_external_changes",   cfg.notify_external_changes},
             {"require_read_before_edit",  cfg.require_read_before_edit},
+            {"detect_write_truncation",   cfg.detect_write_truncation},
+            {"quality_monitor_enabled",   cfg.quality_monitor_enabled},
+            {"strip_past_thinking",       cfg.strip_past_thinking},
             {"lazy_tool_manifest",        cfg.lazy_tool_manifest},
             {"system_prompt_profile",     cfg.system_prompt_profile},
             {"reasoning_max_seconds",       cfg.reasoning_max_seconds},

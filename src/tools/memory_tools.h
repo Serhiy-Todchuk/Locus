@@ -18,7 +18,13 @@ public:
                "Use for facts you discover that should survive into future "
                "sessions (build commands, coding conventions, "
                "user preferences, gotchas). Keep entries short -- one to a "
-               "few sentences. Tag liberally; the tags are searchable.";
+               "few sentences. Tag liberally; the tags are searchable.\n"
+               "Example:\n"
+               "  add_memory({\n"
+               "    \"content\": \"Release build: cmake --build build/release --config Release\",\n"
+               "    \"tags\": [\"build\", \"cmake\"],\n"
+               "    \"pinned\": true\n"
+               "  })";
     }
     std::string short_description() const override {
         return "Save a verbatim note to the workspace memory bank.";
@@ -49,7 +55,10 @@ public:
                "query. Combines keyword (BM25), semantic (vector), and a "
                "recency boost. Returns the verbatim entries plus tags. Use "
                "when you suspect something useful was learned in a prior "
-               "session and you want it back in context.";
+               "session and you want it back in context.\n"
+               "Example:\n"
+               "  search_memory({\"query\": \"how do we build the release exe\", "
+               "\"max_results\": 3, \"tags\": [\"build\"]})";
     }
     std::string short_description() const override {
         return "Hybrid search over the workspace memory bank.";

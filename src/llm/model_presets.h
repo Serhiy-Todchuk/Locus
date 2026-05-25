@@ -64,4 +64,12 @@ const std::vector<ModelPreset>& builtin_presets();
 // Convenience: find a preset by exact name. Returns nullptr when not found.
 const ModelPreset* find_preset(const std::string& name);
 
+// S6.10 Task F -- best-effort match of a server-reported model id to a known
+// preset. Case-insensitive regex over the lower-cased id. Returns the first
+// matching preset in dropdown order; nullptr on no match (caller keeps the
+// current config). The matcher is intentionally conservative: it only
+// recognises model families with curated presets, so any model whose family
+// isn't represented falls through cleanly.
+const ModelPreset* find_preset_for_model(const std::string& model_id);
+
 } // namespace locus

@@ -3,6 +3,7 @@
 #include "auto_commit.h"
 #include "compaction_pipeline.h"
 #include "history_archive.h"
+#include "quality_monitor.h"
 #include "index/index_query.h"
 #include "llm/token_counter.h"
 #include "../tools/tool_registry.h"
@@ -912,8 +913,68 @@ void AgentCore::process_message(const std::string& content)
         if (!useless)
             ctx_->add_message(std::move(step.assistant_msg));
 
+        // S6.10 Task B -- empty_response detector. Fires when the assistant
+        // returned no content / no tool_calls / no reasoning. The model has
+        // no failure mode to react to without an explicit nudge: bail with
+        // useless=true would otherwise just end the turn silently.
+        if (useless) {
+            bool quality_on = true;
+            if (auto* ws = services_.workspace())
+                quality_on = ws->config().quality_monitor_enabled;
+            if (quality_on) {
+                auto correction = QualityMonitor::evaluate(
+                    ctx_->history().messages());
+                if (correction && correction->kind ==
+                    QualityCorrectionKind::empty_response)
+                {
+                    if (!inject_nudge(correction->corrective_message,
+                                      "empty_response"))
+                    {
+                        frontends_.broadcast([](IFrontend& fe) {
+                            fe.on_error(
+                                "Agent appears stuck (quality monitor "
+                                "exceeded its 2-correction cap this turn).");
+                        });
+                        break;
+                    }
+                    continue;  // re-enter the round loop
+                }
+            }
+            break;  // nothing to do; let the turn complete naturally
+        }
+
         if (step.tool_calls.empty())
             break;
+
+        // S6.10 Task B -- repeated_tool_call detector. Inspect the latest
+        // assistant message (just appended) BEFORE dispatching its tool
+        // calls. If it repeats the previous (name, args), we know the model
+        // is in a tight loop and the dispatch will not produce new info.
+        // Inject a corrective and continue without running the tool again.
+        {
+            bool quality_on = true;
+            if (auto* ws = services_.workspace())
+                quality_on = ws->config().quality_monitor_enabled;
+            if (quality_on) {
+                auto correction = QualityMonitor::evaluate(
+                    ctx_->history().messages());
+                if (correction && correction->kind ==
+                    QualityCorrectionKind::repeated_tool_call)
+                {
+                    if (!inject_nudge(correction->corrective_message,
+                                      "repeated_tool_call"))
+                    {
+                        frontends_.broadcast([](IFrontend& fe) {
+                            fe.on_error(
+                                "Agent appears stuck (quality monitor "
+                                "exceeded its 2-correction cap this turn).");
+                        });
+                        break;
+                    }
+                    continue;
+                }
+            }
+        }
 
         for (auto& call : step.tool_calls) {
             if (cancel_requested_.load()) {
@@ -1039,6 +1100,33 @@ void AgentCore::request_commit_now()
     cancel_requested_.store(true);
     dispatcher_->wake();
     spdlog::info("AgentCore: commit-now requested (manual)");
+}
+
+// -- inject_nudge (S6.10 Task B) ----------------------------------------------
+
+bool AgentCore::inject_nudge(std::string body, const std::string& reason_tag)
+{
+    // Shares the 2-cap with the reasoning watchdog -- a turn that fires
+    // both detectors gets at most two corrections in total, never two of
+    // each. Once the third would-fire arrives, callers should treat the
+    // false return as a signal to abort the turn.
+    if (++nudges_this_turn_ > 2) {
+        spdlog::warn("AgentCore: nudge cap hit (reason={}); refusing further "
+                     "corrections this turn", reason_tag);
+        return false;
+    }
+    int tok = 0;
+    ctx_->add_message({MessageRole::user, body});
+    tok = ctx_->history().messages().back().token_estimate;
+    activity_->emit(
+        ActivityKind::quality_correction,
+        "Quality nudge (#" + std::to_string(nudges_this_turn_)
+            + ", reason=" + reason_tag + ")",
+        body,
+        /*tokens_in=*/tok);
+    spdlog::info("AgentCore: quality-monitor nudge #{} injected (reason={})",
+                 nudges_this_turn_, reason_tag);
+    return true;
 }
 
 // -- tool_decision ------------------------------------------------------------

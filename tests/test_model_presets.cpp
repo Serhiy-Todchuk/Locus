@@ -73,19 +73,18 @@ TEST_CASE("all three backends are represented", "[s4.v][presets]")
     REQUIRE(llamaserver);
 }
 
-TEST_CASE("Qwen preset pins ToolFormat::Qwen", "[s4.v][presets]")
+TEST_CASE("Qwen family preset pins ToolFormat::Qwen", "[s4.v][presets]")
 {
-    // Qwen's wire-level habit is `<tool_call>...` XML markers. If our table
-    // ever stops pinning Qwen the XML extraction is silently dropped to Auto,
-    // which still works but is suboptimal -- guard against regression.
-    bool found = false;
-    for (const auto& p : builtin_presets()) {
-        if (p.name.find("Qwen") != std::string::npos) {
-            REQUIRE(p.tool_format == ToolFormat::Qwen);
-            found = true;
-        }
-    }
-    REQUIRE(found);
+    // Qwen 2.5 / 3 family preset's wire-level habit is `<tool_call>...` XML
+    // markers. If our table ever stops pinning Qwen the XML extraction is
+    // silently dropped to Auto, which still works but is suboptimal -- guard
+    // against regression on the "family" preset specifically. S6.10 Task H
+    // added a Qwen3-Coder preset that pins Auto (Qwen3-Coder's tool calls
+    // come through cleanly via LM Studio's native JSON path), so this guard
+    // is on the family preset only.
+    const auto* p = find_preset("LM Studio -- Qwen family");
+    REQUIRE(p != nullptr);
+    REQUIRE(p->tool_format == ToolFormat::Qwen);
 }
 
 TEST_CASE("non-tool-trained preset pins ToolFormat::None",
@@ -118,27 +117,59 @@ TEST_CASE("sampler defaults: Qwen preset carries Qwen's published values",
     REQUIRE(p->repeat_penalty == 0.0);  // Qwen doesn't recommend one
 }
 
-TEST_CASE("sampler defaults: Llama 3.x preset suggests repeat_penalty 1.1",
-          "[s4.v][presets][samplers]")
+TEST_CASE("sampler defaults: Llama 3.x preset suggests repeat_penalty 1.1 and top_p 0.9",
+          "[s4.v][s6.10][presets][samplers]")
 {
+    // S6.10 Task H -- top_p 0.9 added to keep long codegen turns on track
+    // alongside the previously-present repeat_penalty 1.1.
     const locus::ModelPreset* p = nullptr;
     for (const auto& q : builtin_presets()) {
         if (q.name.find("Llama 3") != std::string::npos) { p = &q; break; }
     }
     REQUIRE(p != nullptr);
     REQUIRE(p->repeat_penalty == 1.1);
+    REQUIRE(p->top_p == 0.9);
+}
+
+TEST_CASE("sampler defaults: Gemma preset gains top_k 64 (S6.10 Task H)",
+          "[s6.10][presets][samplers]")
+{
+    const locus::ModelPreset* p = nullptr;
+    for (const auto& q : builtin_presets()) {
+        if (q.name.find("Gemma") != std::string::npos) { p = &q; break; }
+    }
+    REQUIRE(p != nullptr);
+    REQUIRE(p->top_k == 64);
+}
+
+TEST_CASE("sampler defaults: Qwen3-Coder preset (S6.10 Task H)",
+          "[s6.10][presets][samplers]")
+{
+    const auto* p = find_preset("LM Studio -- Qwen3-Coder");
+    REQUIRE(p != nullptr);
+    REQUIRE(p->temperature == 0.1);
+    REQUIRE(p->top_p == 0.9);
+}
+
+TEST_CASE("sampler defaults: DeepSeek-R1-Distill preset (S6.10 Task H)",
+          "[s6.10][presets][samplers]")
+{
+    const auto* p = find_preset("LM Studio -- DeepSeek-R1-Distill");
+    REQUIRE(p != nullptr);
+    REQUIRE(p->temperature == 0.6);
+    REQUIRE(p->top_p == 0.95);
 }
 
 TEST_CASE("sampler defaults: presets without overrides stay at 0",
           "[s4.v][presets][samplers]")
 {
-    // The Gemma / Ollama-generic / llama-server-generic / non-tool-trained
-    // presets are deliberately silent on samplers so the server's per-model
-    // defaults apply. If a future edit accidentally fills one of them in,
-    // we want to know.
+    // The Ollama-generic / llama-server-generic / non-tool-trained presets
+    // are deliberately silent on samplers so the server's per-model defaults
+    // apply. If a future edit accidentally fills one of them in, we want to
+    // know. (Gemma / Llama 3.x carry post-S6.10 tuning -- see their dedicated
+    // tests above.)
     for (const auto& p : builtin_presets()) {
-        if (p.name.find("Gemma")     != std::string::npos ||
-            p.name.find("Ollama")    != std::string::npos ||
+        if (p.name.find("Ollama")    != std::string::npos ||
             p.name.find("llama-server") != std::string::npos ||
             p.name.find("base /")    != std::string::npos)
         {
@@ -148,5 +179,87 @@ TEST_CASE("sampler defaults: presets without overrides stay at 0",
             REQUIRE(p.min_p          == 0.0);
             REQUIRE(p.repeat_penalty == 0.0);
         }
+    }
+}
+
+// -- S6.10 Task F -- model id -> preset matcher ------------------------------
+
+TEST_CASE("find_preset_for_model: empty id returns nullptr",
+          "[s6.10][presets][matcher]")
+{
+    REQUIRE(locus::find_preset_for_model("") == nullptr);
+}
+
+TEST_CASE("find_preset_for_model: unknown model id returns nullptr",
+          "[s6.10][presets][matcher]")
+{
+    REQUIRE(locus::find_preset_for_model("totally-made-up-model") == nullptr);
+    REQUIRE(locus::find_preset_for_model("falcon-180b") == nullptr);
+}
+
+TEST_CASE("find_preset_for_model: Qwen3-Coder beats generic Qwen",
+          "[s6.10][presets][matcher]")
+{
+    const auto* p = locus::find_preset_for_model("qwen3-coder-7b-instruct-q4_k_m");
+    REQUIRE(p != nullptr);
+    REQUIRE(p->name == "LM Studio -- Qwen3-Coder");
+}
+
+TEST_CASE("find_preset_for_model: generic Qwen2.5/3 matches the Qwen family preset",
+          "[s6.10][presets][matcher]")
+{
+    const auto* p = locus::find_preset_for_model("Qwen3-32B-Instruct-Q4_K_M");
+    REQUIRE(p != nullptr);
+    REQUIRE(p->name == "LM Studio -- Qwen family");
+
+    const auto* q = locus::find_preset_for_model("qwen2.5-14b-instruct");
+    REQUIRE(q != nullptr);
+    REQUIRE(q->name == "LM Studio -- Qwen family");
+}
+
+TEST_CASE("find_preset_for_model: Gemma 2/3/4 ids match",
+          "[s6.10][presets][matcher]")
+{
+    for (const auto* id : {
+            "gemma-2-9b-it", "gemma-3-1b-it", "gemma-4-e4b",
+            "google/gemma-4-9b-it"
+        })
+    {
+        INFO("id: " << id);
+        const auto* p = locus::find_preset_for_model(id);
+        REQUIRE(p != nullptr);
+        REQUIRE(p->name == "LM Studio -- Gemma family");
+    }
+}
+
+TEST_CASE("find_preset_for_model: DeepSeek-R1 distills match dedicated preset",
+          "[s6.10][presets][matcher]")
+{
+    for (const auto* id : {
+            "deepseek-r1-distill-qwen-32b",
+            "deepseek-r1-distill-llama-8b",
+            "DeepSeek-R1-Distill-Qwen-1.5B",
+        })
+    {
+        INFO("id: " << id);
+        const auto* p = locus::find_preset_for_model(id);
+        REQUIRE(p != nullptr);
+        REQUIRE(p->name == "LM Studio -- DeepSeek-R1-Distill");
+    }
+}
+
+TEST_CASE("find_preset_for_model: Llama 3.x ids match",
+          "[s6.10][presets][matcher]")
+{
+    for (const auto* id : {
+            "meta-llama-3.1-8b-instruct",
+            "Llama-3.3-70B-Instruct-Q4_K_M",
+            "meta-llama/Llama-3-8b-Instruct",
+        })
+    {
+        INFO("id: " << id);
+        const auto* p = locus::find_preset_for_model(id);
+        REQUIRE(p != nullptr);
+        REQUIRE(p->name == "LM Studio -- Llama 3.x family");
     }
 }

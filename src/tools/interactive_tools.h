@@ -10,7 +10,10 @@ public:
     std::string description() const override {
         return "Ask the user a question and wait for their response. "
                "Use this when you need clarification, confirmation, or input "
-               "before proceeding. The user's response is returned as the result.";
+               "before proceeding. The user's response is returned as the result.\n"
+               "Example:\n"
+               "  ask_user({\"question\": \"Which test runner should I configure -- "
+               "Catch2 or GoogleTest?\"})";
     }
     std::string short_description() const override {
         return "Ask the user a question and return their response.";

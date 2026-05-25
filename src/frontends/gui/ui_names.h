@@ -103,6 +103,12 @@ inline constexpr const char* kSettingsLlmPresetChoice = "locus.settings.llm.pres
 inline constexpr const char* kSettingsLlmPresetApplyBtn = "locus.settings.llm.preset_apply_btn";
 inline constexpr const char* kSettingsLlmToolFormat   = "locus.settings.llm.tool_format";
 inline constexpr const char* kSettingsLlmGrammarMode  = "locus.settings.llm.grammar_mode";
+// S6.10 Task H -- "Reset to preset defaults" touches the sampler block only.
+inline constexpr const char* kSettingsLlmSamplerResetBtn =
+    "locus.settings.llm.sampler_reset_btn";
+// S6.10 Task F -- "Auto-detect preset on workspace open" toggle.
+inline constexpr const char* kSettingsLlmAutoDetectPreset =
+    "locus.settings.llm.auto_detect_preset";
 
 // Settings -> Tool Approvals tab.
 inline constexpr const char* kSettingsApprovalsList         = "locus.settings.approvals.list";

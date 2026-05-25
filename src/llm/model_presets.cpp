@@ -1,5 +1,8 @@
 #include "model_presets.h"
 
+#include <algorithm>
+#include <regex>
+
 namespace locus {
 
 namespace {
@@ -35,13 +38,18 @@ const std::vector<ModelPreset>& presets_table()
     // (raw GBNF + response_format both supported); Off for non-tool-trained
     // base models (grammar makes no sense there) and Ollama (response_format
     // support is partial / behind `format: json` rather than full json_schema).
+    // S6.10 Task H additions:
+    //   - LM Studio -- Qwen3-Coder      (separate from generic Qwen; temp=0.1)
+    //   - LM Studio -- DeepSeek-R1-Distill (temp=0.6 top_p=0.95, reasoning-heavy)
+    //   - LM Studio -- Gemma family     gains top_k=64
+    //   - LM Studio -- Llama 3.x family gains top_p=0.9
     static const std::vector<ModelPreset> k_presets = {
         {
             "LM Studio -- Gemma family",
-            "Gemma 2 / 3 / 4 instruct via LM Studio. Auto tool-format covers Gemma's OpenAI-style tool_calls cleanly.",
+            "Gemma 2 / 3 / 4 instruct via LM Studio. Auto tool-format covers Gemma's OpenAI-style tool_calls cleanly. top_k=64 follows Gemma's published recommendation.",
             "http://127.0.0.1:1234",
             0.7, 8192, ToolFormat::Auto,
-            0.0, 0, 0.0, 0.0,
+            0.0, 64, 0.0, 0.0,
             GrammarMode::BestEffort,
         },
         {
@@ -53,11 +61,27 @@ const std::vector<ModelPreset>& presets_table()
             GrammarMode::BestEffort,
         },
         {
+            "LM Studio -- Qwen3-Coder",
+            "Qwen3-Coder-7B / 14B / 32B-Instruct via LM Studio. Coder-specific defaults: temperature 0.1, top_p 0.9 (Qwen3-Coder card recommends low-temperature for code).",
+            "http://127.0.0.1:1234",
+            0.1, 8192, ToolFormat::Auto,
+            0.9, 0, 0.0, 0.0,
+            GrammarMode::BestEffort,
+        },
+        {
+            "LM Studio -- DeepSeek-R1-Distill",
+            "DeepSeek-R1-Distill-Qwen / Llama variants via LM Studio. Reasoning-heavy distills want temperature 0.6 and top_p 0.95 per the model card.",
+            "http://127.0.0.1:1234",
+            0.6, 8192, ToolFormat::Auto,
+            0.95, 0, 0.0, 0.0,
+            GrammarMode::BestEffort,
+        },
+        {
             "LM Studio -- Llama 3.x family",
-            "Llama 3 / 3.1 / 3.3 instruct via LM Studio. Auto tool-format handles both the native JSON path and any Claude-style markers some fine-tunes emit. repeat_penalty=1.1 keeps long codegen turns on track.",
+            "Llama 3 / 3.1 / 3.3 instruct via LM Studio. Auto tool-format handles both the native JSON path and any Claude-style markers some fine-tunes emit. top_p=0.9 and repeat_penalty=1.1 keep long codegen turns on track.",
             "http://127.0.0.1:1234",
             0.7, 8192, ToolFormat::Auto,
-            0.0, 0, 0.0, 1.1,
+            0.9, 0, 0.0, 1.1,
             GrammarMode::BestEffort,
         },
         {
@@ -99,6 +123,40 @@ const ModelPreset* find_preset(const std::string& name)
 {
     for (const auto& p : presets_table()) {
         if (p.name == name) return &p;
+    }
+    return nullptr;
+}
+
+const ModelPreset* find_preset_for_model(const std::string& model_id)
+{
+    if (model_id.empty()) return nullptr;
+
+    // Fold the id to lower-case so the regex patterns can be written as
+    // plain literal substrings (no \i flag in std::regex). Strip the LM
+    // Studio "publisher/" prefix LM Studio prepends for catalog entries
+    // (e.g. "google/gemma-4-e4b" -> "gemma-4-e4b") so the patterns hit.
+    std::string id = model_id;
+    if (auto slash = id.find('/'); slash != std::string::npos)
+        id = id.substr(slash + 1);
+    std::transform(id.begin(), id.end(), id.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
+
+    // Match order matters -- more-specific patterns come first so the
+    // Qwen3-Coder preset wins over the generic Qwen preset, and the
+    // DeepSeek-R1-Distill preset wins over the generic Llama preset.
+    // Each entry: (regex pattern, preset name in builtin_presets()).
+    static const std::pair<std::regex, const char*> k_rules[] = {
+        {std::regex(R"(qwen.?3.*coder)"),         "LM Studio -- Qwen3-Coder"},
+        {std::regex(R"(deepseek.*r1)"),           "LM Studio -- DeepSeek-R1-Distill"},
+        {std::regex(R"(qwen.?(2\.5|3))"),         "LM Studio -- Qwen family"},
+        {std::regex(R"(gemma.?(2|3|4))"),         "LM Studio -- Gemma family"},
+        {std::regex(R"((llama.?3|meta.*llama.?3))"), "LM Studio -- Llama 3.x family"},
+    };
+
+    for (const auto& rule : k_rules) {
+        if (std::regex_search(id, rule.first)) {
+            return find_preset(rule.second);
+        }
     }
     return nullptr;
 }

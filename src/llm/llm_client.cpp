@@ -108,6 +108,13 @@ json ChatMessage::to_json() const
     if (!content.empty())
         j["content"] = content;
 
+    // S6.10 Task C -- LM Studio's wire format keys assistant reasoning as
+    // `reasoning_content`. Persist it when present; AgentLoop's payload-prep
+    // strips past-turn copies before the next stream_completion so the LLM
+    // sees the current decision-chain reasoning only.
+    if (!reasoning_content.empty())
+        j["reasoning_content"] = reasoning_content;
+
     if (!tool_calls.empty()) {
         json arr = json::array();
         for (auto& tc : tool_calls) {
@@ -134,6 +141,7 @@ ChatMessage ChatMessage::from_json(const json& j)
     ChatMessage m;
     m.role = role_from_string(j.value("role", "user"));
     m.content = j.value("content", "");
+    m.reasoning_content = j.value("reasoning_content", "");
 
     if (j.contains("tool_calls")) {
         for (auto& tc : j["tool_calls"]) {

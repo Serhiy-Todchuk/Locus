@@ -57,6 +57,9 @@ add_executable(locus_tests
     test_reasoning_watchdog.cpp
     test_json_repair.cpp
     test_tool_call_grammar.cpp
+    test_truncation_detector.cpp
+    test_thinking_strip.cpp
+    test_quality_monitor.cpp
     retrieval_eval/metrics.cpp
     support/shared_embedder.cpp
 )

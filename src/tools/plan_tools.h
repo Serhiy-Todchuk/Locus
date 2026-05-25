@@ -21,7 +21,16 @@ public:
         return "Propose a numbered plan of steps for the user to review and "
                "approve. Use this exactly once when in plan mode. After the "
                "user approves, you will be put into execute mode with the "
-               "full tool catalog. The user can also reject and re-prompt.";
+               "full tool catalog. The user can also reject and re-prompt.\n"
+               "Example:\n"
+               "  propose_plan({\n"
+               "    \"title\": \"Add CSV export to ReportsView\",\n"
+               "    \"steps\": [\n"
+               "      {\"description\": \"Read src/reports_view.cpp\", \"tools_needed\": [\"read_file\"]},\n"
+               "      {\"description\": \"Add export_to_csv() helper\", \"tools_needed\": [\"edit_file\"]},\n"
+               "      {\"description\": \"Wire up the toolbar button\", \"tools_needed\": [\"edit_file\"]}\n"
+               "    ]\n"
+               "  })";
     }
     std::string short_description() const override {
         return "Propose a numbered plan for the user to approve (plan mode).";

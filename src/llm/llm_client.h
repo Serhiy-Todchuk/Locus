@@ -45,6 +45,17 @@ struct ChatMessage {
     MessageRole role = MessageRole::user;
     std::string content;
 
+    // S6.10 Task C -- assistant chain-of-thought reasoning, captured from the
+    // stream decoder's `on_reasoning` channel (LM Studio splits this into the
+    // OpenAI delta's `reasoning_content` field; Qwen-XML / Claude-XML decoders
+    // extract <think>...</think> / <thinking>...</thinking> bodies and route
+    // them here too). Persisted to disk via to_json; stripped from past-turn
+    // assistant messages when assembling the next request payload (see
+    // strip_past_thinking in WorkspaceConfig and AgentLoop's payload-prep).
+    // Empty for non-assistant messages and for assistant messages from a
+    // model that has no reasoning channel.
+    std::string reasoning_content;
+
     // For assistant messages that contain tool calls:
     std::vector<ToolCallRequest> tool_calls;
 

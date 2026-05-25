@@ -58,6 +58,13 @@ std::string write_atomic(const std::filesystem::path& target,
 
 ToolResult error_result(const std::string& msg);
 
+// S6.10 Task B -- closest-name suggestion across a list of tools. Returns
+// the candidate's `name()` with the smallest Levenshtein distance to
+// `target`. Empty when `candidates` is empty. Promoted from describe_tool.cpp
+// so ToolDispatcher's unknown-tool branch can share the helper.
+std::string closest_tool_name(const std::string& target,
+                              const std::vector<ITool*>& candidates);
+
 // Process-wide "this file was read by the agent" tracker (S4.A).
 // Edit tools require the file to have been read first -- mirrors the Claude
 // Code pattern that cuts hallucinated edits on local models. The set only

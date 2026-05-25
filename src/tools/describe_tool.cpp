@@ -1,4 +1,5 @@
 #include "tools/describe_tool.h"
+#include "tools/shared.h"
 
 #include "core/workspace.h"
 #include "core/workspace_services.h"
@@ -142,7 +143,11 @@ ToolResult DescribeTool::execute(const ToolCall& call,
     ITool* target = registry_.find(requested);
     if (!target) {
         auto all = registry_.all();
-        std::string suggestion = closest_name(requested, all);
+        // S6.10 Task B promoted closest-name to tools::closest_tool_name in
+        // shared.h so the dispatcher's unknown-tool branch can share it. The
+        // local helper above is retained for the ToolDispatcher-doesn't-have-
+        // shared-libs path; either call site is functionally equivalent.
+        std::string suggestion = tools::closest_tool_name(requested, all);
 
         std::ostringstream names;
         for (std::size_t i = 0; i < all.size(); ++i) {

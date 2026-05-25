@@ -20,6 +20,8 @@ enum class ActivityKind {
     memory_searched, // S4.R memory bank: search_memory invoked
     memory_deleted,  // S4.R memory bank: entry removed
     compaction,      // M5 polish: context compaction queued / applied
+    truncation_blocked,  // S6.10 Task G: write/edit refused -- truncation marker detected
+    quality_correction,  // S6.10 Task B: detector fired and injected a corrective nudge
     warning,         // non-fatal warning
     error            // non-fatal error surfaced to user
 };
@@ -54,6 +56,8 @@ inline const char* to_string(ActivityKind k)
     case ActivityKind::memory_searched: return "memory_searched";
     case ActivityKind::memory_deleted:  return "memory_deleted";
     case ActivityKind::compaction:      return "compaction";
+    case ActivityKind::truncation_blocked: return "truncation_blocked";
+    case ActivityKind::quality_correction: return "quality_correction";
     case ActivityKind::warning:         return "warning";
     case ActivityKind::error:           return "error";
     }

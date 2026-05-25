@@ -5,6 +5,7 @@
 #include "index/embedding_worker.h"
 #include "index/index_query.h"
 #include "index/indexer.h"
+#include "llm/model_presets.h"
 #include "mcp/mcp_manager.h"
 #include "tools/tools.h"
 
@@ -85,6 +86,60 @@ void LocusSession::load_shared_resources(const std::filesystem::path& ws_path,
         llm_config_.model = model_info.id;
         spdlog::info("Model auto-detected: {}", llm_config_.model);
     }
+
+    // S6.10 Task F -- auto-apply matching preset when the user hasn't pinned
+    // a specific one. `llm_preset_name` empty / "auto" means "delegate to the
+    // family matcher"; a literal preset name pins it. The bool is the master
+    // switch (default true). Apply replaces the sampler block + temperature
+    // + max_tokens + tool_format + grammar_mode in `llm_config_`; users who
+    // want their hand-tuned values back uncheck the box in Settings.
+    {
+        const auto& wc_ad = workspace_->config();
+        if (wc_ad.auto_detect_model_preset) {
+            const ModelPreset* preset = nullptr;
+            std::string source;
+            if (!wc_ad.llm_preset_name.empty()
+                && wc_ad.llm_preset_name != "auto")
+            {
+                preset = find_preset(wc_ad.llm_preset_name);
+                if (preset) {
+                    source = "pinned";
+                } else {
+                    spdlog::warn("Preset '{}' not found; falling back to auto-"
+                                 "detect", wc_ad.llm_preset_name);
+                }
+            }
+            if (!preset && !model_info.id.empty()) {
+                preset = find_preset_for_model(model_info.id);
+                if (preset) {
+                    source = "auto-detected";
+                    spdlog::info("auto-applied preset '{}' for model '{}'",
+                                 preset->name, model_info.id);
+                } else {
+                    spdlog::info("no preset matched model id '{}'; keeping "
+                                 "current config", model_info.id);
+                }
+            } else if (preset) {
+                spdlog::info("applied user-pinned preset '{}'", preset->name);
+            }
+            if (preset) {
+                llm_config_.temperature    = preset->temperature;
+                llm_config_.max_tokens     = preset->max_tokens;
+                llm_config_.tool_format    = preset->tool_format;
+                llm_config_.top_p          = preset->top_p;
+                llm_config_.top_k          = preset->top_k;
+                llm_config_.min_p          = preset->min_p;
+                llm_config_.repeat_penalty = preset->repeat_penalty;
+                llm_config_.grammar_mode   = preset->grammar_mode;
+                spdlog::trace("preset '{}' applied via {} (temp={}, top_p={}, "
+                              "top_k={}, tool_format={})",
+                              preset->name, source, preset->temperature,
+                              preset->top_p, preset->top_k,
+                              to_string(preset->tool_format));
+            }
+        }
+    }
+
     if (llm_config_.context_limit <= 0) {
         if (model_info.context_length > 0) {
             llm_config_.context_limit = model_info.context_length;

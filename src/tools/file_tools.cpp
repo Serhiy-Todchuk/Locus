@@ -1,5 +1,6 @@
 #include "tools/file_tools.h"
 #include "tools/shared.h"
+#include "tools/truncation_detector.h"
 
 #include "core/workspace.h"
 #include "core/workspace_services.h"
@@ -8,6 +9,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <sstream>
 #include <string>
 
@@ -15,10 +17,51 @@ namespace locus {
 
 namespace fs = std::filesystem;
 
+using tools::detect_truncation_phrase;
 using tools::error_result;
 using tools::ReadTracker;
 using tools::resolve_path;
 using tools::write_atomic;
+
+namespace {
+
+// S6.10 Task G -- run the truncation detector against `body` if the workspace
+// has the flag on. Returns an error_result-style ToolResult on detection
+// (success=false, content carrying the matched phrase + override hint);
+// returns nullopt when the body looks clean OR when the flag is off.
+std::optional<ToolResult> check_truncation(IWorkspaceServices& ws,
+                                            const std::string& body,
+                                            const std::string& rel_path,
+                                            const std::string& tool_name)
+{
+    // Respect the per-workspace knob; opt out cleanly when no workspace
+    // is wired (the in-process tests use a FakeWorkspaceServices).
+    Workspace* w = ws.workspace();
+    if (!w || !w->config().detect_write_truncation) return std::nullopt;
+
+    auto match = detect_truncation_phrase(body);
+    if (!match) return std::nullopt;
+
+    spdlog::warn("{}: truncation marker '{}' detected near end of {} -- refusing",
+                 tool_name, *match, rel_path);
+
+    std::string msg =
+        "Error: the proposed content for '" + rel_path +
+        "' appears truncated. Matched the elision marker '" + *match +
+        "' near the end of the body. Emit the complete file content -- "
+        "placeholders like 'rest of the code' indicate the model elided real "
+        "content. If this string is intentional in your file, set "
+        "agent.detect_write_truncation=false in .locus/config.json.";
+    ToolResult r{false, msg, msg};
+    r.activity_tag     = "truncation_blocked";
+    r.activity_summary = "Write blocked: truncation marker in " + rel_path;
+    r.activity_detail  = "tool: " + tool_name +
+                         "\npath: " + rel_path +
+                         "\nphrase: " + *match;
+    return r;
+}
+
+} // namespace
 
 // -- ReadFileTool -----------------------------------------------------------
 
@@ -123,6 +166,10 @@ ToolResult WriteFileTool::execute(const ToolCall& call, IWorkspaceServices& ws,
         return error_result("Error: file already exists: " + rel_path +
                             " (set overwrite=true to replace it, or use edit_file "
                             "for partial changes)");
+
+    // S6.10 Task G -- block writes whose body ends in an elision marker.
+    if (auto blocked = check_truncation(ws, content, rel_path, "write_file"))
+        return *blocked;
 
     // Make sure the containing directory exists -- covers both fresh files and
     // rewrites whose directory got removed since the path was chosen.
@@ -315,6 +362,10 @@ ToolResult EditFileTool::execute(const ToolCall& call, IWorkspaceServices& ws,
         std::string old_s = e.value("old_string", "");
         std::string new_s = e.value("new_string", "");
         bool all          = e.value("replace_all", false);
+
+        // S6.10 Task G -- screen each new_string body before applying.
+        if (auto blocked = check_truncation(ws, new_s, rel_path, "edit_file"))
+            return *blocked;
 
         std::string err = apply_single_edit(buf, old_s, new_s, all, rel_path);
         if (!err.empty()) {

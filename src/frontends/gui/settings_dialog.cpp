@@ -19,7 +19,7 @@ namespace locus {
 SettingsDialog::SettingsDialog(wxWindow* parent, WorkspaceConfig& config,
                                IToolRegistry& tools, McpManager* mcp)
     : wxDialog(parent, wxID_ANY, "Settings",
-               wxDefaultPosition, wxSize(620, 560),
+               wxDefaultPosition, wxSize(620, 760),
                wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER)
     , config_(config)
     , tools_(tools)

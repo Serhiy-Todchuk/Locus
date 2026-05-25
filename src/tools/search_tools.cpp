@@ -56,6 +56,26 @@ std::string SearchTool::description_for(IWorkspaceServices& ws) const
     desc += ".";
     if (semantic) desc += " Semantic and hybrid require semantic search to be "
                           "enabled.";
+
+    // S6.10 Task E -- per-mode examples. Only render examples for modes
+    // actually available in this workspace; mirrors the mode-list filter
+    // above so the LLM doesn't see hints for tools it can't call.
+    desc += "\nExamples:\n";
+    desc += "  search({\"query\": \"WorkspaceConfig\"})  // text (default)\n";
+    desc += "  search({\"query\": \"->m_cache\", \"mode\": \"regex\"})\n";
+    if (code) {
+        desc += "  search({\"query\": \"ToolDispatcher\", \"mode\": \"symbols\", "
+                "\"kind\": \"class\"})\n";
+        desc += "  search({\"query\": \"(call_expression function: (identifier) "
+                "@fn (#eq? @fn \\\"malloc\\\"))\", \"mode\": \"ast\", "
+                "\"language\": \"c\"})\n";
+    }
+    if (semantic) {
+        desc += "  search({\"query\": \"how does the indexer batch file "
+                "events\", \"mode\": \"semantic\"})\n";
+        desc += "  search({\"query\": \"reasoning watchdog auto-nudge\", "
+                "\"mode\": \"hybrid\"})";
+    }
     return desc;
 }
 

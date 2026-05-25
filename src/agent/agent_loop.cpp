@@ -328,7 +328,50 @@ AgentStepResult AgentLoop::run_step(const ConversationHistory& history,
         return cancel_flag_.load(std::memory_order_relaxed);
     };
 
-    llm_.stream_completion(history.messages(), tool_schemas, cbs);
+    // S6.10 Task C -- build the outgoing messages vector, optionally stripping
+    // reasoning_content from past assistant messages. Strip every assistant
+    // message EXCEPT the most recent if and only if the very last message in
+    // history is a tool result (we're mid-decision-chain and the model may
+    // still need its own reasoning to interpret the result). Assistant
+    // messages that have ONLY reasoning (no content, no tool_calls) are
+    // preserved intact -- those are vanishingly rare post-S6.13 and the
+    // simple rule beats a sentence-counting heuristic.
+    std::vector<ChatMessage> outgoing = history.messages();
+    bool strip_enabled = true;
+    if (auto* ws = services_.workspace())
+        strip_enabled = ws->config().strip_past_thinking;
+    if (strip_enabled) {
+        // Find the most recent assistant message.
+        int last_assistant_idx = -1;
+        for (int i = static_cast<int>(outgoing.size()) - 1; i >= 0; --i) {
+            if (outgoing[i].role == MessageRole::assistant) {
+                last_assistant_idx = i;
+                break;
+            }
+        }
+        bool keep_latest =
+            !outgoing.empty() &&
+            outgoing.back().role == MessageRole::tool;
+        long long stripped_bytes = 0;
+        for (int i = 0; i < static_cast<int>(outgoing.size()); ++i) {
+            ChatMessage& m = outgoing[i];
+            if (m.role != MessageRole::assistant) continue;
+            if (m.reasoning_content.empty()) continue;
+            // Preserve assistant messages with ONLY reasoning intact -- a one-
+            // line check covers the post-S6.13 edge case without further
+            // heuristics.
+            if (m.content.empty() && m.tool_calls.empty()) continue;
+            if (i == last_assistant_idx && keep_latest) continue;
+            stripped_bytes += static_cast<long long>(m.reasoning_content.size());
+            m.reasoning_content.clear();
+        }
+        if (stripped_bytes > 0) {
+            spdlog::trace("AgentLoop: stripped {} bytes of past-turn reasoning "
+                          "from outgoing payload",
+                          stripped_bytes);
+        }
+    }
+    llm_.stream_completion(outgoing, tool_schemas, cbs);
 
     auto stream_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                          std::chrono::steady_clock::now() - stream_t0).count();
@@ -406,6 +449,11 @@ AgentStepResult AgentLoop::run_step(const ConversationHistory& history,
 
     out.assistant_msg.role = MessageRole::assistant;
     out.assistant_msg.content = accumulated_text;
+    // S6.10 Task C -- capture this turn's reasoning into the assistant
+    // message so the next round (mid-decision-chain after a tool result)
+    // sees the model's own thinking. AgentLoop's payload-prep strips it
+    // again from older assistant messages so prefix cache survives.
+    out.assistant_msg.reasoning_content = accumulated_reasoning;
     out.assistant_msg.tool_calls = tool_call_requests;
 
     out.tool_calls.reserve(tool_call_requests.size());

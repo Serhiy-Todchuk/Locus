@@ -128,19 +128,44 @@ void ToolDispatcher::dispatch(const ToolCall& call, const AppendFn& append_resul
     auto* tool = tools_.find(call.tool_name);
 
     if (!tool) {
-        spdlog::warn("ToolDispatcher: unknown tool '{}'", call.tool_name);
+        // S6.10 Task B -- enrich the dispatcher's unknown-tool error with a
+        // closest-match suggestion + a short list of names the model could
+        // have called, so the next round has actionable context instead of
+        // just "your tool name is wrong". This replaces what the original
+        // spec proposed as the `unknown_tool` quality-monitor detector.
+        auto all = tools_.all();
+        std::string suggestion = tools::closest_tool_name(call.tool_name, all);
+        std::string available;
+        for (std::size_t i = 0; i < all.size() && i < 24; ++i) {
+            if (i) available += ", ";
+            available += all[i]->name();
+        }
+        if (all.size() > 24) available += ", ...";
+
+        spdlog::warn("ToolDispatcher: unknown tool '{}' (suggest '{}')",
+                     call.tool_name, suggestion);
         ChatMessage err;
         err.role = MessageRole::tool;
         err.tool_call_id = call.id;
-        err.content = "Error: unknown tool '" + call.tool_name + "'";
+        err.content = "Error: unknown tool '" + call.tool_name + "'.";
+        if (!suggestion.empty())
+            err.content += " Did you mean '" + suggestion + "'?";
+        err.content += " Available tools: " + available;
         append_result(std::move(err));
         frontends_.broadcast([&](IFrontend& fe) {
             fe.on_error("Unknown tool: " + call.tool_name);
         });
         activity_.emit(ActivityKind::error,
-                       "Unknown tool: " + call.tool_name,
+                       "Unknown tool: " + call.tool_name +
+                           (suggestion.empty()
+                                ? std::string{}
+                                : " (suggest '" + suggestion + "')"),
                        "LLM requested tool '" + call.tool_name +
-                           "' which is not registered.");
+                           "' which is not registered.\n" +
+                           (suggestion.empty()
+                                ? std::string{}
+                                : "Closest match: " + suggestion + "\n") +
+                           "Available: " + available);
         return;
     }
 
@@ -468,6 +493,21 @@ void ToolDispatcher::dispatch(const ToolCall& call, const AppendFn& append_resul
                                       : ActivityKind::error,
                        std::move(sum),
                        result.content);
+    }
+
+    // S6.10 Task G -- optional companion event when the tool flagged its
+    // result with an activity tag (today: truncation_blocked from file tools).
+    if (!result.activity_tag.empty()) {
+        ActivityKind kind = ActivityKind::warning;
+        if (result.activity_tag == "truncation_blocked")
+            kind = ActivityKind::truncation_blocked;
+        else if (result.activity_tag == "quality_correction")
+            kind = ActivityKind::quality_correction;
+        activity_.emit(kind,
+                       result.activity_summary.empty()
+                           ? std::string{"Tool flagged: "} + result.activity_tag
+                           : result.activity_summary,
+                       result.activity_detail);
     }
 
     ChatMessage tool_msg;

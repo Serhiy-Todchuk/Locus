@@ -342,6 +342,24 @@ LlmSettingsPanel::LlmSettingsPanel(wxWindow* parent, const WorkspaceConfig& conf
     {
         auto* row = new wxBoxSizer(wxHORIZONTAL);
         row->AddStretchSpacer(1);
+        // S6.10 Task H -- sampler-only reset. Distinct from the
+        // preset Load button (which clobbers temperature / max_tokens /
+        // tool_format too). Resets only the sampler block so a user who has
+        // tuned temperature manually can re-baseline the samplers without
+        // losing their custom temperature.
+        sampler_reset_btn_ = new wxButton(this, wxID_ANY,
+            "Reset samplers to preset");
+        sampler_reset_btn_->SetToolTip(
+            "Reset the top_p / top_k / min_p / repeat_penalty / "
+            "frequency_penalty / presence_penalty fields to the values from "
+            "the currently selected preset. Temperature and other fields are "
+            "left alone.");
+        sampler_reset_btn_->SetName(ui_names::kSettingsLlmSamplerResetBtn);
+        gui::apply_locus_accessible_name(sampler_reset_btn_);
+        sampler_reset_btn_->Bind(wxEVT_BUTTON,
+            &LlmSettingsPanel::on_sampler_reset, this);
+        row->Add(sampler_reset_btn_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+
         auto* btn = new wxButton(this, wxID_ANY, "Reset to global defaults");
         btn->SetToolTip(
             "Reload the controls on this tab from ~/.locus/config.json. "
@@ -354,7 +372,53 @@ LlmSettingsPanel::LlmSettingsPanel(wxWindow* parent, const WorkspaceConfig& conf
         outer->Add(row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
     }
 
+    // S6.10 Task F -- auto-detect preset on workspace open.
+    {
+        auto* row = new wxBoxSizer(wxHORIZONTAL);
+        auto_detect_preset_ctrl_ = new wxCheckBox(this, wxID_ANY,
+            "Auto-detect preset on workspace open");
+        auto_detect_preset_ctrl_->SetValue(config.auto_detect_model_preset);
+        auto_detect_preset_ctrl_->SetToolTip(
+            "At workspace open, ask the LM Studio / llama-server endpoint for "
+            "the loaded model id and apply the matching preset if one is "
+            "available. Disable to keep whatever preset (or custom values) "
+            "are persisted in .locus/config.json.");
+        auto_detect_preset_ctrl_->SetName(
+            ui_names::kSettingsLlmAutoDetectPreset);
+        gui::apply_locus_accessible_name(auto_detect_preset_ctrl_);
+        row->Add(auto_detect_preset_ctrl_, 0, wxALIGN_CENTER_VERTICAL);
+        outer->Add(row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
+    }
+
     SetSizer(outer);
+}
+
+void LlmSettingsPanel::on_sampler_reset(wxCommandEvent&)
+{
+    if (!preset_ctrl_) return;
+    int sel = preset_ctrl_->GetSelection();
+    if (sel <= 0) {
+        // "Custom" selected -- nothing to reset to. Zero out the sampler
+        // block so the request body stays lean (the 0 sentinel means
+        // "don't send"). This matches the implicit behaviour the user gets
+        // when they apply "Custom" via the picker.
+        if (top_p_ctrl_)             top_p_ctrl_->SetValue(0.0);
+        if (top_k_ctrl_)             top_k_ctrl_->SetValue(0);
+        if (min_p_ctrl_)             min_p_ctrl_->SetValue(0.0);
+        if (repeat_penalty_ctrl_)    repeat_penalty_ctrl_->SetValue(0.0);
+        if (frequency_penalty_ctrl_) frequency_penalty_ctrl_->SetValue(0.0);
+        if (presence_penalty_ctrl_)  presence_penalty_ctrl_->SetValue(0.0);
+        return;
+    }
+    const auto& p = builtin_presets()[static_cast<size_t>(sel - 1)];
+    if (top_p_ctrl_)             top_p_ctrl_->SetValue(p.top_p);
+    if (top_k_ctrl_)             top_k_ctrl_->SetValue(p.top_k);
+    if (min_p_ctrl_)             min_p_ctrl_->SetValue(p.min_p);
+    if (repeat_penalty_ctrl_)    repeat_penalty_ctrl_->SetValue(p.repeat_penalty);
+    // frequency_penalty / presence_penalty are OpenAI-protocol; presets don't
+    // touch them, so the reset zeros these as well so the request stays clean.
+    if (frequency_penalty_ctrl_) frequency_penalty_ctrl_->SetValue(0.0);
+    if (presence_penalty_ctrl_)  presence_penalty_ctrl_->SetValue(0.0);
 }
 
 void LlmSettingsPanel::on_preset_choice(wxCommandEvent&)
@@ -456,6 +520,9 @@ void LlmSettingsPanel::load_from_config(const WorkspaceConfig& cfg)
     if (frequency_penalty_ctrl_) frequency_penalty_ctrl_->SetValue(cfg.llm_frequency_penalty);
     if (presence_penalty_ctrl_)  presence_penalty_ctrl_->SetValue(cfg.llm_presence_penalty);
 
+    if (auto_detect_preset_ctrl_)
+        auto_detect_preset_ctrl_->SetValue(cfg.auto_detect_model_preset);
+
     // Snap the preset picker back to "Custom" after a reset; the loaded values
     // may not match any preset and showing a stale match would be misleading.
     if (preset_ctrl_) preset_ctrl_->SetSelection(0);
@@ -500,6 +567,9 @@ void LlmSettingsPanel::commit_to_config(WorkspaceConfig& cfg) const
     if (repeat_penalty_ctrl_)    cfg.llm_repeat_penalty = repeat_penalty_ctrl_->GetValue();
     if (frequency_penalty_ctrl_) cfg.llm_frequency_penalty = frequency_penalty_ctrl_->GetValue();
     if (presence_penalty_ctrl_)  cfg.llm_presence_penalty  = presence_penalty_ctrl_->GetValue();
+
+    if (auto_detect_preset_ctrl_)
+        cfg.auto_detect_model_preset = auto_detect_preset_ctrl_->GetValue();
 }
 
 } // namespace locus

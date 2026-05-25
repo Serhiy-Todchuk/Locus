@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <cstring>
 #include <fstream>
+#include <limits>
+#include <vector>
 
 #if defined(_WIN32)
 #  include <cwctype>
@@ -118,6 +120,42 @@ std::string make_relative(IWorkspaceServices& ws, const fs::path& p)
 ToolResult error_result(const std::string& msg)
 {
     return {false, msg, msg};
+}
+
+// S6.10 Task B -- shared closest-name helper. Levenshtein bounded by the
+// number of registered tools (~20); cheap enough that we don't need a max
+// distance cutoff. Returns empty when `candidates` is empty.
+namespace {
+int levenshtein_local(const std::string& a, const std::string& b)
+{
+    const std::size_t m = a.size();
+    const std::size_t n = b.size();
+    std::vector<std::vector<int>> dp(m + 1, std::vector<int>(n + 1, 0));
+    for (std::size_t i = 0; i <= m; ++i) dp[i][0] = static_cast<int>(i);
+    for (std::size_t j = 0; j <= n; ++j) dp[0][j] = static_cast<int>(j);
+    for (std::size_t i = 1; i <= m; ++i) {
+        for (std::size_t j = 1; j <= n; ++j) {
+            int cost = a[i - 1] == b[j - 1] ? 0 : 1;
+            dp[i][j] = std::min({dp[i - 1][j] + 1,
+                                 dp[i][j - 1] + 1,
+                                 dp[i - 1][j - 1] + cost});
+        }
+    }
+    return dp[m][n];
+}
+} // namespace
+
+std::string closest_tool_name(const std::string& target,
+                              const std::vector<ITool*>& candidates)
+{
+    std::string best;
+    int best_d = std::numeric_limits<int>::max();
+    for (auto* t : candidates) {
+        if (!t) continue;
+        int d = levenshtein_local(target, t->name());
+        if (d < best_d) { best_d = d; best = t->name(); }
+    }
+    return best;
 }
 
 ToolApprovalPolicy resolve_approval_policy(

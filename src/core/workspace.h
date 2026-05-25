@@ -253,6 +253,38 @@ struct WorkspaceConfig {
     // for ~one fewer round trip per edit.
     bool require_read_before_edit = true;
 
+    // S6.10 Task G -- anti-truncation detector for code writes. When true,
+    // WriteFileTool and EditFileTool scan the final body / new_string for
+    // elision markers ("// rest of the code", "// ... existing code ...",
+    // etc.) and refuse the operation when a phrase is matched. Default on:
+    // a false positive means the user re-issues a write (cheap); a false
+    // negative means a silently corrupted file (expensive).
+    bool detect_write_truncation = true;
+
+    // S6.10 Task B -- detector layer that watches for empty-response and
+    // repeated-tool-call failure modes and injects a corrective nudge
+    // through AgentCore's existing nudges_this_turn_ + synthetic-user-message
+    // path. Shares the 2-cap with the reasoning watchdog. Default on.
+    bool quality_monitor_enabled = true;
+
+    // S6.10 Task C -- strip past-turn reasoning_content from the LLM payload.
+    // Reasoning blocks are decision scratchpads that add no information once
+    // the tool result is back in the conversation. Keeping them past turn N
+    // shoots the prefix cache and inflates round N+1's context. Display
+    // layer is unchanged: chat panel and activity log still see the full
+    // reasoning. Default on.
+    bool strip_past_thinking = true;
+
+    // S6.10 Task F -- auto-apply matching preset at workspace open when
+    // `llm.preset_name` is empty or "auto" (the new default). Set false to
+    // skip the detect entirely. The current preset is otherwise untouched
+    // and the user is expected to pick from the Settings -> LLM tab dropdown.
+    bool auto_detect_model_preset = true;
+    // Last preset the user picked (or "" / "auto" to engage auto-detect).
+    // Stored in `.locus/config.json` so a workspace re-open uses the chosen
+    // value without forcing a re-detect.
+    std::string llm_preset_name = "";
+
     // S4.R -- workspace-scoped memory bank. When enabled, two tools land in the
     // manifest (`add_memory`, `search_memory`), a slot is reserved in the
     // system prompt for pinned + recently-used entries, and `/memorize` is

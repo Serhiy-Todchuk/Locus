@@ -30,6 +30,7 @@ add_executable(locus_integration_tests
     test_int_lazy_manifest.cpp
     test_int_reasoning_watchdog.cpp
     test_int_tool_calls.cpp
+    test_int_small_model_robustness.cpp
 )
 
 target_include_directories(locus_integration_tests PRIVATE

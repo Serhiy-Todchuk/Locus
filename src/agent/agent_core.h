@@ -216,6 +216,13 @@ private:
                                   const std::string& result_content,
                                   bool result_success);
 
+    // S6.10 Task B -- inject a synthetic-user-message nudge, share the
+    // S6.13 per-turn 2-cap with the reasoning watchdog. Returns false when
+    // the cap would be exceeded (caller should abort the turn with the
+    // standard "Agent appears stuck" error). Quality monitor uses this;
+    // future detector layers can hook the same entry point.
+    bool inject_nudge(std::string body, const std::string& reason_tag);
+
     int current_token_count() const { return ctx_->current_tokens(); }
 
     // Members

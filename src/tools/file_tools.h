@@ -13,7 +13,9 @@ public:
                "For binary document formats (PDF, DOCX, XLSX) read_file "
                "returns raw bytes -- use `search` instead: those formats "
                "are extracted to clean text at index time and are fully "
-               "searchable. `get_file_outline` also works on them.";
+               "searchable. `get_file_outline` also works on them.\n"
+               "Example:\n"
+               "  read_file({\"path\": \"src/main.cpp\", \"offset\": 1, \"length\": 100})";
     }
     std::string short_description() const override {
         return "Read a line range of a text file (paginates large files).";
@@ -45,7 +47,10 @@ public:
                "create_directory tool, write_file is sufficient for scaffolding a "
                "fresh project tree. Fails if the file already exists unless "
                "`overwrite=true` is set -- set that only when you intend to replace "
-               "the whole file. For modifying existing files, prefer `edit_file`.";
+               "the whole file. For modifying existing files, prefer `edit_file`.\n"
+               "Example:\n"
+               "  write_file({\"path\": \"src/new_module.cpp\", \"content\": \"...\"})\n"
+               "  // overwrite=false (default) refuses if the file exists.";
     }
     std::string short_description() const override {
         return "Create a new file (set overwrite=true to replace existing).";
@@ -86,7 +91,17 @@ public:
                "PRECONDITION: read_file must have been called on the same path during "
                "this session. Call read_file first if you have not already -- "
                "edit_file will return an error otherwise. This guard catches blind "
-               "edits against stale assumptions about file contents.";
+               "edits against stale assumptions about file contents.\n"
+               "Examples:\n"
+               "  // Single edit:\n"
+               "  edit_file({\"path\": \"src/foo.cpp\", \"edits\": [\n"
+               "    {\"old_string\": \"int total = 0;\", \"new_string\": \"int total = 1;\"}\n"
+               "  ]})\n"
+               "  // Atomic batch of two:\n"
+               "  edit_file({\"path\": \"src/foo.cpp\", \"edits\": [\n"
+               "    {\"old_string\": \"oldFn(\", \"new_string\": \"newFn(\", \"replace_all\": true},\n"
+               "    {\"old_string\": \"// TODO\", \"new_string\": \"// DONE\"}\n"
+               "  ]})";
     }
     std::string short_description() const override {
         return "Apply exact-string edits to a file atomically (read_file first).";

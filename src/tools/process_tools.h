@@ -66,7 +66,14 @@ public:
         return "Start a long-running shell command in the background and return its "
                "process_id. The command keeps running across agent turns. Use for dev "
                "servers, file watchers, long builds, or anything you intend to tail. "
-               "Read its output with `read_process_output`, terminate with `stop_process`.";
+               "Read its output with `read_process_output`, terminate with `stop_process`.\n"
+               "Example -- start, then tail, then stop:\n"
+               "  // 1. start:\n"
+               "  run_command_bg({\"command\": \"npm run dev\"})  // -> {\"process_id\": 1}\n"
+               "  // 2. read new output (omit since_offset to continue from last read):\n"
+               "  read_process_output({\"process_id\": 1})\n"
+               "  // 3. stop when done:\n"
+               "  stop_process({\"process_id\": 1})";
     }
     std::string short_description() const override {
         return "Start a long-running shell process; returns a process_id.";

@@ -1,0 +1,93 @@
+{
+  "name": "sampler_reset_and_auto_detect",
+  "description": "S6.10 Tasks H + F -- exercise the LLM tab's new 'Reset samplers to preset' button and the 'Auto-detect preset on workspace open' checkbox. Both surfaces are addressed by the names declared in ui_names.h. The button click is verifiable by visibility / parent presence (UIA can't reliably read wxSpinCtrlDouble values to confirm the sampler block actually reset, see the manual test plan). The checkbox is similarly verifiable as 'present and clickable'; round-tripping its state through settings_persistence is covered by the existing settings_persistence.json script.",
+  "setup": {
+    "workspace": "tmp"
+  },
+  "steps": [
+    { "op": "launch" },
+    {
+      "op": "wait_for_window",
+      "args": { "title_prefix": "Locus", "timeout_ms": 20000 }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.chat.panel", "timeout_ms": 15000 }
+    },
+    { "op": "sleep", "args": { "ms": 400 } },
+
+    { "op": "press_key", "args": { "key": "COMMA", "modifiers": "CTRL" } },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.settings.notebook", "timeout_ms": 5000 }
+    },
+    {
+      "op": "select_tab",
+      "args": { "parent_aid": "locus.settings.notebook", "index": 0 }
+    },
+    { "op": "sleep", "args": { "ms": 400 } },
+
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.settings.llm.sampler_reset_btn", "timeout_ms": 5000 }
+    },
+    {
+      "op": "assert_visible",
+      "args": { "automation_id": "locus.settings.llm.sampler_reset_btn" }
+    },
+    { "op": "screenshot", "args": { "name": "01_sampler_reset_button_visible" } },
+
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.settings.llm.auto_detect_preset", "timeout_ms": 5000 }
+    },
+    {
+      "op": "assert_visible",
+      "args": { "automation_id": "locus.settings.llm.auto_detect_preset" }
+    },
+    { "op": "screenshot", "args": { "name": "02_auto_detect_checkbox_visible" } },
+
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.settings.llm.preset_choice", "timeout_ms": 5000 }
+    },
+    {
+      "op": "click",
+      "args": { "automation_id": "locus.settings.llm.preset_choice" }
+    },
+    { "op": "sleep", "args": { "ms": 200 } },
+    {
+      "op": "press_key",
+      "args": { "automation_id": "locus.settings.llm.preset_choice", "key": "DOWN" }
+    },
+    {
+      "op": "press_key",
+      "args": { "automation_id": "locus.settings.llm.preset_choice", "key": "DOWN" }
+    },
+    { "op": "sleep", "args": { "ms": 200 } },
+
+    {
+      "op": "click",
+      "args": { "automation_id": "locus.settings.llm.preset_apply_btn" }
+    },
+    { "op": "sleep", "args": { "ms": 300 } },
+
+    {
+      "op": "click",
+      "args": { "automation_id": "locus.settings.llm.sampler_reset_btn" }
+    },
+    { "op": "sleep", "args": { "ms": 300 } },
+    { "op": "screenshot", "args": { "name": "03_after_sampler_reset" } },
+
+    {
+      "op": "click",
+      "args": { "automation_id": "locus.settings.llm.auto_detect_preset" }
+    },
+    { "op": "sleep", "args": { "ms": 200 } },
+    { "op": "screenshot", "args": { "name": "04_after_auto_detect_toggle" } },
+
+    { "op": "press_key", "args": { "key": "ESC" } },
+    { "op": "sleep", "args": { "ms": 300 } },
+    { "op": "quit", "args": { "wait_ms": 5000 } }
+  ]
+}
