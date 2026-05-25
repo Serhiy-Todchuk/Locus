@@ -207,7 +207,7 @@ ToolResult SearchMemoryTool::execute(const ToolCall& call, IWorkspaceServices& w
     if (auto* wsp = ws.workspace()) {
         // No direct WorkspaceConfig accessor here -- rely on the default
         // unless the workspace exposes one. The default matches WorkspaceConfig
-        // .memory_search_response_max_tokens (1500). A future revision can
+        // .memory.search_response_max_tokens (1500). A future revision can
         // wire IWorkspaceServices::config() through if a per-call override
         // becomes necessary.
         (void)wsp;

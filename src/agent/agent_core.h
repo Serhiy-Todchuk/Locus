@@ -52,7 +52,15 @@ namespace locus {
 //   thread during each turn; between turns the fence is cleared so inter-turn
 //   operations (CLI REPL /reset etc.) run on any thread.
 
+class AgentTurnRunner;  // runs the round loop; friend below.
+
 class AgentCore : public ILocusCore {
+    // The round loop lives in AgentTurnRunner (agent/agent_turn.cpp). It
+    // reaches into the atomics + mutexes + member subsystems below; making
+    // it a friend keeps the lift purely mechanical without exposing a new
+    // public surface.
+    friend class AgentTurnRunner;
+
 public:
     AgentCore(ILLMClient& llm,
               IToolRegistry& tools,

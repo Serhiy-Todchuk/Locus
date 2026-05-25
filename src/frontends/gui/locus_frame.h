@@ -29,6 +29,7 @@
 
 namespace locus {
 
+class AgentEventRouter;
 class LocusTab;
 class McpManager;
 
@@ -38,6 +39,10 @@ class McpManager;
 // Workspace-shared subsystems sit on the LocusSession; tab-scoped state
 // (chat panel, per-tab WxFrontend) lives on a `TabUi` value in `tabs_ui_`.
 class LocusFrame : public wxFrame {
+    // The on_agent_* event handlers live in AgentEventRouter
+    // (agent_event_router.h/cpp); they reach into the private state below.
+    friend class AgentEventRouter;
+
 public:
     explicit LocusFrame(LocusSession& session);
     ~LocusFrame() override;
@@ -147,37 +152,7 @@ private:
     void on_iconize(wxIconizeEvent& evt);
     void on_aui_pane_close(wxAuiManagerEvent& evt);
 
-    // Agent thread events (via WxFrontend). All route by tab_id (evt.GetId()).
-    void on_agent_turn_start(wxThreadEvent& evt);
-    void on_agent_token(wxThreadEvent& evt);
-    void on_agent_reasoning_token(wxThreadEvent& evt);
-    void on_agent_tool_pending(wxThreadEvent& evt);
-    void on_agent_tool_result(wxThreadEvent& evt);
-    void on_agent_turn_complete(wxThreadEvent& evt);
-    void on_agent_context_meter(wxThreadEvent& evt);
-    void on_agent_compaction(wxThreadEvent& evt);
-    void on_agent_compaction_archived(wxThreadEvent& evt);
-    void on_agent_session_reset(wxThreadEvent& evt);
-    void on_agent_error(wxThreadEvent& evt);
-    void on_agent_embedding_progress(wxThreadEvent& evt);
-    void on_agent_indexing_progress(wxThreadEvent& evt);
-    void on_agent_activity(wxThreadEvent& evt);
-    void on_agent_activity_updated(wxThreadEvent& evt);
-    void on_agent_attached_context(wxThreadEvent& evt);
-    void on_agent_mode_changed(wxThreadEvent& evt);
-    void on_agent_plan_proposed(wxThreadEvent& evt);
-    void on_agent_plan_step_advanced(wxThreadEvent& evt);
-    void on_agent_plan_completed(wxThreadEvent& evt);
-    void on_agent_auto_commit(wxThreadEvent& evt);
-    void on_agent_gen_progress(wxThreadEvent& evt);
-    void on_agent_history_msg_added(wxThreadEvent& evt);
-    void on_agent_history_msg_deleted(wxThreadEvent& evt);
-    void on_agent_preset_changed(wxThreadEvent& evt);
-    void on_agent_round_progress(wxThreadEvent& evt);
-    // S6.13 follow-up -- reasoning watchdog routed to the active tab's chat
-    // panel: show / hide the Commit-now button.
-    void on_agent_watchdog_tripped(wxThreadEvent& evt);
-    void on_agent_watchdog_cleared(wxThreadEvent& evt);
+    // Agent thread events (via WxFrontend) handled by AgentEventRouter.
 
     // S5.R observer callbacks (forwarded from TabProcessObserver via
     // CallAfter -- safe to call wx from here, runs on UI thread). Sync
@@ -247,9 +222,10 @@ private:
     }
 
     // System tray + menu.
-    std::unique_ptr<LocusTray>      tray_;
-    std::unique_ptr<MenuController> menu_;
-    OpsStatusView                   ops_status_;
+    std::unique_ptr<LocusTray>        tray_;
+    std::unique_ptr<MenuController>   menu_;
+    std::unique_ptr<AgentEventRouter> router_;
+    OpsStatusView                     ops_status_;
 
     // Workspace-shared panels.
     FileTreePanel*    file_tree_panel_   = nullptr;

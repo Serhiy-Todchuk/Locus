@@ -273,8 +273,8 @@ IntegrationHarness::IntegrationHarness()
     // already-merged patterns get cleared. This only affects the live
     // process; .locus/config.json on disk is untouched (we never save it
     // from the harness).
-    if (workspace_->config().respect_gitignore) {
-        workspace_->config().respect_gitignore = false;
+    if (workspace_->config().index.respect_gitignore) {
+        workspace_->config().index.respect_gitignore = false;
         workspace_->indexer().reload_gitignore();
         spdlog::info("Integration harness: disabled .gitignore respect for "
                      "scratch-dir visibility (tests/integration_tmp).");

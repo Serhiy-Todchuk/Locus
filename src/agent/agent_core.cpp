@@ -1,5 +1,6 @@
 #include "agent_core.h"
 
+#include "agent_turn.h"
 #include "auto_commit.h"
 #include "compaction_pipeline.h"
 #include "history_archive.h"
@@ -22,32 +23,6 @@
 #include <utility>
 
 namespace locus {
-
-namespace {
-
-// S5.F -- snapshot the workspace compaction config into a per-run selection.
-// AgentCore uses this from three places (legacy strategy shim, auto-compact
-// trigger in the round loop, /compact slash command) so it lives at file
-// scope.
-CompactionLayerSelection selection_from_config(const WorkspaceConfig::Compaction& c)
-{
-    CompactionLayerSelection sel;
-    sel.drop_redundant_tool_results           = c.layer_drop_redundant_tool_results;
-    sel.strip_large_tool_bodies               = c.layer_strip_large_tool_bodies;
-    sel.drop_old_reasoning                    = c.layer_drop_old_reasoning;
-    sel.drop_oldest_turns                     = c.layer_drop_oldest_turns;
-    sel.llm_summary                           = c.layer_llm_summary;
-    sel.strip_threshold_tokens                = c.strip_threshold_tokens;
-    sel.older_than_turns                      = c.older_than_turns;
-    sel.keep_recent_turns                     = c.keep_recent_turns;
-    sel.preserve_short_user_msgs_max_tokens   = c.preserve_short_user_msgs_max_tokens;
-    sel.preserve_short_tool_calls_max_tokens  = c.preserve_short_tool_calls_max_tokens;
-    sel.summary_max_tokens                    = c.summary_max_tokens;
-    sel.custom_summary_instructions           = c.custom_summary_instructions;
-    return sel;
-}
-
-} // namespace
 
 AgentCore::AgentCore(ILLMClient& llm,
                      IToolRegistry& tools,
@@ -86,8 +61,8 @@ AgentCore::AgentCore(ILLMClient& llm,
     bool lazy_manifest = false;
     SystemPromptProfile profile = SystemPromptProfile::Full;
     if (auto* w = services_.workspace()) {
-        lazy_manifest = w->config().lazy_tool_manifest;
-        profile       = profile_from_string(w->config().system_prompt_profile);
+        lazy_manifest = w->config().agent.lazy_tool_manifest;
+        profile       = profile_from_string(w->config().agent.system_prompt_profile);
     }
     auto assembly = SystemPromptAssembly::build(
         locus_md, ws_meta, tools, llm_config.tool_format, memory_section,
@@ -647,7 +622,7 @@ void AgentCore::process_message(const std::string& content)
     }
     bool notify = true;
     if (auto* ws = services_.workspace())
-        notify = ws->config().notify_external_changes;
+        notify = ws->config().agent.notify_external_changes;
     if (notify && ctx_->change_tracker()) {
         if (auto* idx = services_.index()) {
             try {
@@ -697,318 +672,12 @@ void AgentCore::process_message(const std::string& content)
                             ctx_->budget().reserve());
     });
 
-    int round = 0;
-    bool turn_had_error = false;
-
     // Per-workspace cap (Agentic Tetris findings #5). 0 = unbounded.
     int max_rounds = 0;
     if (auto* ws = services_.workspace())
-        max_rounds = ws->config().max_rounds_per_message;
+        max_rounds = ws->config().agent.max_rounds_per_message;
 
-    auto under_cap = [&]() {
-        return max_rounds <= 0 || round < max_rounds;
-    };
-
-    while (under_cap()) {
-        if (cancel_requested_.load()) {
-            spdlog::info("AgentCore: turn cancelled by user");
-            frontends_.broadcast([](IFrontend& fe) {
-                fe.on_error("Turn cancelled.");
-            });
-            break;
-        }
-
-        ++round;
-        // Round bookend at info level (was trace, bumped after agentic
-        // testing showed the chronology was unreadable at info without
-        // -verbose). Paired with the LLM POST summary line later in the
-        // same round, plus the per-tool dispatch lines, this gives a
-        // greppable round-by-round timeline in .locus/locus.log.
-        spdlog::info("AgentCore: round {} start (turn {})", round, turn_id);
-        frontends_.broadcast([&](IFrontend& fe) {
-            fe.on_round_progress(round, max_rounds);
-        });
-
-        apply_pending_compaction();
-        apply_pending_mode_change();
-        apply_pending_plan_decision();
-        apply_pending_deletes();
-
-        // Mid-turn user-message injection: while we were running the previous
-        // round, the user may have queued more prompts. Drain non-slash
-        // entries from the front of `message_queue_` and append them as
-        // user messages so the next LLM call sees them. Slash commands
-        // ('/clear', '/compact', ...) are NOT injected -- they need full
-        // turn-boundary semantics (history mutation, dialog spawn, ...) so
-        // we stop at the first slash entry and let the natural pop-and-
-        // process loop in agent_thread_func handle them once this turn ends.
-        // Cancellation also short-circuits the drain so a Stop-mid-turn
-        // doesn't sneak a queued prompt into history.
-        if (!cancel_requested_.load()) {
-            std::vector<std::string> injected;
-            {
-                std::lock_guard lock(queue_mutex_);
-                while (!message_queue_.empty()) {
-                    const std::string& front = message_queue_.front();
-                    std::size_t i = 0;
-                    while (i < front.size()
-                           && std::isspace(static_cast<unsigned char>(front[i])))
-                        ++i;
-                    if (i < front.size() && front[i] == '/') break;
-                    injected.push_back(std::move(message_queue_.front()));
-                    message_queue_.pop();
-                }
-            }
-            for (auto& m : injected) {
-                spdlog::info("AgentCore: injecting queued user message mid-turn "
-                             "({} chars, round {})", m.size(), round);
-                int chars = static_cast<int>(m.size());
-                ctx_->add_message({MessageRole::user, m});
-                int tok = ctx_->history().messages().back().token_estimate;
-                activity_->emit(ActivityKind::user_message,
-                                "User message (mid-turn, round "
-                                    + std::to_string(round) + ", "
-                                    + std::to_string(chars) + " chars)",
-                                m,
-                                /*tokens_in=*/tok);
-            }
-            if (!injected.empty()) {
-                frontends_.broadcast([&](IFrontend& fe) {
-                    fe.on_context_meter(ctx_->current_tokens(),
-                                        ctx_->llm_config().context_limit,
-                                        ctx_->budget().last_prompt_tokens(),
-                                        ctx_->budget().last_completion_tokens(),
-                                        ctx_->budget().reserve());
-                });
-            }
-        }
-
-        // S5.F -- auto-compact band. When usage crosses the configured
-        // auto_threshold of effective_limit and auto_enabled is on, queue
-        // the cascade (1+2+3+6, layer 5 reserved for explicit user invocation)
-        // and apply it immediately so the next round runs with a leaner history.
-        if (auto* ws = services_.workspace()) {
-            const auto& cc = ws->config().compaction;
-            // Only consider the auto band when the LLM context window is
-            // actually known (auto-detected > 0). Otherwise effective_limit
-            // collapses to 1 and a 2-K system prompt looks like 200000% usage.
-            int  raw_limit = ctx_->llm_config().context_limit;
-            if (cc.auto_enabled && raw_limit > 0) {
-                int eff  = ctx_->effective_limit();
-                int used = ctx_->current_tokens();
-                if (eff > 0 && used > 0) {
-                    double ratio = static_cast<double>(used) / eff;
-                    if (ratio >= cc.auto_threshold) {
-                        CompactionLayerSelection sel = selection_from_config(cc);
-                        int target = static_cast<int>(eff * cc.warn_threshold);
-                        if (target <= 0) target = eff / 2;
-                        spdlog::warn("AgentCore: auto-compact firing ({} / {} = {:.0f}% of effective_limit, threshold {:.0f}%)",
-                                     used, eff, ratio * 100, cc.auto_threshold * 100);
-                        {
-                            std::lock_guard lock(queue_mutex_);
-                            pending_pipeline_           = true;
-                            pending_pipeline_selection_ = sel;
-                            pending_pipeline_target_    = target;
-                            pending_pipeline_overrides_.clear();
-                        }
-                        apply_pending_compaction();
-                    }
-                }
-            }
-        }
-
-        if (ctx_->budget().check_overflow(ctx_->current_tokens()))
-            break;
-
-        ToolMode tool_mode = ToolMode::agent;
-        switch (mode_.load(std::memory_order_acquire)) {
-        case AgentMode::chat:    tool_mode = ToolMode::agent;   break;
-        case AgentMode::plan:    tool_mode = ToolMode::plan;    break;
-        case AgentMode::execute: tool_mode = ToolMode::execute; break;
-        }
-        auto step = loop_->run_step(ctx_->history(), tool_mode);
-
-        frontends_.broadcast([&](IFrontend& fe) {
-            fe.on_context_meter(ctx_->current_tokens(), ctx_->llm_config().context_limit,
-                            ctx_->budget().last_prompt_tokens(),
-                            ctx_->budget().last_completion_tokens(),
-                            ctx_->budget().reserve(),
-                            step.stream_ms);
-        });
-
-        if (step.had_error) {
-            turn_had_error = true;
-            break;
-        }
-
-        // Skip useless assistant messages -- empty content AND no tool_calls
-        // means the LLM returned nothing actionable. Most often happens on a
-        // mid-stream cancel before any token arrived, or on an LM Studio
-        // stream that died after finish_reason but before content. Appending
-        // such a message would leave a permanent orphan in history that has
-        // no UI bubble (render_loaded_history skips empty-content assistants)
-        // and corrupts the [user, assistant, ...] alternation some local LLM
-        // jinja templates require -- LM Studio's "No user query found in
-        // messages" rejection is the symptom.
-        const bool useless = step.assistant_msg.content.empty()
-                          && step.assistant_msg.tool_calls.empty();
-
-        if (cancel_requested_.load()) {
-            // S6.13 -- distinguish three reasons the cancel flag is hot:
-            //   (a) user clicked Stop                       -> abort turn
-            //   (b) UI clicked Commit now                   -> nudge + continue
-            //   (c) AgentLoop's auto-nudge tripped the flag -> nudge + continue
-            const bool is_nudge =
-                nudge_requested_.exchange(false) || step.watchdog_auto_nudge;
-            if (is_nudge) {
-                if (++nudges_this_turn_ > 2) {
-                    spdlog::warn("AgentCore: 3 reasoning watchdog trips in one turn; aborting");
-                    frontends_.broadcast([](IFrontend& fe) {
-                        fe.on_error(
-                            "Agent appears stuck (3 reasoning watchdog trips "
-                            "in one turn). Stopping. Adjust the prompt or raise "
-                            "agent.reasoning_max_chars / reasoning_max_seconds "
-                            "thresholds if the model genuinely needs more room.");
-                        fe.on_reasoning_watchdog_cleared();
-                    });
-                    break;
-                }
-                // Soft cancel: clear the abort flag, append the steering
-                // message, and continue the round loop. The new round will
-                // re-enter the LLM with the message visible in history.
-                cancel_requested_.store(false);
-                std::string nudge =
-                    "[Auto-nudge] Stop reasoning. Commit to a tool call now, "
-                    "or give a brief final answer if no tool is needed.";
-                ctx_->add_message({MessageRole::user, nudge});
-                int tok = ctx_->history().messages().back().token_estimate;
-                activity_->emit(
-                    ActivityKind::user_message,
-                    "Reasoning watchdog nudge (#" + std::to_string(nudges_this_turn_)
-                        + ", trigger=" + (step.watchdog_trigger.empty()
-                                              ? std::string("manual")
-                                              : step.watchdog_trigger) + ")",
-                    nudge,
-                    /*tokens_in=*/tok);
-                frontends_.broadcast([](IFrontend& fe) {
-                    fe.on_reasoning_watchdog_cleared();
-                });
-                spdlog::info("AgentCore: reasoning-watchdog nudge #{} injected "
-                             "(trigger={})", nudges_this_turn_,
-                             step.watchdog_trigger.empty() ? "manual"
-                                                            : step.watchdog_trigger);
-                continue;  // re-enter while-loop body for next round
-            }
-
-            if (!useless)
-                ctx_->add_message(std::move(step.assistant_msg));
-            spdlog::info("AgentCore: turn cancelled mid-stream");
-            frontends_.broadcast([](IFrontend& fe) {
-                fe.on_error("Turn cancelled.");
-                fe.on_reasoning_watchdog_cleared();
-            });
-            break;
-        }
-
-        if (!useless)
-            ctx_->add_message(std::move(step.assistant_msg));
-
-        // S6.10 Task B -- empty_response detector. Fires when the assistant
-        // returned no content / no tool_calls / no reasoning. The model has
-        // no failure mode to react to without an explicit nudge: bail with
-        // useless=true would otherwise just end the turn silently.
-        if (useless) {
-            bool quality_on = true;
-            if (auto* ws = services_.workspace())
-                quality_on = ws->config().quality_monitor_enabled;
-            if (quality_on) {
-                auto correction = QualityMonitor::evaluate(
-                    ctx_->history().messages());
-                if (correction && correction->kind ==
-                    QualityCorrectionKind::empty_response)
-                {
-                    if (!inject_nudge(correction->corrective_message,
-                                      "empty_response"))
-                    {
-                        frontends_.broadcast([](IFrontend& fe) {
-                            fe.on_error(
-                                "Agent appears stuck (quality monitor "
-                                "exceeded its 2-correction cap this turn).");
-                        });
-                        break;
-                    }
-                    continue;  // re-enter the round loop
-                }
-            }
-            break;  // nothing to do; let the turn complete naturally
-        }
-
-        if (step.tool_calls.empty())
-            break;
-
-        // S6.10 Task B -- repeated_tool_call detector. Inspect the latest
-        // assistant message (just appended) BEFORE dispatching its tool
-        // calls. If it repeats the previous (name, args), we know the model
-        // is in a tight loop and the dispatch will not produce new info.
-        // Inject a corrective and continue without running the tool again.
-        {
-            bool quality_on = true;
-            if (auto* ws = services_.workspace())
-                quality_on = ws->config().quality_monitor_enabled;
-            if (quality_on) {
-                auto correction = QualityMonitor::evaluate(
-                    ctx_->history().messages());
-                if (correction && correction->kind ==
-                    QualityCorrectionKind::repeated_tool_call)
-                {
-                    if (!inject_nudge(correction->corrective_message,
-                                      "repeated_tool_call"))
-                    {
-                        frontends_.broadcast([](IFrontend& fe) {
-                            fe.on_error(
-                                "Agent appears stuck (quality monitor "
-                                "exceeded its 2-correction cap this turn).");
-                        });
-                        break;
-                    }
-                    continue;
-                }
-            }
-        }
-
-        for (auto& call : step.tool_calls) {
-            if (cancel_requested_.load()) {
-                spdlog::info("AgentCore: skipping remaining tool calls (cancelled)");
-                break;
-            }
-            std::string captured_content;
-            bool        captured_success = true;
-            dispatcher_->dispatch(call, [&](ChatMessage m) {
-                captured_content = m.content;
-                ctx_->add_message(std::move(m));
-            });
-            observe_plan_tool_result(call, captured_content, captured_success);
-        }
-
-        {
-            std::lock_guard lock(plan_mutex_);
-            if (plan_awaiting_decision_)
-                break;
-        }
-    }
-
-    if (max_rounds > 0 && round >= max_rounds) {
-        turn_had_error = true;
-        spdlog::warn("AgentCore: hit max round limit ({})", max_rounds);
-        const int hit = max_rounds;
-        frontends_.broadcast([hit](IFrontend& fe) {
-            fe.on_error("Agent reached the maximum number of tool call "
-                        "rounds (" + std::to_string(hit) +
-                        "). Raise agent.max_rounds_per_message in "
-                        ".locus/config.json if the task legitimately needs "
-                        "more (set to 0 to remove the cap).");
-        });
-    }
+    bool turn_had_error = AgentTurnRunner(*this, turn_id, max_rounds).run().turn_had_error;
 
     metrics_->end_turn(turn_had_error);
 
@@ -1027,7 +696,7 @@ void AgentCore::process_message(const std::string& content)
     {
         if (auto* ws = services_.workspace()) {
             const auto& cfg = ws->config();
-            if (cfg.git_auto_commit) {
+            if (cfg.git.auto_commit) {
                 std::string assistant_text;
                 for (auto it = ctx_->history().messages().rbegin();
                      it != ctx_->history().messages().rend(); ++it) {
@@ -1038,15 +707,15 @@ void AgentCore::process_message(const std::string& content)
                 }
                 auto r = auto_commit_after_turn(
                     services_.root(),
-                    cfg.git_commit_prefix,
-                    cfg.git_commit_branch,
+                    cfg.git.commit_prefix,
+                    cfg.git.commit_branch,
                     assistant_text);
 
                 if (r.success && !r.skipped) {
                     activity_->emit(ActivityKind::index_event,
                                     "Auto-commit " + r.short_sha
                                         + " on " + r.branch,
-                                    cfg.git_commit_prefix
+                                    cfg.git.commit_prefix
                                         + make_commit_subject(assistant_text));
                     std::string sha = r.short_sha;
                     std::string br  = r.branch;
@@ -1655,7 +1324,7 @@ std::string AgentCore::save_session()
 
     std::string id = ctx_->save_session(extras);
 
-    // Sidecar JSONL activity log -- opt-in via WorkspaceConfig::sessions::
+    // Sidecar JSONL activity log -- opt-in via WorkspaceConfig::Sessions::
     // persist_activity. Set the persist path on the live ActivityLog so
     // every subsequent emit() flows to disk. Re-saving an existing session
     // points at the same sidecar path (append-only), so future activity

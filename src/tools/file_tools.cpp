@@ -37,7 +37,7 @@ std::optional<ToolResult> check_truncation(IWorkspaceServices& ws,
     // Respect the per-workspace knob; opt out cleanly when no workspace
     // is wired (the in-process tests use a FakeWorkspaceServices).
     Workspace* w = ws.workspace();
-    if (!w || !w->config().detect_write_truncation) return std::nullopt;
+    if (!w || !w->config().agent.detect_write_truncation) return std::nullopt;
 
     auto match = detect_truncation_phrase(body);
     if (!match) return std::nullopt;
@@ -345,7 +345,7 @@ ToolResult EditFileTool::execute(const ToolCall& call, IWorkspaceServices& ws,
     // old_string match.
     bool require_read = true;
     if (Workspace* w = ws.workspace())
-        require_read = w->config().require_read_before_edit;
+        require_read = w->config().agent.require_read_before_edit;
     if (require_read && !ReadTracker::instance().was_read(full))
         return error_result("Error: read the file first. Call read_file on '" +
                             rel_path +

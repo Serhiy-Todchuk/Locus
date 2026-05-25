@@ -30,13 +30,13 @@ namespace {
 class LazyManifestGuard {
 public:
     explicit LazyManifestGuard(bool enable)
-        : prev_(harness().workspace().config().lazy_tool_manifest)
+        : prev_(harness().workspace().config().agent.lazy_tool_manifest)
     {
-        harness().workspace().config().lazy_tool_manifest = enable;
+        harness().workspace().config().agent.lazy_tool_manifest = enable;
     }
     ~LazyManifestGuard()
     {
-        harness().workspace().config().lazy_tool_manifest = prev_;
+        harness().workspace().config().agent.lazy_tool_manifest = prev_;
     }
 private:
     bool prev_;

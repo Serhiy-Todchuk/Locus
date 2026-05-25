@@ -268,7 +268,7 @@ void apply_reranker(std::vector<SearchResult>& results,
 // services interface doesn't expose a Workspace (e.g. in tests).
 int reranker_top_k_for(IWorkspaceServices& ws, int fallback)
 {
-    if (auto* w = ws.workspace()) return w->config().reranker_top_k;
+    if (auto* w = ws.workspace()) return w->config().index.reranker_top_k;
     return fallback;
 }
 

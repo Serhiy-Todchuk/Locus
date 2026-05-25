@@ -12,157 +12,157 @@ WorkspaceConfig workspace_config_from_json(const json& j)
     if (j.contains("index")) {
         auto& idx = j["index"];
         if (idx.contains("exclude_patterns"))
-            cfg.exclude_patterns = idx["exclude_patterns"].get<std::vector<std::string>>();
+            cfg.index.exclude_patterns = idx["exclude_patterns"].get<std::vector<std::string>>();
         if (idx.contains("max_file_size_kb"))
-            cfg.max_file_size_kb = idx["max_file_size_kb"].get<int>();
+            cfg.index.max_file_size_kb = idx["max_file_size_kb"].get<int>();
         if (idx.contains("code_parsing_enabled"))
-            cfg.code_parsing_enabled = idx["code_parsing_enabled"].get<bool>();
+            cfg.index.code_parsing_enabled = idx["code_parsing_enabled"].get<bool>();
         if (idx.contains("respect_gitignore"))
-            cfg.respect_gitignore = idx["respect_gitignore"].get<bool>();
+            cfg.index.respect_gitignore = idx["respect_gitignore"].get<bool>();
 
         if (idx.contains("semantic_search")) {
             auto& ss = idx["semantic_search"];
             if (ss.contains("enabled"))
-                cfg.semantic_search_enabled = ss["enabled"].get<bool>();
+                cfg.index.semantic_search_enabled = ss["enabled"].get<bool>();
             if (ss.contains("model"))
-                cfg.embedding_model = ss["model"].get<std::string>();
+                cfg.index.embedding_model = ss["model"].get<std::string>();
             // 'dimensions' is no longer a config setting - silently ignore
             // legacy entries so old config.json files don't error out.
             if (ss.contains("chunk_size_lines"))
-                cfg.chunk_size_lines = ss["chunk_size_lines"].get<int>();
+                cfg.index.chunk_size_lines = ss["chunk_size_lines"].get<int>();
             if (ss.contains("chunk_overlap_lines"))
-                cfg.chunk_overlap_lines = ss["chunk_overlap_lines"].get<int>();
+                cfg.index.chunk_overlap_lines = ss["chunk_overlap_lines"].get<int>();
             if (ss.contains("reranker_enabled"))
-                cfg.reranker_enabled = ss["reranker_enabled"].get<bool>();
+                cfg.index.reranker_enabled = ss["reranker_enabled"].get<bool>();
             if (ss.contains("reranker_model"))
-                cfg.reranker_model = ss["reranker_model"].get<std::string>();
+                cfg.index.reranker_model = ss["reranker_model"].get<std::string>();
             if (ss.contains("reranker_top_k"))
-                cfg.reranker_top_k = ss["reranker_top_k"].get<int>();
+                cfg.index.reranker_top_k = ss["reranker_top_k"].get<int>();
         }
     }
 
     if (j.contains("llm")) {
         auto& llm = j["llm"];
         if (llm.contains("endpoint"))
-            cfg.llm_endpoint = llm["endpoint"].get<std::string>();
+            cfg.llm.endpoint = llm["endpoint"].get<std::string>();
         if (llm.contains("model"))
-            cfg.llm_model = llm["model"].get<std::string>();
+            cfg.llm.model = llm["model"].get<std::string>();
         if (llm.contains("temperature"))
-            cfg.llm_temperature = llm["temperature"].get<double>();
+            cfg.llm.temperature = llm["temperature"].get<double>();
         if (llm.contains("context_limit"))
-            cfg.llm_context_limit = llm["context_limit"].get<int>();
+            cfg.llm.context_limit = llm["context_limit"].get<int>();
         if (llm.contains("max_tokens"))
-            cfg.llm_max_tokens = llm["max_tokens"].get<int>();
+            cfg.llm.max_tokens = llm["max_tokens"].get<int>();
         if (llm.contains("tool_format"))
-            cfg.llm_tool_format = llm["tool_format"].get<std::string>();
+            cfg.llm.tool_format = llm["tool_format"].get<std::string>();
         if (llm.contains("timeout_ms"))
-            cfg.llm_timeout_ms = llm["timeout_ms"].get<int>();
+            cfg.llm.timeout_ms = llm["timeout_ms"].get<int>();
         if (llm.contains("top_p"))
-            cfg.llm_top_p = llm["top_p"].get<double>();
+            cfg.llm.top_p = llm["top_p"].get<double>();
         if (llm.contains("top_k"))
-            cfg.llm_top_k = llm["top_k"].get<int>();
+            cfg.llm.top_k = llm["top_k"].get<int>();
         if (llm.contains("min_p"))
-            cfg.llm_min_p = llm["min_p"].get<double>();
+            cfg.llm.min_p = llm["min_p"].get<double>();
         if (llm.contains("repeat_penalty"))
-            cfg.llm_repeat_penalty = llm["repeat_penalty"].get<double>();
+            cfg.llm.repeat_penalty = llm["repeat_penalty"].get<double>();
         if (llm.contains("frequency_penalty"))
-            cfg.llm_frequency_penalty = llm["frequency_penalty"].get<double>();
+            cfg.llm.frequency_penalty = llm["frequency_penalty"].get<double>();
         if (llm.contains("presence_penalty"))
-            cfg.llm_presence_penalty = llm["presence_penalty"].get<double>();
+            cfg.llm.presence_penalty = llm["presence_penalty"].get<double>();
         // S6.10 Task D -- grammar-constrained decoding for tool calls.
         if (llm.contains("grammar_mode"))
-            cfg.llm_grammar_mode = llm["grammar_mode"].get<std::string>();
+            cfg.llm.grammar_mode = llm["grammar_mode"].get<std::string>();
         // S6.10 Task F -- auto-detect model and apply preset
         if (llm.contains("auto_detect_preset"))
-            cfg.auto_detect_model_preset = llm["auto_detect_preset"].get<bool>();
+            cfg.llm.auto_detect_preset = llm["auto_detect_preset"].get<bool>();
         if (llm.contains("preset_name"))
-            cfg.llm_preset_name = llm["preset_name"].get<std::string>();
+            cfg.llm.preset_name = llm["preset_name"].get<std::string>();
     }
 
     if (j.contains("agent")) {
         auto& ag = j["agent"];
         if (ag.contains("tool_manifest_warn_tokens"))
-            cfg.tool_manifest_warn_tokens = ag["tool_manifest_warn_tokens"].get<int>();
+            cfg.agent.tool_manifest_warn_tokens = ag["tool_manifest_warn_tokens"].get<int>();
         if (ag.contains("process_output_buffer_kb"))
-            cfg.process_output_buffer_kb = ag["process_output_buffer_kb"].get<int>();
+            cfg.agent.process_output_buffer_kb = ag["process_output_buffer_kb"].get<int>();
         if (ag.contains("tool_max_runtime_s"))
-            cfg.tool_max_runtime_s = ag["tool_max_runtime_s"].get<int>();
+            cfg.agent.tool_max_runtime_s = ag["tool_max_runtime_s"].get<int>();
         if (ag.contains("max_rounds_per_message"))
-            cfg.max_rounds_per_message = ag["max_rounds_per_message"].get<int>();
+            cfg.agent.max_rounds_per_message = ag["max_rounds_per_message"].get<int>();
         if (ag.contains("run_command_truncate_lines"))
-            cfg.run_command_truncate_lines = ag["run_command_truncate_lines"].get<int>();
+            cfg.agent.run_command_truncate_lines = ag["run_command_truncate_lines"].get<int>();
         if (ag.contains("dump_on_run_command_hang"))
-            cfg.dump_on_run_command_hang = ag["dump_on_run_command_hang"].get<bool>();
+            cfg.agent.dump_on_run_command_hang = ag["dump_on_run_command_hang"].get<bool>();
         if (ag.contains("notify_external_changes"))
-            cfg.notify_external_changes = ag["notify_external_changes"].get<bool>();
+            cfg.agent.notify_external_changes = ag["notify_external_changes"].get<bool>();
         if (ag.contains("require_read_before_edit"))
-            cfg.require_read_before_edit = ag["require_read_before_edit"].get<bool>();
+            cfg.agent.require_read_before_edit = ag["require_read_before_edit"].get<bool>();
         // S6.10 Task G -- anti-truncation detector
         if (ag.contains("detect_write_truncation"))
-            cfg.detect_write_truncation = ag["detect_write_truncation"].get<bool>();
+            cfg.agent.detect_write_truncation = ag["detect_write_truncation"].get<bool>();
         // S6.10 Task B -- quality monitor
         if (ag.contains("quality_monitor_enabled"))
-            cfg.quality_monitor_enabled = ag["quality_monitor_enabled"].get<bool>();
+            cfg.agent.quality_monitor_enabled = ag["quality_monitor_enabled"].get<bool>();
         // S6.10 Task C -- strip past-turn reasoning_content from LLM payload
         if (ag.contains("strip_past_thinking"))
-            cfg.strip_past_thinking = ag["strip_past_thinking"].get<bool>();
+            cfg.agent.strip_past_thinking = ag["strip_past_thinking"].get<bool>();
         // S6.11 -- lazy tool manifest
         if (ag.contains("lazy_tool_manifest"))
-            cfg.lazy_tool_manifest = ag["lazy_tool_manifest"].get<bool>();
+            cfg.agent.lazy_tool_manifest = ag["lazy_tool_manifest"].get<bool>();
         // S6.12 -- system-prompt profile
         if (ag.contains("system_prompt_profile"))
-            cfg.system_prompt_profile = ag["system_prompt_profile"].get<std::string>();
+            cfg.agent.system_prompt_profile = ag["system_prompt_profile"].get<std::string>();
         // S6.13 -- reasoning watchdog
         if (ag.contains("reasoning_max_seconds"))
-            cfg.reasoning_max_seconds = ag["reasoning_max_seconds"].get<int>();
+            cfg.agent.reasoning_max_seconds = ag["reasoning_max_seconds"].get<int>();
         if (ag.contains("reasoning_max_chars"))
-            cfg.reasoning_max_chars = ag["reasoning_max_chars"].get<int>();
+            cfg.agent.reasoning_max_chars = ag["reasoning_max_chars"].get<int>();
         if (ag.contains("reasoning_max_rounds_silent"))
-            cfg.reasoning_max_rounds_silent = ag["reasoning_max_rounds_silent"].get<int>();
+            cfg.agent.reasoning_max_rounds_silent = ag["reasoning_max_rounds_silent"].get<int>();
         if (ag.contains("reasoning_auto_nudge"))
-            cfg.reasoning_auto_nudge = ag["reasoning_auto_nudge"].get<bool>();
+            cfg.agent.reasoning_auto_nudge = ag["reasoning_auto_nudge"].get<bool>();
     }
 
     if (j.contains("memory")) {
         auto& m = j["memory"];
         if (m.contains("enabled"))
-            cfg.memory_enabled = m["enabled"].get<bool>();
+            cfg.memory.enabled = m["enabled"].get<bool>();
         if (m.contains("in_context_budget_tokens"))
-            cfg.memory_in_context_budget_tokens = m["in_context_budget_tokens"].get<int>();
+            cfg.memory.in_context_budget_tokens = m["in_context_budget_tokens"].get<int>();
         if (m.contains("max_entries"))
-            cfg.memory_max_entries = m["max_entries"].get<int>();
+            cfg.memory.max_entries = m["max_entries"].get<int>();
         if (m.contains("search_response_max_tokens"))
-            cfg.memory_search_response_max_tokens = m["search_response_max_tokens"].get<int>();
+            cfg.memory.search_response_max_tokens = m["search_response_max_tokens"].get<int>();
         if (m.contains("recency_half_life_days"))
-            cfg.memory_recency_half_life_days = m["recency_half_life_days"].get<int>();
+            cfg.memory.recency_half_life_days = m["recency_half_life_days"].get<int>();
     }
 
     if (j.contains("git")) {
         auto& g = j["git"];
         if (g.contains("auto_commit"))
-            cfg.git_auto_commit = g["auto_commit"].get<bool>();
+            cfg.git.auto_commit = g["auto_commit"].get<bool>();
         if (g.contains("commit_branch"))
-            cfg.git_commit_branch = g["commit_branch"].get<std::string>();
+            cfg.git.commit_branch = g["commit_branch"].get<std::string>();
         if (g.contains("commit_prefix"))
-            cfg.git_commit_prefix = g["commit_prefix"].get<std::string>();
+            cfg.git.commit_prefix = g["commit_prefix"].get<std::string>();
     }
 
     if (j.contains("chat")) {
         auto& c = j["chat"];
         if (c.contains("show_diffs"))
-            cfg.chat_show_diffs = c["show_diffs"].get<bool>();
+            cfg.chat.show_diffs = c["show_diffs"].get<bool>();
         if (c.contains("diff_max_lines"))
-            cfg.chat_diff_max_lines = c["diff_max_lines"].get<int>();
+            cfg.chat.diff_max_lines = c["diff_max_lines"].get<int>();
         if (c.contains("diff_context_lines"))
-            cfg.chat_diff_context_lines = c["diff_context_lines"].get<int>();
+            cfg.chat.diff_context_lines = c["diff_context_lines"].get<int>();
         if (c.contains("diff_collapse_threshold"))
-            cfg.chat_diff_collapse_threshold = c["diff_collapse_threshold"].get<int>();
+            cfg.chat.diff_collapse_threshold = c["diff_collapse_threshold"].get<int>();
     }
 
     if (j.contains("compaction")) {
         auto& c = j["compaction"];
         if (c.contains("reserve_tokens"))
-            cfg.compaction_reserve_tokens = c["reserve_tokens"].get<int>();
+            cfg.compaction.reserve_tokens = c["reserve_tokens"].get<int>();
         if (c.contains("auto_enabled"))
             cfg.compaction.auto_enabled = c["auto_enabled"].get<bool>();
         if (c.contains("warn_threshold"))
@@ -208,7 +208,7 @@ WorkspaceConfig workspace_config_from_json(const json& j)
     if (j.contains("ui")) {
         auto& u = j["ui"];
         if (u.contains("show_per_message_tokens"))
-            cfg.ui_show_per_message_tokens = u["show_per_message_tokens"].get<bool>();
+            cfg.chat.show_per_message_tokens = u["show_per_message_tokens"].get<bool>();
     }
 
     if (j.contains("capabilities") && j["capabilities"].is_object()) {
@@ -226,13 +226,13 @@ WorkspaceConfig workspace_config_from_json(const json& j)
         // Capabilities are canonical when present -- propagate to the legacy
         // flags so the older subsystems (Workspace ctor, MemoryStore
         // construction) see the user's chosen value without a parallel UI.
-        cfg.semantic_search_enabled = cfg.capabilities.semantic_search;
-        cfg.memory_enabled          = cfg.capabilities.memory_bank;
+        cfg.index.semantic_search_enabled = cfg.capabilities.semantic_search;
+        cfg.memory.enabled                = cfg.capabilities.memory_bank;
     } else {
         // Migration path: derive the two mappable buckets from the existing
         // flags. The other three buckets keep their defaults.
-        cfg.capabilities.semantic_search = cfg.semantic_search_enabled;
-        cfg.capabilities.memory_bank     = cfg.memory_enabled;
+        cfg.capabilities.semantic_search = cfg.index.semantic_search_enabled;
+        cfg.capabilities.memory_bank     = cfg.memory.enabled;
     }
 
     if (j.contains("sessions") && j["sessions"].is_object()) {
@@ -289,74 +289,74 @@ json workspace_config_to_json(const WorkspaceConfig& cfg)
 
     return {
         {"index", {
-            {"exclude_patterns", cfg.exclude_patterns},
-            {"max_file_size_kb", cfg.max_file_size_kb},
-            {"code_parsing_enabled", cfg.code_parsing_enabled},
-            {"respect_gitignore", cfg.respect_gitignore},
+            {"exclude_patterns", cfg.index.exclude_patterns},
+            {"max_file_size_kb", cfg.index.max_file_size_kb},
+            {"code_parsing_enabled", cfg.index.code_parsing_enabled},
+            {"respect_gitignore", cfg.index.respect_gitignore},
             {"semantic_search", {
-                {"enabled", cfg.semantic_search_enabled},
-                {"model", cfg.embedding_model},
-                {"chunk_size_lines", cfg.chunk_size_lines},
-                {"chunk_overlap_lines", cfg.chunk_overlap_lines},
-                {"reranker_enabled", cfg.reranker_enabled},
-                {"reranker_model", cfg.reranker_model},
-                {"reranker_top_k", cfg.reranker_top_k}
+                {"enabled", cfg.index.semantic_search_enabled},
+                {"model", cfg.index.embedding_model},
+                {"chunk_size_lines", cfg.index.chunk_size_lines},
+                {"chunk_overlap_lines", cfg.index.chunk_overlap_lines},
+                {"reranker_enabled", cfg.index.reranker_enabled},
+                {"reranker_model", cfg.index.reranker_model},
+                {"reranker_top_k", cfg.index.reranker_top_k}
             }}
         }},
         {"llm", {
-            {"endpoint", cfg.llm_endpoint},
-            {"model", cfg.llm_model},
-            {"temperature", cfg.llm_temperature},
-            {"context_limit", cfg.llm_context_limit},
-            {"max_tokens", cfg.llm_max_tokens},
-            {"tool_format", cfg.llm_tool_format},
-            {"timeout_ms", cfg.llm_timeout_ms},
-            {"top_p",          cfg.llm_top_p},
-            {"top_k",          cfg.llm_top_k},
-            {"min_p",          cfg.llm_min_p},
-            {"repeat_penalty", cfg.llm_repeat_penalty},
-            {"frequency_penalty", cfg.llm_frequency_penalty},
-            {"presence_penalty",  cfg.llm_presence_penalty},
-            {"grammar_mode",      cfg.llm_grammar_mode},
-            {"auto_detect_preset", cfg.auto_detect_model_preset},
-            {"preset_name",       cfg.llm_preset_name}
+            {"endpoint", cfg.llm.endpoint},
+            {"model", cfg.llm.model},
+            {"temperature", cfg.llm.temperature},
+            {"context_limit", cfg.llm.context_limit},
+            {"max_tokens", cfg.llm.max_tokens},
+            {"tool_format", cfg.llm.tool_format},
+            {"timeout_ms", cfg.llm.timeout_ms},
+            {"top_p",          cfg.llm.top_p},
+            {"top_k",          cfg.llm.top_k},
+            {"min_p",          cfg.llm.min_p},
+            {"repeat_penalty", cfg.llm.repeat_penalty},
+            {"frequency_penalty", cfg.llm.frequency_penalty},
+            {"presence_penalty",  cfg.llm.presence_penalty},
+            {"grammar_mode",      cfg.llm.grammar_mode},
+            {"auto_detect_preset", cfg.llm.auto_detect_preset},
+            {"preset_name",       cfg.llm.preset_name}
         }},
         {"agent", {
-            {"tool_manifest_warn_tokens", cfg.tool_manifest_warn_tokens},
-            {"process_output_buffer_kb",  cfg.process_output_buffer_kb},
-            {"tool_max_runtime_s",        cfg.tool_max_runtime_s},
-            {"max_rounds_per_message",    cfg.max_rounds_per_message},
-            {"run_command_truncate_lines", cfg.run_command_truncate_lines},
-            {"dump_on_run_command_hang",  cfg.dump_on_run_command_hang},
-            {"notify_external_changes",   cfg.notify_external_changes},
-            {"require_read_before_edit",  cfg.require_read_before_edit},
-            {"detect_write_truncation",   cfg.detect_write_truncation},
-            {"quality_monitor_enabled",   cfg.quality_monitor_enabled},
-            {"strip_past_thinking",       cfg.strip_past_thinking},
-            {"lazy_tool_manifest",        cfg.lazy_tool_manifest},
-            {"system_prompt_profile",     cfg.system_prompt_profile},
-            {"reasoning_max_seconds",       cfg.reasoning_max_seconds},
-            {"reasoning_max_chars",         cfg.reasoning_max_chars},
-            {"reasoning_max_rounds_silent", cfg.reasoning_max_rounds_silent},
-            {"reasoning_auto_nudge",        cfg.reasoning_auto_nudge}
+            {"tool_manifest_warn_tokens", cfg.agent.tool_manifest_warn_tokens},
+            {"process_output_buffer_kb",  cfg.agent.process_output_buffer_kb},
+            {"tool_max_runtime_s",        cfg.agent.tool_max_runtime_s},
+            {"max_rounds_per_message",    cfg.agent.max_rounds_per_message},
+            {"run_command_truncate_lines", cfg.agent.run_command_truncate_lines},
+            {"dump_on_run_command_hang",  cfg.agent.dump_on_run_command_hang},
+            {"notify_external_changes",   cfg.agent.notify_external_changes},
+            {"require_read_before_edit",  cfg.agent.require_read_before_edit},
+            {"detect_write_truncation",   cfg.agent.detect_write_truncation},
+            {"quality_monitor_enabled",   cfg.agent.quality_monitor_enabled},
+            {"strip_past_thinking",       cfg.agent.strip_past_thinking},
+            {"lazy_tool_manifest",        cfg.agent.lazy_tool_manifest},
+            {"system_prompt_profile",     cfg.agent.system_prompt_profile},
+            {"reasoning_max_seconds",       cfg.agent.reasoning_max_seconds},
+            {"reasoning_max_chars",         cfg.agent.reasoning_max_chars},
+            {"reasoning_max_rounds_silent", cfg.agent.reasoning_max_rounds_silent},
+            {"reasoning_auto_nudge",        cfg.agent.reasoning_auto_nudge}
         }},
         {"memory", {
-            {"enabled",                    cfg.memory_enabled},
-            {"in_context_budget_tokens",   cfg.memory_in_context_budget_tokens},
-            {"max_entries",                cfg.memory_max_entries},
-            {"search_response_max_tokens", cfg.memory_search_response_max_tokens},
-            {"recency_half_life_days",     cfg.memory_recency_half_life_days}
+            {"enabled",                    cfg.memory.enabled},
+            {"in_context_budget_tokens",   cfg.memory.in_context_budget_tokens},
+            {"max_entries",                cfg.memory.max_entries},
+            {"search_response_max_tokens", cfg.memory.search_response_max_tokens},
+            {"recency_half_life_days",     cfg.memory.recency_half_life_days}
         }},
         {"git", {
-            {"auto_commit",   cfg.git_auto_commit},
-            {"commit_branch", cfg.git_commit_branch},
-            {"commit_prefix", cfg.git_commit_prefix}
+            {"auto_commit",   cfg.git.auto_commit},
+            {"commit_branch", cfg.git.commit_branch},
+            {"commit_prefix", cfg.git.commit_prefix}
         }},
         {"chat", {
-            {"show_diffs",              cfg.chat_show_diffs},
-            {"diff_max_lines",          cfg.chat_diff_max_lines},
-            {"diff_context_lines",      cfg.chat_diff_context_lines},
-            {"diff_collapse_threshold", cfg.chat_diff_collapse_threshold}
+            {"show_diffs",              cfg.chat.show_diffs},
+            {"diff_max_lines",          cfg.chat.diff_max_lines},
+            {"diff_context_lines",      cfg.chat.diff_context_lines},
+            {"diff_collapse_threshold", cfg.chat.diff_collapse_threshold}
         }},
         {"capabilities", {
             {"background_processes", cfg.capabilities.background_processes},
@@ -367,7 +367,7 @@ json workspace_config_to_json(const WorkspaceConfig& cfg)
         }},
         {"tool_approvals", approvals},
         {"compaction", {
-            {"reserve_tokens", cfg.compaction_reserve_tokens},
+            {"reserve_tokens", cfg.compaction.reserve_tokens},
             {"auto_enabled",                       cfg.compaction.auto_enabled},
             {"warn_threshold",                     cfg.compaction.warn_threshold},
             {"auto_threshold",                     cfg.compaction.auto_threshold},
@@ -386,7 +386,7 @@ json workspace_config_to_json(const WorkspaceConfig& cfg)
             {"layer_llm_summary",                  cfg.compaction.layer_llm_summary}
         }},
         {"ui", {
-            {"show_per_message_tokens", cfg.ui_show_per_message_tokens}
+            {"show_per_message_tokens", cfg.chat.show_per_message_tokens}
         }},
         {"sessions", {
             {"auto_cleanup_enabled", cfg.sessions.auto_cleanup_enabled},

@@ -355,7 +355,7 @@ TEST_CASE("WriteFileTool: detector can be disabled via workspace config",
 
     {
         locus::Workspace ws(tmp);
-        ws.config().detect_write_truncation = false;
+        ws.config().agent.detect_write_truncation = false;
         locus::IWorkspaceServices& wctx = ws;
 
         locus::WriteFileTool tool;

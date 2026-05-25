@@ -1,6 +1,7 @@
 #pragma once
 
 #include "conversation.h"
+#include "core/workspace_config.h"
 #include "llm/llm_client.h"
 
 #include <cstddef>
@@ -105,5 +106,10 @@ public:
     static std::string format_summary_message(const std::string& summary,
                                               std::size_t turn_span);
 };
+
+// Snapshot the workspace compaction config into a per-run selection. Three
+// callers: the legacy strategy shim, the AgentTurnRunner auto-compact trigger,
+// and the /compact slash command.
+CompactionLayerSelection selection_from_config(const WorkspaceConfig::Compaction& c);
 
 } // namespace locus

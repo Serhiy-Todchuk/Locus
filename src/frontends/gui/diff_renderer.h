@@ -22,7 +22,7 @@ namespace locus {
 // (one `<div class="diff-line">` each, of any kind). When the cap is hit,
 // emission stops and a `(N more lines collapsed)` footer is appended.
 // Negative or zero is treated as "no cap" (defensive; production passes the
-// WorkspaceConfig::chat_diff_max_lines value).
+// WorkspaceConfig::Chat::diff_max_lines value).
 struct DiffRenderOptions {
     int  max_lines     = 200;
     // Lines of unchanged context shown before and after each change. 0 means

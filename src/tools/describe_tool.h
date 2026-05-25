@@ -2,14 +2,14 @@
 
 // S6.11 -- describe_tool meta-tool.
 //
-// When `WorkspaceConfig::lazy_tool_manifest` is on, the per-turn tool catalog
+// When `WorkspaceConfig::Agent::lazy_tool_manifest` is on, the per-turn tool catalog
 // (system prompt + API tools array) is trimmed to one-line summaries. The
 // model fetches the full schema of a tool it wants to call via
 // `describe_tool('<name>')`. Result content is the same OpenAI-format JSON
 // schema entry that the full-manifest path would have shipped up-front.
 //
 // Visibility: always REGISTERED in the tool registry. `available(ws)` returns
-// `ws.config().lazy_tool_manifest`, so the LLM-facing manifest only includes
+// `ws.config().agent.lazy_tool_manifest`, so the LLM-facing manifest only includes
 // the tool when lazy mode is on. Inspection via the tools panel / slash
 // commands works in any mode (those bypass the manifest filter).
 //
@@ -34,7 +34,7 @@ public:
                                          IWorkspaceServices& ws,
                                          const std::atomic<bool>* cancel_flag) override;
 
-    // available(ws) returns ws.config().lazy_tool_manifest. The meta-tool
+    // available(ws) returns ws.config().agent.lazy_tool_manifest. The meta-tool
     // serves no purpose when full schemas are already inline, so we hide it
     // from the LLM in that case.
     bool available(IWorkspaceServices& ws) const override;

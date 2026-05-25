@@ -12,6 +12,24 @@
 
 namespace locus {
 
+CompactionLayerSelection selection_from_config(const WorkspaceConfig::Compaction& c)
+{
+    CompactionLayerSelection sel;
+    sel.drop_redundant_tool_results           = c.layer_drop_redundant_tool_results;
+    sel.strip_large_tool_bodies               = c.layer_strip_large_tool_bodies;
+    sel.drop_old_reasoning                    = c.layer_drop_old_reasoning;
+    sel.drop_oldest_turns                     = c.layer_drop_oldest_turns;
+    sel.llm_summary                           = c.layer_llm_summary;
+    sel.strip_threshold_tokens                = c.strip_threshold_tokens;
+    sel.older_than_turns                      = c.older_than_turns;
+    sel.keep_recent_turns                     = c.keep_recent_turns;
+    sel.preserve_short_user_msgs_max_tokens   = c.preserve_short_user_msgs_max_tokens;
+    sel.preserve_short_tool_calls_max_tokens  = c.preserve_short_tool_calls_max_tokens;
+    sel.summary_max_tokens                    = c.summary_max_tokens;
+    sel.custom_summary_instructions           = c.custom_summary_instructions;
+    return sel;
+}
+
 namespace {
 
 // ---- Substitution helper (mirrors prompt_templates' shape) ----------------

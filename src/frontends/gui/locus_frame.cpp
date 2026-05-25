@@ -1,5 +1,6 @@
 #include "locus_frame.h"
 #include "about_dialog.h"
+#include "agent_event_router.h"
 #include "app_icons.h"
 #include "locus_accessible.h"
 #include "locus_app.h"
@@ -249,35 +250,40 @@ LocusFrame::LocusFrame(LocusSession& session)
         };
     }
 
-    // Bind agent thread events.
-    Bind(EVT_AGENT_TURN_START,    &LocusFrame::on_agent_turn_start,    this);
-    Bind(EVT_AGENT_TOKEN,         &LocusFrame::on_agent_token,         this);
-    Bind(EVT_AGENT_REASONING_TOKEN, &LocusFrame::on_agent_reasoning_token, this);
-    Bind(EVT_AGENT_TOOL_PENDING,  &LocusFrame::on_agent_tool_pending,  this);
-    Bind(EVT_AGENT_TOOL_RESULT,   &LocusFrame::on_agent_tool_result,   this);
-    Bind(EVT_AGENT_TURN_COMPLETE, &LocusFrame::on_agent_turn_complete, this);
-    Bind(EVT_AGENT_CONTEXT_METER, &LocusFrame::on_agent_context_meter, this);
-    Bind(EVT_AGENT_COMPACTION,    &LocusFrame::on_agent_compaction,    this);
-    Bind(EVT_AGENT_COMPACTION_ARCHIVED, &LocusFrame::on_agent_compaction_archived, this);
-    Bind(EVT_AGENT_SESSION_RESET, &LocusFrame::on_agent_session_reset, this);
-    Bind(EVT_AGENT_ERROR,         &LocusFrame::on_agent_error,         this);
-    Bind(EVT_AGENT_EMBEDDING_PROGRESS, &LocusFrame::on_agent_embedding_progress, this);
-    Bind(EVT_AGENT_INDEXING_PROGRESS,  &LocusFrame::on_agent_indexing_progress,  this);
-    Bind(EVT_AGENT_ACTIVITY,      &LocusFrame::on_agent_activity,      this);
-    Bind(EVT_AGENT_ACTIVITY_UPDATED, &LocusFrame::on_agent_activity_updated, this);
-    Bind(EVT_AGENT_ATTACHED_CONTEXT, &LocusFrame::on_agent_attached_context, this);
-    Bind(EVT_AGENT_MODE_CHANGED,        &LocusFrame::on_agent_mode_changed,       this);
-    Bind(EVT_AGENT_PLAN_PROPOSED,       &LocusFrame::on_agent_plan_proposed,      this);
-    Bind(EVT_AGENT_PLAN_STEP_ADVANCED,  &LocusFrame::on_agent_plan_step_advanced, this);
-    Bind(EVT_AGENT_PLAN_COMPLETED,      &LocusFrame::on_agent_plan_completed,     this);
-    Bind(EVT_AGENT_AUTO_COMMIT,         &LocusFrame::on_agent_auto_commit,        this);
-    Bind(EVT_AGENT_GEN_PROGRESS,        &LocusFrame::on_agent_gen_progress,       this);
-    Bind(EVT_AGENT_HISTORY_MSG_ADDED,   &LocusFrame::on_agent_history_msg_added,   this);
-    Bind(EVT_AGENT_HISTORY_MSG_DELETED, &LocusFrame::on_agent_history_msg_deleted, this);
-    Bind(EVT_AGENT_PRESET_CHANGED,      &LocusFrame::on_agent_preset_changed,      this);
-    Bind(EVT_AGENT_ROUND_PROGRESS,      &LocusFrame::on_agent_round_progress,      this);
-    Bind(EVT_AGENT_WATCHDOG_TRIPPED,    &LocusFrame::on_agent_watchdog_tripped,    this);
-    Bind(EVT_AGENT_WATCHDOG_CLEARED,    &LocusFrame::on_agent_watchdog_cleared,    this);
+    // Bind agent thread events. Routed through AgentEventRouter so the 27
+    // handlers + their helpers live in agent_event_router.cpp instead of
+    // inflating this file. Events are still posted to the frame (via
+    // WxFrontend), but the bind's receiver is the router instance.
+    router_ = std::make_unique<AgentEventRouter>(*this);
+    auto* r = router_.get();
+    Bind(EVT_AGENT_TURN_START,         &AgentEventRouter::on_agent_turn_start,         r);
+    Bind(EVT_AGENT_TOKEN,              &AgentEventRouter::on_agent_token,              r);
+    Bind(EVT_AGENT_REASONING_TOKEN,    &AgentEventRouter::on_agent_reasoning_token,    r);
+    Bind(EVT_AGENT_TOOL_PENDING,       &AgentEventRouter::on_agent_tool_pending,       r);
+    Bind(EVT_AGENT_TOOL_RESULT,        &AgentEventRouter::on_agent_tool_result,        r);
+    Bind(EVT_AGENT_TURN_COMPLETE,      &AgentEventRouter::on_agent_turn_complete,      r);
+    Bind(EVT_AGENT_CONTEXT_METER,      &AgentEventRouter::on_agent_context_meter,      r);
+    Bind(EVT_AGENT_COMPACTION,         &AgentEventRouter::on_agent_compaction,         r);
+    Bind(EVT_AGENT_COMPACTION_ARCHIVED,&AgentEventRouter::on_agent_compaction_archived,r);
+    Bind(EVT_AGENT_SESSION_RESET,      &AgentEventRouter::on_agent_session_reset,      r);
+    Bind(EVT_AGENT_ERROR,              &AgentEventRouter::on_agent_error,              r);
+    Bind(EVT_AGENT_EMBEDDING_PROGRESS, &AgentEventRouter::on_agent_embedding_progress, r);
+    Bind(EVT_AGENT_INDEXING_PROGRESS,  &AgentEventRouter::on_agent_indexing_progress,  r);
+    Bind(EVT_AGENT_ACTIVITY,           &AgentEventRouter::on_agent_activity,           r);
+    Bind(EVT_AGENT_ACTIVITY_UPDATED,   &AgentEventRouter::on_agent_activity_updated,   r);
+    Bind(EVT_AGENT_ATTACHED_CONTEXT,   &AgentEventRouter::on_agent_attached_context,   r);
+    Bind(EVT_AGENT_MODE_CHANGED,       &AgentEventRouter::on_agent_mode_changed,       r);
+    Bind(EVT_AGENT_PLAN_PROPOSED,      &AgentEventRouter::on_agent_plan_proposed,      r);
+    Bind(EVT_AGENT_PLAN_STEP_ADVANCED, &AgentEventRouter::on_agent_plan_step_advanced, r);
+    Bind(EVT_AGENT_PLAN_COMPLETED,     &AgentEventRouter::on_agent_plan_completed,     r);
+    Bind(EVT_AGENT_AUTO_COMMIT,        &AgentEventRouter::on_agent_auto_commit,        r);
+    Bind(EVT_AGENT_GEN_PROGRESS,       &AgentEventRouter::on_agent_gen_progress,       r);
+    Bind(EVT_AGENT_HISTORY_MSG_ADDED,  &AgentEventRouter::on_agent_history_msg_added,  r);
+    Bind(EVT_AGENT_HISTORY_MSG_DELETED,&AgentEventRouter::on_agent_history_msg_deleted,r);
+    Bind(EVT_AGENT_PRESET_CHANGED,     &AgentEventRouter::on_agent_preset_changed,     r);
+    Bind(EVT_AGENT_ROUND_PROGRESS,     &AgentEventRouter::on_agent_round_progress,     r);
+    Bind(EVT_AGENT_WATCHDOG_TRIPPED,   &AgentEventRouter::on_agent_watchdog_tripped,   r);
+    Bind(EVT_AGENT_WATCHDOG_CLEARED,   &AgentEventRouter::on_agent_watchdog_cleared,   r);
 
     // Notebook events.
     if (notebook_) {
@@ -478,11 +484,11 @@ void LocusFrame::configure_chat_panel(ChatPanel* chat, LocusTab& tab)
         [agent_ptr](const std::string& rel_path) -> std::optional<std::string> {
             return agent_ptr->read_current_pre_mutation(rel_path);
         });
-    chat->set_diff_options(workspace_.config().chat_show_diffs,
-                            workspace_.config().chat_diff_max_lines,
-                            workspace_.config().chat_diff_context_lines,
-                            workspace_.config().chat_diff_collapse_threshold);
-    chat->set_show_per_message_tokens(workspace_.config().ui_show_per_message_tokens);
+    chat->set_diff_options(workspace_.config().chat.show_diffs,
+                            workspace_.config().chat.diff_max_lines,
+                            workspace_.config().chat.diff_context_lines,
+                            workspace_.config().chat.diff_collapse_threshold);
+    chat->set_show_per_message_tokens(workspace_.config().chat.show_per_message_tokens);
     chat->set_auto_compact_state(workspace_.config().compaction.auto_enabled);
     chat->set_on_auto_compact_toggle([this](bool enabled) {
         on_auto_compact_toggled(enabled);
@@ -1140,7 +1146,7 @@ void LocusFrame::show_settings_dialog()
 
         if (dlg.semantic_changed()) {
             workspace_.disable_semantic_search();
-            if (workspace_.config().semantic_search_enabled) {
+            if (workspace_.config().index.semantic_search_enabled) {
                 if (!workspace_.enable_semantic_search()) {
                     wxMessageBox(
                         "Could not enable semantic search.\n"
@@ -1150,10 +1156,10 @@ void LocusFrame::show_settings_dialog()
             }
         }
         for (auto& [tid, ui] : tabs_ui_) {
-            ui.chat->set_diff_options(workspace_.config().chat_show_diffs,
-                                       workspace_.config().chat_diff_max_lines,
-                                       workspace_.config().chat_diff_context_lines,
-                                       workspace_.config().chat_diff_collapse_threshold);
+            ui.chat->set_diff_options(workspace_.config().chat.show_diffs,
+                                       workspace_.config().chat.diff_max_lines,
+                                       workspace_.config().chat.diff_context_lines,
+                                       workspace_.config().chat.diff_collapse_threshold);
         }
         update_memory_bank_menu_state();
         spdlog::info("Settings saved to config.json");
@@ -1273,258 +1279,6 @@ void LocusFrame::on_aui_pane_close(wxAuiManagerEvent& evt)
     evt.Skip();
 }
 
-// ---------------------------------------------------------------------------
-// Agent thread events -- routed by tab_id (evt.GetId())
-// ---------------------------------------------------------------------------
-
-void LocusFrame::on_agent_turn_start(wxThreadEvent& evt)
-{
-    int tab_id = evt.GetId();
-    SetStatusText("Agent working...", 0);
-    if (tray_) tray_->set_state(LocusTray::State::active);
-    if (auto* ui = find_tab_ui(tab_id)) {
-        ui->busy = true;
-        refresh_tab_title(tab_id);
-        ui->chat->on_turn_start();
-    }
-}
-
-void LocusFrame::on_agent_token(wxThreadEvent& evt)
-{
-    if (auto* ui = find_tab_ui(evt.GetId()))
-        ui->chat->on_token(evt.GetString());
-}
-
-void LocusFrame::on_agent_reasoning_token(wxThreadEvent& evt)
-{
-    if (auto* ui = find_tab_ui(evt.GetId()))
-        ui->chat->on_reasoning_token(evt.GetString());
-}
-
-void LocusFrame::on_agent_tool_pending(wxThreadEvent& evt)
-{
-    int tab_id = evt.GetId();
-    auto* ui = find_tab_ui(tab_id);
-    if (!ui) return;
-    try {
-        auto payload = nlohmann::json::parse(evt.GetString().ToUTF8().data());
-        std::string tool    = payload.value("tool", "");
-        std::string call_id = payload.value("id", "");
-        std::string preview = payload.value("preview", "");
-        nlohmann::json args = payload.value("args", nlohmann::json::object());
-        std::vector<std::string> safety_warnings;
-        if (payload.contains("safety_warnings") && payload["safety_warnings"].is_array()) {
-            for (const auto& w : payload["safety_warnings"]) {
-                if (w.is_string()) safety_warnings.push_back(w.get<std::string>());
-            }
-        }
-        bool needs_approval = payload.value("needs_approval", true);
-
-        ui->chat->on_tool_pending(
-            wxString::FromUTF8(call_id),
-            wxString::FromUTF8(tool),
-            wxString::FromUTF8(preview),
-            args);
-
-        if (!needs_approval) return;
-
-        ui->awaiting_decision = true;
-        refresh_tab_title(tab_id);
-
-        auto* agent_ptr = &ui->tab->agent();
-        const auto& cfg = workspace_.config();
-        if (tool == "ask_user") {
-            notification_sounds::play(
-                notification_sounds::Kind::ask_user, cfg, this);
-            std::string question = args.value("question", "");
-            AskUserDialog dlg(this, question);
-            if (dlg.ShowModal() == wxID_OK) {
-                nlohmann::json modified = args;
-                modified["response"] = dlg.response();
-                agent_ptr->tool_decision(call_id, ToolDecision::modify, modified);
-            } else {
-                agent_ptr->tool_decision(call_id, ToolDecision::reject, {});
-            }
-        } else {
-            notification_sounds::play(
-                notification_sounds::Kind::tool_approval, cfg, this);
-            ToolApprovalDialog::run(this, call_id, tool, args, preview,
-                safety_warnings,
-                [agent_ptr](const std::string& cid, ToolDecision d,
-                            const nlohmann::json& modified) {
-                    agent_ptr->tool_decision(cid, d, modified);
-                });
-        }
-        ui->awaiting_decision = false;
-        refresh_tab_title(tab_id);
-    } catch (const std::exception& ex) {
-        spdlog::warn("Failed to parse tool_pending payload: {}", ex.what());
-    }
-}
-
-void LocusFrame::on_agent_tool_result(wxThreadEvent& evt)
-{
-    auto* ui = find_tab_ui(evt.GetId());
-    if (!ui) return;
-    try {
-        auto payload = nlohmann::json::parse(evt.GetString().ToUTF8().data());
-        wxString call_id = wxString::FromUTF8(payload.value("call_id", ""));
-        wxString display = wxString::FromUTF8(payload.value("display", ""));
-        bool success = payload.value("success", true);
-        ui->chat->on_tool_result(call_id, display, success);
-    } catch (...) {}
-}
-
-void LocusFrame::on_agent_turn_complete(wxThreadEvent& evt)
-{
-    int tab_id = evt.GetId();
-    SetStatusText("Ready", 0);
-    if (tray_) tray_->set_state(LocusTray::State::idle);
-    if (auto* ui = find_tab_ui(tab_id)) {
-        ui->busy = false;
-        refresh_tab_title(tab_id);
-        ui->chat->on_turn_complete();
-        // S6.13 follow-up -- ensure Commit-now disappears at end of turn
-        // even if no explicit watchdog_cleared event was emitted (e.g. when
-        // a tool call landed naturally and the watchdog never tripped).
-        ui->chat->set_commit_now_visible(false);
-    }
-    notification_sounds::play(
-        notification_sounds::Kind::turn_complete,
-        workspace_.config(), this);
-    // S5.I -- a tab's title might have just been autoderived from its first
-    // user message; refresh the notebook label.
-    if (auto* ui = find_tab_ui(tab_id); ui && ui->tab)
-        refresh_tab_title(tab_id);
-}
-
-void LocusFrame::on_agent_context_meter(wxThreadEvent& evt)
-{
-    auto* ui = find_tab_ui(evt.GetId());
-    if (!ui) return;
-    int used  = evt.GetInt();
-    int limit = static_cast<int>(evt.GetExtraLong());
-    int prompt = 0, completion = 0, reserve = 0;
-    long long stream_ms = 0;
-    auto payload_str = evt.GetString().ToUTF8();
-    if (payload_str.length() > 0) {
-        try {
-            auto j = nlohmann::json::parse(std::string(payload_str.data(), payload_str.length()));
-            prompt     = j.value("prompt", 0);
-            completion = j.value("completion", 0);
-            reserve    = j.value("reserve", 0);
-            stream_ms  = j.value("stream_ms", 0LL);
-        } catch (...) {}
-    }
-    ui->chat->set_context_meter(used, limit, prompt, completion, reserve, stream_ms);
-
-    int effective = limit - reserve;
-    if (effective <= 0) effective = limit > 0 ? limit : 1;
-    double ratio = static_cast<double>(used) / static_cast<double>(effective);
-    bool was_warn = ui->ctx_over_warn;
-    bool was_auto = ui->ctx_over_auto;
-    ui->ctx_over_warn = ratio >= workspace_.config().compaction.warn_threshold;
-    ui->ctx_over_auto = ratio >= workspace_.config().compaction.auto_threshold;
-    if (was_warn != ui->ctx_over_warn || was_auto != ui->ctx_over_auto)
-        refresh_tab_title(evt.GetId());
-}
-
-void LocusFrame::on_agent_compaction(wxThreadEvent& /*evt*/)
-{
-    notification_sounds::play(
-        notification_sounds::Kind::compaction,
-        workspace_.config(), this);
-    show_compaction_dialog();
-}
-
-void LocusFrame::on_agent_compaction_archived(wxThreadEvent& evt)
-{
-    int counter = evt.GetInt();
-    auto* ui = find_tab_ui(evt.GetId());
-    if (!ui || !ui->chat || !ui->tab) return;
-    auto archive_dir = workspace_.root() / ".locus" / "sessions" /
-                       ui->tab->session_id();
-    ui->chat->set_compacted_count(counter,
-        wxString::FromUTF8(archive_dir.string()));
-}
-
-void LocusFrame::on_agent_round_progress(wxThreadEvent& evt)
-{
-    int round      = evt.GetInt();
-    int max_rounds = static_cast<int>(evt.GetExtraLong());
-    if (auto* ui = find_tab_ui(evt.GetId())) {
-        if (ui->chat) ui->chat->set_round_progress(round, max_rounds);
-    }
-}
-
-void LocusFrame::on_agent_watchdog_tripped(wxThreadEvent& evt)
-{
-    if (auto* ui = find_tab_ui(evt.GetId())) {
-        if (ui->chat) ui->chat->set_commit_now_visible(true);
-    }
-    // Status bar hint so the user knows why the button just appeared. The
-    // trigger string is short ("chars" or "seconds"); value is the count
-    // that crossed the configured threshold.
-    SetStatusText(wxString::Format("Watchdog tripped (%s = %d)",
-                                    evt.GetString(), evt.GetInt()), 0);
-}
-
-void LocusFrame::on_agent_watchdog_cleared(wxThreadEvent& evt)
-{
-    if (auto* ui = find_tab_ui(evt.GetId())) {
-        if (ui->chat) ui->chat->set_commit_now_visible(false);
-    }
-}
-
-void LocusFrame::on_agent_session_reset(wxThreadEvent& evt)
-{
-    SetStatusText("Conversation reset", 0);
-    if (auto* ui = find_tab_ui(evt.GetId())) {
-        ui->chat->on_session_reset();
-        ui->chat->set_system_prompt_bubble(ui->tab->agent().context().system_prompt());
-    }
-    if (activity_panel_) activity_panel_->clear();
-}
-
-void LocusFrame::on_agent_error(wxThreadEvent& evt)
-{
-    wxString msg = evt.GetString();
-    SetStatusText("Error: " + msg, 0);
-    if (tray_) tray_->set_state(LocusTray::State::error);
-    if (auto* ui = find_tab_ui(evt.GetId())) ui->chat->on_error(msg);
-    spdlog::error("Agent error (shown in UI): {}", msg.ToStdString());
-}
-
-void LocusFrame::on_agent_embedding_progress(wxThreadEvent& evt)
-{
-    int done = evt.GetInt();
-    int total = static_cast<int>(evt.GetExtraLong());
-    file_tree_panel_->set_embedding_progress(done, total);
-    ops_status_.set_embedding(done, total);
-    refresh_ops_status();
-}
-
-void LocusFrame::on_agent_indexing_progress(wxThreadEvent& evt)
-{
-    int done = evt.GetInt();
-    int total = static_cast<int>(evt.GetExtraLong());
-    ops_status_.set_indexing(done, total);
-    refresh_ops_status();
-    if (tray_) {
-        const bool agent_busy = std::any_of(
-            tabs_ui_.begin(), tabs_ui_.end(),
-            [](const auto& entry) { return entry.second.busy; });
-        if (!agent_busy) {
-            tray_->set_state(total > 0 && done < total
-                ? LocusTray::State::indexing
-                : LocusTray::State::idle);
-        }
-    }
-    if (total > 0 && done >= total) {
-        refresh_index_stats();
-        if (file_tree_panel_) file_tree_panel_->rebuild();
-    }
-}
 
 void LocusFrame::refresh_ops_status()
 {
@@ -1549,132 +1303,6 @@ void LocusFrame::update_memory_bank_menu_state()
     }
 }
 
-void LocusFrame::on_agent_activity(wxThreadEvent& evt)
-{
-    // Activity is workspace-shared; route to the single panel regardless of
-    // source tab.
-    auto ev = evt.GetPayload<ActivityEvent>();
-    if (activity_panel_) activity_panel_->append(ev);
-    if (memory_bank_panel_) memory_bank_panel_->on_activity_event(ev);
-}
-
-void LocusFrame::on_agent_activity_updated(wxThreadEvent& evt)
-{
-    // ActivityLog coalesced an index_event onto an existing row -- replace
-    // the matching row in place. Memory-bank panel doesn't render the
-    // activity log, so no notification needed there.
-    auto ev = evt.GetPayload<ActivityEvent>();
-    if (activity_panel_) activity_panel_->update(ev);
-}
-
-void LocusFrame::on_agent_attached_context(wxThreadEvent& evt)
-{
-    if (auto* ui = find_tab_ui(evt.GetId()))
-        ui->chat->set_attached_chip(evt.GetString());
-}
-
-void LocusFrame::on_agent_mode_changed(wxThreadEvent& evt)
-{
-    if (auto* ui = find_tab_ui(evt.GetId())) {
-        auto mode = static_cast<AgentMode>(evt.GetInt());
-        ui->chat->on_mode_changed(mode);
-    }
-}
-
-void LocusFrame::on_agent_plan_proposed(wxThreadEvent& evt)
-{
-    if (auto* ui = find_tab_ui(evt.GetId()))
-        ui->chat->on_plan_proposed(evt.GetString());
-    refresh_active_tab_footer_status();
-}
-
-void LocusFrame::on_agent_plan_step_advanced(wxThreadEvent& evt)
-{
-    auto* ui = find_tab_ui(evt.GetId());
-    if (!ui) return;
-    try {
-        auto j = nlohmann::json::parse(evt.GetString().utf8_string());
-        wxString plan_id = wxString::FromUTF8(j.value("plan_id", ""));
-        int      step    = j.value("step_idx", 0);
-        wxString status  = wxString::FromUTF8(j.value("status", "pending"));
-        wxString notes   = wxString::FromUTF8(j.value("notes", ""));
-        ui->chat->on_plan_step_advanced(plan_id, step, status, notes);
-    } catch (const std::exception& ex) {
-        spdlog::warn("Failed to parse plan_step_advanced payload: {}", ex.what());
-    }
-    refresh_active_tab_footer_status();
-}
-
-void LocusFrame::on_agent_plan_completed(wxThreadEvent& evt)
-{
-    auto* ui = find_tab_ui(evt.GetId());
-    if (!ui) return;
-    try {
-        auto j = nlohmann::json::parse(evt.GetString().utf8_string());
-        wxString plan_id = wxString::FromUTF8(j.value("plan_id", ""));
-        bool     success = j.value("success", false);
-        ui->chat->on_plan_completed(plan_id, success);
-    } catch (const std::exception& ex) {
-        spdlog::warn("Failed to parse plan_completed payload: {}", ex.what());
-    }
-    refresh_active_tab_footer_status();
-}
-
-void LocusFrame::on_agent_auto_commit(wxThreadEvent& evt)
-{
-    auto* ui = find_tab_ui(evt.GetId());
-    if (!ui) return;
-    try {
-        auto j = nlohmann::json::parse(evt.GetString().utf8_string());
-        wxString sha     = wxString::FromUTF8(j.value("short_sha", ""));
-        wxString branch  = wxString::FromUTF8(j.value("branch", ""));
-        wxString subject = wxString::FromUTF8(j.value("subject", ""));
-        ui->chat->on_auto_commit(sha, branch, subject);
-    } catch (const std::exception& ex) {
-        spdlog::warn("Failed to parse auto_commit payload: {}", ex.what());
-    }
-    refresh_active_tab_footer_status();
-}
-
-void LocusFrame::on_agent_gen_progress(wxThreadEvent& evt)
-{
-    auto* ui = find_tab_ui(evt.GetId());
-    if (!ui) return;
-    int chars      = evt.GetInt();
-    int est_tokens = static_cast<int>(evt.GetExtraLong());
-    ui->chat->set_generation_progress(chars, est_tokens);
-}
-
-void LocusFrame::on_agent_history_msg_added(wxThreadEvent& evt)
-{
-    auto* ui = find_tab_ui(evt.GetId());
-    if (!ui) return;
-    int history_id = evt.GetInt();
-    long packed    = evt.GetExtraLong();
-    MessageRole role = static_cast<MessageRole>(packed & 0xFF);
-    bool deletable   = (packed & 0x100) != 0;
-    ui->chat->on_history_message_added(history_id, role, deletable);
-    // First user message may have just landed -- autoderived title.
-    if (role == MessageRole::user)
-        refresh_tab_title(evt.GetId());
-}
-
-void LocusFrame::on_agent_history_msg_deleted(wxThreadEvent& evt)
-{
-    if (auto* ui = find_tab_ui(evt.GetId()))
-        ui->chat->on_history_message_deleted(evt.GetInt());
-}
-
-void LocusFrame::on_agent_preset_changed(wxThreadEvent& evt)
-{
-    if (auto* ui = find_tab_ui(evt.GetId())) {
-        int packed = evt.GetInt();
-        tools::PermissionPreset effective =
-            static_cast<tools::PermissionPreset>(packed & 0xff);
-        bool from_runtime = (packed & 0x100) != 0;
-        ui->chat->on_permission_preset_changed(effective, from_runtime);
-    }
-}
 
 // ---------------------------------------------------------------------------
 // S5.R -- per-tab process observer (lifecycle only)

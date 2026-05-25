@@ -54,7 +54,7 @@ public:
     int reload_gitignore();
 
     // S4.L -- walk the `files` table and drop any row whose path matches an
-    // active exclude pattern (config.exclude_patterns OR gitignore_patterns_).
+    // active exclude pattern (config.index.exclude_patterns OR gitignore_patterns_).
     // Used to clean up stale rows from previous workspace sessions when the
     // exclude set has grown between runs. Returns the number of dropped rows.
     int reconcile_excluded_files();
@@ -131,8 +131,8 @@ private:
     SymbolExtractorRegistry  symbol_extractors_;
 
     // S4.L -- merged .gitignore patterns reloaded by `reload_gitignore()`.
-    // Empty when `WorkspaceConfig::respect_gitignore` is false. Read by
-    // `is_excluded()` alongside `config_.exclude_patterns`.
+    // Empty when `WorkspaceConfig::Index::respect_gitignore` is false. Read by
+    // `is_excluded()` alongside `config_.index.exclude_patterns`.
     std::vector<GitignorePattern> gitignore_patterns_;
 
     // Serialises process_events callers (WatcherPump background thread vs

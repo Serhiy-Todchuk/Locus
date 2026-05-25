@@ -81,7 +81,7 @@ Workspace::Workspace(const fs::path& root)
     main_db_->drop_legacy_semantic_tables();
 
     spdlog::info("Starting file watcher on {}", root_.string());
-    watcher_ = std::make_unique<FileWatcher>(root_, config_.exclude_patterns);
+    watcher_ = std::make_unique<FileWatcher>(root_, config_.index.exclude_patterns);
     watcher_->start();
 
     // Register text extractors for known document formats
@@ -99,7 +99,7 @@ Workspace::Workspace(const fs::path& root)
     extractors_->register_extractor(".yml",   std::make_unique<YamlExtractor>());
 
     // Initialise semantic search if enabled (opens vectors.db on success)
-    if (config_.semantic_search_enabled) {
+    if (config_.index.semantic_search_enabled) {
         enable_semantic_search();
     }
 
@@ -131,11 +131,11 @@ Workspace::Workspace(const fs::path& root)
 
     // Background-process registry (S4.I). Empty at startup; tools spawn into it.
     processes_ = std::make_unique<ProcessRegistry>(
-        root_, static_cast<std::size_t>(config_.process_output_buffer_kb) * 1024);
+        root_, static_cast<std::size_t>(config_.agent.process_output_buffer_kb) * 1024);
 
     // S4.R memory bank. Constructed last so it picks up the embedder/reranker
     // that enable_semantic_search wired above. Lives in `.locus/memory/`.
-    if (config_.memory_enabled) {
+    if (config_.memory.enabled) {
         memory_ = std::make_unique<MemoryStore>(
             locus_dir_ / "memory",
             *main_db_,
@@ -238,7 +238,7 @@ bool Workspace::enable_semantic_search()
     fs::path model_path;
     fs::path base = exe_dir;
     for (int i = 0; i < 6; ++i) {
-        fs::path candidate = base / "models" / config_.embedding_model;
+        fs::path candidate = base / "models" / config_.index.embedding_model;
         if (fs::exists(candidate)) {
             model_path = candidate;
             break;
@@ -249,7 +249,7 @@ bool Workspace::enable_semantic_search()
 
     if (model_path.empty()) {
         spdlog::warn("Semantic search enabled but model '{}' not found under {} or its parents",
-                     config_.embedding_model, exe_dir.string());
+                     config_.index.embedding_model, exe_dir.string());
         return false;
     }
 
@@ -269,7 +269,7 @@ bool Workspace::enable_semantic_search()
         // different embedder model (same dim, different vector space),
         // ensure_vectors_schema drops chunk_vectors + chunks; the indexer
         // pass that follows will re-chunk + re-enqueue every file.
-        vectors_db_->ensure_vectors_schema(dim, config_.embedding_model);
+        vectors_db_->ensure_vectors_schema(dim, config_.index.embedding_model);
 
         embedding_worker_ = std::make_unique<EmbeddingWorker>(
             *vectors_db_, *embedder_);
@@ -286,11 +286,11 @@ bool Workspace::enable_semantic_search()
                      model_path.string(), dim);
 
         // Reranker is optional - only load if enabled and the GGUF is present.
-        if (config_.reranker_enabled) {
+        if (config_.index.reranker_enabled) {
             fs::path rr_path;
             fs::path b = exe_dir;
             for (int i = 0; i < 6; ++i) {
-                fs::path c = b / "models" / config_.reranker_model;
+                fs::path c = b / "models" / config_.index.reranker_model;
                 if (fs::exists(c)) { rr_path = c; break; }
                 if (!b.has_parent_path() || b.parent_path() == b) break;
                 b = b.parent_path();
@@ -298,7 +298,7 @@ bool Workspace::enable_semantic_search()
             if (rr_path.empty()) {
                 spdlog::warn("Reranker enabled but model '{}' not found - "
                              "search will use bi-encoder scores only",
-                             config_.reranker_model);
+                             config_.index.reranker_model);
             } else {
                 try {
                     reranker_ = std::make_unique<Reranker>(rr_path);

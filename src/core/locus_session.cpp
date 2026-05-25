@@ -24,31 +24,31 @@ namespace {
 // described in the header.
 void merge_workspace_defaults(LLMConfig& cfg, const WorkspaceConfig& wc)
 {
-    if (cfg.base_url.empty() && !wc.llm_endpoint.empty())
-        cfg.base_url = wc.llm_endpoint;
-    if (cfg.model.empty() && !wc.llm_model.empty())
-        cfg.model = wc.llm_model;
-    if (cfg.context_limit <= 0 && wc.llm_context_limit > 0)
-        cfg.context_limit = wc.llm_context_limit;
-    if (wc.llm_max_tokens > 0)
-        cfg.max_tokens = wc.llm_max_tokens;
-    if (wc.llm_timeout_ms > 0)
-        cfg.timeout_ms = wc.llm_timeout_ms;
-    if (wc.llm_temperature > 0.0 && wc.llm_temperature != cfg.temperature)
-        cfg.temperature = wc.llm_temperature;
-    if (cfg.tool_format == ToolFormat::Auto && !wc.llm_tool_format.empty())
-        cfg.tool_format = tool_format_from_string(wc.llm_tool_format);
+    if (cfg.base_url.empty() && !wc.llm.endpoint.empty())
+        cfg.base_url = wc.llm.endpoint;
+    if (cfg.model.empty() && !wc.llm.model.empty())
+        cfg.model = wc.llm.model;
+    if (cfg.context_limit <= 0 && wc.llm.context_limit > 0)
+        cfg.context_limit = wc.llm.context_limit;
+    if (wc.llm.max_tokens > 0)
+        cfg.max_tokens = wc.llm.max_tokens;
+    if (wc.llm.timeout_ms > 0)
+        cfg.timeout_ms = wc.llm.timeout_ms;
+    if (wc.llm.temperature > 0.0 && wc.llm.temperature != cfg.temperature)
+        cfg.temperature = wc.llm.temperature;
+    if (cfg.tool_format == ToolFormat::Auto && !wc.llm.tool_format.empty())
+        cfg.tool_format = tool_format_from_string(wc.llm.tool_format);
 
-    if (wc.llm_top_p          > 0.0) cfg.top_p          = wc.llm_top_p;
-    if (wc.llm_top_k          > 0)   cfg.top_k          = wc.llm_top_k;
-    if (wc.llm_min_p          > 0.0) cfg.min_p          = wc.llm_min_p;
-    if (wc.llm_repeat_penalty > 0.0) cfg.repeat_penalty = wc.llm_repeat_penalty;
-    if (wc.llm_frequency_penalty != 0.0) cfg.frequency_penalty = wc.llm_frequency_penalty;
-    if (wc.llm_presence_penalty  != 0.0) cfg.presence_penalty  = wc.llm_presence_penalty;
+    if (wc.llm.top_p          > 0.0) cfg.top_p          = wc.llm.top_p;
+    if (wc.llm.top_k          > 0)   cfg.top_k          = wc.llm.top_k;
+    if (wc.llm.min_p          > 0.0) cfg.min_p          = wc.llm.min_p;
+    if (wc.llm.repeat_penalty > 0.0) cfg.repeat_penalty = wc.llm.repeat_penalty;
+    if (wc.llm.frequency_penalty != 0.0) cfg.frequency_penalty = wc.llm.frequency_penalty;
+    if (wc.llm.presence_penalty  != 0.0) cfg.presence_penalty  = wc.llm.presence_penalty;
     // S6.10 Task D -- grammar mode. Layer the workspace string over the seed
     // (caller may pass GrammarMode::Off as default; workspace overrides).
-    if (!wc.llm_grammar_mode.empty())
-        cfg.grammar_mode = grammar_mode_from_string(wc.llm_grammar_mode);
+    if (!wc.llm.grammar_mode.empty())
+        cfg.grammar_mode = grammar_mode_from_string(wc.llm.grammar_mode);
 }
 
 } // namespace
@@ -95,18 +95,18 @@ void LocusSession::load_shared_resources(const std::filesystem::path& ws_path,
     // want their hand-tuned values back uncheck the box in Settings.
     {
         const auto& wc_ad = workspace_->config();
-        if (wc_ad.auto_detect_model_preset) {
+        if (wc_ad.llm.auto_detect_preset) {
             const ModelPreset* preset = nullptr;
             std::string source;
-            if (!wc_ad.llm_preset_name.empty()
-                && wc_ad.llm_preset_name != "auto")
+            if (!wc_ad.llm.preset_name.empty()
+                && wc_ad.llm.preset_name != "auto")
             {
-                preset = find_preset(wc_ad.llm_preset_name);
+                preset = find_preset(wc_ad.llm.preset_name);
                 if (preset) {
                     source = "pinned";
                 } else {
                     spdlog::warn("Preset '{}' not found; falling back to auto-"
-                                 "detect", wc_ad.llm_preset_name);
+                                 "detect", wc_ad.llm.preset_name);
                 }
             }
             if (!preset && !model_info.id.empty()) {

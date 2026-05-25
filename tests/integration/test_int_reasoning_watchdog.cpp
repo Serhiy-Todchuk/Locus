@@ -20,21 +20,21 @@ namespace {
 class WatchdogGuard {
 public:
     WatchdogGuard(int max_seconds, int max_chars, bool auto_nudge)
-        : prev_secs_(harness().workspace().config().reasoning_max_seconds)
-        , prev_chars_(harness().workspace().config().reasoning_max_chars)
-        , prev_nudge_(harness().workspace().config().reasoning_auto_nudge)
+        : prev_secs_(harness().workspace().config().agent.reasoning_max_seconds)
+        , prev_chars_(harness().workspace().config().agent.reasoning_max_chars)
+        , prev_nudge_(harness().workspace().config().agent.reasoning_auto_nudge)
     {
         auto& cfg = harness().workspace().config();
-        cfg.reasoning_max_seconds = max_seconds;
-        cfg.reasoning_max_chars   = max_chars;
-        cfg.reasoning_auto_nudge  = auto_nudge;
+        cfg.agent.reasoning_max_seconds = max_seconds;
+        cfg.agent.reasoning_max_chars   = max_chars;
+        cfg.agent.reasoning_auto_nudge  = auto_nudge;
     }
     ~WatchdogGuard()
     {
         auto& cfg = harness().workspace().config();
-        cfg.reasoning_max_seconds = prev_secs_;
-        cfg.reasoning_max_chars   = prev_chars_;
-        cfg.reasoning_auto_nudge  = prev_nudge_;
+        cfg.agent.reasoning_max_seconds = prev_secs_;
+        cfg.agent.reasoning_max_chars   = prev_chars_;
+        cfg.agent.reasoning_auto_nudge  = prev_nudge_;
     }
 private:
     int  prev_secs_;

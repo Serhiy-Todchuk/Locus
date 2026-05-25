@@ -130,7 +130,7 @@ LocusTab::LocusTab(int tab_id,
     // auto-show / busy-badge book-keeping.
     processes_ = std::make_unique<ProcessRegistry>(
         workspace.root(),
-        static_cast<std::size_t>(workspace.config().process_output_buffer_kb) * 1024);
+        static_cast<std::size_t>(workspace.config().agent.process_output_buffer_kb) * 1024);
 
     services_ = std::make_unique<TabServices>(workspace, *processes_);
 

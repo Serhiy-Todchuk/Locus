@@ -270,14 +270,14 @@ TEST_CASE("[s5.d][config] compaction_reserve_tokens default is -1 (auto)",
           "[s5.d][config]")
 {
     WorkspaceConfig cfg;
-    REQUIRE(cfg.compaction_reserve_tokens == -1);
+    REQUIRE(cfg.compaction.reserve_tokens == -1);
 }
 
 TEST_CASE("[s5.d][config] compaction_reserve_tokens round-trips through JSON",
           "[s5.d][config]")
 {
     WorkspaceConfig cfg;
-    cfg.compaction_reserve_tokens = 2048;
+    cfg.compaction.reserve_tokens = 2048;
 
     auto j    = workspace_config_to_json(cfg);
     REQUIRE(j.contains("compaction"));
@@ -285,21 +285,21 @@ TEST_CASE("[s5.d][config] compaction_reserve_tokens round-trips through JSON",
     REQUIRE(j["compaction"]["reserve_tokens"] == 2048);
 
     auto cfg2 = workspace_config_from_json(j);
-    REQUIRE(cfg2.compaction_reserve_tokens == 2048);
+    REQUIRE(cfg2.compaction.reserve_tokens == 2048);
 }
 
 TEST_CASE("[s5.d][config] ui_show_per_message_tokens default is true",
           "[s5.d][config]")
 {
     WorkspaceConfig cfg;
-    REQUIRE(cfg.ui_show_per_message_tokens == true);
+    REQUIRE(cfg.chat.show_per_message_tokens == true);
 }
 
 TEST_CASE("[s5.d][config] ui_show_per_message_tokens round-trips through JSON",
           "[s5.d][config]")
 {
     WorkspaceConfig cfg;
-    cfg.ui_show_per_message_tokens = false;
+    cfg.chat.show_per_message_tokens = false;
 
     auto j = workspace_config_to_json(cfg);
     REQUIRE(j.contains("ui"));
@@ -307,5 +307,5 @@ TEST_CASE("[s5.d][config] ui_show_per_message_tokens round-trips through JSON",
     REQUIRE(j["ui"]["show_per_message_tokens"] == false);
 
     auto cfg2 = workspace_config_from_json(j);
-    REQUIRE(cfg2.ui_show_per_message_tokens == false);
+    REQUIRE(cfg2.chat.show_per_message_tokens == false);
 }

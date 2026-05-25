@@ -83,7 +83,7 @@ Key rules:
 ## 3. Turn lifecycle
 
 A "turn" is one user message -> zero or more LLM calls with tool dispatch in between -> final
-text-only assistant message. The loop caps at `WorkspaceConfig::max_rounds_per_message`
+text-only assistant message. The loop caps at `WorkspaceConfig::Agent::max_rounds_per_message`
 (default 100, 0 = unbounded) to prevent runaway tool chains. The cap was a hardcoded
 `k_max_rounds = 20` until the agentic-Tetris run-2 build-fix loop hit it at round 20 mid-edit;
 see findings.md #5 in the same output dir.
@@ -99,31 +99,64 @@ Both paths funnel to `agent_thread_func()` -> `process_message()`.
 
 ### 3.2 `AgentCore::process_message` phases
 
+`process_message` is the thin orchestrator; the multi-round LLM/tool loop lives in
+`AgentTurnRunner::run()` ([agent_turn.cpp](../src/agent/agent_turn.cpp)). The runner is
+stack-allocated per turn, takes `(AgentCore&, turn_id, max_rounds)`, and reaches into
+AgentCore's private state via the `friend class AgentTurnRunner` declaration in
+[agent_core.h](../src/agent/agent_core.h).
+
 ```
-process_message(content)
- ├─ busy_ = true; cancel_requested_ = false
+process_message(content)                                         // AgentCore
+ ├─ busy_ = true; cancel_requested_ = false; nudges_this_turn_ = 0
  ├─ on_turn_start broadcast                              ──> all frontends
- ├─ slash_->try_dispatch(content, token_cb, error_cb)    ── if true: on_turn_complete, return
- ├─ history_.add(user message)
- ├─ activity_->emit(user_message)
+ ├─ slash_->try_dispatch(content, ...)                    ── if handled: on_turn_complete, return
+ ├─ bump turn_id; arm dispatcher checkpoints; metrics_->begin_turn
+ ├─ effective_content = attached-context block + file-change diff note + user_input
+ ├─ history_.add(user message); activity_->emit(user_message)
  ├─ on_context_meter broadcast
  │
- ├─ for round = 1..max_rounds_per_message:        // ws->config().max_rounds_per_message; 0 = unbounded
- │    on_round_progress(round, max_rounds) broadcast      ──> all frontends (chip)
- │    ├─ if cancel_requested_: emit on_error, break
- │    ├─ budget_->check_overflow(current_token_count())  ── may emit on_compaction_needed, break if full
- │    ├─ step = loop_->run_step(history_)                <── AgentLoop
- │    ├─ on_context_meter broadcast
- │    ├─ if step.had_error: break
- │    ├─ history_.add(step.assistant_msg)                <── only writer of history_
- │    ├─ if step.tool_calls.empty(): break
- │    └─ for each call in step.tool_calls:
- │         ├─ if cancel_requested_: break
- │         └─ dispatcher_->dispatch(call, append_fn)     <── ToolDispatcher
+ ├─ turn_had_error = AgentTurnRunner(*this, turn_id, max_rounds).run().turn_had_error
+ │                                                        // see 3.2.1 below
  │
- ├─ if max_rounds > 0 && round >= max_rounds: on_error broadcast
+ ├─ metrics_->end_turn(turn_had_error)
+ ├─ drop turn-context from dispatcher; cps->drop_turn if empty
+ ├─ S4.L auto-commit (if config.git.auto_commit && agent_touched_size > 0)
+ ├─ snapshot file-change tracker for next turn
  ├─ on_turn_complete broadcast
  └─ busy_ = false
+```
+
+#### 3.2.1 `AgentTurnRunner::run()` -- the round loop
+
+```
+run() -> Outcome{turn_had_error, rounds_run}                     // AgentTurnRunner
+ ├─ for round = 1..max_rounds:               // 0 = unbounded; from config.agent.max_rounds_per_message
+ │    ├─ if cancel_requested_: emit on_error("Turn cancelled."), break
+ │    ├─ on_round_progress(round, max_rounds) broadcast
+ │    ├─ apply_pending_compaction / mode_change / plan_decision / deletes
+ │    ├─ drain mid-turn queued user messages (non-slash entries from message_queue_)
+ │    ├─ auto-compact band check (config.compaction.auto_threshold)  ── may queue + apply pipeline
+ │    ├─ if budget_->check_overflow(): break
+ │    ├─ step = loop_->run_step(history_, tool_mode)              <── AgentLoop
+ │    ├─ on_context_meter broadcast (with step.stream_ms)
+ │    ├─ if step.had_error: turn_had_error = true; break
+ │    ├─ if cancel_requested_:                                     // fork: Stop vs nudge
+ │    │    if nudge_requested_ || step.watchdog_auto_nudge:
+ │    │      if ++nudges_this_turn_ > 2: emit "Agent appears stuck", break
+ │    │      cancel = false; history_.add(synthetic nudge user msg); continue
+ │    │    else: history_.add(assistant_msg if non-empty); emit "Turn cancelled."; break
+ │    ├─ history_.add(step.assistant_msg) if non-empty           <── only writer of history_
+ │    ├─ if useless (empty content + no tool_calls):
+ │    │    QualityMonitor::empty_response detector  -> nudge + continue, or break
+ │    ├─ if step.tool_calls.empty(): break
+ │    ├─ QualityMonitor::repeated_tool_call detector  -> nudge + continue
+ │    ├─ for each call in step.tool_calls:
+ │    │    if cancel_requested_: break
+ │    │    dispatcher_->dispatch(call, append_fn)                <── ToolDispatcher
+ │    │    observe_plan_tool_result(call, ...)
+ │    └─ if plan_awaiting_decision_: break
+ │
+ └─ if max_rounds > 0 && round >= max_rounds: turn_had_error = true; emit on_error
 ```
 
 `append_fn` is a lambda that calls `history_.add(msg)`; `ToolDispatcher` never touches history
@@ -305,7 +338,7 @@ sequenceDiagram
 ```
 
 Each round is one `AgentLoop::run_step()` call. Round count is bounded by
-`WorkspaceConfig::max_rounds_per_message` (default 500, 0 = unbounded); hitting the cap emits
+`WorkspaceConfig::Agent::max_rounds_per_message` (default 500, 0 = unbounded); hitting the cap emits
 `on_error("Agent reached the maximum number of tool call rounds (N). Raise
 agent.max_rounds_per_message ...")` and ends the turn. The chat-footer round chip
 (`set_round_progress`) updates every round so the user can see "round 7/500" while a turn is
@@ -432,8 +465,8 @@ Cross-cutting rationale: [ADR-0007](decisions/0007-context-budget-reshape-lazy-m
 ### Reasoning watchdog (S6.13)
 
 `AgentLoop` polls combined reasoning + text channel size and elapsed wall-clock
-on every stream chunk. If `WorkspaceConfig::reasoning_max_chars` /
-`reasoning_max_seconds` (both default 0 = off; OR-semantics) trip, it broadcasts
+on every stream chunk. If `WorkspaceConfig::Agent::reasoning_max_chars` /
+`WorkspaceConfig::Agent::reasoning_max_seconds` (both default 0 = off; OR-semantics) trip, it broadcasts
 `IFrontend::on_reasoning_watchdog_tripped(trigger, value)` and -- in auto-nudge
 mode -- sets `cancel_flag_` plus `out.watchdog_auto_nudge=true` so the stream
 breaks cleanly. The round loop in `AgentCore` then:

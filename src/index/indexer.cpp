@@ -59,7 +59,7 @@ Indexer::Indexer(Database& main_db, Database* vectors_db,
     , stmts_(main_db, vectors_db)
 {
     register_builtin_symbol_extractors(symbol_extractors_);
-    if (config_.respect_gitignore) {
+    if (config_.index.respect_gitignore) {
         // Universal skip list: directories that are essentially never
         // sources of useful .gitignore rules and that bloat the walker if
         // descended (esp. `build/` for repos that vendor third-party src
@@ -144,7 +144,7 @@ bool Indexer::is_excluded(const fs::path& rel_path) const
 {
     std::string rel_str = rel_path.string();
     std::replace(rel_str.begin(), rel_str.end(), '\\', '/');
-    for (auto& pattern : config_.exclude_patterns) {
+    for (auto& pattern : config_.index.exclude_patterns) {
         if (glob_match(pattern, rel_str)) return true;
     }
     // S4.L -- treat the rel_str as a file path for gitignore matching. The
@@ -160,7 +160,7 @@ bool Indexer::is_excluded(const fs::path& rel_path) const
 
 int Indexer::reload_gitignore()
 {
-    if (!config_.respect_gitignore) {
+    if (!config_.index.respect_gitignore) {
         gitignore_patterns_.clear();
         return 0;
     }
@@ -365,7 +365,7 @@ void Indexer::index_file(const fs::path& rel_path)
 
         bool chunks_ok = true;
         if (stat_match && !db_binary && vectors_db_ &&
-            config_.semantic_search_enabled && stmts_.file_has_chunks) {
+            config_.index.semantic_search_enabled && stmts_.file_has_chunks) {
             sqlite3_reset(stmts_.file_has_chunks);
             sqlite3_bind_int64(stmts_.file_has_chunks, 1, db_file_id);
             if (sqlite3_step(stmts_.file_has_chunks) == SQLITE_ROW) {
@@ -392,8 +392,8 @@ void Indexer::index_file(const fs::path& rel_path)
     ITextExtractor* extractor = extractors_.find(ext);
     if (extractor) {
         // Check file size before invoking extractor
-        if (config_.max_file_size_kb > 0 &&
-            fsize > static_cast<uintmax_t>(config_.max_file_size_kb) * 1024) {
+        if (config_.index.max_file_size_kb > 0 &&
+            fsize > static_cast<uintmax_t>(config_.index.max_file_size_kb) * 1024) {
             log_fs()->trace("Skipping large file ({} KB): {}", fsize / 1024, abs_path.string());
             binary = true;
         } else {
@@ -405,7 +405,7 @@ void Indexer::index_file(const fs::path& rel_path)
             }
         }
     } else {
-        content = read_file_content(abs_path, config_.max_file_size_kb);
+        content = read_file_content(abs_path, config_.index.max_file_size_kb);
         binary = content.empty() ||
                  is_binary_content(content.data(), content.size());
     }
@@ -448,7 +448,7 @@ void Indexer::index_file(const fs::path& rel_path)
     sqlite3_bind_int64(stmts_.delete_heads, 1, file_id);
     sqlite3_step(stmts_.delete_heads);
 
-    if (vectors_db_ && config_.semantic_search_enabled) {
+    if (vectors_db_ && config_.index.semantic_search_enabled) {
         sqlite3_reset(stmts_.delete_chunk_vecs);
         sqlite3_bind_int64(stmts_.delete_chunk_vecs, 1, file_id);
         sqlite3_step(stmts_.delete_chunk_vecs);
@@ -469,22 +469,22 @@ void Indexer::index_file(const fs::path& rel_path)
 
     // Extract symbols (Tree-sitter)
     std::vector<SymbolSpan> symbol_spans;
-    if (config_.code_parsing_enabled) {
+    if (config_.index.code_parsing_enabled) {
         extract_symbols(file_id, content, language, symbol_spans);
     }
 
     // Create semantic chunks (if enabled)
-    if (vectors_db_ && config_.semantic_search_enabled && !content.empty()) {
+    if (vectors_db_ && config_.index.semantic_search_enabled && !content.empty()) {
         std::vector<Chunk> chunks;
         if (!symbol_spans.empty()) {
             chunks = chunk_code(content, symbol_spans,
-                                config_.chunk_size_lines, config_.chunk_overlap_lines);
+                                config_.index.chunk_size_lines, config_.index.chunk_overlap_lines);
         } else if (!headings.empty()) {
             chunks = chunk_document(content, headings,
-                                    config_.chunk_size_lines, config_.chunk_overlap_lines);
+                                    config_.index.chunk_size_lines, config_.index.chunk_overlap_lines);
         } else {
             chunks = chunk_sliding_window(content,
-                                          config_.chunk_size_lines, config_.chunk_overlap_lines);
+                                          config_.index.chunk_size_lines, config_.index.chunk_overlap_lines);
         }
 
         std::vector<int64_t> chunk_ids;
@@ -655,7 +655,7 @@ void Indexer::process_events(const std::vector<FileEvent>& events)
     // file that's still in this batch). Reload runs once per batch even if
     // multiple .gitignore files changed.
     bool gitignore_changed = false;
-    if (config_.respect_gitignore) {
+    if (config_.index.respect_gitignore) {
         for (auto& ev : events) {
             if (ev.path.filename() == ".gitignore"
                 || (ev.action == FileAction::Moved

@@ -231,9 +231,9 @@ ToolResult ListDirectoryTool::execute(const ToolCall& call, IWorkspaceServices& 
     std::vector<std::string> excludes;
     int64_t size_cap_bytes = 0;
     if (wsp) {
-        excludes = wsp->config().exclude_patterns;
-        if (wsp->config().max_file_size_kb > 0) {
-            size_cap_bytes = static_cast<int64_t>(wsp->config().max_file_size_kb) * 1024;
+        excludes = wsp->config().index.exclude_patterns;
+        if (wsp->config().index.max_file_size_kb > 0) {
+            size_cap_bytes = static_cast<int64_t>(wsp->config().index.max_file_size_kb) * 1024;
         }
     }
 

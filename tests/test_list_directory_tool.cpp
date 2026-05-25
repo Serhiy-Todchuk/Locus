@@ -154,7 +154,7 @@ TEST_CASE("ListDirectoryTool: file past max_file_size_kb shows as [oversized]",
 
     {
         locus::Workspace ws(tmp);
-        ws.config().max_file_size_kb = 1;
+        ws.config().index.max_file_size_kb = 1;
         auto r = invoke_list(ws);
         REQUIRE(r.success);
         REQUIRE_THAT(r.content, ContainsSubstring("huge.txt"));

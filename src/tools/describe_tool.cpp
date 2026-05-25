@@ -40,7 +40,7 @@ ToolApprovalPolicy DescribeTool::approval_policy() const
 bool DescribeTool::available(IWorkspaceServices& ws) const
 {
     if (auto* w = ws.workspace())
-        return w->config().lazy_tool_manifest;
+        return w->config().agent.lazy_tool_manifest;
     // No workspace handle (test harnesses) -- hide rather than expose to keep
     // the manifest tight by default.
     return false;

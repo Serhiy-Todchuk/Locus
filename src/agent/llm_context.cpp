@@ -102,7 +102,7 @@ void LLMContext::update_reserve()
     auto* ws = services_.workspace();
     if (!ws) return;
     int limit   = llm_config_.context_limit;
-    int cfg_val = ws->config().compaction_reserve_tokens;
+    int cfg_val = ws->config().compaction.reserve_tokens;
     int reserve = 0;
     if (cfg_val >= 0) {
         reserve = cfg_val;
@@ -333,7 +333,7 @@ void LLMContext::load_session(const std::string& id)
     // S5.G -- re-announce every loaded message so a frontend connected after
     // load builds its dom -> history map for hover-reveal delete. Order is
     // history order; the chat panel's own re-rendering of loaded messages
-    // happens through a separate path (LocusFrame::on_agent_session_reset
+    // happens through a separate path (AgentEventRouter::on_agent_session_reset
     // + re-render), so the added events here are purely for the delete map.
     for (const auto& m : history_.messages()) {
         bool deletable = (m.role == MessageRole::user) ||

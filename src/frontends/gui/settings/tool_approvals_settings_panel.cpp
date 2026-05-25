@@ -95,7 +95,7 @@ ToolApprovalsSettingsPanel::ToolApprovalsSettingsPanel(wxWindow* parent,
 
     require_read_before_edit_ctrl_ = new wxCheckBox(this, wxID_ANY,
         "Require read_file before edit_file (default on)");
-    require_read_before_edit_ctrl_->SetValue(config.require_read_before_edit);
+    require_read_before_edit_ctrl_->SetValue(config.agent.require_read_before_edit);
     require_read_before_edit_ctrl_->SetToolTip(
         "When checked, edit_file refuses any path the agent hasn't read in "
         "this session via read_file. Cuts hallucinated edits on local "
@@ -108,7 +108,7 @@ ToolApprovalsSettingsPanel::ToolApprovalsSettingsPanel(wxWindow* parent,
     // schema fetch. Default off; opt-in for small-context local models.
     lazy_tool_manifest_ctrl_ = new wxCheckBox(this, wxID_ANY,
         "Lazy tool manifest (saves ~2-3K tokens per turn)");
-    lazy_tool_manifest_ctrl_->SetValue(config.lazy_tool_manifest);
+    lazy_tool_manifest_ctrl_->SetValue(config.agent.lazy_tool_manifest);
     lazy_tool_manifest_ctrl_->SetToolTip(
         "When checked, the per-turn tool catalog (system prompt + API tools "
         "array) collapses to one-line summaries; the agent fetches full "
@@ -134,8 +134,8 @@ ToolApprovalsSettingsPanel::ToolApprovalsSettingsPanel(wxWindow* parent,
         system_prompt_profile_ctrl_ = new wxChoice(this, wxID_ANY,
             wxDefaultPosition, wxDefaultSize, profile_labels);
         int sel = 0;
-        if (config.system_prompt_profile == "compact") sel = 1;
-        else if (config.system_prompt_profile == "minimal") sel = 2;
+        if (config.agent.system_prompt_profile == "compact") sel = 1;
+        else if (config.agent.system_prompt_profile == "minimal") sel = 2;
         system_prompt_profile_ctrl_->SetSelection(sel);
         system_prompt_profile_ctrl_->SetName(
             "locus.settings.system_prompt.profile_choice");
@@ -159,7 +159,7 @@ ToolApprovalsSettingsPanel::ToolApprovalsSettingsPanel(wxWindow* parent,
                  0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
         reasoning_max_seconds_ctrl_ = new wxSpinCtrl(this, wxID_ANY);
         reasoning_max_seconds_ctrl_->SetRange(0, 3600);
-        reasoning_max_seconds_ctrl_->SetValue(config.reasoning_max_seconds);
+        reasoning_max_seconds_ctrl_->SetValue(config.agent.reasoning_max_seconds);
         reasoning_max_seconds_ctrl_->SetName(
             "locus.settings.agent.reasoning_max_seconds");
         gui::apply_locus_accessible_name(reasoning_max_seconds_ctrl_);
@@ -177,7 +177,7 @@ ToolApprovalsSettingsPanel::ToolApprovalsSettingsPanel(wxWindow* parent,
                  0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
         reasoning_max_chars_ctrl_ = new wxSpinCtrl(this, wxID_ANY);
         reasoning_max_chars_ctrl_->SetRange(0, 1000000);
-        reasoning_max_chars_ctrl_->SetValue(config.reasoning_max_chars);
+        reasoning_max_chars_ctrl_->SetValue(config.agent.reasoning_max_chars);
         reasoning_max_chars_ctrl_->SetName(
             "locus.settings.agent.reasoning_max_chars");
         gui::apply_locus_accessible_name(reasoning_max_chars_ctrl_);
@@ -190,7 +190,7 @@ ToolApprovalsSettingsPanel::ToolApprovalsSettingsPanel(wxWindow* parent,
     }
     reasoning_auto_nudge_ctrl_ = new wxCheckBox(this, wxID_ANY,
         "Reasoning watchdog: auto-nudge (no user click needed)");
-    reasoning_auto_nudge_ctrl_->SetValue(config.reasoning_auto_nudge);
+    reasoning_auto_nudge_ctrl_->SetValue(config.agent.reasoning_auto_nudge);
     reasoning_auto_nudge_ctrl_->SetToolTip(
         "When checked, the watchdog automatically cancels the current LLM "
         "stream and injects a 'Stop reasoning, commit to a tool call now' "
@@ -214,7 +214,7 @@ ToolApprovalsSettingsPanel::ToolApprovalsSettingsPanel(wxWindow* parent,
                  0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
         truncate_lines_ctrl_ = new wxSpinCtrl(this, wxID_ANY);
         truncate_lines_ctrl_->SetRange(0, 5000);
-        truncate_lines_ctrl_->SetValue(config.run_command_truncate_lines);
+        truncate_lines_ctrl_->SetValue(config.agent.run_command_truncate_lines);
         truncate_lines_ctrl_->SetName(ui_names::kSettingsApprovalsTruncateLines);
         gui::apply_locus_accessible_name(truncate_lines_ctrl_);
         truncate_lines_ctrl_->SetToolTip(
@@ -444,23 +444,23 @@ void ToolApprovalsSettingsPanel::refresh_preset_chip()
 void ToolApprovalsSettingsPanel::load_from_config(const WorkspaceConfig& cfg)
 {
     if (require_read_before_edit_ctrl_)
-        require_read_before_edit_ctrl_->SetValue(cfg.require_read_before_edit);
+        require_read_before_edit_ctrl_->SetValue(cfg.agent.require_read_before_edit);
     if (truncate_lines_ctrl_)
-        truncate_lines_ctrl_->SetValue(cfg.run_command_truncate_lines);
+        truncate_lines_ctrl_->SetValue(cfg.agent.run_command_truncate_lines);
     if (lazy_tool_manifest_ctrl_)
-        lazy_tool_manifest_ctrl_->SetValue(cfg.lazy_tool_manifest);
+        lazy_tool_manifest_ctrl_->SetValue(cfg.agent.lazy_tool_manifest);
     if (system_prompt_profile_ctrl_) {
         int sel = 0;
-        if (cfg.system_prompt_profile == "compact") sel = 1;
-        else if (cfg.system_prompt_profile == "minimal") sel = 2;
+        if (cfg.agent.system_prompt_profile == "compact") sel = 1;
+        else if (cfg.agent.system_prompt_profile == "minimal") sel = 2;
         system_prompt_profile_ctrl_->SetSelection(sel);
     }
     if (reasoning_max_seconds_ctrl_)
-        reasoning_max_seconds_ctrl_->SetValue(cfg.reasoning_max_seconds);
+        reasoning_max_seconds_ctrl_->SetValue(cfg.agent.reasoning_max_seconds);
     if (reasoning_max_chars_ctrl_)
-        reasoning_max_chars_ctrl_->SetValue(cfg.reasoning_max_chars);
+        reasoning_max_chars_ctrl_->SetValue(cfg.agent.reasoning_max_chars);
     if (reasoning_auto_nudge_ctrl_)
-        reasoning_auto_nudge_ctrl_->SetValue(cfg.reasoning_auto_nudge);
+        reasoning_auto_nudge_ctrl_->SetValue(cfg.agent.reasoning_auto_nudge);
 
     // Refresh wildcard overrides from the reloaded config.
     wildcard_overrides_.clear();
@@ -523,24 +523,24 @@ void ToolApprovalsSettingsPanel::commit_to_config(WorkspaceConfig& cfg) const
     cfg.tool_approval_policies = std::move(new_approvals);
 
     if (require_read_before_edit_ctrl_)
-        cfg.require_read_before_edit = require_read_before_edit_ctrl_->IsChecked();
+        cfg.agent.require_read_before_edit = require_read_before_edit_ctrl_->IsChecked();
     if (truncate_lines_ctrl_)
-        cfg.run_command_truncate_lines = truncate_lines_ctrl_->GetValue();
+        cfg.agent.run_command_truncate_lines = truncate_lines_ctrl_->GetValue();
     if (lazy_tool_manifest_ctrl_)
-        cfg.lazy_tool_manifest = lazy_tool_manifest_ctrl_->IsChecked();
+        cfg.agent.lazy_tool_manifest = lazy_tool_manifest_ctrl_->IsChecked();
     if (system_prompt_profile_ctrl_) {
         switch (system_prompt_profile_ctrl_->GetSelection()) {
-            case 1:  cfg.system_prompt_profile = "compact"; break;
-            case 2:  cfg.system_prompt_profile = "minimal"; break;
-            default: cfg.system_prompt_profile = "full";    break;
+            case 1:  cfg.agent.system_prompt_profile = "compact"; break;
+            case 2:  cfg.agent.system_prompt_profile = "minimal"; break;
+            default: cfg.agent.system_prompt_profile = "full";    break;
         }
     }
     if (reasoning_max_seconds_ctrl_)
-        cfg.reasoning_max_seconds = reasoning_max_seconds_ctrl_->GetValue();
+        cfg.agent.reasoning_max_seconds = reasoning_max_seconds_ctrl_->GetValue();
     if (reasoning_max_chars_ctrl_)
-        cfg.reasoning_max_chars = reasoning_max_chars_ctrl_->GetValue();
+        cfg.agent.reasoning_max_chars = reasoning_max_chars_ctrl_->GetValue();
     if (reasoning_auto_nudge_ctrl_)
-        cfg.reasoning_auto_nudge = reasoning_auto_nudge_ctrl_->IsChecked();
+        cfg.agent.reasoning_auto_nudge = reasoning_auto_nudge_ctrl_->IsChecked();
 }
 
 } // namespace locus

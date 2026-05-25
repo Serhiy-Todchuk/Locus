@@ -268,9 +268,9 @@ MemoryStore::MemoryStore(fs::path                memory_dir,
     , vectors_db_(vectors_db)
     , embedder_(embedder)
     , reranker_(reranker)
-    , max_entries_(config.memory_max_entries)
-    , recency_half_life_days_(config.memory_recency_half_life_days)
-    , in_context_budget_tokens_(config.memory_in_context_budget_tokens)
+    , max_entries_(config.memory.max_entries)
+    , recency_half_life_days_(config.memory.recency_half_life_days)
+    , in_context_budget_tokens_(config.memory.in_context_budget_tokens)
 {
     std::error_code ec;
     fs::create_directories(dir_, ec);

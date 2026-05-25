@@ -29,11 +29,11 @@ fs::path make_temp_root(const std::string& tag)
 locus::WorkspaceConfig default_config()
 {
     locus::WorkspaceConfig cfg;
-    cfg.memory_enabled                    = true;
-    cfg.memory_in_context_budget_tokens   = 500;
-    cfg.memory_max_entries                = 200;
-    cfg.memory_search_response_max_tokens = 1500;
-    cfg.memory_recency_half_life_days     = 21;
+    cfg.memory.enabled                    = true;
+    cfg.memory.in_context_budget_tokens   = 500;
+    cfg.memory.max_entries                = 200;
+    cfg.memory.search_response_max_tokens = 1500;
+    cfg.memory.recency_half_life_days     = 21;
     return cfg;
 }
 

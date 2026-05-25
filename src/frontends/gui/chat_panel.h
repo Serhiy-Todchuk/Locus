@@ -260,8 +260,6 @@ private:
     int  current_find_flags() const;
     void on_find_input_key(wxKeyEvent& evt);
 
-    static std::string build_chat_html();
-
     void run_script(const wxString& js);
 
     static wxString user_text_to_html(const wxString& s);

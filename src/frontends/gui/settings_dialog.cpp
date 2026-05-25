@@ -121,34 +121,34 @@ void SettingsDialog::on_ok(wxCommandEvent& evt)
     // Cross-tab reconciliation: the Capabilities tab's semantic toggle is the
     // canonical authority. When the two differ, capabilities wins and we force
     // semantic_changed_ so the indexer reacts.
-    if (new_cfg.capabilities.semantic_search != new_cfg.semantic_search_enabled) {
-        new_cfg.semantic_search_enabled = new_cfg.capabilities.semantic_search;
+    if (new_cfg.capabilities.semantic_search != new_cfg.index.semantic_search_enabled) {
+        new_cfg.index.semantic_search_enabled = new_cfg.capabilities.semantic_search;
     }
 
     // Determine which subsystems changed.
-    llm_changed_ = (new_cfg.llm_endpoint       != baseline.llm_endpoint       ||
-                    new_cfg.llm_model           != baseline.llm_model          ||
-                    new_cfg.llm_temperature     != baseline.llm_temperature    ||
-                    new_cfg.llm_context_limit   != baseline.llm_context_limit  ||
-                    new_cfg.llm_max_tokens      != baseline.llm_max_tokens     ||
-                    new_cfg.llm_tool_format     != baseline.llm_tool_format    ||
-                    new_cfg.llm_top_p           != baseline.llm_top_p          ||
-                    new_cfg.llm_top_k           != baseline.llm_top_k          ||
-                    new_cfg.llm_min_p           != baseline.llm_min_p          ||
-                    new_cfg.llm_repeat_penalty  != baseline.llm_repeat_penalty ||
-                    new_cfg.llm_frequency_penalty != baseline.llm_frequency_penalty ||
-                    new_cfg.llm_presence_penalty  != baseline.llm_presence_penalty);
+    llm_changed_ = (new_cfg.llm.endpoint       != baseline.llm.endpoint       ||
+                    new_cfg.llm.model           != baseline.llm.model          ||
+                    new_cfg.llm.temperature     != baseline.llm.temperature    ||
+                    new_cfg.llm.context_limit   != baseline.llm.context_limit  ||
+                    new_cfg.llm.max_tokens      != baseline.llm.max_tokens     ||
+                    new_cfg.llm.tool_format     != baseline.llm.tool_format    ||
+                    new_cfg.llm.top_p           != baseline.llm.top_p          ||
+                    new_cfg.llm.top_k           != baseline.llm.top_k          ||
+                    new_cfg.llm.min_p           != baseline.llm.min_p          ||
+                    new_cfg.llm.repeat_penalty  != baseline.llm.repeat_penalty ||
+                    new_cfg.llm.frequency_penalty != baseline.llm.frequency_penalty ||
+                    new_cfg.llm.presence_penalty  != baseline.llm.presence_penalty);
 
-    index_changed_ = (new_cfg.exclude_patterns != baseline.exclude_patterns);
+    index_changed_ = (new_cfg.index.exclude_patterns != baseline.index.exclude_patterns);
 
-    semantic_changed_ = (new_cfg.semantic_search_enabled != baseline.semantic_search_enabled ||
-                         new_cfg.embedding_model         != baseline.embedding_model         ||
-                         new_cfg.reranker_enabled        != baseline.reranker_enabled        ||
-                         new_cfg.reranker_model          != baseline.reranker_model          ||
-                         new_cfg.reranker_top_k          != baseline.reranker_top_k);
+    semantic_changed_ = (new_cfg.index.semantic_search_enabled != baseline.index.semantic_search_enabled ||
+                         new_cfg.index.embedding_model         != baseline.index.embedding_model         ||
+                         new_cfg.index.reranker_enabled        != baseline.index.reranker_enabled        ||
+                         new_cfg.index.reranker_model          != baseline.index.reranker_model          ||
+                         new_cfg.index.reranker_top_k          != baseline.index.reranker_top_k);
 
     bool approvals_changed = (new_cfg.tool_approval_policies != baseline.tool_approval_policies ||
-                               new_cfg.require_read_before_edit != baseline.require_read_before_edit);
+                               new_cfg.agent.require_read_before_edit != baseline.agent.require_read_before_edit);
 
     capabilities_changed_ = (
         new_cfg.capabilities.background_processes != baseline.capabilities.background_processes ||
@@ -162,7 +162,7 @@ void SettingsDialog::on_ok(wxCommandEvent& evt)
 
     if (changed_) {
         // Keep the legacy mirror in sync with the canonical capabilities bool.
-        new_cfg.memory_enabled = new_cfg.capabilities.memory_bank;
+        new_cfg.memory.enabled = new_cfg.capabilities.memory_bank;
 
         config_ = new_cfg;
 
@@ -191,7 +191,7 @@ WorkspaceConfig SettingsDialog::snapshot_dialog_state() const
     // save_global_config filters them out anyway.
 
     // Keep legacy mirror in sync.
-    out.memory_enabled = out.capabilities.memory_bank;
+    out.memory.enabled = out.capabilities.memory_bank;
 
     return out;
 }

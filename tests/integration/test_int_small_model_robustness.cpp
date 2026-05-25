@@ -51,7 +51,7 @@ TEST_CASE("S6.10 Task G: WriteFileTool blocks payload with elision marker",
     std::error_code ec;
     fs::remove(target_abs, ec);
 
-    REQUIRE(h.workspace().config().detect_write_truncation);
+    REQUIRE(h.workspace().config().agent.detect_write_truncation);
 
     locus::WriteFileTool tool;
     nlohmann::json args;

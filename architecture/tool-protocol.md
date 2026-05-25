@@ -99,7 +99,7 @@ public:
 
 ### Lazy manifest (S6.11)
 
-When `WorkspaceConfig::lazy_tool_manifest` is true, both the system-prompt
+When `WorkspaceConfig::Agent::lazy_tool_manifest` is true, both the system-prompt
 "## Available Tools" section AND the API `tools: [...]` array degrade to
 one-line summaries per tool -- the model fetches the full schema on demand
 via a new built-in `describe_tool('<name>')` meta-tool. Saves ~2-3K tokens

@@ -388,6 +388,7 @@ add_library(locus_core STATIC
     src/agent/metrics.cpp
     src/agent/tool_dispatcher.cpp
     src/agent/agent_loop.cpp
+    src/agent/agent_turn.cpp
     src/agent/slash_commands.cpp
     src/agent/prompt_templates.cpp
     src/agent/agent_core.cpp
@@ -482,6 +483,7 @@ add_executable(locus_gui WIN32
     src/frontends/gui/about_dialog.cpp
     src/frontends/gui/locus_app.cpp
     src/frontends/gui/locus_frame.cpp
+    src/frontends/gui/agent_event_router.cpp
     src/frontends/gui/locus_tray.cpp
     src/frontends/gui/menu_controller.cpp
     src/frontends/gui/ops_status_view.cpp
@@ -490,6 +492,7 @@ add_executable(locus_gui WIN32
     src/frontends/gui/activity_panel.cpp
     src/frontends/gui/metrics_view.cpp
     src/frontends/gui/chat_panel.cpp
+    src/frontends/gui/chat_html_template.cpp
     src/frontends/gui/chat/chat_util.cpp
     src/frontends/gui/chat/chat_stream_renderer.cpp
     src/frontends/gui/chat/chat_footer_chips.cpp

@@ -136,7 +136,7 @@ LlmSettingsPanel::LlmSettingsPanel(wxWindow* parent, const WorkspaceConfig& conf
     lbl_endpoint->SetToolTip(kTipEndpoint);
     grid->Add(lbl_endpoint, 0, wxALIGN_CENTER_VERTICAL);
     endpoint_ctrl_ = new wxTextCtrl(this, wxID_ANY,
-        wxString::FromUTF8(config.llm_endpoint));
+        wxString::FromUTF8(config.llm.endpoint));
     endpoint_ctrl_->SetToolTip(kTipEndpoint);
     endpoint_ctrl_->SetName(ui_names::kSettingsLlmEndpoint);
     gui::apply_locus_accessible_name(endpoint_ctrl_);
@@ -146,7 +146,7 @@ LlmSettingsPanel::LlmSettingsPanel(wxWindow* parent, const WorkspaceConfig& conf
     lbl_model->SetToolTip(kTipModel);
     grid->Add(lbl_model, 0, wxALIGN_CENTER_VERTICAL);
     model_ctrl_ = new wxTextCtrl(this, wxID_ANY,
-        wxString::FromUTF8(config.llm_model));
+        wxString::FromUTF8(config.llm.model));
     model_ctrl_->SetToolTip(kTipModel);
     model_ctrl_->SetName(ui_names::kSettingsLlmModel);
     gui::apply_locus_accessible_name(model_ctrl_);
@@ -159,7 +159,7 @@ LlmSettingsPanel::LlmSettingsPanel(wxWindow* parent, const WorkspaceConfig& conf
     temperature_ctrl_->SetRange(0.0, 2.0);
     temperature_ctrl_->SetIncrement(0.1);
     temperature_ctrl_->SetDigits(2);
-    temperature_ctrl_->SetValue(config.llm_temperature);
+    temperature_ctrl_->SetValue(config.llm.temperature);
     temperature_ctrl_->SetToolTip(kTipTemperature);
     temperature_ctrl_->SetName(ui_names::kSettingsLlmTemperature);
     gui::apply_locus_accessible_name(temperature_ctrl_);
@@ -170,7 +170,7 @@ LlmSettingsPanel::LlmSettingsPanel(wxWindow* parent, const WorkspaceConfig& conf
     grid->Add(lbl_ctx, 0, wxALIGN_CENTER_VERTICAL);
     context_ctrl_ = new wxSpinCtrl(this, wxID_ANY);
     context_ctrl_->SetRange(0, 1048576);
-    context_ctrl_->SetValue(config.llm_context_limit);
+    context_ctrl_->SetValue(config.llm.context_limit);
     context_ctrl_->SetToolTip(kTipContextLimit);
     context_ctrl_->SetName(ui_names::kSettingsLlmContextLimit);
     gui::apply_locus_accessible_name(context_ctrl_);
@@ -181,7 +181,7 @@ LlmSettingsPanel::LlmSettingsPanel(wxWindow* parent, const WorkspaceConfig& conf
     grid->Add(lbl_max, 0, wxALIGN_CENTER_VERTICAL);
     max_tokens_ctrl_ = new wxSpinCtrl(this, wxID_ANY);
     max_tokens_ctrl_->SetRange(256, 1048576);
-    max_tokens_ctrl_->SetValue(config.llm_max_tokens > 0 ? config.llm_max_tokens : 8192);
+    max_tokens_ctrl_->SetValue(config.llm.max_tokens > 0 ? config.llm.max_tokens : 8192);
     max_tokens_ctrl_->SetToolTip(kTipMaxTokens);
     max_tokens_ctrl_->SetName(ui_names::kSettingsLlmMaxTokens);
     gui::apply_locus_accessible_name(max_tokens_ctrl_);
@@ -192,8 +192,8 @@ LlmSettingsPanel::LlmSettingsPanel(wxWindow* parent, const WorkspaceConfig& conf
     grid->Add(lbl_timeout, 0, wxALIGN_CENTER_VERTICAL);
     timeout_ctrl_ = new wxSpinCtrl(this, wxID_ANY);
     timeout_ctrl_->SetRange(10, 36000);   // 10 s .. 10 h
-    timeout_ctrl_->SetValue(config.llm_timeout_ms > 0
-                            ? config.llm_timeout_ms / 1000
+    timeout_ctrl_->SetValue(config.llm.timeout_ms > 0
+                            ? config.llm.timeout_ms / 1000
                             : 1800);
     timeout_ctrl_->SetToolTip(kTipTimeoutSeconds);
     timeout_ctrl_->SetName(ui_names::kSettingsLlmTimeoutSeconds);
@@ -210,7 +210,7 @@ LlmSettingsPanel::LlmSettingsPanel(wxWindow* parent, const WorkspaceConfig& conf
     tool_format_ctrl_->Append("Claude");
     tool_format_ctrl_->Append("None");
     {
-        ToolFormat tf = tool_format_from_string(config.llm_tool_format);
+        ToolFormat tf = tool_format_from_string(config.llm.tool_format);
         int sel = 0;
         switch (tf) {
             case ToolFormat::Auto:   sel = 0; break;
@@ -237,7 +237,7 @@ LlmSettingsPanel::LlmSettingsPanel(wxWindow* parent, const WorkspaceConfig& conf
     grammar_mode_ctrl_->Append("Best effort");
     grammar_mode_ctrl_->Append("Strict");
     {
-        GrammarMode gm = grammar_mode_from_string(config.llm_grammar_mode);
+        GrammarMode gm = grammar_mode_from_string(config.llm.grammar_mode);
         int sel = 0;
         switch (gm) {
             case GrammarMode::Off:        sel = 0; break;
@@ -258,7 +258,7 @@ LlmSettingsPanel::LlmSettingsPanel(wxWindow* parent, const WorkspaceConfig& conf
     top_p_ctrl_->SetRange(0.0, 1.0);
     top_p_ctrl_->SetIncrement(0.05);
     top_p_ctrl_->SetDigits(2);
-    top_p_ctrl_->SetValue(config.llm_top_p);
+    top_p_ctrl_->SetValue(config.llm.top_p);
     top_p_ctrl_->SetToolTip(kTipTopP);
     grid->Add(top_p_ctrl_, 0);
 
@@ -267,7 +267,7 @@ LlmSettingsPanel::LlmSettingsPanel(wxWindow* parent, const WorkspaceConfig& conf
     grid->Add(lbl_top_k, 0, wxALIGN_CENTER_VERTICAL);
     top_k_ctrl_ = new wxSpinCtrl(this, wxID_ANY);
     top_k_ctrl_->SetRange(0, 10000);
-    top_k_ctrl_->SetValue(config.llm_top_k);
+    top_k_ctrl_->SetValue(config.llm.top_k);
     top_k_ctrl_->SetToolTip(kTipTopK);
     grid->Add(top_k_ctrl_, 0);
 
@@ -278,7 +278,7 @@ LlmSettingsPanel::LlmSettingsPanel(wxWindow* parent, const WorkspaceConfig& conf
     min_p_ctrl_->SetRange(0.0, 1.0);
     min_p_ctrl_->SetIncrement(0.01);
     min_p_ctrl_->SetDigits(2);
-    min_p_ctrl_->SetValue(config.llm_min_p);
+    min_p_ctrl_->SetValue(config.llm.min_p);
     min_p_ctrl_->SetToolTip(kTipMinP);
     grid->Add(min_p_ctrl_, 0);
 
@@ -289,7 +289,7 @@ LlmSettingsPanel::LlmSettingsPanel(wxWindow* parent, const WorkspaceConfig& conf
     repeat_penalty_ctrl_->SetRange(0.0, 2.0);
     repeat_penalty_ctrl_->SetIncrement(0.05);
     repeat_penalty_ctrl_->SetDigits(2);
-    repeat_penalty_ctrl_->SetValue(config.llm_repeat_penalty);
+    repeat_penalty_ctrl_->SetValue(config.llm.repeat_penalty);
     repeat_penalty_ctrl_->SetToolTip(kTipRepeatPenalty);
     grid->Add(repeat_penalty_ctrl_, 0);
 
@@ -300,7 +300,7 @@ LlmSettingsPanel::LlmSettingsPanel(wxWindow* parent, const WorkspaceConfig& conf
     frequency_penalty_ctrl_->SetRange(-2.0, 2.0);
     frequency_penalty_ctrl_->SetIncrement(0.05);
     frequency_penalty_ctrl_->SetDigits(2);
-    frequency_penalty_ctrl_->SetValue(config.llm_frequency_penalty);
+    frequency_penalty_ctrl_->SetValue(config.llm.frequency_penalty);
     frequency_penalty_ctrl_->SetToolTip(kTipFrequencyPenalty);
     grid->Add(frequency_penalty_ctrl_, 0);
 
@@ -311,7 +311,7 @@ LlmSettingsPanel::LlmSettingsPanel(wxWindow* parent, const WorkspaceConfig& conf
     presence_penalty_ctrl_->SetRange(-2.0, 2.0);
     presence_penalty_ctrl_->SetIncrement(0.05);
     presence_penalty_ctrl_->SetDigits(2);
-    presence_penalty_ctrl_->SetValue(config.llm_presence_penalty);
+    presence_penalty_ctrl_->SetValue(config.llm.presence_penalty);
     presence_penalty_ctrl_->SetToolTip(kTipPresencePenalty);
     grid->Add(presence_penalty_ctrl_, 0);
 
@@ -377,7 +377,7 @@ LlmSettingsPanel::LlmSettingsPanel(wxWindow* parent, const WorkspaceConfig& conf
         auto* row = new wxBoxSizer(wxHORIZONTAL);
         auto_detect_preset_ctrl_ = new wxCheckBox(this, wxID_ANY,
             "Auto-detect preset on workspace open");
-        auto_detect_preset_ctrl_->SetValue(config.auto_detect_model_preset);
+        auto_detect_preset_ctrl_->SetValue(config.llm.auto_detect_preset);
         auto_detect_preset_ctrl_->SetToolTip(
             "At workspace open, ask the LM Studio / llama-server endpoint for "
             "the loaded model id and apply the matching preset if one is "
@@ -478,19 +478,19 @@ void LlmSettingsPanel::on_preset_apply(wxCommandEvent&)
 
 void LlmSettingsPanel::load_from_config(const WorkspaceConfig& cfg)
 {
-    if (endpoint_ctrl_)    endpoint_ctrl_->ChangeValue(wxString::FromUTF8(cfg.llm_endpoint));
-    if (model_ctrl_)       model_ctrl_->ChangeValue(wxString::FromUTF8(cfg.llm_model));
-    if (temperature_ctrl_) temperature_ctrl_->SetValue(cfg.llm_temperature);
-    if (context_ctrl_)     context_ctrl_->SetValue(cfg.llm_context_limit);
+    if (endpoint_ctrl_)    endpoint_ctrl_->ChangeValue(wxString::FromUTF8(cfg.llm.endpoint));
+    if (model_ctrl_)       model_ctrl_->ChangeValue(wxString::FromUTF8(cfg.llm.model));
+    if (temperature_ctrl_) temperature_ctrl_->SetValue(cfg.llm.temperature);
+    if (context_ctrl_)     context_ctrl_->SetValue(cfg.llm.context_limit);
     if (max_tokens_ctrl_)
-        max_tokens_ctrl_->SetValue(cfg.llm_max_tokens > 0 ? cfg.llm_max_tokens : 8192);
+        max_tokens_ctrl_->SetValue(cfg.llm.max_tokens > 0 ? cfg.llm.max_tokens : 8192);
     if (timeout_ctrl_)
-        timeout_ctrl_->SetValue(cfg.llm_timeout_ms > 0
-                                ? cfg.llm_timeout_ms / 1000
+        timeout_ctrl_->SetValue(cfg.llm.timeout_ms > 0
+                                ? cfg.llm.timeout_ms / 1000
                                 : 1800);
 
     if (tool_format_ctrl_) {
-        ToolFormat tf = tool_format_from_string(cfg.llm_tool_format);
+        ToolFormat tf = tool_format_from_string(cfg.llm.tool_format);
         int sel = 0;
         switch (tf) {
             case ToolFormat::Auto:   sel = 0; break;
@@ -503,7 +503,7 @@ void LlmSettingsPanel::load_from_config(const WorkspaceConfig& cfg)
     }
 
     if (grammar_mode_ctrl_) {
-        GrammarMode gm = grammar_mode_from_string(cfg.llm_grammar_mode);
+        GrammarMode gm = grammar_mode_from_string(cfg.llm.grammar_mode);
         int sel = 0;
         switch (gm) {
             case GrammarMode::Off:        sel = 0; break;
@@ -513,15 +513,15 @@ void LlmSettingsPanel::load_from_config(const WorkspaceConfig& cfg)
         grammar_mode_ctrl_->SetSelection(sel);
     }
 
-    if (top_p_ctrl_)             top_p_ctrl_->SetValue(cfg.llm_top_p);
-    if (top_k_ctrl_)             top_k_ctrl_->SetValue(cfg.llm_top_k);
-    if (min_p_ctrl_)             min_p_ctrl_->SetValue(cfg.llm_min_p);
-    if (repeat_penalty_ctrl_)    repeat_penalty_ctrl_->SetValue(cfg.llm_repeat_penalty);
-    if (frequency_penalty_ctrl_) frequency_penalty_ctrl_->SetValue(cfg.llm_frequency_penalty);
-    if (presence_penalty_ctrl_)  presence_penalty_ctrl_->SetValue(cfg.llm_presence_penalty);
+    if (top_p_ctrl_)             top_p_ctrl_->SetValue(cfg.llm.top_p);
+    if (top_k_ctrl_)             top_k_ctrl_->SetValue(cfg.llm.top_k);
+    if (min_p_ctrl_)             min_p_ctrl_->SetValue(cfg.llm.min_p);
+    if (repeat_penalty_ctrl_)    repeat_penalty_ctrl_->SetValue(cfg.llm.repeat_penalty);
+    if (frequency_penalty_ctrl_) frequency_penalty_ctrl_->SetValue(cfg.llm.frequency_penalty);
+    if (presence_penalty_ctrl_)  presence_penalty_ctrl_->SetValue(cfg.llm.presence_penalty);
 
     if (auto_detect_preset_ctrl_)
-        auto_detect_preset_ctrl_->SetValue(cfg.auto_detect_model_preset);
+        auto_detect_preset_ctrl_->SetValue(cfg.llm.auto_detect_preset);
 
     // Snap the preset picker back to "Custom" after a reset; the loaded values
     // may not match any preset and showing a stale match would be misleading.
@@ -535,41 +535,41 @@ bool LlmSettingsPanel::validate(wxString& /*out_error*/) const
 
 void LlmSettingsPanel::commit_to_config(WorkspaceConfig& cfg) const
 {
-    cfg.llm_endpoint      = endpoint_ctrl_->GetValue().ToStdString();
-    cfg.llm_model         = model_ctrl_->GetValue().ToStdString();
-    cfg.llm_temperature   = temperature_ctrl_->GetValue();
-    cfg.llm_context_limit = context_ctrl_->GetValue();
-    cfg.llm_max_tokens    = max_tokens_ctrl_->GetValue();
+    cfg.llm.endpoint      = endpoint_ctrl_->GetValue().ToStdString();
+    cfg.llm.model         = model_ctrl_->GetValue().ToStdString();
+    cfg.llm.temperature   = temperature_ctrl_->GetValue();
+    cfg.llm.context_limit = context_ctrl_->GetValue();
+    cfg.llm.max_tokens    = max_tokens_ctrl_->GetValue();
     if (timeout_ctrl_)
-        cfg.llm_timeout_ms = timeout_ctrl_->GetValue() * 1000;
+        cfg.llm.timeout_ms = timeout_ctrl_->GetValue() * 1000;
 
     if (tool_format_ctrl_) {
         switch (tool_format_ctrl_->GetSelection()) {
-            case 0: cfg.llm_tool_format = "auto";   break;
-            case 1: cfg.llm_tool_format = "openai"; break;
-            case 2: cfg.llm_tool_format = "qwen";   break;
-            case 3: cfg.llm_tool_format = "claude"; break;
-            case 4: cfg.llm_tool_format = "none";   break;
+            case 0: cfg.llm.tool_format = "auto";   break;
+            case 1: cfg.llm.tool_format = "openai"; break;
+            case 2: cfg.llm.tool_format = "qwen";   break;
+            case 3: cfg.llm.tool_format = "claude"; break;
+            case 4: cfg.llm.tool_format = "none";   break;
         }
     }
 
     if (grammar_mode_ctrl_) {
         switch (grammar_mode_ctrl_->GetSelection()) {
-            case 0: cfg.llm_grammar_mode = "off";         break;
-            case 1: cfg.llm_grammar_mode = "best_effort"; break;
-            case 2: cfg.llm_grammar_mode = "strict";      break;
+            case 0: cfg.llm.grammar_mode = "off";         break;
+            case 1: cfg.llm.grammar_mode = "best_effort"; break;
+            case 2: cfg.llm.grammar_mode = "strict";      break;
         }
     }
 
-    if (top_p_ctrl_)             cfg.llm_top_p          = top_p_ctrl_->GetValue();
-    if (top_k_ctrl_)             cfg.llm_top_k          = top_k_ctrl_->GetValue();
-    if (min_p_ctrl_)             cfg.llm_min_p          = min_p_ctrl_->GetValue();
-    if (repeat_penalty_ctrl_)    cfg.llm_repeat_penalty = repeat_penalty_ctrl_->GetValue();
-    if (frequency_penalty_ctrl_) cfg.llm_frequency_penalty = frequency_penalty_ctrl_->GetValue();
-    if (presence_penalty_ctrl_)  cfg.llm_presence_penalty  = presence_penalty_ctrl_->GetValue();
+    if (top_p_ctrl_)             cfg.llm.top_p          = top_p_ctrl_->GetValue();
+    if (top_k_ctrl_)             cfg.llm.top_k          = top_k_ctrl_->GetValue();
+    if (min_p_ctrl_)             cfg.llm.min_p          = min_p_ctrl_->GetValue();
+    if (repeat_penalty_ctrl_)    cfg.llm.repeat_penalty = repeat_penalty_ctrl_->GetValue();
+    if (frequency_penalty_ctrl_) cfg.llm.frequency_penalty = frequency_penalty_ctrl_->GetValue();
+    if (presence_penalty_ctrl_)  cfg.llm.presence_penalty  = presence_penalty_ctrl_->GetValue();
 
     if (auto_detect_preset_ctrl_)
-        cfg.auto_detect_model_preset = auto_detect_preset_ctrl_->GetValue();
+        cfg.llm.auto_detect_preset = auto_detect_preset_ctrl_->GetValue();
 }
 
 } // namespace locus

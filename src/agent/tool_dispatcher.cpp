@@ -372,14 +372,14 @@ void ToolDispatcher::dispatch(const ToolCall& call, const AppendFn& append_resul
     // tools (run_command, MCP) can abort in flight rather than waiting for
     // the natural timeout.
     //
-    // S5.Z follow-up -- wall-clock guardrail. When WorkspaceConfig::tool_max_runtime_s > 0,
+    // S5.Z follow-up -- wall-clock guardrail. When WorkspaceConfig::Agent::tool_max_runtime_s > 0,
     // arm a watchdog thread that sets the cancel_flag if the tool hasn't returned
     // by then. Saves a session from the run_command ReadFile hang documented in
     // tests/ui_automation/output/agentic_Tetris/findings.md when the tool's own
     // timeout path is broken. Cleared via the watchdog_stop cv after execute returns.
     int max_runtime_s = 0;
     if (auto* ws = services_.workspace())
-        max_runtime_s = ws->config().tool_max_runtime_s;
+        max_runtime_s = ws->config().agent.tool_max_runtime_s;
 
     std::atomic<bool> watchdog_fired{false};
     std::mutex                wd_mu;

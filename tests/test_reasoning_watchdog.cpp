@@ -26,20 +26,20 @@ using locus::workspace_config_from_json;
 TEST_CASE("reasoning_watchdog: defaults are off", "[s6.13][reasoning_watchdog]")
 {
     WorkspaceConfig cfg;
-    REQUIRE(cfg.reasoning_max_seconds == 0);
-    REQUIRE(cfg.reasoning_max_chars == 0);
-    REQUIRE(cfg.reasoning_max_rounds_silent == 0);
-    REQUIRE(cfg.reasoning_auto_nudge == false);
+    REQUIRE(cfg.agent.reasoning_max_seconds == 0);
+    REQUIRE(cfg.agent.reasoning_max_chars == 0);
+    REQUIRE(cfg.agent.reasoning_max_rounds_silent == 0);
+    REQUIRE(cfg.agent.reasoning_auto_nudge == false);
 }
 
 TEST_CASE("reasoning_watchdog: JSON round-trip preserves values",
           "[s6.13][reasoning_watchdog]")
 {
     WorkspaceConfig src;
-    src.reasoning_max_seconds       = 120;
-    src.reasoning_max_chars         = 30000;
-    src.reasoning_max_rounds_silent = 5;
-    src.reasoning_auto_nudge        = true;
+    src.agent.reasoning_max_seconds       = 120;
+    src.agent.reasoning_max_chars         = 30000;
+    src.agent.reasoning_max_rounds_silent = 5;
+    src.agent.reasoning_auto_nudge        = true;
 
     auto j = workspace_config_to_json(src);
     REQUIRE(j["agent"]["reasoning_max_seconds"]       == 120);
@@ -48,10 +48,10 @@ TEST_CASE("reasoning_watchdog: JSON round-trip preserves values",
     REQUIRE(j["agent"]["reasoning_auto_nudge"]        == true);
 
     WorkspaceConfig restored = workspace_config_from_json(j);
-    REQUIRE(restored.reasoning_max_seconds       == 120);
-    REQUIRE(restored.reasoning_max_chars         == 30000);
-    REQUIRE(restored.reasoning_max_rounds_silent == 5);
-    REQUIRE(restored.reasoning_auto_nudge        == true);
+    REQUIRE(restored.agent.reasoning_max_seconds       == 120);
+    REQUIRE(restored.agent.reasoning_max_chars         == 30000);
+    REQUIRE(restored.agent.reasoning_max_rounds_silent == 5);
+    REQUIRE(restored.agent.reasoning_auto_nudge        == true);
 }
 
 TEST_CASE("reasoning_watchdog: missing keys yield default-constructed values",
@@ -59,8 +59,8 @@ TEST_CASE("reasoning_watchdog: missing keys yield default-constructed values",
 {
     nlohmann::json j = {{"agent", nlohmann::json::object()}};
     WorkspaceConfig cfg = workspace_config_from_json(j);
-    REQUIRE(cfg.reasoning_max_seconds       == 0);
-    REQUIRE(cfg.reasoning_max_chars         == 0);
-    REQUIRE(cfg.reasoning_max_rounds_silent == 0);
-    REQUIRE(cfg.reasoning_auto_nudge        == false);
+    REQUIRE(cfg.agent.reasoning_max_seconds       == 0);
+    REQUIRE(cfg.agent.reasoning_max_chars         == 0);
+    REQUIRE(cfg.agent.reasoning_max_rounds_silent == 0);
+    REQUIRE(cfg.agent.reasoning_auto_nudge        == false);
 }

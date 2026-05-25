@@ -181,7 +181,7 @@ ToolResult RunCommandTool::execute(const ToolCall& call, IWorkspaceServices& ws,
     // has exited, which is the symptom of the inherited-handle pipe-leak bug.
     // Quiet while everything is healthy.
     //
-    // S5.Z follow-up -- when WorkspaceConfig::dump_on_run_command_hang is on
+    // S5.Z follow-up -- when WorkspaceConfig::Agent::dump_on_run_command_hang is on
     // AND the heartbeat catches a stuck reader past a child exit, the
     // heartbeat shells out to `procdump.exe -ma <self_pid> <dump_path>` so we
     // capture an in-vivo snapshot of the agent thread's ReadFile stack. One
@@ -189,7 +189,7 @@ ToolResult RunCommandTool::execute(const ToolCall& call, IWorkspaceServices& ws,
     bool dump_on_hang = false;
     fs::path dumps_dir;
     if (auto* w = ws.workspace()) {
-        if (w->config().dump_on_run_command_hang) {
+        if (w->config().agent.dump_on_run_command_hang) {
             dump_on_hang = true;
             dumps_dir = w->root() / ".locus" / "dumps";
         }
@@ -376,7 +376,7 @@ ToolResult RunCommandTool::execute(const ToolCall& call, IWorkspaceServices& ws,
     }
     int default_lines = 50;
     if (auto* wsp = ws.workspace())
-        default_lines = wsp->config().run_command_truncate_lines;
+        default_lines = wsp->config().agent.run_command_truncate_lines;
     std::string filtered = apply_output_filter(output, spec, default_lines);
 
     std::ostringstream content;
@@ -518,7 +518,7 @@ ToolResult ReadProcessOutputTool::execute(const ToolCall& call, IWorkspaceServic
         return error_result("Error: " + parse_err);
     int default_lines = 50;
     if (auto* wsp = ws.workspace())
-        default_lines = wsp->config().run_command_truncate_lines;
+        default_lines = wsp->config().agent.run_command_truncate_lines;
     spdlog::trace("read_process_output: id={} bytes={} next_offset={} dropped={}\n"
                   "--- raw ---\n{}\n--- end raw ---",
                   id, r->data.size(), r->next_offset, r->dropped_before_window,

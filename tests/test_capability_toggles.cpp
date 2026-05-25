@@ -197,8 +197,8 @@ TEST_CASE("Capabilities: round-trip through config.json preserves values",
         REQUIRE(c.web_retrieval        == true);
 
         // Legacy mirrors propagated.
-        REQUIRE(ws.config().semantic_search_enabled == false);
-        REQUIRE(ws.config().memory_enabled          == false);
+        REQUIRE(ws.config().index.semantic_search_enabled == false);
+        REQUIRE(ws.config().memory.enabled          == false);
     }
 }
 

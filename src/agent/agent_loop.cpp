@@ -35,7 +35,7 @@ AgentLoop::AgentLoop(ILLMClient& llm,
 int AgentLoop::manifest_warn_tokens() const
 {
     if (auto* ws = services_.workspace())
-        return ws->config().tool_manifest_warn_tokens;
+        return ws->config().agent.tool_manifest_warn_tokens;
     return 4000;  // default if no Workspace (tests, embedded use)
 }
 
@@ -48,7 +48,7 @@ std::vector<ToolSchema> AgentLoop::build_tool_schemas(ToolMode mode)
     // via describe_tool when it needs to call.
     bool lazy = false;
     if (auto* ws = services_.workspace())
-        lazy = ws->config().lazy_tool_manifest;
+        lazy = ws->config().agent.lazy_tool_manifest;
     auto schema_json = tools_.build_schema_json(services_, mode, lazy);
 
     std::vector<ToolSchema> schemas;
@@ -171,9 +171,9 @@ AgentStepResult AgentLoop::run_step(const ConversationHistory& history,
     int  wd_max_chars         = 0;
     bool wd_auto_nudge        = false;
     if (auto* ws = services_.workspace()) {
-        wd_max_seconds = ws->config().reasoning_max_seconds;
-        wd_max_chars   = ws->config().reasoning_max_chars;
-        wd_auto_nudge  = ws->config().reasoning_auto_nudge;
+        wd_max_seconds = ws->config().agent.reasoning_max_seconds;
+        wd_max_chars   = ws->config().agent.reasoning_max_chars;
+        wd_auto_nudge  = ws->config().agent.reasoning_auto_nudge;
     }
     auto check_watchdog = [&]() {
         if (out.watchdog_tripped) return;  // one trip per round
@@ -339,7 +339,7 @@ AgentStepResult AgentLoop::run_step(const ConversationHistory& history,
     std::vector<ChatMessage> outgoing = history.messages();
     bool strip_enabled = true;
     if (auto* ws = services_.workspace())
-        strip_enabled = ws->config().strip_past_thinking;
+        strip_enabled = ws->config().agent.strip_past_thinking;
     if (strip_enabled) {
         // Find the most recent assistant message.
         int last_assistant_idx = -1;
