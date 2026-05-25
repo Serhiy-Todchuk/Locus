@@ -1,5 +1,8 @@
 // S6.10 Tasks A + D -- tool-call robustness integration tests.
 //
+// Companion suite: tests/integration/test_int_small_model_robustness.cpp
+// covers Tasks G / B / F / E / C from the same stage.
+//
 // Task A (JSON repair pre-pass) -- two cases:
 //   1. Deterministic: feed malformed-JSON tool-call args through the harness's
 //      actual ToolRegistry::parse_tool_call. Verifies the repair pre-pass is
