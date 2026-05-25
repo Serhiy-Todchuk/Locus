@@ -623,7 +623,8 @@ LocusFrame::TabUi& LocusFrame::install_tab_ui(LocusTab& tab, const wxString& tab
     // session BEFORE the UI was installed, the agent's history already holds
     // those messages but the chat WebView is empty.  Paint them now.
     if (!tab.session_id().empty() && tab.agent().history().size() > 1) {
-        slot.chat->render_loaded_history(tab.agent().history());
+        slot.chat->render_loaded_history(tab.agent().history(),
+                                         &tab.agent().tools());
     }
     return slot;
 }

@@ -23,6 +23,7 @@
 - [x] **[S6.12](S6.12-system-prompt-profiles.md)** -- System-Prompt Profiles (Full / Compact / Minimal via `system_prompt.profile` setting; trims the prose Rules / Editing / Shell / MSVC sections without losing load-bearing invariants; lazy-manifest-compatible) **done 2026-05-25**
 - [x] **[S6.13](S6.13-reasoning-watchdog.md)** -- Reasoning Watchdog + Commit-now button (per-round budget on reasoning seconds / chars, OR semantics; `agent.reasoning_auto_nudge` cancels the in-flight LLM stream and injects a "Stop reasoning, commit now" steering message; non-modal `locus.chat.commit_btn` in the footer surfaces when manual mode is on and the watchdog trips; 2-nudge cap before turn aborts with "Agent appears stuck") **done 2026-05-25**
 - [ ] **[S6.14](S6.14-thinking-knob.md)** -- Thinking ON/OFF/auto Knob in LLM Settings (tri-state `enable_thinking` per workspace; per-model-family injection: Qwen3 `chat_template_kwargs.enable_thinking`, Qwen2 `/no_think`, o1 `reasoning_effort`; moved from backlog 2026-05-25)
+- [x] **[S6.15](S6.15-session-restore-parity.md)** -- Session Restore Parity (render reasoning bubbles + tool-call previews on restore, persist agent_mode + plan, opt-in activity sidecar JSONL, absolute timestamp for week-old sessions) **done 2026-05-25**
 
 ## Dependencies
 

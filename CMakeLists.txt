@@ -510,6 +510,7 @@ add_executable(locus_gui WIN32
     src/frontends/gui/settings/tool_approvals_settings_panel.cpp
     src/frontends/gui/settings/mcp_settings_panel.cpp
     src/frontends/gui/settings/notifications_settings_panel.cpp
+    src/frontends/gui/settings/sessions_settings_panel.cpp
     src/frontends/gui/notification_sounds.cpp
     src/frontends/gui/markdown.cpp
     src/frontends/gui/autostart.cpp

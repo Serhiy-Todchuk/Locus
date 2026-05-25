@@ -197,10 +197,16 @@ public:
     // panel.  Called once when a tab restores from disk (the live agent path
     // already paints bubbles for new messages; this only fires for content
     // that came from the session JSON).  Walks the history in order, emits
-    // basic user / assistant / tool bubbles, attaches the hover-reveal X to
-    // deletable ones, and populates the history_to_dom_ map so per-message
-    // delete works on restored content.
-    void render_loaded_history(const class ConversationHistory& history);
+    // reasoning / user / assistant / tool bubbles matching the live look,
+    // attaches the hover-reveal X to deletable ones, and populates the
+    // history_to_dom_ map so per-message delete works on restored content.
+    //
+    // `tools` is optional -- when supplied, each tool-result bubble shows the
+    // same `tool-preview` line the live `on_tool_pending` path renders (built
+    // by re-invoking ITool::preview on the saved tool_calls arguments). When
+    // null, only the tool name is shown above the result body.
+    void render_loaded_history(const class ConversationHistory& history,
+                               class IToolRegistry* tools = nullptr);
 
     // S5.G -- a ChatMessage was removed from ConversationHistory. Removes the
     // matching dom bubble.

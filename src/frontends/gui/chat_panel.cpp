@@ -14,6 +14,7 @@
 #include "../../agent/mention_parser.h"
 #include "../../agent/metrics.h"
 #include "../../llm/token_counter.h"
+#include "../../tools/tool.h"
 
 #include <spdlog/spdlog.h>
 
@@ -2028,11 +2029,34 @@ void ChatPanel::on_history_message_deleted(int history_id)
     run_script(wxString::Format("removeMsg(%d);", dom_id));
 }
 
-void ChatPanel::render_loaded_history(const ConversationHistory& history)
+void ChatPanel::render_loaded_history(const ConversationHistory& history,
+                                      IToolRegistry* tools)
 {
-    // Walk forward so call_id -> tool_name lookup (used to label tool-result
-    // bubbles) only needs to look backwards into already-seen messages.
-    std::unordered_map<std::string, std::string> call_id_to_tool;
+    // Per-call lookup so tool-result bubbles below can recover the tool name
+    // AND re-build the same `tool-preview` line the live `on_tool_pending`
+    // path renders. Walk forward so each tool result only needs to consult
+    // already-seen assistant turns.
+    struct CallInfo {
+        std::string tool_name;
+        std::string preview;   // empty when no registry or tool returned ""
+    };
+    std::unordered_map<std::string, CallInfo> call_info;
+
+    auto build_preview = [&](const std::string& tool_name,
+                             const std::string& args_json) -> std::string {
+        if (!tools) return {};
+        ITool* t = tools->find(tool_name);
+        if (!t) return {};
+        ToolCall tc;
+        tc.tool_name = tool_name;
+        if (!args_json.empty()) {
+            try { tc.args = nlohmann::json::parse(args_json); }
+            catch (...) { tc.args = nlohmann::json::object(); }
+        }
+        try { return t->preview(tc); }
+        catch (...) { return {}; }
+    };
+
     for (const auto& msg : history.messages()) {
         switch (msg.role) {
         case MessageRole::system:
@@ -2061,15 +2085,39 @@ void ChatPanel::render_loaded_history(const ConversationHistory& history)
         }
 
         case MessageRole::assistant: {
-            // Remember the tool_name for each tool_call so the matching tool-
-            // result bubble below can label itself.
+            // Cache args+preview for each tool_call so the matching tool-
+            // result bubble below can label itself + show the same
+            // `tool-preview` line live mode shows.
             for (const auto& tc : msg.tool_calls) {
-                if (!tc.id.empty()) call_id_to_tool[tc.id] = tc.name;
+                if (tc.id.empty()) continue;
+                CallInfo info;
+                info.tool_name = tc.name;
+                info.preview   = build_preview(tc.name, tc.arguments);
+                call_info[tc.id] = std::move(info);
             }
+
+            // Restore the collapsed `Thinking...` bubble whenever the saved
+            // assistant turn carried reasoning_content (S6.10 Task C persists
+            // it). Live mode emits this via addReasoning + setReasoningBody +
+            // finalizeReasoning; we replay the same three calls so the
+            // resulting DOM matches byte-for-byte.
+            if (!msg.reasoning_content.empty()) {
+                ++message_id_;
+                int rid = message_id_;
+                run_script(wxString::Format("addReasoning(%d, 0);", rid));
+                run_script(wxString::Format(
+                    "setReasoningBody(%d, %s);",
+                    rid,
+                    "'" + chat_js_escape(wxString::FromUTF8(msg.reasoning_content)) + "'"));
+                run_script(wxString::Format(
+                    "finalizeReasoning(%d, 'Thinking (restored)');", rid));
+            }
+
             if (msg.content.empty()) {
-                // tool-only assistant turn -- no visible bubble (matches the
-                // live experience where the assistant bubble seals empty and
-                // gets replaced by the tool bubble).
+                // tool-only assistant turn -- no visible content bubble
+                // (matches the live experience where the assistant bubble
+                // seals empty and gets replaced by the tool bubble). The
+                // tool-preview line below still appears above each result.
                 continue;
             }
             ++message_id_;
@@ -2095,19 +2143,26 @@ void ChatPanel::render_loaded_history(const ConversationHistory& history)
         case MessageRole::tool: {
             ++message_id_;
             std::string tool_name = "tool";
-            if (auto it = call_id_to_tool.find(msg.tool_call_id);
-                it != call_id_to_tool.end()) {
-                tool_name = it->second;
+            std::string preview;
+            if (auto it = call_info.find(msg.tool_call_id);
+                it != call_info.end()) {
+                tool_name = it->second.tool_name;
+                preview   = it->second.preview;
             }
-            // Bubble head: just the tool-name span. The result body is
-            // appended below via DOM construction so its textContent goes
-            // through exactly one JS-string decode -- matches the live
-            // on_tool_result path. Building inline HTML here would force a
-            // second chat_js_escape pass on already-escaped content, turning
-            // newlines into literal backslash-n.
+            // Bubble head: tool-name + optional preview line. Matches live
+            // `on_tool_pending` exactly so the restored DOM is identical.
+            // The result body is appended below via DOM construction so its
+            // textContent goes through exactly one JS-string decode --
+            // building inline HTML would force a second chat_js_escape pass
+            // on already-escaped content, turning newlines into literal `\n`.
             wxString head = "<span class=\"tool-name\">"
                           + chat_js_escape(wxString::FromUTF8(tool_name))
                           + "</span>";
+            if (!preview.empty()) {
+                head += "<br><span class=\"tool-preview\">"
+                      + chat_js_escape(wxString::FromUTF8(preview))
+                      + "</span>";
+            }
             run_script(wxString::Format(
                 "addMsg(%d, 'msg-tool', %s);",
                 message_id_,

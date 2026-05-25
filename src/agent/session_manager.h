@@ -52,6 +52,12 @@ public:
     // Load a session by ID. Throws std::runtime_error if not found.
     ConversationHistory load(const std::string& id) const;
 
+    // Load the full session JSON (messages + top-level extras like
+    // `agent_mode` / `plan` / `metrics`). Throws std::runtime_error if not
+    // found. Used by AgentCore::load_session to restore not just the
+    // conversation but the surrounding mode / plan state too.
+    nlohmann::json load_full(const std::string& id) const;
+
     // List all saved sessions, sorted by last_opened_at desc (newest-first).
     std::vector<SessionInfo> list() const;
 

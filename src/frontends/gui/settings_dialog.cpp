@@ -7,6 +7,7 @@
 #include "settings/llm_settings_panel.h"
 #include "settings/mcp_settings_panel.h"
 #include "settings/notifications_settings_panel.h"
+#include "settings/sessions_settings_panel.h"
 #include "settings/tool_approvals_settings_panel.h"
 #include "../../core/global_config.h"
 #include "../../core/global_paths.h"
@@ -37,6 +38,7 @@ SettingsDialog::SettingsDialog(wxWindow* parent, WorkspaceConfig& config,
     approvals_panel_     = new ToolApprovalsSettingsPanel(notebook, config, tools);
     mcp_panel_           = new McpSettingsPanel(notebook, config, mcp);
     notifications_panel_ = new NotificationsSettingsPanel(notebook, config);
+    sessions_panel_      = new SessionsSettingsPanel(notebook, config);
 
     llm_panel_->SetName(ui_names::kSettingsTabLlm);
     index_panel_->SetName(ui_names::kSettingsTabIndex);
@@ -44,12 +46,14 @@ SettingsDialog::SettingsDialog(wxWindow* parent, WorkspaceConfig& config,
     approvals_panel_->SetName(ui_names::kSettingsTabApprovals);
     mcp_panel_->SetName(ui_names::kSettingsTabMcp);
     notifications_panel_->SetName(ui_names::kSettingsTabNotifications);
+    sessions_panel_->SetName(ui_names::kSettingsTabSessions);
     gui::apply_locus_accessible_name(llm_panel_);
     gui::apply_locus_accessible_name(index_panel_);
     gui::apply_locus_accessible_name(capabilities_panel_);
     gui::apply_locus_accessible_name(approvals_panel_);
     gui::apply_locus_accessible_name(mcp_panel_);
     gui::apply_locus_accessible_name(notifications_panel_);
+    gui::apply_locus_accessible_name(sessions_panel_);
 
     notebook->AddPage(llm_panel_,           "LLM");
     notebook->AddPage(index_panel_,         "Index");
@@ -57,6 +61,7 @@ SettingsDialog::SettingsDialog(wxWindow* parent, WorkspaceConfig& config,
     notebook->AddPage(approvals_panel_,     "Tool Approvals");
     notebook->AddPage(mcp_panel_,           "MCP Servers");
     notebook->AddPage(notifications_panel_, "Notifications");
+    notebook->AddPage(sessions_panel_,      "Sessions");
 
     auto* main_sizer = new wxBoxSizer(wxVERTICAL);
     main_sizer->Add(notebook, 1, wxEXPAND | wxALL, 8);
@@ -92,7 +97,8 @@ void SettingsDialog::on_ok(wxCommandEvent& evt)
         !capabilities_panel_->validate(err)  ||
         !approvals_panel_->validate(err)     ||
         !mcp_panel_->validate(err)           ||
-        !notifications_panel_->validate(err))
+        !notifications_panel_->validate(err) ||
+        !sessions_panel_->validate(err))
     {
         wxMessageBox(err, "Settings", wxOK | wxICON_ERROR, this);
         return;
@@ -110,6 +116,7 @@ void SettingsDialog::on_ok(wxCommandEvent& evt)
     approvals_panel_->commit_to_config(new_cfg);
     mcp_panel_->commit_to_config(new_cfg);
     notifications_panel_->commit_to_config(new_cfg);
+    sessions_panel_->commit_to_config(new_cfg);
 
     // Cross-tab reconciliation: the Capabilities tab's semantic toggle is the
     // canonical authority. When the two differ, capabilities wins and we force
@@ -179,6 +186,7 @@ WorkspaceConfig SettingsDialog::snapshot_dialog_state() const
     capabilities_panel_->commit_to_config(out);
     approvals_panel_->commit_to_config(out);
     notifications_panel_->commit_to_config(out);
+    sessions_panel_->commit_to_config(out);
     // MCP panel deliberately excluded: trust keys are workspace-specific and
     // save_global_config filters them out anyway.
 

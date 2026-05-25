@@ -48,6 +48,7 @@ add_executable(locus_tests
     test_chat_activity_restructure.cpp
     test_activity_log.cpp
     test_tabs_and_sessions.cpp
+    test_session_restore.cpp
     test_source_hygiene.cpp
     test_terminal_per_tab.cpp
     test_describe_tool.cpp

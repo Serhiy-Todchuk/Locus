@@ -122,4 +122,41 @@ inline nlohmann::json plan_to_json(const Plan& p)
     return j;
 }
 
+// Inverse of plan_to_json -- tolerant of missing fields (used when loading
+// pre-S6.x sessions that never carried a plan block). The status string
+// is parsed back via the same to_string contract above; unknown values
+// default to pending so a hand-edited session file can't crash the load.
+inline PlanStep::Status plan_step_status_from_string(std::string_view s)
+{
+    if (s == "in_progress") return PlanStep::Status::in_progress;
+    if (s == "done")        return PlanStep::Status::done;
+    if (s == "failed")      return PlanStep::Status::failed;
+    return PlanStep::Status::pending;
+}
+
+inline Plan plan_from_json(const nlohmann::json& j)
+{
+    Plan p;
+    if (!j.is_object()) return p;
+    p.id      = j.value("id",      std::string{});
+    p.title   = j.value("title",   std::string{});
+    p.summary = j.value("summary", std::string{});
+    if (j.contains("steps") && j["steps"].is_array()) {
+        for (const auto& sj : j["steps"]) {
+            PlanStep s;
+            s.description = sj.value("description", std::string{});
+            if (sj.contains("tools_needed") && sj["tools_needed"].is_array()) {
+                for (const auto& t : sj["tools_needed"]) {
+                    if (t.is_string()) s.tools_needed.push_back(t.get<std::string>());
+                }
+            }
+            s.status = plan_step_status_from_string(
+                sj.value("status", std::string{"pending"}));
+            s.notes  = sj.value("notes", std::string{});
+            p.steps.push_back(std::move(s));
+        }
+    }
+    return p;
+}
+
 } // namespace locus

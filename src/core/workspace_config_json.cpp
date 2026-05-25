@@ -245,6 +245,8 @@ WorkspaceConfig workspace_config_from_json(const json& j)
             cfg.sessions.delete_after_days = s["delete_after_days"].get<int>();
         if (s.contains("restore_last"))
             cfg.sessions.restore_last = s["restore_last"].get<bool>();
+        if (s.contains("persist_activity"))
+            cfg.sessions.persist_activity = s["persist_activity"].get<bool>();
     }
 
     if (j.contains("notifications") && j["notifications"].is_object()) {
@@ -390,7 +392,8 @@ json workspace_config_to_json(const WorkspaceConfig& cfg)
             {"auto_cleanup_enabled", cfg.sessions.auto_cleanup_enabled},
             {"keep_last_count",      cfg.sessions.keep_last_count},
             {"delete_after_days",    cfg.sessions.delete_after_days},
-            {"restore_last",         cfg.sessions.restore_last}
+            {"restore_last",         cfg.sessions.restore_last},
+            {"persist_activity",     cfg.sessions.persist_activity}
         }},
         {"notifications", {
             {"sound_on_tool_approval", cfg.notifications.sound_on_tool_approval},

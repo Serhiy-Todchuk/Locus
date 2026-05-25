@@ -90,6 +90,9 @@ inline constexpr const char* kSettingsTabApprovals    = "locus.settings.tab.appr
 inline constexpr const char* kSettingsTabMcp          = "locus.settings.tab.mcp";
 inline constexpr const char* kSettingsTabCapabilities = "locus.settings.tab.capabilities";
 inline constexpr const char* kSettingsTabNotifications = "locus.settings.tab.notifications";
+inline constexpr const char* kSettingsTabSessions     = "locus.settings.tab.sessions";
+inline constexpr const char* kSettingsSessionsRestoreLast      = "locus.settings.sessions.restore_last";
+inline constexpr const char* kSettingsSessionsPersistActivity  = "locus.settings.sessions.persist_activity";
 inline constexpr const char* kSettingsSaveAsGlobalBtn = "locus.settings.save_as_global_btn";
 
 // Settings -> LLM tab sub-controls (S5.L Phase A extension).

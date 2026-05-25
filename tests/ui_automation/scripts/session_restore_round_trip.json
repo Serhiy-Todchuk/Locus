@@ -1,0 +1,167 @@
+{
+  "name": "session_restore_round_trip",
+  "description": "Save/restore visual parity. Seeds a workspace with a complete saved session that carries reasoning_content, an assistant tool_calls turn, a tool-result row, plus a final assistant answer; opts the session into ui_state.json so restore_last auto-opens it; then asserts the restored chat WebView contains every visible marker (user text, 'Thinking', tool_name, tool result body, final answer) and that dump_history returns the same persisted ChatMessage shape verbatim. Closes the M6 'fully restore saved conversation' gap by catching regressions where reasoning is dropped on render or the tool-call preview goes missing on the restore path.",
+  "setup": {
+    "workspace": "tmp",
+    "sessions_config": {
+      "restore_last": true
+    },
+    "sessions_seed": [
+      {
+        "id": "uia_restore_1",
+        "title": "Save/restore visual parity",
+        "first_user_message": "find FooBarBaz in src",
+        "last_opened_at": -120,
+        "messages": [
+          { "role": "system",  "content": "You are a test assistant." },
+          { "role": "user",    "content": "find FooBarBaz in src" },
+          {
+            "role": "assistant",
+            "content": "",
+            "reasoning_content": "RESTORED_THINKING_MARKER: I should grep the source tree first.",
+            "tool_calls": [
+              {
+                "id": "call_uia_1",
+                "type": "function",
+                "function": {
+                  "name": "search",
+                  "arguments": "{\"mode\":\"text\",\"query\":\"FooBarBaz\",\"path\":\"src\"}"
+                }
+              }
+            ]
+          },
+          {
+            "role": "tool",
+            "tool_call_id": "call_uia_1",
+            "content": "TOOL_RESULT_MARKER: src/foo.cpp:42: FooBarBaz x;"
+          },
+          {
+            "role": "assistant",
+            "content": "FINAL_ANSWER_MARKER: found one hit in src/foo.cpp at line 42."
+          }
+        ],
+        "extras": {
+          "agent_mode": "chat"
+        }
+      }
+    ],
+    "ui_state": {
+      "open_tabs": [
+        { "session_id": "uia_restore_1", "title": "Save/restore visual parity", "active": true }
+      ]
+    }
+  },
+  "steps": [
+    { "op": "launch" },
+    {
+      "op": "wait_for_window",
+      "args": { "title_prefix": "Locus", "timeout_ms": 20000 }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.chat.panel", "timeout_ms": 15000 }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.chat.webview", "timeout_ms": 5000 }
+    },
+
+    { "op": "sleep", "args": { "ms": 1000 } },
+    { "op": "screenshot", "args": { "name": "01_restored_chat" } },
+
+    {
+      "op": "wait_for_text_stable",
+      "args": {
+        "automation_id": "locus.chat.webview",
+        "stable_ms": 800,
+        "timeout_ms": 8000
+      }
+    },
+
+    {
+      "op": "read_chat",
+      "args": { "max_chars": 30000 }
+    },
+
+    {
+      "op": "assert_text_contains",
+      "args": {
+        "automation_id": "locus.chat.webview",
+        "walk_subtree": true,
+        "substring": "find FooBarBaz in src",
+        "timeout_ms": 6000
+      }
+    },
+    {
+      "op": "assert_text_contains",
+      "args": {
+        "automation_id": "locus.chat.webview",
+        "walk_subtree": true,
+        "substring": "Thinking",
+        "timeout_ms": 6000
+      }
+    },
+    {
+      "op": "assert_text_contains",
+      "args": {
+        "automation_id": "locus.chat.webview",
+        "walk_subtree": true,
+        "substring": "search",
+        "timeout_ms": 6000
+      }
+    },
+    {
+      "op": "assert_text_contains",
+      "args": {
+        "automation_id": "locus.chat.webview",
+        "walk_subtree": true,
+        "substring": "Result",
+        "timeout_ms": 6000
+      }
+    },
+    {
+      "op": "assert_text_contains",
+      "args": {
+        "automation_id": "locus.chat.webview",
+        "walk_subtree": true,
+        "substring": "FINAL_ANSWER_MARKER",
+        "timeout_ms": 6000
+      }
+    },
+
+    {
+      "op": "dump_history",
+      "args": {
+        "session_id": "uia_restore_1",
+        "include_system": false,
+        "max_content_chars": 4000
+      }
+    },
+
+    {
+      "op": "assert_file_contains",
+      "args": {
+        "path": ".locus/sessions/uia_restore_1.json",
+        "substring": "TOOL_RESULT_MARKER"
+      }
+    },
+    {
+      "op": "assert_file_contains",
+      "args": {
+        "path": ".locus/sessions/uia_restore_1.json",
+        "substring": "RESTORED_THINKING_MARKER"
+      }
+    },
+    {
+      "op": "assert_file_contains",
+      "args": {
+        "path": ".locus/sessions/uia_restore_1.json",
+        "substring": "call_uia_1"
+      }
+    },
+
+    { "op": "screenshot", "args": { "name": "02_after_assertions" } },
+
+    { "op": "quit", "args": { "wait_ms": 5000 } }
+  ]
+}

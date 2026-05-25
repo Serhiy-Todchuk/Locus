@@ -180,18 +180,58 @@ ScriptResult ScriptRunner::run()
                     std::string title = entry.value("title", id);
                     long long when = entry.value("last_opened_at", now_s);
                     if (when < 0) when = now_s + when;
+
+                    // Optional `messages` array -- when supplied, persisted
+                    // verbatim so UIA tests can stage a saved session with
+                    // reasoning_content + tool_calls + tool-result rows and
+                    // verify the restore path renders them correctly.
+                    Json messages = Json::array();
+                    if (entry.contains("messages") && entry["messages"].is_array())
+                        messages = entry["messages"];
+
+                    // Optional top-level extras (agent_mode + plan +
+                    // plan_awaiting_decision) -- used by the save/restore
+                    // UIA test. Merge into the session JSON last so we can
+                    // selectively override defaults.
+                    Json extras = entry.value("extras", Json::object());
+
                     Json j;
                     j["id"]                = id;
-                    j["message_count"]     = 1;
-                    j["estimated_tokens"]  = 100;
-                    j["messages"]          = Json::array();
-                    j["first_user_message"] = title;
+                    j["message_count"]     = static_cast<int>(messages.size());
+                    j["estimated_tokens"]  = entry.value("estimated_tokens", 100);
+                    j["messages"]          = std::move(messages);
+                    j["first_user_message"] = entry.value("first_user_message",
+                                                          title);
                     j["title"]             = title;
                     j["created_at"]        = when;
                     j["last_opened_at"]    = when;
+                    if (extras.is_object()) {
+                        for (auto it = extras.begin(); it != extras.end(); ++it)
+                            j[it.key()] = it.value();
+                    }
                     std::ofstream sf(sessions_dir / (id + ".json"));
                     sf << j.dump(2) << '\n';
                 }
+            }
+        } catch (const std::exception& ex) {
+            (void)ex;
+        }
+
+        // Optional: seed `.locus/ui_state.json` so the workspace's
+        // restore_last hook auto-opens specific sessions as tabs. Shape
+        // matches `WorkspaceUiState`: { "open_tabs": [{ session_id, title,
+        // active }] }. Used by save/restore tests to stage a known set of
+        // tabs without driving them through the menu first.
+        try {
+            if (script_.contains("setup") && script_["setup"].is_object() &&
+                script_["setup"].contains("ui_state") &&
+                script_["setup"]["ui_state"].is_object())
+            {
+                auto locus_dir = workspace_dir / ".locus";
+                std::error_code ec3;
+                std::filesystem::create_directories(locus_dir, ec3);
+                std::ofstream usf(locus_dir / "ui_state.json");
+                usf << script_["setup"]["ui_state"].dump(2) << '\n';
             }
         } catch (const std::exception& ex) {
             (void)ex;

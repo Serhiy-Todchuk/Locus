@@ -192,6 +192,24 @@ ConversationHistory SessionManager::load(const std::string& id) const
     return history;
 }
 
+json SessionManager::load_full(const std::string& id) const
+{
+    auto path = sessions_dir_ / (id + ".json");
+
+    if (!fs::exists(path))
+        throw std::runtime_error("Session not found: " + id);
+
+    std::ifstream f(path);
+    if (!f.is_open())
+        throw std::runtime_error("Cannot read session file: " + path.string());
+
+    json j = json::parse(f);
+    if (!j.is_object() || !j.contains("messages"))
+        throw std::runtime_error("Invalid session file (no messages): " + id);
+
+    return j;
+}
+
 // -- List ---------------------------------------------------------------------
 
 SessionInfo SessionManager::read_session_info(const fs::path& path)
@@ -287,8 +305,9 @@ std::vector<SessionInfo> SessionManager::list() const
 
 bool SessionManager::remove(const std::string& id)
 {
-    auto path        = sessions_dir_ / (id + ".json");
-    auto archive_dir = sessions_dir_ / id;
+    auto path         = sessions_dir_ / (id + ".json");
+    auto archive_dir  = sessions_dir_ / id;
+    auto activity_log = sessions_dir_ / (id + ".activity.jsonl");
 
     std::error_code ec;
     bool removed_file = fs::remove(path, ec);
@@ -301,15 +320,23 @@ bool SessionManager::remove(const std::string& id)
     std::error_code ec_dir;
     auto removed_archives = fs::remove_all(archive_dir, ec_dir);  // 0 on missing
 
-    if (removed_file)
-        spdlog::info("SessionManager: removed session '{}' (+{} archive file(s))",
-                     id, static_cast<unsigned long long>(removed_archives));
-    else if (removed_archives > 0)
-        spdlog::info("SessionManager: removed orphaned archive dir for '{}' "
-                     "({} file(s))", id,
-                     static_cast<unsigned long long>(removed_archives));
+    // Activity-log sidecar (opt-in, may not exist). Drop it together with
+    // the session so a delete-and-recreate cycle doesn't replay stale
+    // activity into the new run.
+    std::error_code ec_act;
+    bool removed_activity = fs::remove(activity_log, ec_act);
 
-    return removed_file || removed_archives > 0;
+    if (removed_file)
+        spdlog::info("SessionManager: removed session '{}' (+{} archive file(s){})",
+                     id, static_cast<unsigned long long>(removed_archives),
+                     removed_activity ? ", +activity log" : "");
+    else if (removed_archives > 0 || removed_activity)
+        spdlog::info("SessionManager: removed orphaned files for '{}' "
+                     "({} archive file(s){})", id,
+                     static_cast<unsigned long long>(removed_archives),
+                     removed_activity ? ", +activity log" : "");
+
+    return removed_file || removed_archives > 0 || removed_activity;
 }
 
 // -- Patch helpers ------------------------------------------------------------

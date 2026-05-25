@@ -1,6 +1,3 @@
-- manual-tests.txt's prompt
-- Fully restore saved conversation!!!
-- Multi LLM + select toggle in chat panel bottom: Task F in S6.10: Re-detect on model swap: if the user changes the model in LM Studio mid-session, the next request gets the new `model_id`; if it differs from `last_applied_preset` source, re-match. Avoid re-applying every turn (cache).
 - This needs to be revisited: Auto-detect loaded model and auto-apply preset
 - Refactor big cpp files: workspace.h (line 29) is a big config gravity well. chat_panel.cpp (line 66), agent_core.cpp (line 603), and locus_frame.cpp (line 320) are large enough that future changes will invite local patching over clean design.
 - Shrink CLAUDE.md

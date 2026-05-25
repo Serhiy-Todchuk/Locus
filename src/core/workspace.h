@@ -400,6 +400,14 @@ struct WorkspaceConfig {
         // S5.I -- when true, every open_tabs entry in workspace UI state is
         // re-opened on workspace open. When false a single empty tab opens.
         bool restore_last         = true;
+        // When true, ActivityLog appends every emitted event to a sidecar
+        // JSONL file (.locus/sessions/<id>.activity.jsonl) and replays the
+        // file on load_session. Default off because (a) it doubles the
+        // per-event I/O cost and (b) most users don't care about activity
+        // history across restarts. Turn on from the Sessions settings tab
+        // when investigating a multi-day session or saving a session as
+        // QA evidence.
+        bool persist_activity     = false;
     };
     Sessions sessions;
 

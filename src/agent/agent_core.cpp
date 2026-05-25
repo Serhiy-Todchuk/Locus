@@ -1635,13 +1635,116 @@ std::string AgentCore::save_session()
 {
     nlohmann::json extras;
     extras["metrics"] = metrics_->to_json();
-    return ctx_->save_session(extras);
+
+    // Persist the surrounding agent state so re-opening a saved session
+    // restores not just the chat transcript but the mode + plan the user
+    // had in flight. `agent_mode` always written; `plan` only when a plan
+    // is currently live (plan-mode preview / execute-mode progress).
+    extras["agent_mode"] = to_string(mode_.load());
+    std::optional<Plan> plan_snapshot;
+    bool awaiting = false;
+    {
+        std::lock_guard<std::mutex> g(plan_mutex_);
+        plan_snapshot = current_plan_;
+        awaiting      = plan_awaiting_decision_;
+    }
+    if (plan_snapshot.has_value()) {
+        extras["plan"]                    = plan_to_json(*plan_snapshot);
+        extras["plan_awaiting_decision"]  = awaiting;
+    }
+
+    std::string id = ctx_->save_session(extras);
+
+    // Sidecar JSONL activity log -- opt-in via WorkspaceConfig::sessions::
+    // persist_activity. Set the persist path on the live ActivityLog so
+    // every subsequent emit() flows to disk. Re-saving an existing session
+    // points at the same sidecar path (append-only), so future activity
+    // continues the existing log file.
+    if (auto* ws = services_.workspace()) {
+        if (ws->config().sessions.persist_activity && !id.empty()) {
+            auto path = sessions_.sessions_dir() / (id + ".activity.jsonl");
+            activity_->set_persist_path(path);
+        }
+    }
+
+    return id;
 }
 
 void AgentCore::load_session(const std::string& session_id)
 {
+    // Read the full session file before applying so we can pick up the
+    // top-level `agent_mode` / `plan` block alongside the messages. The
+    // history-only load() path stays the cheap default for callers that
+    // don't need mode/plan restore.
+    nlohmann::json full;
+    try {
+        full = sessions_.load_full(session_id);
+    } catch (const std::exception& e) {
+        // Fall back to history-only load so the legacy path still works
+        // even if the meta read fails.
+        spdlog::warn("AgentCore::load_session: full-load failed ({}), "
+                     "falling back to history-only", e.what());
+    }
+
     ctx_->load_session(session_id);
     metrics_->reset();
+
+    // Activity sidecar replay (opt-in). Done AFTER on_session_reset would
+    // have been broadcast otherwise -- but we wait to broadcast it below
+    // because the activity panel needs to clear its existing list before
+    // we replay events into it. Clear the in-memory ring + reset the
+    // persist path first so a previously-open session doesn't bleed events
+    // into the freshly-loaded one.
+    activity_->clear();
+    activity_->set_persist_path({});
+    if (auto* ws = services_.workspace()) {
+        if (ws->config().sessions.persist_activity) {
+            auto path = sessions_.sessions_dir()
+                        / (session_id + ".activity.jsonl");
+            activity_->replay_from(path);
+            activity_->set_persist_path(path);
+        }
+    }
+
+    // Re-apply persisted mode + plan. Done after history load so the
+    // chat-panel render path (which fires from on_session_reset below)
+    // sees the right mode banner / plan bubble. We use the public setters
+    // so the existing pending-thread-hop machinery + frontend broadcasts
+    // keep working: set_mode queues onto the agent thread; AgentLoop's
+    // apply_pending_mode_change picks it up on the next idle tick.
+    AgentMode restored_mode = AgentMode::chat;
+    std::optional<Plan> restored_plan;
+    bool restored_awaiting = false;
+    if (full.is_object()) {
+        if (full.contains("agent_mode") && full["agent_mode"].is_string()) {
+            restored_mode = agent_mode_from_string(
+                full["agent_mode"].get<std::string>());
+        }
+        if (full.contains("plan") && full["plan"].is_object()) {
+            restored_plan = plan_from_json(full["plan"]);
+            restored_awaiting = full.value("plan_awaiting_decision", false);
+        }
+    }
+
+    {
+        std::lock_guard<std::mutex> g(plan_mutex_);
+        current_plan_           = restored_plan;
+        plan_awaiting_decision_ = restored_awaiting;
+    }
+    // Use direct store-and-broadcast (rather than the queued set_mode path)
+    // because the agent thread is idle here -- we want the new state visible
+    // before on_session_reset fires so the chat panel paints the right
+    // mode tab + plan bubble on first render.
+    mode_.store(restored_mode);
+    frontends_.broadcast([&](IFrontend& fe) {
+        fe.on_mode_changed(restored_mode);
+    });
+    if (restored_plan.has_value()) {
+        Plan plan_copy = *restored_plan;
+        frontends_.broadcast([&](IFrontend& fe) {
+            fe.on_plan_proposed(plan_copy);
+        });
+    }
 
     frontends_.broadcast([&](IFrontend& fe) {
         fe.on_context_meter(ctx_->current_tokens(), ctx_->llm_config().context_limit,

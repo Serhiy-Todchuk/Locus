@@ -8,6 +8,8 @@
 #include <wx/textdlg.h>
 
 #include <chrono>
+#include <ctime>
+#include <iomanip>
 #include <sstream>
 
 namespace locus {
@@ -205,11 +207,25 @@ wxString ManageSessionsDialog::format_age(long long last_opened_at)
         std::chrono::system_clock::now().time_since_epoch()).count();
     long long diff = now - last_opened_at;
     if (diff < 0) diff = 0;
-    if (diff < 60)        return wxString::Format("%llds ago", diff);
-    if (diff < 3600)      return wxString::Format("%lldm ago", diff / 60);
-    if (diff < 86400)     return wxString::Format("%lldh ago", diff / 3600);
-    if (diff < 86400 * 30) return wxString::Format("%lldd ago", diff / 86400);
-    return wxString::Format("%lldmo ago", diff / (86400 * 30));
+    if (diff < 60)         return wxString::Format("%llds ago", diff);
+    if (diff < 3600)       return wxString::Format("%lldm ago", diff / 60);
+    if (diff < 86400)      return wxString::Format("%lldh ago", diff / 3600);
+    if (diff < 86400 * 7)  return wxString::Format("%lldd ago", diff / 86400);
+
+    // Older than a week -- absolute local timestamp is more useful than
+    // "37d ago" / "5mo ago". Format mirrors the session-id stem the file
+    // already carries on disk, so the dialog reads consistently with the
+    // sessions/ directory listing.
+    std::time_t t = static_cast<std::time_t>(last_opened_at);
+    std::tm tm{};
+#ifdef _WIN32
+    localtime_s(&tm, &t);
+#else
+    localtime_r(&t, &tm);
+#endif
+    std::ostringstream oss;
+    oss << std::put_time(&tm, "%Y-%m-%d %H:%M");
+    return wxString::FromUTF8(oss.str());
 }
 
 wxString ManageSessionsDialog::format_size(long long bytes)

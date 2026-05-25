@@ -2,8 +2,13 @@
 
 #include "../core/frontend.h"
 
+#include <nlohmann/json.hpp>
+#include <spdlog/spdlog.h>
+
 #include <cctype>
 #include <chrono>
+#include <fstream>
+#include <unordered_map>
 #include <utility>
 
 namespace locus {
@@ -26,6 +31,25 @@ std::string category_prefix(const std::string& s)
     while (i < s.size() && !std::isdigit(static_cast<unsigned char>(s[i])))
         ++i;
     return s.substr(0, i);
+}
+
+ActivityKind kind_from_string(const std::string& s)
+{
+    if (s == "system_prompt")      return ActivityKind::system_prompt;
+    if (s == "tool_manifest")      return ActivityKind::tool_manifest;
+    if (s == "user_message")       return ActivityKind::user_message;
+    if (s == "llm_response")       return ActivityKind::llm_response;
+    if (s == "tool_call")          return ActivityKind::tool_call;
+    if (s == "tool_result")        return ActivityKind::tool_result;
+    if (s == "index_event")        return ActivityKind::index_event;
+    if (s == "memory_added")       return ActivityKind::memory_added;
+    if (s == "memory_searched")    return ActivityKind::memory_searched;
+    if (s == "memory_deleted")     return ActivityKind::memory_deleted;
+    if (s == "compaction")         return ActivityKind::compaction;
+    if (s == "truncation_blocked") return ActivityKind::truncation_blocked;
+    if (s == "quality_correction") return ActivityKind::quality_correction;
+    if (s == "error")              return ActivityKind::error;
+    return ActivityKind::warning;
 }
 
 } // namespace
@@ -87,6 +111,12 @@ void ActivityLog::emit(ActivityKind kind,
         }
     }
 
+    // Sidecar JSONL is append-only -- we never rewrite a coalesced line, we
+    // just append the new (latest) state. The replay reader keeps the LAST
+    // entry per id, so this stays consistent without holding the mutex
+    // through file I/O.
+    append_to_sidecar(ev);
+
     if (was_coalesced)
         frontends_.broadcast([&](IFrontend& fe) { fe.on_activity_updated(ev); });
     else
@@ -108,6 +138,125 @@ std::vector<ActivityEvent> ActivityLog::get_since(uint64_t since_id) const
         if (ev.id > since_id)
             out.push_back(ev);
     return out;
+}
+
+// -- Sidecar persistence -----------------------------------------------------
+
+void ActivityLog::set_persist_path(const std::filesystem::path& path)
+{
+    std::lock_guard lock(mutex_);
+    persist_path_ = path;
+}
+
+void ActivityLog::clear()
+{
+    std::lock_guard lock(mutex_);
+    buffer_.clear();
+    next_id_ = 1;
+}
+
+void ActivityLog::append_to_sidecar(const ActivityEvent& ev)
+{
+    std::filesystem::path path;
+    {
+        std::lock_guard lock(mutex_);
+        if (persist_path_.empty()) return;
+        path = persist_path_;
+    }
+
+    nlohmann::json j;
+    j["id"]      = ev.id;
+    j["ts"]      = std::chrono::duration_cast<std::chrono::seconds>(
+                       ev.timestamp.time_since_epoch()).count();
+    j["kind"]    = to_string(ev.kind);
+    j["summary"] = ev.summary;
+    if (!ev.detail.empty()) j["detail"] = ev.detail;
+    if (ev.tokens_in.has_value())    j["tin"]    = *ev.tokens_in;
+    if (ev.tokens_out.has_value())   j["tout"]   = *ev.tokens_out;
+    if (ev.tokens_delta.has_value()) j["tdelta"] = *ev.tokens_delta;
+
+    try {
+        std::ofstream out(path, std::ios::app | std::ios::binary);
+        if (!out.is_open()) return;
+        out << j.dump() << '\n';
+    } catch (const std::exception& e) {
+        spdlog::warn("ActivityLog: sidecar append failed at {}: {}",
+                     path.string(), e.what());
+    }
+}
+
+void ActivityLog::replay_from(const std::filesystem::path& path)
+{
+    std::error_code ec;
+    if (!std::filesystem::exists(path, ec) || ec) return;
+
+    std::ifstream in(path, std::ios::binary);
+    if (!in.is_open()) return;
+
+    // Read all lines into events, keep last-wins per id (coalesced events
+    // append a fresh line each time -- the latest line is the truth).
+    std::vector<ActivityEvent> ordered;
+    std::unordered_map<uint64_t, size_t> by_id;
+    std::string line;
+    while (std::getline(in, line)) {
+        if (line.empty()) continue;
+        nlohmann::json j;
+        try { j = nlohmann::json::parse(line); }
+        catch (const std::exception& e) {
+            spdlog::warn("ActivityLog: sidecar parse failure at {}: {}",
+                         path.string(), e.what());
+            continue;
+        }
+        if (!j.is_object() || !j.contains("id")) continue;
+
+        ActivityEvent ev;
+        ev.id      = j.value("id", 0ULL);
+        long long ts = j.value("ts", 0LL);
+        ev.timestamp = std::chrono::system_clock::time_point(
+                           std::chrono::seconds(ts));
+        ev.kind    = kind_from_string(j.value("kind", std::string{"warning"}));
+        ev.summary = j.value("summary", std::string{});
+        ev.detail  = j.value("detail",  std::string{});
+        if (j.contains("tin")    && j["tin"].is_number_integer())
+            ev.tokens_in    = j["tin"].get<int>();
+        if (j.contains("tout")   && j["tout"].is_number_integer())
+            ev.tokens_out   = j["tout"].get<int>();
+        if (j.contains("tdelta") && j["tdelta"].is_number_integer())
+            ev.tokens_delta = j["tdelta"].get<int>();
+
+        auto it = by_id.find(ev.id);
+        if (it == by_id.end()) {
+            by_id[ev.id] = ordered.size();
+            ordered.push_back(std::move(ev));
+        } else {
+            ordered[it->second] = std::move(ev);  // last-wins
+        }
+    }
+
+    if (ordered.empty()) return;
+
+    // Cap to the configured ring size, keeping the most-recent entries.
+    if (ordered.size() > max_size_) {
+        ordered.erase(ordered.begin(),
+                      ordered.begin() +
+                          (ordered.size() - max_size_));
+    }
+
+    uint64_t high = 0;
+    for (auto& ev : ordered) high = std::max(high, ev.id);
+
+    {
+        std::lock_guard lock(mutex_);
+        buffer_ = ordered;
+        next_id_ = high + 1;
+    }
+
+    // Re-broadcast so any frontend attached at load time paints the restored
+    // activity rows. Done outside the lock to avoid reentrancy on listeners
+    // that might call get_since() / emit() in response.
+    for (const auto& ev : ordered) {
+        frontends_.broadcast([&](IFrontend& fe) { fe.on_activity(ev); });
+    }
 }
 
 } // namespace locus
