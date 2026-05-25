@@ -52,6 +52,7 @@ add_executable(locus_tests
     test_terminal_per_tab.cpp
     test_describe_tool.cpp
     test_lazy_manifest.cpp
+    test_manifest_budget.cpp
     test_system_prompt_profiles.cpp
     test_reasoning_watchdog.cpp
     retrieval_eval/metrics.cpp
