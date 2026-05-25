@@ -24,6 +24,7 @@
 - [x] **[S6.13](S6.13-reasoning-watchdog.md)** -- Reasoning Watchdog + Commit-now button (per-round budget on reasoning seconds / chars, OR semantics; `agent.reasoning_auto_nudge` cancels the in-flight LLM stream and injects a "Stop reasoning, commit now" steering message; non-modal `locus.chat.commit_btn` in the footer surfaces when manual mode is on and the watchdog trips; 2-nudge cap before turn aborts with "Agent appears stuck") **done 2026-05-25**
 - [ ] **[S6.14](S6.14-thinking-knob.md)** -- Thinking ON/OFF/auto Knob in LLM Settings (tri-state `enable_thinking` per workspace; per-model-family injection: Qwen3 `chat_template_kwargs.enable_thinking`, Qwen2 `/no_think`, o1 `reasoning_effort`; moved from backlog 2026-05-25)
 - [x] **[S6.15](S6.15-session-restore-parity.md)** -- Session Restore Parity (render reasoning bubbles + tool-call previews on restore, persist agent_mode + plan, opt-in activity sidecar JSONL, absolute timestamp for week-old sessions) **done 2026-05-25**
+- [ ] **[S6.16](S6.16-endpoint-profiles.md)** -- Endpoint Profiles + Chat-Footer Endpoint Switcher (multi-LLM source support via OpenAI-compat profiles persisted at `%APPDATA%/Locus/endpoints.json`; six seed rows -- LM Studio / Ollama / NVIDIA Build / OpenAI / OpenRouter / Claude-via-proxy; Bearer auth + `extra_headers` in `OpenAiTransport`; new `wxChoice` in the chat footer + new Settings > Endpoints tab; hot-swap on `AgentCore` between turns)
 
 ## Dependencies
 
@@ -39,3 +40,4 @@
 - S6.11 / S6.12 are tightly coupled (one ADR covers both) but otherwise independent of the rest of M6. S6.12 lands after S6.11 because the system-prompt profile cuts share the lazy-manifest plumbing.
 - S6.13 (reasoning watchdog) is independent of S6.11-S6.12 -- it operates at the stream layer rather than the prompt layer. Companion to S6.14 (one caps reasoning, the other disables it at source). Either can land first.
 - S6.14 (thinking knob) is independent of everything else in M6. Cheap to land (~one new field + one extra_body branch + one Settings row).
+- S6.16 (endpoint profiles) is independent of everything else in M6. Composes with S6.10 Task F (`find_preset_for_model`) -- preset auto-detect re-fires on endpoint switch with no new wiring. Anthropic native is explicitly out of scope; Claude routes via an OpenAI-compat proxy.
