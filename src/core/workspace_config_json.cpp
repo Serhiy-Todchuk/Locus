@@ -69,6 +69,9 @@ WorkspaceConfig workspace_config_from_json(const json& j)
             cfg.llm_frequency_penalty = llm["frequency_penalty"].get<double>();
         if (llm.contains("presence_penalty"))
             cfg.llm_presence_penalty = llm["presence_penalty"].get<double>();
+        // S6.10 Task D -- grammar-constrained decoding for tool calls.
+        if (llm.contains("grammar_mode"))
+            cfg.llm_grammar_mode = llm["grammar_mode"].get<std::string>();
     }
 
     if (j.contains("agent")) {
@@ -297,7 +300,8 @@ json workspace_config_to_json(const WorkspaceConfig& cfg)
             {"min_p",          cfg.llm_min_p},
             {"repeat_penalty", cfg.llm_repeat_penalty},
             {"frequency_penalty", cfg.llm_frequency_penalty},
-            {"presence_penalty",  cfg.llm_presence_penalty}
+            {"presence_penalty",  cfg.llm_presence_penalty},
+            {"grammar_mode",      cfg.llm_grammar_mode}
         }},
         {"agent", {
             {"tool_manifest_warn_tokens", cfg.tool_manifest_warn_tokens},

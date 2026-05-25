@@ -1,5 +1,7 @@
 #include "llm/xml_tool_call_extractor.h"
 
+#include "llm/json_repair.h"
+
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 
@@ -246,9 +248,25 @@ void XmlToolCallExtractor::parse_qwen_body(const std::string& body,
     try {
         j = json::parse(trimmed);
     } catch (const json::exception& e) {
-        spdlog::warn("XmlToolCallExtractor: invalid Qwen JSON ({}): {}",
-                     e.what(), trimmed.substr(0, 120));
-        return;
+        // S6.10 Task A -- JSON repair pre-pass. Small models routinely emit
+        // trailing commas, unquoted keys, or close-brace-off bodies inside
+        // <tool_call>. Try the repair pipeline before giving up.
+        if (auto repaired = repair_for_parse(trimmed)) {
+            spdlog::trace("XmlToolCallExtractor: Qwen JSON repaired via [{}]",
+                          repaired->stages_applied);
+            try {
+                j = json::parse(repaired->fixed);
+            } catch (const json::exception& e2) {
+                spdlog::warn("XmlToolCallExtractor: invalid Qwen JSON after repair "
+                             "(orig: {}; repair: {}): {}",
+                             e.what(), e2.what(), trimmed.substr(0, 120));
+                return;
+            }
+        } else {
+            spdlog::warn("XmlToolCallExtractor: invalid Qwen JSON ({}): {}",
+                         e.what(), trimmed.substr(0, 120));
+            return;
+        }
     }
 
     if (!j.is_object() || !j.contains("name")) {

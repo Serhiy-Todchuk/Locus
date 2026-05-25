@@ -344,6 +344,8 @@ add_library(locus_core STATIC
     src/index/embedding_worker.cpp
     src/index/reranker.cpp
     src/llm/sse_parser.cpp
+    src/llm/json_repair.cpp
+    src/llm/tool_call_grammar.cpp
     src/llm/llm_client.cpp
     src/llm/openai_transport.cpp
     src/llm/xml_tool_call_extractor.cpp

@@ -5,6 +5,7 @@
 #include "llm/stream_decoders/qwen_xml_decoder.h"
 #include "llm/stream_decoders/claude_xml_decoder.h"
 #include "llm/stream_decoders/auto_decoder.h"
+#include "llm/tool_call_grammar.h"
 
 #include "core/log_channels.h"
 
@@ -13,6 +14,7 @@
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cctype>
 
 using json = nlohmann::json;
@@ -45,6 +47,32 @@ ToolFormat tool_format_from_string(const std::string& s)
     if (l == "none" || l == "off" || l == "disabled")      return ToolFormat::None;
     // Unknown values fall back to Auto so a typo never breaks tool calls.
     return ToolFormat::Auto;
+}
+
+// ---- GrammarMode string conversion ------------------------------------------
+
+const char* to_string(GrammarMode m)
+{
+    switch (m) {
+    case GrammarMode::Off:        return "off";
+    case GrammarMode::BestEffort: return "best_effort";
+    case GrammarMode::Strict:     return "strict";
+    }
+    return "off";
+}
+
+GrammarMode grammar_mode_from_string(const std::string& s)
+{
+    std::string l;
+    l.reserve(s.size());
+    for (char c : s) l.push_back(static_cast<char>(std::tolower(
+        static_cast<unsigned char>(c))));
+    if (l == "best_effort" || l == "best-effort" || l == "besteffort" || l == "auto")
+        return GrammarMode::BestEffort;
+    if (l == "strict" || l == "force" || l == "required")
+        return GrammarMode::Strict;
+    // "off" / "none" / "disabled" / unknown all map to Off.
+    return GrammarMode::Off;
 }
 
 namespace {
@@ -136,6 +164,14 @@ public:
     ModelInfo query_model_info() override;
 
 private:
+    // Core streaming path. `stream_completion` wraps this with the Task D
+    // BestEffort retry intercept; everything else (Strict, Off, no-grammar
+    // requests) goes straight here.
+    void do_stream_completion(
+        const std::vector<ChatMessage>& messages,
+        const std::vector<ToolSchema>&  tools,
+        const StreamCallbacks&          callbacks);
+
     json build_request_body(
         const std::vector<ChatMessage>& messages,
         const std::vector<ToolSchema>&  tools) const;
@@ -143,7 +179,37 @@ private:
     LLMConfig                       config_;
     OpenAiTransport                 transport_;
     std::unique_ptr<IStreamDecoder> decoder_;
+
+    // S6.10 Task D -- BestEffort fallback. LM Studio (and possibly other
+    // servers) refuses requests that combine `response_format: json_schema`
+    // with a non-empty `tools` array -- the two constraints fight (the
+    // schema constrains the content channel, the tools array constrains
+    // tool_calls). Per the spec, BestEffort should "attach grammar if server
+    // supports it, otherwise send unconstrained + log at trace". Implemented
+    // by intercepting the stream error, marking the server as
+    // grammar-incompatible for the rest of the session, and retrying the
+    // request without `response_format`. Atomic so a concurrent stream
+    // from another thread reads the flag safely.
+    std::atomic<bool> grammar_disabled_for_session_{false};
 };
+
+namespace {
+
+// Recognise the family of errors LM Studio / llama-server emit when
+// response_format conflicts with the tools array. Phrasings vary across
+// versions but all share one of these stable keywords.
+bool looks_like_grammar_incompatibility(const std::string& err)
+{
+    auto contains = [&](const char* needle) {
+        return err.find(needle) != std::string::npos;
+    };
+    return contains("structured output")
+        || contains("lazy grammar")
+        || contains("response_format")
+        || contains("json_schema");
+}
+
+}  // namespace
 
 LMStudioClient::LMStudioClient(LLMConfig config)
     : config_(std::move(config))
@@ -154,12 +220,14 @@ LMStudioClient::LMStudioClient(LLMConfig config)
     while (!config_.base_url.empty() && config_.base_url.back() == '/')
         config_.base_url.pop_back();
 
-    spdlog::info("LLM client: endpoint={} model={} temp={} max_tokens={} tool_format={}",
+    spdlog::info("LLM client: endpoint={} model={} temp={} max_tokens={} "
+                 "tool_format={} grammar_mode={}",
                  config_.base_url,
                  config_.model.empty() ? "(server default)" : config_.model,
                  config_.temperature,
                  config_.max_tokens,
-                 to_string(config_.tool_format));
+                 to_string(config_.tool_format),
+                 to_string(config_.grammar_mode));
 }
 
 // Helper: extract context length from a model JSON object using known field names.
@@ -335,10 +403,83 @@ json LMStudioClient::build_request_body(
         body["tools"] = std::move(tool_arr);
     }
 
+    // S6.10 Task D -- server-side grammar-constrained decoding. When the
+    // workspace's grammar_mode opts in, attach a `response_format` json_schema
+    // describing the union of valid tool calls. LM Studio / llama-server /
+    // vLLM honour this at sampling time so malformed tool-call JSON becomes
+    // physically impossible to generate. Servers that don't recognise the
+    // field ignore it (OpenAI-compat passthrough), so attaching is safe even
+    // for unknown backends. Task A's repair pre-pass remains the universal
+    // fallback for the server-doesn't-honour case.
+    if (grammar_should_attach(config_.grammar_mode, config_.tool_format,
+                               tools.size()) &&
+        !grammar_disabled_for_session_.load(std::memory_order_acquire)) {
+        auto schema = build_tool_call_union_schema(tools);
+        if (!schema.is_null()) {
+            body["response_format"] = json{
+                {"type",        "json_schema"},
+                {"json_schema", std::move(schema)},
+            };
+            spdlog::trace("LLM request: grammar_mode={} response_format attached",
+                          to_string(config_.grammar_mode));
+        }
+    }
+
     return body;
 }
 
 void LMStudioClient::stream_completion(
+    const std::vector<ChatMessage>& messages,
+    const std::vector<ToolSchema>&  tools,
+    const StreamCallbacks&          callbacks)
+{
+    // S6.10 Task D -- BestEffort retry intercept. When response_format is
+    // attached this turn AND grammar_mode is BestEffort, run the request
+    // with a wrapped on_error so the server's grammar-incompatibility error
+    // (LM Studio: "Cannot combine structured output constraints with lazy
+    // grammar") never reaches the user; instead we set the session-wide
+    // flag, log a warn, and retry the request without response_format. The
+    // server returns the error BEFORE any content streams in practice, so
+    // the user-visible callbacks don't see duplicate output. Strict mode
+    // forwards the error verbatim and does not retry.
+    const bool grammar_attached_this_turn =
+        grammar_should_attach(config_.grammar_mode, config_.tool_format,
+                              tools.size()) &&
+        !grammar_disabled_for_session_.load(std::memory_order_acquire);
+
+    if (grammar_attached_this_turn &&
+        config_.grammar_mode == GrammarMode::BestEffort)
+    {
+        std::string captured_error;
+        StreamCallbacks probe = callbacks;
+        probe.on_error = [&](const std::string& err) {
+            if (captured_error.empty() && looks_like_grammar_incompatibility(err)) {
+                captured_error = err;
+                return;  // suppress; we'll retry without response_format
+            }
+            if (callbacks.on_error) callbacks.on_error(err);
+        };
+
+        do_stream_completion(messages, tools, probe);
+
+        if (!captured_error.empty()) {
+            grammar_disabled_for_session_.store(true,
+                std::memory_order_release);
+            spdlog::warn(
+                "LLM grammar: server rejected response_format alongside tools "
+                "('{}'); disabling response_format for this session and retrying. "
+                "Set llm.grammar_mode=off in .locus/config.json to skip this probe.",
+                captured_error);
+            // Flag now set -- build_request_body skips attach this time.
+            do_stream_completion(messages, tools, callbacks);
+        }
+        return;
+    }
+
+    do_stream_completion(messages, tools, callbacks);
+}
+
+void LMStudioClient::do_stream_completion(
     const std::vector<ChatMessage>& messages,
     const std::vector<ToolSchema>&  tools,
     const StreamCallbacks&          callbacks)

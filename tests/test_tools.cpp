@@ -122,6 +122,64 @@ TEST_CASE("ToolRegistry: parse_tool_call handles valid and empty JSON", "[s0.6]"
     REQUIRE(bad.args.is_object());
 }
 
+TEST_CASE("ToolRegistry: parse_tool_call repairs malformed JSON args",
+          "[s6.10][json_repair][tool_registry]")
+{
+    // Trailing comma -- common Gemma / Qwen-Coder failure mode.
+    auto a = locus::ToolRegistry::parse_tool_call(
+        "call_1", "read_file", R"({"path":"src/main.cpp","offset":10,})");
+    REQUIRE(a.args["path"] == "src/main.cpp");
+    REQUIRE(a.args["offset"] == 10);
+
+    // Unquoted keys + trailing comma combined.
+    auto b = locus::ToolRegistry::parse_tool_call(
+        "call_2", "read_file", R"({path: "src/x.cpp", offset: 5,})");
+    REQUIRE(b.args["path"] == "src/x.cpp");
+    REQUIRE(b.args["offset"] == 5);
+
+    // Surrounding prose + missing closing brace.
+    auto c = locus::ToolRegistry::parse_tool_call(
+        "call_3", "read_file",
+        R"(Sure! Here's the call: {"path":"src/y.cpp","offset":1)");
+    REQUIRE(c.args["path"] == "src/y.cpp");
+    REQUIRE(c.args["offset"] == 1);
+}
+
+TEST_CASE("ToolRegistry: parse_tool_call lifts field-name aliases",
+          "[s6.10][tool_registry]")
+{
+    // Some models wrap args under `parameters` / `args` / `arguments` / `input`
+    // instead of inlining them. parse_tool_call lifts the wrapper so downstream
+    // tools see the canonical flat shape.
+    auto a = locus::ToolRegistry::parse_tool_call(
+        "call_1", "read_file",
+        R"({"parameters":{"path":"src/main.cpp","offset":10}})");
+    REQUIRE(a.args["path"] == "src/main.cpp");
+    REQUIRE(a.args["offset"] == 10);
+    REQUIRE_FALSE(a.args.contains("parameters"));
+
+    for (const char* alias : {"args", "arguments", "input"}) {
+        std::string body = std::string("{\"") + alias + "\":{\"path\":\"x\"}}";
+        auto call = locus::ToolRegistry::parse_tool_call("c", "read_file", body);
+        REQUIRE(call.args.contains("path"));
+        REQUIRE(call.args["path"] == "x");
+    }
+
+    // Negative: don't hijack a tool that legitimately takes one of those
+    // names as a real flat parameter. An alias is only lifted when the outer
+    // object has EXACTLY one key AND its value is itself an object.
+    auto literal = locus::ToolRegistry::parse_tool_call(
+        "call_2", "fake", R"({"args":"some string value"})");
+    REQUIRE(literal.args.contains("args"));
+    REQUIRE(literal.args["args"] == "some string value");
+
+    auto multi = locus::ToolRegistry::parse_tool_call(
+        "call_3", "fake", R"({"parameters":{"path":"x"},"extra":1})");
+    // outer has 2 keys -- alias NOT lifted; both keys still present.
+    REQUIRE(multi.args.contains("parameters"));
+    REQUIRE(multi.args.contains("extra"));
+}
+
 // -- ReadFileTool tests -----------------------------------------------------
 
 TEST_CASE("ReadFileTool: basic read returns line-numbered content", "[s0.6]")

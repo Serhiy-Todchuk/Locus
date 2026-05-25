@@ -83,6 +83,15 @@ LlmSettingsPanel::LlmSettingsPanel(wxWindow* parent, const WorkspaceConfig& conf
         "default for unknown models. Pin to a specific format only when you "
         "know the model. None skips the tools array entirely (for "
         "non-tool-trained base models).";
+    static constexpr const char* kTipGrammarMode =
+        "Server-side grammar-constrained decoding for tool calls. When set "
+        "to best_effort, attaches a response_format json_schema describing "
+        "the union of valid tool calls -- LM Studio / llama-server / vLLM "
+        "honour this at sampling time so malformed JSON becomes impossible "
+        "to generate. Servers that don't recognise the field ignore it; "
+        "Locus's JSON repair pre-pass remains the universal fallback. "
+        "Strict is reserved for a future server-probe gate (today treats "
+        "like best_effort). Off preserves pre-S6.10 behaviour.";
     static constexpr const char* kTipTimeoutSeconds =
         "Stream-stall watchdog (seconds). Aborts the request if NO bytes flow "
         "from the LLM for this long. Not a total-request cap -- long thinking "
@@ -216,6 +225,31 @@ LlmSettingsPanel::LlmSettingsPanel(wxWindow* parent, const WorkspaceConfig& conf
     tool_format_ctrl_->SetName(ui_names::kSettingsLlmToolFormat);
     gui::apply_locus_accessible_name(tool_format_ctrl_);
     grid->Add(tool_format_ctrl_, 0);
+
+    // S6.10 Task D -- grammar_mode dropdown. Next to tool_format because
+    // their semantics interact (grammar attaches only when tool_format != none
+    // and tools are non-empty).
+    auto* lbl_gm = new wxStaticText(this, wxID_ANY, "Grammar mode:");
+    lbl_gm->SetToolTip(kTipGrammarMode);
+    grid->Add(lbl_gm, 0, wxALIGN_CENTER_VERTICAL);
+    grammar_mode_ctrl_ = new wxChoice(this, wxID_ANY);
+    grammar_mode_ctrl_->Append("Off");
+    grammar_mode_ctrl_->Append("Best effort");
+    grammar_mode_ctrl_->Append("Strict");
+    {
+        GrammarMode gm = grammar_mode_from_string(config.llm_grammar_mode);
+        int sel = 0;
+        switch (gm) {
+            case GrammarMode::Off:        sel = 0; break;
+            case GrammarMode::BestEffort: sel = 1; break;
+            case GrammarMode::Strict:     sel = 2; break;
+        }
+        grammar_mode_ctrl_->SetSelection(sel);
+    }
+    grammar_mode_ctrl_->SetToolTip(kTipGrammarMode);
+    grammar_mode_ctrl_->SetName(ui_names::kSettingsLlmGrammarMode);
+    gui::apply_locus_accessible_name(grammar_mode_ctrl_);
+    grid->Add(grammar_mode_ctrl_, 0);
 
     auto* lbl_top_p = new wxStaticText(this, wxID_ANY, "top_p:");
     lbl_top_p->SetToolTip(kTipTopP);
@@ -362,6 +396,16 @@ void LlmSettingsPanel::on_preset_apply(wxCommandEvent&)
     }
     tool_format_ctrl_->SetSelection(tf_sel);
 
+    if (grammar_mode_ctrl_) {
+        int gm_sel = 0;
+        switch (p.grammar_mode) {
+            case GrammarMode::Off:        gm_sel = 0; break;
+            case GrammarMode::BestEffort: gm_sel = 1; break;
+            case GrammarMode::Strict:     gm_sel = 2; break;
+        }
+        grammar_mode_ctrl_->SetSelection(gm_sel);
+    }
+
     if (top_p_ctrl_)          top_p_ctrl_->SetValue(p.top_p);
     if (top_k_ctrl_)          top_k_ctrl_->SetValue(p.top_k);
     if (min_p_ctrl_)          min_p_ctrl_->SetValue(p.min_p);
@@ -392,6 +436,17 @@ void LlmSettingsPanel::load_from_config(const WorkspaceConfig& cfg)
             case ToolFormat::None:   sel = 4; break;
         }
         tool_format_ctrl_->SetSelection(sel);
+    }
+
+    if (grammar_mode_ctrl_) {
+        GrammarMode gm = grammar_mode_from_string(cfg.llm_grammar_mode);
+        int sel = 0;
+        switch (gm) {
+            case GrammarMode::Off:        sel = 0; break;
+            case GrammarMode::BestEffort: sel = 1; break;
+            case GrammarMode::Strict:     sel = 2; break;
+        }
+        grammar_mode_ctrl_->SetSelection(sel);
     }
 
     if (top_p_ctrl_)             top_p_ctrl_->SetValue(cfg.llm_top_p);
@@ -428,6 +483,14 @@ void LlmSettingsPanel::commit_to_config(WorkspaceConfig& cfg) const
             case 2: cfg.llm_tool_format = "qwen";   break;
             case 3: cfg.llm_tool_format = "claude"; break;
             case 4: cfg.llm_tool_format = "none";   break;
+        }
+    }
+
+    if (grammar_mode_ctrl_) {
+        switch (grammar_mode_ctrl_->GetSelection()) {
+            case 0: cfg.llm_grammar_mode = "off";         break;
+            case 1: cfg.llm_grammar_mode = "best_effort"; break;
+            case 2: cfg.llm_grammar_mode = "strict";      break;
         }
     }
 

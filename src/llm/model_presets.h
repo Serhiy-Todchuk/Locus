@@ -49,6 +49,13 @@ struct ModelPreset {
     int         top_k          = 0;
     double      min_p          = 0.0;
     double      repeat_penalty = 0.0;
+
+    // S6.10 Task D -- server-side grammar-constrained decoding for tool calls.
+    // Default Off keeps the request body lean and matches pre-S6.10 behaviour.
+    // Presets opt in (BestEffort) for families whose servers are known to
+    // honour `response_format` json_schema (LM Studio Qwen / Gemma / Llama 3
+    // setups, llama-server in general, vLLM).
+    GrammarMode grammar_mode  = GrammarMode::Off;
 };
 
 // Returns the built-in preset table. Order is the order the dropdown shows.

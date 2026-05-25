@@ -75,11 +75,20 @@ TEST_CASE("describe_tool reports closest-match suggestion for an unknown tool na
     auto& h = harness();
     LazyManifestGuard lazy(true);
 
-    // "readfile" is one character off from "read_file" -- the levenshtein
-    // helper should land on read_file as the suggestion.
+    // "read_filex" is one character past "read_file" -- the levenshtein helper
+    // should land on read_file as the suggestion. Suffix-added rather than
+    // separator-dropped because small models routinely "helpfully" autocorrect
+    // a name with a missing underscore ("readfile" -> "read_file") before
+    // shipping the tool call, which trips the closest-match path before our
+    // code can see the bad input. Adding a trailing character is far less
+    // likely to be auto-fixed (it looks deliberate, not like a typo) so the
+    // test exercises the actual closest-match code on small models too.
+    // Verified on gemma-4-e4b 2026-05-25.
     PromptResult r = h.prompt(
-        "Call the describe_tool tool with name=\"readfile\". Then quote the "
-        "tool's response verbatim.");
+        "Call the describe_tool tool with the argument `name` set to the "
+        "EXACT string \"read_filex\" -- do not modify, autocorrect, or strip "
+        "the trailing 'x'. The tool will reject the name with an error; quote "
+        "the error verbatim.");
 
     REQUIRE_FALSE(r.timed_out);
     REQUIRE(r.errors.empty());
@@ -87,11 +96,12 @@ TEST_CASE("describe_tool reports closest-match suggestion for an unknown tool na
 
     const auto* res = r.find_result_for("describe_tool");
     REQUIRE(res != nullptr);
-    // The error message names the requested name + suggests the closest one.
-    REQUIRE(res->display.find("readfile") != std::string::npos);
-    REQUIRE(res->display.find("read_file") != std::string::npos);
     // success=false renders as the error body without the schema markers.
     REQUIRE(res->display.find("not registered") != std::string::npos);
+    // The suggestion path landed on read_file. (Whichever exact variant of
+    // the bad input the model shipped, the suggestion is what we care about.)
+    REQUIRE(res->display.find("read_file") != std::string::npos);
+    REQUIRE(res->display.find("Did you mean") != std::string::npos);
 }
 
 TEST_CASE("toggling lazy_tool_manifest mid-session round-trips a basic turn",

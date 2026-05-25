@@ -121,6 +121,15 @@ struct WorkspaceConfig {
     double      llm_frequency_penalty = 0.0;
     double      llm_presence_penalty  = 0.0;
 
+    // S6.10 Task D -- server-side grammar-constrained decoding for tool calls.
+    // String for natural-reading config.json; parsed via grammar_mode_from_string.
+    // "off" preserves pre-S6.10 behaviour; "best_effort" attaches a response_format
+    // json_schema describing the union of valid tool calls (LM Studio /
+    // llama-server / vLLM honour it; servers that don't ignore the field).
+    // "strict" reserved for a future server-probe gate; today treats like
+    // best_effort.
+    std::string llm_grammar_mode = "off";
+
     // Per-workspace tool approval overrides: tool_name -> policy.
     // Absent entries fall back to the tool's default (ITool::approval_policy()).
     std::unordered_map<std::string, ToolApprovalPolicy> tool_approval_policies;

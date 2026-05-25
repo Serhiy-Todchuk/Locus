@@ -44,6 +44,10 @@ void merge_workspace_defaults(LLMConfig& cfg, const WorkspaceConfig& wc)
     if (wc.llm_repeat_penalty > 0.0) cfg.repeat_penalty = wc.llm_repeat_penalty;
     if (wc.llm_frequency_penalty != 0.0) cfg.frequency_penalty = wc.llm_frequency_penalty;
     if (wc.llm_presence_penalty  != 0.0) cfg.presence_penalty  = wc.llm_presence_penalty;
+    // S6.10 Task D -- grammar mode. Layer the workspace string over the seed
+    // (caller may pass GrammarMode::Off as default; workspace overrides).
+    if (!wc.llm_grammar_mode.empty())
+        cfg.grammar_mode = grammar_mode_from_string(wc.llm_grammar_mode);
 }
 
 } // namespace

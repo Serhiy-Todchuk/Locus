@@ -102,6 +102,7 @@ inline constexpr const char* kSettingsLlmTimeoutSeconds = "locus.settings.llm.ti
 inline constexpr const char* kSettingsLlmPresetChoice = "locus.settings.llm.preset_choice";
 inline constexpr const char* kSettingsLlmPresetApplyBtn = "locus.settings.llm.preset_apply_btn";
 inline constexpr const char* kSettingsLlmToolFormat   = "locus.settings.llm.tool_format";
+inline constexpr const char* kSettingsLlmGrammarMode  = "locus.settings.llm.grammar_mode";
 
 // Settings -> Tool Approvals tab.
 inline constexpr const char* kSettingsApprovalsList         = "locus.settings.approvals.list";

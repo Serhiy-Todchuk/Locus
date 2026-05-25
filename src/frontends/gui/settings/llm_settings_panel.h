@@ -29,7 +29,8 @@ private:
     wxSpinCtrl*        timeout_ctrl_     = nullptr;  // stream-stall watchdog, seconds
     wxChoice*          preset_ctrl_      = nullptr;
     wxStaticText*      preset_hint_      = nullptr;
-    wxChoice*          tool_format_ctrl_ = nullptr;
+    wxChoice*          tool_format_ctrl_  = nullptr;
+    wxChoice*          grammar_mode_ctrl_ = nullptr;
     wxSpinCtrlDouble*  top_p_ctrl_           = nullptr;
     wxSpinCtrl*        top_k_ctrl_           = nullptr;
     wxSpinCtrlDouble*  min_p_ctrl_           = nullptr;

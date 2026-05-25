@@ -96,6 +96,35 @@ enum class ToolFormat {
 const char* to_string(ToolFormat f);
 ToolFormat  tool_format_from_string(const std::string& s);
 
+// ---- Grammar mode (S6.10 Task D) --------------------------------------------
+//
+// Server-side grammar-constrained decoding for tool calls. When the server
+// supports it (LM Studio / llama.cpp / vLLM all do via `response_format` with
+// a JSON schema), attaching a schema to the request body constrains the
+// sampler so malformed tool-call JSON becomes physically impossible to
+// generate. Task A's repair pre-pass is still the universal fallback for
+// servers that don't honour the schema.
+//
+//   Off         -- never attach a constraint. The default until a preset opts
+//                  in -- preserves the pre-S6.10 behaviour exactly.
+//   BestEffort  -- attach a `response_format: {type: "json_schema", ...}`
+//                  describing the union of valid tool calls. Servers that
+//                  honour it constrain the tokens; servers that don't ignore
+//                  the field. Locus's stream decoder + Task A repair still
+//                  run either way.
+//   Strict      -- same payload as BestEffort today; reserved for a future
+//                  startup-time server probe that refuses to start the
+//                  session when the server cannot honour the schema. Until
+//                  the probe lands, treat as BestEffort.
+enum class GrammarMode {
+    Off,
+    BestEffort,
+    Strict
+};
+
+const char* to_string(GrammarMode m);
+GrammarMode grammar_mode_from_string(const std::string& s);
+
 // ---- Config -----------------------------------------------------------------
 
 struct LLMConfig {
@@ -131,6 +160,13 @@ struct LLMConfig {
     // three knobs compose rather than overlap.
     double      frequency_penalty = 0.0;
     double      presence_penalty  = 0.0;
+
+    // S6.10 Task D -- server-side grammar-constrained decoding for tool calls.
+    // Default Off preserves pre-S6.10 behaviour. Set to BestEffort to attach a
+    // `response_format` json_schema describing the union of valid tool calls
+    // (compatible with LM Studio / llama.cpp / vLLM; ignored by servers that
+    // don't honour the field).
+    GrammarMode grammar_mode = GrammarMode::Off;
 };
 
 // ---- Model info (from /v1/models) -------------------------------------------

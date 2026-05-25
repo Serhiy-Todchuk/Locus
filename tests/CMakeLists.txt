@@ -55,6 +55,8 @@ add_executable(locus_tests
     test_manifest_budget.cpp
     test_system_prompt_profiles.cpp
     test_reasoning_watchdog.cpp
+    test_json_repair.cpp
+    test_tool_call_grammar.cpp
     retrieval_eval/metrics.cpp
     support/shared_embedder.cpp
 )

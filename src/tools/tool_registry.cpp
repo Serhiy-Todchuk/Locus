@@ -1,5 +1,7 @@
 #include "tool_registry.h"
 
+#include "llm/json_repair.h"
+
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
@@ -162,10 +164,52 @@ ToolCall ToolRegistry::parse_tool_call(const std::string& id,
         try {
             call.args = nlohmann::json::parse(arguments_json);
         } catch (const nlohmann::json::parse_error& e) {
-            spdlog::warn("Failed to parse tool call args for '{}': {}", name, e.what());
-            call.args = nlohmann::json::object();
+            // S6.10 Task A -- run the JSON repair pre-pass before giving up.
+            // Covers trailing commas / unquoted keys / single-quoted strings /
+            // missing closers / literal newlines in string values / extra
+            // surrounding prose. On success, log the stages that fired so the
+            // user can spot which patterns the model is producing.
+            if (auto repaired = repair_for_parse(arguments_json)) {
+                try {
+                    call.args = nlohmann::json::parse(repaired->fixed);
+                    spdlog::trace("parse_tool_call: repaired '{}' args via [{}]",
+                                  name, repaired->stages_applied);
+                } catch (const nlohmann::json::parse_error& e2) {
+                    spdlog::warn("Failed to parse tool call args for '{}': "
+                                 "orig={}; after-repair={}", name, e.what(), e2.what());
+                    call.args = nlohmann::json::object();
+                }
+            } else {
+                spdlog::warn("Failed to parse tool call args for '{}': {} "
+                             "(repair did not produce parseable JSON)",
+                             name, e.what());
+                call.args = nlohmann::json::object();
+            }
         }
     }
+
+    // S6.10 Task A -- field-name aliases. Some models wrap their args under
+    // `parameters` / `args` / `arguments` / `input` instead of inlining them.
+    // When that happens, transparently lift the inner object so downstream
+    // tools see the canonical flat shape. Only fires when the outer object
+    // has exactly one key matching an alias AND that key's value is itself
+    // an object -- avoids hijacking a tool that legitimately takes one of
+    // those names as a real parameter.
+    if (call.args.is_object() && call.args.size() == 1) {
+        static const char* k_aliases[] = {
+            "parameters", "args", "arguments", "input"
+        };
+        for (const char* alias : k_aliases) {
+            auto it = call.args.find(alias);
+            if (it != call.args.end() && it->is_object()) {
+                spdlog::trace("parse_tool_call: lifted '{}' wrapper for '{}'",
+                              alias, name);
+                call.args = *it;
+                break;
+            }
+        }
+    }
+
     return call;
 }
 

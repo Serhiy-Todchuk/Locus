@@ -30,6 +30,11 @@ const std::vector<ModelPreset>& presets_table()
     //   - Base / Ollama / llama-server generic: same, defaults stay 0
     //
     // Anything left at 0 means "preset doesn't override the server".
+    // S6.10 Task D -- per-family grammar_mode defaults. BestEffort wins for
+    // LM Studio (Structured Output is documented and stable) and llama-server
+    // (raw GBNF + response_format both supported); Off for non-tool-trained
+    // base models (grammar makes no sense there) and Ollama (response_format
+    // support is partial / behind `format: json` rather than full json_schema).
     static const std::vector<ModelPreset> k_presets = {
         {
             "LM Studio -- Gemma family",
@@ -37,6 +42,7 @@ const std::vector<ModelPreset>& presets_table()
             "http://127.0.0.1:1234",
             0.7, 8192, ToolFormat::Auto,
             0.0, 0, 0.0, 0.0,
+            GrammarMode::BestEffort,
         },
         {
             "LM Studio -- Qwen family",
@@ -44,6 +50,7 @@ const std::vector<ModelPreset>& presets_table()
             "http://127.0.0.1:1234",
             0.7, 8192, ToolFormat::Qwen,
             0.8, 20, 0.05, 0.0,
+            GrammarMode::BestEffort,
         },
         {
             "LM Studio -- Llama 3.x family",
@@ -51,6 +58,7 @@ const std::vector<ModelPreset>& presets_table()
             "http://127.0.0.1:1234",
             0.7, 8192, ToolFormat::Auto,
             0.0, 0, 0.0, 1.1,
+            GrammarMode::BestEffort,
         },
         {
             "LM Studio -- base / non-tool-trained",
@@ -58,6 +66,7 @@ const std::vector<ModelPreset>& presets_table()
             "http://127.0.0.1:1234",
             0.7, 8192, ToolFormat::None,
             0.0, 0, 0.0, 0.0,
+            GrammarMode::Off,
         },
         {
             "Ollama -- generic",
@@ -65,6 +74,7 @@ const std::vector<ModelPreset>& presets_table()
             "http://127.0.0.1:11434",
             0.7, 8192, ToolFormat::Auto,
             0.0, 0, 0.0, 0.0,
+            GrammarMode::Off,
         },
         {
             "llama-server (llama.cpp) -- generic",
@@ -72,6 +82,7 @@ const std::vector<ModelPreset>& presets_table()
             "http://127.0.0.1:8080",
             0.7, 8192, ToolFormat::Auto,
             0.0, 0, 0.0, 0.0,
+            GrammarMode::BestEffort,
         },
     };
     return k_presets;
