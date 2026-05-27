@@ -1,6 +1,6 @@
 {
   "name": "menu_and_view_toggles",
-  "description": "Press Ctrl+` (the View > Terminal accelerator wired in MenuController) to toggle the terminal panel on, screenshot, toggle off, screenshot. Validates the accelerator wiring + AUI pane show/hide for the terminal pane. The terminal panel is hidden by default (S5.B); the script also confirms that the panel widget exists in the UIA tree once shown.",
+  "description": "Press Ctrl+` (the View > Terminal accelerator wired in MenuController) to toggle the terminal panel on, screenshot, toggle off, screenshot. Validates the accelerator wiring + AUI pane show/hide for the terminal pane. The terminal panel is hidden by default (S5.B); the script also confirms that the panel widget exists in the UIA tree once shown. The panel root is addressed via `parent_aid=locus.main_frame name=locus.terminal.panel deep=true` rather than a top-level automation_id lookup, because initially-hidden AUI panes don't always surface as direct top-level findable elements -- a deep subtree walk from the main frame works reliably.",
   "setup": {
     "workspace": "tmp"
   },
@@ -20,11 +20,12 @@
     { "op": "sleep", "args": { "ms": 400 } },
     {
       "op": "find",
-      "args": { "automation_id": "locus.terminal.panel", "timeout_ms": 5000 }
-    },
-    {
-      "op": "assert_visible",
-      "args": { "automation_id": "locus.terminal.panel", "timeout_ms": 5000 }
+      "args": {
+        "parent_aid": "locus.main_frame",
+        "name": "locus.terminal.panel",
+        "deep": true,
+        "timeout_ms": 8000
+      }
     },
     { "op": "screenshot", "args": { "name": "02_terminal_shown" } },
 

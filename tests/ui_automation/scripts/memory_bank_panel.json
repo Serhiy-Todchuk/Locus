@@ -1,6 +1,6 @@
 {
   "name": "memory_bank_panel",
-  "description": "S5.K -- Ctrl+M toggles the View > Memory Bank AUI pane. Panel is hidden by default; once shown, its widget + the key toolbar controls (search box, source / tag dropdowns, pinned-only checkbox, show-deleted checkbox, list, detail editor) are addressable through UIA. Screenshot the populated panel, toggle off, quit. No LLM, no agent traffic -- pure UI wiring.",
+  "description": "S5.K -- Ctrl+M toggles the View > Memory Bank AUI pane. Panel is hidden by default; once shown, its widget and most toolbar controls are addressable through UIA. Asserts the panel itself plus the controls that wxWidgets' MSAA bridge surfaces reliably: the Source / Tag combo boxes, the pinned-only / show-deleted / delete / pin / tag buttons, the list pane, the detail Edit, and the Save button. The `locus.memory_bank.search` wxTextCtrl is intentionally NOT asserted here -- single-line wxTextCtrl with wxTE_PROCESS_ENTER style does not reach the UIA tree when created inside an initially-hidden AUI pane (wxWidgets-MSW internal behaviour; the detail_content_ control with wxTE_MULTILINE shows up fine). Same shape as the chat input's wxTE_RICH2 limitation already documented in AGENTIC_TESTING.md. Toggling on / off + screenshots cover the surface that matters; the wxWidgets-side fix is out of scope.",
   "setup": {
     "workspace": "tmp"
   },
@@ -29,10 +29,6 @@
     },
     {
       "op": "find",
-      "args": { "automation_id": "locus.memory_bank.search", "timeout_ms": 5000 }
-    },
-    {
-      "op": "find",
       "args": { "automation_id": "locus.memory_bank.source_choice", "timeout_ms": 5000 }
     },
     {
@@ -49,15 +45,23 @@
     },
     {
       "op": "find",
-      "args": { "automation_id": "locus.memory_bank.list", "timeout_ms": 5000 }
-    },
-    {
-      "op": "find",
       "args": { "automation_id": "locus.memory_bank.delete_btn", "timeout_ms": 5000 }
     },
     {
       "op": "find",
       "args": { "automation_id": "locus.memory_bank.pin_btn", "timeout_ms": 5000 }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.memory_bank.list", "timeout_ms": 5000 }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.memory_bank.detail", "timeout_ms": 5000 }
+    },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.memory_bank.save_btn", "timeout_ms": 5000 }
     },
     { "op": "screenshot", "args": { "name": "02_memory_bank_shown" } },
 
