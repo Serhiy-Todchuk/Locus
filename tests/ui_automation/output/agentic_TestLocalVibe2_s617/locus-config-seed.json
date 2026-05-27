@@ -1,0 +1,42 @@
+{
+  "llm": {
+    "endpoint": "http://127.0.0.1:1234",
+    "model": "qwen/qwen3.6-27b",
+    "context_limit": 16384,
+    "auto_detect_preset": true
+  },
+  "agent": {
+    "reasoning_max_seconds": 180,
+    "reasoning_max_chars": 30000,
+    "reasoning_auto_nudge": true,
+    "lazy_tool_manifest": true,
+    "system_prompt_profile": "compact",
+    "prompt_cost": "balanced",
+    "quality_monitor_enabled": true
+  },
+  "compaction": {
+    "aggressiveness": "balanced",
+    "auto_threshold": 0.85,
+    "warn_threshold": 0.70
+  },
+  "capabilities": {
+    "background_processes": true,
+    "semantic_search": false,
+    "code_aware_search": true,
+    "memory_bank": false
+  },
+  "index": {
+    "semantic_search": { "enabled": false }
+  },
+  "tool_approvals": {
+    "write_file": "auto",
+    "edit_file": "auto",
+    "delete_file": "auto",
+    "run_command": "auto",
+    "run_command_bg": "auto"
+  },
+  "sessions": {
+    "auto_cleanup_enabled": false,
+    "restore_last": false
+  }
+}
