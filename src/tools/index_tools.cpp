@@ -319,6 +319,57 @@ ToolResult GetFileOutlineTool::execute(const ToolCall& call, IWorkspaceServices&
 
     auto entries = idx->get_file_outline(path);
 
+    // When the index returns nothing, distinguish the failure modes so the
+    // agent doesn't see a silent "0 entries" for four different problems.
+    // See tests/test_outline_race.cpp for the cases.
+    if (entries.empty()) {
+        fs::path abs_root = ws.root();
+        fs::path abs_path = abs_root / path;
+        std::error_code ec;
+        bool exists_on_disk = fs::exists(abs_path, ec) && fs::is_regular_file(abs_path, ec);
+
+        if (!exists_on_disk) {
+            return error_result(
+                "Error: file not found at '" + path + "'. Check the path is "
+                "relative to the workspace root.");
+        }
+
+        // File is on disk but no symbols are in the index. Could be (a) a
+        // pending-index race -- common after a fresh write_file by an external
+        // editor -- or (b) the file is genuinely empty / unsupported. Surface
+        // this honestly instead of returning a misleading "0 entries" line
+        // that looks identical to "extractor saw the file and found nothing".
+        int64_t on_disk_size = static_cast<int64_t>(fs::file_size(abs_path, ec));
+        if (ec) on_disk_size = 0;
+
+        int64_t size_cap_bytes = 0;
+        if (auto* wsp = ws.workspace()) {
+            int kb = wsp->config().index.max_file_size_kb;
+            if (kb > 0) size_cap_bytes = static_cast<int64_t>(kb) * 1024;
+        }
+
+        std::ostringstream msg;
+        msg << "[" << path << "] no symbols or headings found in the index.\n";
+        if (size_cap_bytes > 0 && on_disk_size > size_cap_bytes) {
+            msg << "File is " << on_disk_size << " bytes -- above the index "
+                << "size cap (" << size_cap_bytes << " bytes); not indexed.\n"
+                << "Use read_file with offset/length to read it in pages.\n";
+        } else {
+            msg << "File is present on disk (" << on_disk_size << " bytes) "
+                << "but the index has no symbols for it. Possible causes:\n"
+                << "  - file was just written and indexing has not caught up yet (retry)\n"
+                << "  - language is not in the extractor table (C/C++, Python, JS/TS, "
+                << "Go, Rust, Java, C#, Ruby, PHP, Bash, Swift, Kotlin)\n"
+                << "  - file genuinely has no top-level declarations\n"
+                << "Try `search` with mode=text or mode=regex if you need lines, "
+                << "or `read_file` to see the body directly.\n";
+        }
+        std::string body = msg.str();
+        spdlog::trace("get_file_outline: {} -> empty (exists_on_disk={}, size={})",
+                      path, exists_on_disk, on_disk_size);
+        return {true, body, body};
+    }
+
     std::ostringstream content;
     content << "[" << path << "] outline (" << entries.size() << " entries)\n";
     for (auto& e : entries) {

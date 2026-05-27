@@ -5,8 +5,10 @@
 #include "file_change_tracker.h"
 #include "metrics.h"
 #include "tools/command_path_scanner.h"
+#include "tools/permission_presets.h"
 #include "tools/shared.h"
 #include "../core/log_channels.h"
+#include "../core/watcher_pump.h"
 #include "../core/workspace.h"
 
 #include <spdlog/spdlog.h>
@@ -466,6 +468,27 @@ void ToolDispatcher::dispatch(const ToolCall& call, const AppendFn& append_resul
     spdlog::info("ToolDispatcher: tool '{}' result: success={}, content={} chars, exec_ms={}",
                  call.tool_name, result.success, result.content.size(), (long long)exec_ms);
     spdlog::trace("ToolDispatcher: tool result content: {}", result.content);
+
+    // Mid-turn index freshness: a write/edit/delete done in agent round N must
+    // be visible to a search / get_file_outline / list_directory in round N+1.
+    // The pre-turn flush in main.cpp / locus_frame.cpp only fires once per
+    // USER turn; the watcher pump's 1.5 s quiet-period otherwise delays
+    // process_events. See tests/test_outline_race.cpp for the repro.
+    if (result.success) {
+        const std::string cat = tools::builtin_tool_category(call.tool_name);
+        if (cat == "edit" || cat == "delete") {
+            if (auto* wsp = services_.workspace()) {
+                try {
+                    wsp->watcher_pump().flush_now();
+                    spdlog::trace("ToolDispatcher: flush_now after mutating tool '{}'",
+                                  call.tool_name);
+                } catch (const std::exception& ex) {
+                    spdlog::warn("ToolDispatcher: flush_now after '{}' failed: {}",
+                                 call.tool_name, ex.what());
+                }
+            }
+        }
+    }
 
     if (metrics_) {
         std::optional<int> rcount = parse_search_result_count(call.tool_name,

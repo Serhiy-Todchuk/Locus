@@ -61,6 +61,7 @@ add_executable(locus_tests
     test_truncation_detector.cpp
     test_thinking_strip.cpp
     test_quality_monitor.cpp
+    test_outline_race.cpp
     retrieval_eval/metrics.cpp
     support/shared_embedder.cpp
 )
