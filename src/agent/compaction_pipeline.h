@@ -44,6 +44,9 @@ struct CompactionLayerSelection {
     int  preserve_short_user_msgs_max_tokens   = 500;
     int  preserve_short_tool_calls_max_tokens  = 500;
     int  summary_max_tokens                    = 1024;
+    // S6.17 Task B.1 -- count-based heuristic for layer 2.
+    int  count_heuristic_window                = 10;
+    int  count_heuristic_threshold             = 12;
     std::string custom_summary_instructions;
 };
 

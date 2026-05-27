@@ -49,6 +49,8 @@ CompactionLayerSelection selection_from_config(const WorkspaceConfig::Compaction
     sel.preserve_short_user_msgs_max_tokens   = c.preserve_short_user_msgs_max_tokens;
     sel.preserve_short_tool_calls_max_tokens  = c.preserve_short_tool_calls_max_tokens;
     sel.summary_max_tokens                    = c.summary_max_tokens;
+    sel.count_heuristic_window                = c.count_heuristic_window;
+    sel.count_heuristic_threshold             = c.count_heuristic_threshold;
     sel.custom_summary_instructions           = c.custom_summary_instructions;
     return sel;
 }
@@ -474,25 +476,70 @@ LayerResult layer1_drop_redundant_tool_results(std::vector<ChatMessage>& msgs)
 }
 
 LayerResult layer2_strip_large_tool_bodies(std::vector<ChatMessage>& msgs,
-                                           int threshold)
+                                           int threshold,
+                                           int count_window,
+                                           int count_threshold)
 {
     LayerResult r;
     r.name = "Layer 2 (strip large tool bodies)";
-    if (threshold <= 0) return r;
+    if (threshold <= 0 && count_threshold <= 0) return r;
 
-    for (auto& m : msgs) {
-        if (m.role != MessageRole::tool) continue;
-        if (m.content.empty()) continue;
-        int tok = TokenCounter::estimate(m.content);
-        if (tok <= threshold) continue;
+    // First pass: byte-size threshold. The original Pi-style strip.
+    if (threshold > 0) {
+        for (auto& m : msgs) {
+            if (m.role != MessageRole::tool) continue;
+            if (m.content.empty()) continue;
+            int tok = TokenCounter::estimate(m.content);
+            if (tok <= threshold) continue;
 
-        std::string header = "[Tool result stripped to save context (was ~" +
-                             std::to_string(tok) + " tokens). "
-                             "Original archived; re-call the tool if you need the body.]";
-        m.content = header;
-        m.token_estimate = TokenCounter::estimate_message(m);
-        ++r.messages_touched;
+            std::string header = "[Tool result stripped to save context (was ~" +
+                                 std::to_string(tok) + " tokens). "
+                                 "Original archived; re-call the tool if you need the body.]";
+            m.content = header;
+            m.token_estimate = TokenCounter::estimate_message(m);
+            ++r.messages_touched;
+        }
     }
+
+    // S6.17 Task B.1 -- count-based heuristic. When the most recent
+    // `count_window` rounds carry >= `count_threshold` tool results, strip
+    // the older half regardless of individual byte size. Catches the
+    // Pass-5 shape where every result was small (filtered run_command
+    // outputs) but the count grew unbounded, leaving the byte-threshold
+    // pass with nothing to chew on. Default knobs (10 / 12) tuned against
+    // the four archived Pass-5 histories.
+    if (count_threshold > 0 && count_window > 0) {
+        std::vector<std::size_t> tool_indices;
+        tool_indices.reserve(msgs.size());
+        for (std::size_t i = 0; i < msgs.size(); ++i) {
+            if (msgs[i].role == MessageRole::tool && !msgs[i].content.empty())
+                tool_indices.push_back(i);
+        }
+        if (static_cast<int>(tool_indices.size()) >= count_threshold) {
+            // Strip the older HALF of the tool-result population, but only
+            // the ones not already replaced by the byte-threshold pass
+            // above (their content already starts with "[Tool result
+            // stripped..."). The "older half" definition is the first
+            // `tool_indices.size() / 2` tool results in chronological
+            // order, which roughly mirrors "drop older rounds" without
+            // disturbing message ordering or assistant/tool pairing.
+            const std::size_t strip_until_idx_in_pop = tool_indices.size() / 2;
+            for (std::size_t k = 0; k < strip_until_idx_in_pop; ++k) {
+                auto& m = msgs[tool_indices[k]];
+                if (m.content.rfind("[Tool result stripped", 0) == 0) continue;
+                int tok = TokenCounter::estimate(m.content);
+                std::string header = "[Tool result stripped to save context (was ~" +
+                                     std::to_string(tok) + " tokens; older half "
+                                     "of " + std::to_string(tool_indices.size()) +
+                                     " tool results in this turn). "
+                                     "Original archived; re-call the tool if you need the body.]";
+                m.content = header;
+                m.token_estimate = TokenCounter::estimate_message(m);
+                ++r.messages_touched;
+            }
+        }
+    }
+
     return r;
 }
 
@@ -683,7 +730,10 @@ PipelineResult CompactionPipeline::run(ConversationHistory& history,
 
     if (now > target_tokens && cfg.strip_large_tool_bodies) {
         execute_layer([&](std::vector<ChatMessage>& m) {
-            return layer2_strip_large_tool_bodies(m, cfg.strip_threshold_tokens);
+            return layer2_strip_large_tool_bodies(
+                m, cfg.strip_threshold_tokens,
+                cfg.count_heuristic_window,
+                cfg.count_heuristic_threshold);
         });
     }
 

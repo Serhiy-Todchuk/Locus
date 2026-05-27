@@ -14,10 +14,17 @@
 
 #include "harness_fixture.h"
 #include "core/workspace.h"
+#include "core/workspace_config.h"
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <nlohmann/json.hpp>
+#include <spdlog/spdlog.h>
+
+#include <filesystem>
+#include <fstream>
+#include <sstream>
+#include <string>
 
 using namespace locus::integration;
 
@@ -102,6 +109,105 @@ TEST_CASE("describe_tool reports closest-match suggestion for an unknown tool na
     // the bad input the model shipped, the suggestion is what we care about.)
     REQUIRE(res->display.find("read_file") != std::string::npos);
     REQUIRE(res->display.find("Did you mean") != std::string::npos);
+}
+
+// S6.17 Task H -- prompt_cost preset resolution.
+//
+// Verifies the load-path resolution + the observable per-turn effect:
+//   - prompt_cost_apply() correctly resolves `balanced` onto the
+//     underlying lazy_tool_manifest + system_prompt_profile fields.
+//   - The next turn's `Tool manifest: N tools, ~Mt` log line reflects the
+//     lazy collapse (M well under the full-schema ~3700t mark for the
+//     default 15-tool roster).
+//
+// Architectural note: `system_prompt_profile` is locked in at AgentCore
+// construction time (the S4.F byte-stable system prompt invariant) and
+// CANNOT change mid-session. So this test cannot assert `profile=compact`
+// in the per-turn system-prompt log line -- the harness's AgentCore was
+// built with the default profile=full and would log that regardless of
+// runtime config edits. The unit tests in test_lazy_manifest.cpp
+// `[s6.17][prompt_cost]` cover the resolution logic exhaustively;
+// observability of the resolved fields on workspace OPEN is covered by
+// the agentic acceptance run (findings.md F-NEW-3).
+TEST_CASE("prompt_cost=balanced resolves flags and shrinks the per-turn manifest",
+          "[integration][llm][s6.17][prompt_cost]")
+{
+    namespace fs = std::filesystem;
+    auto& h = harness();
+
+    // Snapshot the prior config so we can restore on scope exit -- the harness
+    // is shared across tests, so leaking knobs would scramble downstream cases.
+    auto& cfg = h.workspace().config();
+    const bool prev_lazy    = cfg.agent.lazy_tool_manifest;
+    const auto prev_profile = cfg.agent.system_prompt_profile;
+    const auto prev_preset  = cfg.agent.prompt_cost;
+    struct Restore {
+        locus::WorkspaceConfig& cfg;
+        bool lazy;
+        std::string profile;
+        std::string preset;
+        ~Restore() {
+            cfg.agent.lazy_tool_manifest    = lazy;
+            cfg.agent.system_prompt_profile = profile;
+            cfg.agent.prompt_cost           = preset;
+        }
+    } restore{cfg, prev_lazy, prev_profile, prev_preset};
+
+    cfg.agent.prompt_cost = "balanced";
+    locus::prompt_cost_apply(cfg);
+
+    // The apply resolves onto the underlying flags.
+    REQUIRE(cfg.agent.lazy_tool_manifest);
+    REQUIRE(cfg.agent.system_prompt_profile == "compact");
+
+    // Mark a byte position in the integration log BEFORE the turn fires,
+    // so we only scan lines this test produced (the log accumulates across
+    // every preceding case in this binary).
+    const fs::path log_path = h.workspace_root() / ".locus" / "integration_test.log";
+    std::size_t log_offset_before = 0;
+    {
+        std::error_code ec;
+        log_offset_before = static_cast<std::size_t>(fs::file_size(log_path, ec));
+        if (ec) log_offset_before = 0;
+    }
+
+    // Run a trivial turn so AgentLoop rebuilds the per-turn schema array
+    // and emits the `Tool manifest: ...` telemetry line.
+    PromptResult r = h.prompt("Reply with only the word OK.");
+    REQUIRE_FALSE(r.timed_out);
+    REQUIRE(r.errors.empty());
+
+    spdlog::default_logger()->flush();
+    REQUIRE(fs::exists(log_path));
+    std::ifstream in(log_path, std::ios::binary);
+    REQUIRE(in.good());
+    in.seekg(static_cast<std::streamoff>(log_offset_before));
+    std::ostringstream ss;
+    ss << in.rdbuf();
+    const std::string tail = ss.str();
+
+    INFO("integration_test.log tail length: " << tail.size());
+    INFO("tail tail:\n" << tail.substr(tail.size() > 2000 ? tail.size() - 2000 : 0));
+
+    // Manifest log line must be present.
+    const auto manifest_pos = tail.find("Tool manifest:");
+    REQUIRE(manifest_pos != std::string::npos);
+
+    // Extract the token count from the most recent manifest line; the
+    // lazy-mode collapse drops the per-turn schema cost dramatically vs.
+    // the full-schema baseline (~3700t for ~15 tools on the default
+    // capability matrix). 2000t is a comfortable threshold above the
+    // measured ~900t but well below the full-schema floor.
+    auto last_manifest = tail.rfind("Tool manifest:");
+    REQUIRE(last_manifest != std::string::npos);
+    auto tilde   = tail.find('~', last_manifest);
+    auto t_token = tail.find('t', tilde);
+    REQUIRE(tilde   != std::string::npos);
+    REQUIRE(t_token != std::string::npos);
+    int manifest_tokens = std::stoi(
+        tail.substr(tilde + 1, t_token - tilde - 1));
+    INFO("manifest tokens this run: " << manifest_tokens);
+    REQUIRE(manifest_tokens < 2000);
 }
 
 TEST_CASE("toggling lazy_tool_manifest mid-session round-trips a basic turn",
