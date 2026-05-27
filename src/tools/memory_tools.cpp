@@ -103,6 +103,10 @@ std::string AddMemoryTool::preview(const ToolCall& call) const
 ToolResult AddMemoryTool::execute(const ToolCall& call, IWorkspaceServices& ws,
                                    const std::atomic<bool>* /*cancel_flag*/)
 {
+    if (auto err = tools::reject_unknown_keys(call,
+            {"content", "tags", "pinned", "source"}))
+        return *err;
+
     auto* mem = ws.memory();
     if (!mem) return error_result("Error: memory bank is disabled for this workspace");
 
@@ -179,6 +183,10 @@ std::string SearchMemoryTool::preview(const ToolCall& call) const
 ToolResult SearchMemoryTool::execute(const ToolCall& call, IWorkspaceServices& ws,
                                       const std::atomic<bool>* /*cancel_flag*/)
 {
+    if (auto err = tools::reject_unknown_keys(call,
+            {"query", "tags", "max_results"}))
+        return *err;
+
     auto* mem = ws.memory();
     if (!mem) return error_result("Error: memory bank is disabled for this workspace");
 

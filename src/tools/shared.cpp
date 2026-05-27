@@ -3,9 +3,11 @@
 #include "core/workspace_services.h"
 
 #include <algorithm>
+#include <array>
 #include <cstring>
 #include <fstream>
 #include <limits>
+#include <string_view>
 #include <vector>
 
 #if defined(_WIN32)
@@ -120,6 +122,84 @@ std::string make_relative(IWorkspaceServices& ws, const fs::path& p)
 ToolResult error_result(const std::string& msg)
 {
     return {false, msg, msg};
+}
+
+// S6.17 Task D -- per-tool alias map. Keyed by (tool_name, unknown_key); value
+// is a one-sentence suggestion that names the canonical key(s) the model
+// should have used. Lifts the eight or so silent-fallback bugs observed in
+// TestLocalVibe2 into explicit errors with a recovery path.
+namespace {
+
+struct AliasEntry {
+    std::string_view tool;
+    std::string_view key;
+    std::string_view suggest;
+};
+
+constexpr std::array<AliasEntry, 17> k_aliases = {{
+    // read_file (TestLocalVibe2 Pass 2/5: lines:"100-152" silently became
+    // offset=1/length=100; agent retried 6 times before working around it).
+    {"read_file",   "lines",       "use 'offset' (1-based) + 'length' instead, e.g. {\"path\":\"...\",\"offset\":100,\"length\":53}"},
+    {"read_file",   "line_range",  "use 'offset' + 'length' instead"},
+    {"read_file",   "range",       "use 'offset' + 'length' instead"},
+    {"read_file",   "start",       "use 'offset' + 'length' instead"},
+    {"read_file",   "end",         "use 'offset' + 'length' instead"},
+
+    // search / search_* (post-Task-G the tool name is search_<mode> but the
+    // unified `search` form is still in this run -- alias on both).
+    {"search",        "type",         "use 'mode' (text / regex / symbols / semantic / hybrid)"},
+    {"search",        "kind",         "use 'mode' (text / regex / symbols / semantic / hybrid)"},
+    {"search",        "search_mode",  "use 'mode' (text / regex / symbols / semantic / hybrid)"},
+
+    // run_command / run_command_bg (TestLocalVibe2 Pass 5 hit `cmd:` first).
+    {"run_command",     "cmd",   "use 'command' (the shell command line)"},
+    {"run_command",     "shell", "use 'command' (the shell command line)"},
+    {"run_command",     "exec",  "use 'command' (the shell command line)"},
+    {"run_command_bg",  "cmd",   "use 'command' (the shell command line)"},
+    {"run_command_bg",  "shell", "use 'command' (the shell command line)"},
+    {"run_command_bg",  "exec",  "use 'command' (the shell command line)"},
+
+    // write_file body shape.
+    {"write_file",  "body",     "use 'content' (full file body as one string)"},
+    {"write_file",  "text",     "use 'content' (full file body as one string)"},
+    {"write_file",  "data",     "use 'content' (full file body as one string)"},
+}};
+
+std::optional<std::string> suggest_for(const std::string& tool,
+                                       const std::string& unknown_key)
+{
+    for (const auto& a : k_aliases) {
+        if (a.tool == tool && a.key == unknown_key)
+            return std::string(a.suggest);
+    }
+    return std::nullopt;
+}
+
+} // namespace
+
+std::optional<ToolResult> reject_unknown_keys(
+    const ToolCall& call,
+    std::initializer_list<const char*> allowed)
+{
+    if (!call.args.is_object()) return std::nullopt;
+    for (auto it = call.args.begin(); it != call.args.end(); ++it) {
+        const std::string& key = it.key();
+        bool ok = false;
+        for (const char* a : allowed) {
+            if (key == a) { ok = true; break; }
+        }
+        if (ok) continue;
+
+        std::string msg = "Error: unrecognized argument '" + key + "' for tool '"
+                          + call.tool_name + "'";
+        if (auto s = suggest_for(call.tool_name, key))
+            msg += "; " + *s + ".";
+        else
+            msg += ". Call describe_tool('" + call.tool_name +
+                   "') for the schema.";
+        return error_result(msg);
+    }
+    return std::nullopt;
 }
 
 // S6.10 Task B -- shared closest-name helper. Levenshtein bounded by the

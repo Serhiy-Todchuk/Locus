@@ -54,9 +54,9 @@ TEST_CASE("ToolRegistry: build_schema_json produces valid OpenAI schema", "[s0.6
     //       -1 `create_file` (merged into `write_file` with optional `overwrite`).
     // S4.D: +2 `propose_plan`, `mark_step_done` (visible only in plan/execute modes).
     // S4.R: +2 `add_memory`, `search_memory` (memory bank).
-    // S5.Z task 8: +1 `filter_output` (regex/substring over arbitrary text).
     // S6.11: +1 `describe_tool` (lazy-manifest meta-tool; always registered).
-    REQUIRE(schema.size() == 19);
+    // S6.17 Task A: -1 `filter_output` (removed; inline output_filter_mode covers).
+    REQUIRE(schema.size() == 18);
 
     // One `search` entry, no split search_* tools.
     bool has_search = false;
@@ -99,10 +99,10 @@ TEST_CASE("ToolRegistry: all returns all tools", "[s0.6]")
     locus::register_builtin_tools(registry);
 
     auto all = registry.all();
-    REQUIRE(all.size() == 19);  // S4.D adds propose_plan + mark_step_done;
+    REQUIRE(all.size() == 18);  // S4.D adds propose_plan + mark_step_done;
                                 // S4.R adds add_memory + search_memory;
-                                // S5.Z task 8 adds filter_output;
-                                // S6.11 adds describe_tool.
+                                // S6.11 adds describe_tool;
+                                // S6.17 Task A removed filter_output.
 }
 
 TEST_CASE("ToolRegistry: parse_tool_call handles valid and empty JSON", "[s0.6]")
@@ -512,18 +512,6 @@ TEST_CASE("ListDirectoryTool: preview handles empty path", "[preview]")
     REQUIRE_THAT(preview, ContainsSubstring("workspace root"));
 }
 
-TEST_CASE("FilterOutputTool: preview shows mode and pattern", "[preview]")
-{
-    locus::FilterOutputTool tool;
-    locus::ToolCall call{"c1", "filter_output",
-        {{"pattern", "error:"}, {"mode", "substring"}, {"invert", true}}};
-
-    auto preview = tool.preview(call);
-    REQUIRE_THAT(preview, ContainsSubstring("substring"));
-    REQUIRE_THAT(preview, ContainsSubstring("error:"));
-    REQUIRE_THAT(preview, ContainsSubstring("invert"));
-}
-
 TEST_CASE("AddMemoryTool: preview truncates and flattens content", "[preview]")
 {
     locus::AddMemoryTool tool;
@@ -746,8 +734,8 @@ TEST_CASE("ITool defaults: available()=true, visible_in_mode only in agent", "[s
     // themselves unavailable when the workspace has no ProcessRegistry,
     // which the FakeWorkspaceServices used here does not. plan-mode and
     // execute-mode-only tools (S4.D propose_plan, mark_step_done) are also
-    // hidden from agent mode. S5.Z task 8 adds filter_output.
-    REQUIRE(agent.size() == 10);
+    // hidden from agent mode. S6.17 Task A removed filter_output.
+    REQUIRE(agent.size() == 9);
     REQUIRE(plan.size()  == 1);  // S4.D: propose_plan is the one plan-mode tool
 }
 
@@ -887,6 +875,48 @@ TEST_CASE("EditFileTool: preserves indentation exactly", "[s4.a]")
         one_edit("m.rs", "\treturn 0;", "\treturn 42;"), ws);
     REQUIRE(result.success);
     REQUIRE(read_entire_file(tmp / "m.rs") == "fn main() {\n\treturn 42;\n}\n");
+
+    fs::remove_all(tmp);
+}
+
+TEST_CASE("EditFileTool: single-edit shorthand accepted", "[s6.17][edit_file]")
+{
+    // S6.17 Task E -- top-level old_string + new_string normalises to a one-edit
+    // array. Equivalence with the explicit edits=[{...}] form.
+    locus::tools::ReadTracker::instance().clear();
+    auto tmp = make_temp_workspace();
+    write_test_file(tmp, "f.txt", "alpha beta gamma");
+    prime_read(tmp, "f.txt");
+
+    locus::test::FakeWorkspaceServices ws{tmp};
+    locus::EditFileTool tool;
+    locus::ToolCall call{"c1", "edit_file",
+        {{"path", "f.txt"}, {"old_string", "beta"}, {"new_string", "BETA"}}};
+    auto result = tool.execute(call, ws);
+    REQUIRE(result.success);
+    REQUIRE(read_entire_file(tmp / "f.txt") == "alpha BETA gamma");
+
+    fs::remove_all(tmp);
+}
+
+TEST_CASE("EditFileTool: single-edit shorthand honours replace_all",
+          "[s6.17][edit_file]")
+{
+    locus::tools::ReadTracker::instance().clear();
+    auto tmp = make_temp_workspace();
+    write_test_file(tmp, "f.txt", "foo foo foo");
+    prime_read(tmp, "f.txt");
+
+    locus::test::FakeWorkspaceServices ws{tmp};
+    locus::EditFileTool tool;
+    locus::ToolCall call{"c1", "edit_file",
+        {{"path", "f.txt"},
+         {"old_string", "foo"},
+         {"new_string", "bar"},
+         {"replace_all", true}}};
+    auto result = tool.execute(call, ws);
+    REQUIRE(result.success);
+    REQUIRE(read_entire_file(tmp / "f.txt") == "bar bar bar");
 
     fs::remove_all(tmp);
 }

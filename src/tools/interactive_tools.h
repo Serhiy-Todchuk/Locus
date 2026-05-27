@@ -16,7 +16,7 @@ public:
                "Catch2 or GoogleTest?\"})";
     }
     std::string short_description() const override {
-        return "Ask the user a question and return their response.";
+        return "ask_user(question) -- prompt the user; returns their response.";
     }
     std::vector<ToolParam> params() const override {
         return {

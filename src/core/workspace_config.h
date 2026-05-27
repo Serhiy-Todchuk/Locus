@@ -178,6 +178,20 @@ struct WorkspaceConfig {
         // Companion to lazy_tool_manifest above. ADR-0007 carries the rationale.
         std::string system_prompt_profile = "full";
 
+        // S6.17 Task H -- top-level prompt-cost preset. Replaces the manual
+        // {lazy_tool_manifest, system_prompt_profile, tool_format hint} tuple
+        // with a single named choice:
+        //
+        //   "minimal"  -> lazy_tool_manifest=on,  system_prompt_profile=minimal
+        //   "balanced" -> lazy_tool_manifest=on,  system_prompt_profile=compact
+        //   "verbose"  -> lazy_tool_manifest=off, system_prompt_profile=full
+        //   ""         -> custom: honour the individual flags above (back-compat)
+        //
+        // The default "" preserves the pre-S6.17 behaviour. Setting the preset
+        // overrides the individual flags at the WorkspaceConfig consumption
+        // site (see prompt_cost_apply()).
+        std::string prompt_cost = "";
+
         // S6.13 -- reasoning watchdog. Three OR-semantics triggers; each = 0
         // disables that trigger. When any non-zero threshold trips during an LLM
         // round, the watchdog fires its action:
@@ -367,11 +381,20 @@ struct WorkspaceConfig {
         double warn_threshold  = 0.70;
         double auto_threshold  = 0.85;
 
+        // S6.17 Task B.3 -- named preset selects the layer enable matrix.
+        //   "gentle"      -> drop_redundant + strip_large
+        //   "balanced"    -> + drop_old_reasoning + llm_summary  (default)
+        //   "aggressive"  -> + drop_oldest_turns
+        //   "custom"      -> use the individual layer_* booleans below
+        // Empty == "balanced" for backward compatibility.
+        std::string aggressiveness = "balanced";
+
         // Which cascade layers auto-compact runs (and the initial state of
         // the per-layer checkboxes in the /compact dialog). Persisted via
         // the dialog's Save button so the user can tailor the automatic
         // cascade without editing config.json. Defaults match the original
-        // hardcoded auto cascade (1+2+3+6).
+        // hardcoded auto cascade (1+2+3+6). When `aggressiveness != "custom"`
+        // these are derived at run time from the named preset (S6.17 B.3).
         bool   layer_drop_redundant_tool_results = true;
         bool   layer_strip_large_tool_bodies     = true;
         bool   layer_drop_old_reasoning          = true;
@@ -386,6 +409,13 @@ struct WorkspaceConfig {
         int    archive_keep_count                    = 5;
         int    preserve_short_user_msgs_max_tokens   = 500;
         int    preserve_short_tool_calls_max_tokens  = 500;
+
+        // S6.17 Task B.1 -- count-based heuristic for layer_strip_large_tool_bodies.
+        // When the most recent N rounds carry >= M tool results, strip the older
+        // half regardless of individual byte size. Catches the Pass-5 shape
+        // where every result was small but the count was large.
+        int    count_heuristic_window    = 10;
+        int    count_heuristic_threshold = 12;
 
         // Free-form Pi-style appendix to the layer-6 summary prompt. Empty by
         // default; users add things like "preserve all file paths and test
@@ -471,6 +501,31 @@ struct WorkspaceConfig {
     Notifications notifications;
     Capabilities  capabilities;
 };
+
+// S6.17 Task H -- apply the `agent.prompt_cost` preset (if non-empty) onto
+// `cfg.agent.lazy_tool_manifest` + `cfg.agent.system_prompt_profile` in
+// place. Empty preset is a no-op so users can keep the individual flags.
+// Callers: WorkspaceConfig load path (the JSON reader applies presets after
+// loading so the rest of the codebase sees the resolved values without
+// having to know about the preset). The mapping branches on context limit
+// for the "balanced" default-by-context case described in the spec.
+//   <= 16k context: balanced
+//   > 64k context : verbose
+// (Anything in between continues to honour the individual flags.)
+void prompt_cost_apply(WorkspaceConfig& cfg);
+
+// Pure helper used by the prompt-cost Settings panel preview and the test
+// harness. Returns the {lazy, profile} pair a given preset name maps to.
+// Unknown / empty preset returns {cfg.agent.lazy_tool_manifest, cfg.agent.system_prompt_profile}
+// so callers can show "Custom" without recomputing.
+struct PromptCostFlags {
+    bool        lazy_tool_manifest;
+    std::string system_prompt_profile;
+};
+PromptCostFlags prompt_cost_to_flags(const std::string& preset,
+                                     int context_limit,
+                                     bool fallback_lazy,
+                                     const std::string& fallback_profile);
 
 // S5.A token-cost estimates, used to label the capability checkboxes in
 // both the first-open modal and the Settings -> Capabilities tab. Hand-

@@ -212,6 +212,10 @@ std::string ListDirectoryTool::preview(const ToolCall& call) const
 ToolResult ListDirectoryTool::execute(const ToolCall& call, IWorkspaceServices& ws,
                                       const std::atomic<bool>* /*cancel_flag*/)
 {
+    if (auto err = tools::reject_unknown_keys(call,
+            {"path", "depth", "max_entries"}))
+        return *err;
+
     std::string path = call.args.value("path", "");
     int depth = call.args.value("depth", 0);
     int max_entries = call.args.value("max_entries", 200);
@@ -267,6 +271,26 @@ ToolResult ListDirectoryTool::execute(const ToolCall& call, IWorkspaceServices& 
         }
     }
 
+    // S6.17 Task F -- diagnostic. When the index map is empty but the FS
+    // walk below will find files, the most likely cause is a path-key shape
+    // mismatch (forward-slash vs backslash, case, etc.) between insert and
+    // lookup. Sample the first five file keys we DO have so a developer
+    // staring at the trace log can confirm the format at a glance.
+    if (index_meta.empty()) {
+        auto sample = idx->list_directory("", 1'000'000);
+        std::ostringstream keys;
+        int shown = 0;
+        for (const auto& fe : sample) {
+            if (fe.is_directory) continue;
+            if (shown++ > 0) keys << ", ";
+            keys << "'" << fe.path << "'";
+            if (shown >= 5) break;
+        }
+        spdlog::trace("list_directory: IndexedMeta lookup miss for rel='{}'; "
+                      "files-table keys (sample of {}): [{}]",
+                      path, shown, keys.str());
+    }
+
     WalkContext cx;
     cx.abs_root       = abs_root;
     cx.excludes       = &excludes;
@@ -308,6 +332,9 @@ std::string GetFileOutlineTool::preview(const ToolCall& call) const
 ToolResult GetFileOutlineTool::execute(const ToolCall& call, IWorkspaceServices& ws,
                                         const std::atomic<bool>* /*cancel_flag*/)
 {
+    if (auto err = tools::reject_unknown_keys(call, {"path"}))
+        return *err;
+
     std::string path = call.args.value("path", "");
 
     if (path.empty())

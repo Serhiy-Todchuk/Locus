@@ -17,7 +17,6 @@ add_executable(locus_tests
     test_reranker.cpp
     test_checkpoint_store.cpp
     test_process_registry.cpp
-    test_filter_output_tool.cpp
     test_process_output_filter.cpp
     test_retrieval_eval.cpp
     test_metrics.cpp
@@ -62,6 +61,8 @@ add_executable(locus_tests
     test_thinking_strip.cpp
     test_quality_monitor.cpp
     test_outline_race.cpp
+    test_tool_arg_validation.cpp
+    test_short_descriptions.cpp
     retrieval_eval/metrics.cpp
     support/shared_embedder.cpp
 )

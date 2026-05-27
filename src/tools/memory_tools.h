@@ -27,7 +27,8 @@ public:
                "  })";
     }
     std::string short_description() const override {
-        return "Save a verbatim note to the workspace memory bank.";
+        return "add_memory(content, tags?, pinned=false) "
+               "-- save verbatim note to memory bank.";
     }
     std::vector<ToolParam> params() const override {
         return {
@@ -61,7 +62,8 @@ public:
                "\"max_results\": 3, \"tags\": [\"build\"]})";
     }
     std::string short_description() const override {
-        return "Hybrid search over the workspace memory bank.";
+        return "search_memory(query, max_results=5, tags?) "
+               "-- hybrid search over memory bank.";
     }
     std::vector<ToolParam> params() const override {
         return {

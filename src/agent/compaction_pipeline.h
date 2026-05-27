@@ -110,6 +110,23 @@ public:
 // Snapshot the workspace compaction config into a per-run selection. Three
 // callers: the legacy strategy shim, the AgentTurnRunner auto-compact trigger,
 // and the /compact slash command.
+//
+// S6.17 Task B.3 -- when `c.aggressiveness != "custom"`, the layer matrix is
+// derived from the named preset (gentle / balanced / aggressive). Empty
+// aggressiveness is treated as "balanced". When set to "custom", the
+// individual `c.layer_*` booleans win unchanged.
 CompactionLayerSelection selection_from_config(const WorkspaceConfig::Compaction& c);
+
+// S6.17 Task B.3 -- pure helper: returns the {drop_redundant_tool_results,
+// strip_large_tool_bodies, drop_old_reasoning, drop_oldest_turns, llm_summary}
+// tuple for a given preset name. Unknown names fall through to "balanced".
+struct AggressivenessLayers {
+    bool drop_redundant_tool_results;
+    bool strip_large_tool_bodies;
+    bool drop_old_reasoning;
+    bool drop_oldest_turns;
+    bool llm_summary;
+};
+AggressivenessLayers layers_for_aggressiveness(const std::string& preset);
 
 } // namespace locus

@@ -586,6 +586,8 @@ void AgentCore::process_message(const std::string& content)
     // across turns only if a frontend bug fires it while not busy; defensive.
     nudge_requested_.store(false);
     nudges_this_turn_ = 0;
+    // S6.17 Task B.1 -- reset per-turn compaction escalation streak.
+    compaction_no_op_streak_ = 0;
 
     frontends_.broadcast([](IFrontend& fe) { fe.on_turn_start(); });
 
@@ -1038,6 +1040,30 @@ void AgentCore::apply_pending_compaction()
             });
         }
 
+        // S6.17 Task B.1 -- escalation. After N consecutive reached=no
+        // compactions within this turn, force-enable the next layer in the
+        // fixed order, overriding the snapshot selection. Independent of the
+        // user's chosen aggressiveness preset -- saturation is a runtime
+        // signal that the configured layers aren't matching the conversation
+        // shape (e.g. many small tool results with no large bodies to strip).
+        const int escalation_steps = compaction_no_op_streak_;
+        if (escalation_steps >= 1) {
+            pipeline_sel.drop_redundant_tool_results = true;
+            pipeline_sel.strip_large_tool_bodies     = true;
+        }
+        if (escalation_steps >= 2) {
+            pipeline_sel.drop_old_reasoning = true;
+            pipeline_sel.llm_summary        = true;
+        }
+        if (escalation_steps >= 3) {
+            pipeline_sel.drop_oldest_turns = true;
+        }
+        if (escalation_steps > 0) {
+            spdlog::warn("CompactionPipeline: escalating to step {} "
+                         "after {} consecutive no-op compaction(s) this turn",
+                         escalation_steps, compaction_no_op_streak_);
+        }
+
         int before_tokens = ctx_->history().estimate_tokens();
         auto result = CompactionPipeline::run(
             ctx_->history(), pipeline_sel, pipeline_target,
@@ -1076,9 +1102,32 @@ void AgentCore::apply_pending_compaction()
         }
 
         int after_tokens = ctx_->history().estimate_tokens();
-        spdlog::info("AgentCore: pipeline compaction {} -> {} (target {}, reached={})",
-                     before_tokens, after_tokens, pipeline_target,
-                     result.reached_target ? "yes" : "no");
+        // S6.17 Task B.4 -- promote reached=no to warn the first time, error
+        // on a second consecutive no-op so the log is the canonical signal
+        // for "compaction pipeline isn't keeping up".
+        if (!result.reached_target) {
+            ++compaction_no_op_streak_;
+            ++compaction_no_op_total_;
+            if (compaction_no_op_streak_ >= 2) {
+                spdlog::error("AgentCore: pipeline compaction {} -> {} "
+                              "(target {}, reached=no) -- {}th consecutive no-op this turn",
+                              before_tokens, after_tokens, pipeline_target,
+                              compaction_no_op_streak_);
+            } else {
+                spdlog::warn("AgentCore: pipeline compaction {} -> {} (target {}, reached=no)",
+                             before_tokens, after_tokens, pipeline_target);
+            }
+            activity_->emit(ActivityKind::compaction,
+                            "Compaction no-op (target not reached)",
+                            "before=" + std::to_string(before_tokens) +
+                            " after=" + std::to_string(after_tokens) +
+                            " target=" + std::to_string(pipeline_target) +
+                            " streak=" + std::to_string(compaction_no_op_streak_));
+        } else {
+            compaction_no_op_streak_ = 0;
+            spdlog::info("AgentCore: pipeline compaction {} -> {} (target {}, reached=yes)",
+                         before_tokens, after_tokens, pipeline_target);
+        }
 
         std::ostringstream summary;
         summary << "Compaction applied: freed ~"

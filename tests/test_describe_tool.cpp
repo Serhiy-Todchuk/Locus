@@ -28,6 +28,31 @@ using locus::ToolRegistry;
 
 }  // namespace
 
+// S6.17 Task J -- describe_tool is the meta-tool the model uses to recover from
+// the lazy-manifest collapse. Its OWN ToolParam list must keep a required
+// `name` arg + a string type so the lazy-mode collapse can't accidentally
+// hollow it out. The actual schema-build-path "describe_tool keeps its full
+// schema when lazy=true" guarantee is enforced in test_lazy_manifest.cpp.
+TEST_CASE("describe_tool: required 'name' arg pinned via params()",
+          "[s6.17][describe_tool][lazy_manifest]")
+{
+    ToolRegistry reg;
+    locus::register_builtin_tools(reg);
+    auto* tool = reg.find("describe_tool");
+    REQUIRE(tool != nullptr);
+
+    auto params = tool->params();
+    bool found_name = false;
+    for (const auto& p : params) {
+        if (p.name == "name") {
+            REQUIRE(p.type == "string");
+            REQUIRE(p.required);
+            found_name = true;
+        }
+    }
+    REQUIRE(found_name);
+}
+
 TEST_CASE("describe_tool: known tool returns full schema", "[s6.11][describe_tool]")
 {
     ToolRegistry reg;

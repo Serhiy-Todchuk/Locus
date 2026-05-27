@@ -893,3 +893,86 @@ TEST_CASE("[s5.f][summary] format_summary_message carries span size",
     REQUIRE(s1.find("1 earlier message") != std::string::npos);
     REQUIRE(s1.find("1 earlier messages") == std::string::npos);
 }
+
+// ---------------------------------------------------------------------------
+// S6.17 Task B.3 -- aggressiveness preset -> layer matrix mapping
+// ---------------------------------------------------------------------------
+
+TEST_CASE("[s6.17][compaction] aggressiveness presets pick the right layers",
+          "[s6.17][compaction]")
+{
+    auto gentle = layers_for_aggressiveness("gentle");
+    REQUIRE(gentle.drop_redundant_tool_results);
+    REQUIRE(gentle.strip_large_tool_bodies);
+    REQUIRE_FALSE(gentle.drop_old_reasoning);
+    REQUIRE_FALSE(gentle.drop_oldest_turns);
+    REQUIRE_FALSE(gentle.llm_summary);
+
+    auto balanced = layers_for_aggressiveness("balanced");
+    REQUIRE(balanced.drop_redundant_tool_results);
+    REQUIRE(balanced.strip_large_tool_bodies);
+    REQUIRE(balanced.drop_old_reasoning);
+    REQUIRE(balanced.llm_summary);
+    REQUIRE_FALSE(balanced.drop_oldest_turns);
+
+    auto aggressive = layers_for_aggressiveness("aggressive");
+    REQUIRE(aggressive.drop_redundant_tool_results);
+    REQUIRE(aggressive.strip_large_tool_bodies);
+    REQUIRE(aggressive.drop_old_reasoning);
+    REQUIRE(aggressive.drop_oldest_turns);
+    REQUIRE(aggressive.llm_summary);
+
+    // Empty -> balanced for backward compat with pre-S6.17 configs.
+    auto empty = layers_for_aggressiveness("");
+    REQUIRE(empty.drop_redundant_tool_results == balanced.drop_redundant_tool_results);
+    REQUIRE(empty.llm_summary                  == balanced.llm_summary);
+
+    // Unknown -> balanced (defensive).
+    auto unknown = layers_for_aggressiveness("nonsense");
+    REQUIRE(unknown.drop_old_reasoning == balanced.drop_old_reasoning);
+}
+
+TEST_CASE("[s6.17][compaction] selection_from_config: preset overrides layer_* booleans",
+          "[s6.17][compaction]")
+{
+    WorkspaceConfig::Compaction c;
+    // Explicit per-layer settings that should be IGNORED because preset wins.
+    c.aggressiveness                     = "gentle";
+    c.layer_drop_redundant_tool_results  = false;
+    c.layer_strip_large_tool_bodies      = false;
+    c.layer_drop_old_reasoning           = true;
+    c.layer_drop_oldest_turns            = true;
+    c.layer_llm_summary                  = true;
+
+    auto sel = selection_from_config(c);
+    REQUIRE(sel.drop_redundant_tool_results);   // gentle
+    REQUIRE(sel.strip_large_tool_bodies);       // gentle
+    REQUIRE_FALSE(sel.drop_old_reasoning);      // gentle off
+    REQUIRE_FALSE(sel.drop_oldest_turns);       // gentle off
+    REQUIRE_FALSE(sel.llm_summary);             // gentle off
+
+    // "custom" hands control back to the per-layer flags.
+    c.aggressiveness = "custom";
+    auto sel2 = selection_from_config(c);
+    REQUIRE_FALSE(sel2.drop_redundant_tool_results);
+    REQUIRE_FALSE(sel2.strip_large_tool_bodies);
+    REQUIRE(sel2.drop_old_reasoning);
+    REQUIRE(sel2.drop_oldest_turns);
+    REQUIRE(sel2.llm_summary);
+}
+
+TEST_CASE("[s6.17][compaction] WorkspaceConfig JSON round-trips aggressiveness + count knobs",
+          "[s6.17][compaction]")
+{
+    WorkspaceConfig cfg;
+    cfg.compaction.aggressiveness            = "aggressive";
+    cfg.compaction.count_heuristic_window    = 7;
+    cfg.compaction.count_heuristic_threshold = 15;
+
+    auto json = workspace_config_to_json(cfg);
+    auto back = workspace_config_from_json(json);
+
+    REQUIRE(back.compaction.aggressiveness            == "aggressive");
+    REQUIRE(back.compaction.count_heuristic_window    == 7);
+    REQUIRE(back.compaction.count_heuristic_threshold == 15);
+}

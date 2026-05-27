@@ -292,6 +292,15 @@ private:
     // AgentCore so the archive lifetime matches the agent.
     std::unique_ptr<HistoryArchive> history_archive_;
 
+    // S6.17 Task B.1 -- consecutive `reached=no` compactions within this turn.
+    // Each subsequent attempt force-enables the next layer in the fixed
+    // escalation order (drop_redundant -> strip_large -> drop_old_reasoning
+    // -> llm_summary -> drop_oldest_turns). Reset per user turn.
+    int compaction_no_op_streak_ = 0;
+    // S6.17 Task B.4 -- total no-op compactions across this session for the
+    // chat-footer chip "compacted: N (M no-op)".
+    int compaction_no_op_total_ = 0;
+
     // Sync-mode completion signal.
     std::mutex               sync_mutex_;
     std::condition_variable  sync_cv_;

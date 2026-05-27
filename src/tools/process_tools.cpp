@@ -39,6 +39,13 @@ std::string RunCommandTool::preview(const ToolCall& call) const
 ToolResult RunCommandTool::execute(const ToolCall& call, IWorkspaceServices& ws,
                                     const std::atomic<bool>* cancel_flag)
 {
+    if (auto err = tools::reject_unknown_keys(call,
+            {"command", "timeout_ms",
+             "output_filter_mode", "output_filter_pattern",
+             "output_filter_lines", "output_filter_context",
+             "output_filter_case_sensitive"}))
+        return *err;
+
     std::string command = call.args.value("command", "");
     // Default 30 minutes -- matches Pi's bash tool. Long-enough builds, test
     // suites, and one-shot scripts complete without the agent having to
@@ -454,6 +461,9 @@ std::string RunCommandBgTool::preview(const ToolCall& call) const
 ToolResult RunCommandBgTool::execute(const ToolCall& call, IWorkspaceServices& ws,
                                       const std::atomic<bool>* /*cancel_flag*/)
 {
+    if (auto err = tools::reject_unknown_keys(call, {"command"}))
+        return *err;
+
     auto* reg = ws.processes();
     if (!reg) return no_registry();
 
@@ -492,6 +502,13 @@ std::string ReadProcessOutputTool::preview(const ToolCall& call) const
 ToolResult ReadProcessOutputTool::execute(const ToolCall& call, IWorkspaceServices& ws,
                                            const std::atomic<bool>* /*cancel_flag*/)
 {
+    if (auto err = tools::reject_unknown_keys(call,
+            {"process_id", "since_offset",
+             "output_filter_mode", "output_filter_pattern",
+             "output_filter_lines", "output_filter_context",
+             "output_filter_case_sensitive"}))
+        return *err;
+
     auto* reg = ws.processes();
     if (!reg) return no_registry();
 
@@ -561,6 +578,9 @@ std::string StopProcessTool::preview(const ToolCall& call) const
 ToolResult StopProcessTool::execute(const ToolCall& call, IWorkspaceServices& ws,
                                      const std::atomic<bool>* /*cancel_flag*/)
 {
+    if (auto err = tools::reject_unknown_keys(call, {"process_id"}))
+        return *err;
+
     auto* reg = ws.processes();
     if (!reg) return no_registry();
 

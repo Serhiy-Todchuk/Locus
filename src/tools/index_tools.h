@@ -19,7 +19,8 @@ public:
                "  list_directory({\"path\": \"src\", \"depth\": 0})";
     }
     std::string short_description() const override {
-        return "List files/dirs at a path with per-entry index annotations.";
+        return "list_directory(path?, depth=0, max_entries=200) "
+               "-- list files/dirs with index annotations.";
     }
     std::vector<ToolParam> params() const override {
         return {
@@ -44,7 +45,7 @@ public:
                "  get_file_outline({\"path\": \"src/agent/agent_core.cpp\"})";
     }
     std::string short_description() const override {
-        return "List a file's headings and code symbols with line numbers.";
+        return "get_file_outline(path) -- list headings + code symbols with lines.";
     }
     std::vector<ToolParam> params() const override {
         return {

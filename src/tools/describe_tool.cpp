@@ -127,6 +127,9 @@ ToolResult DescribeTool::execute(const ToolCall& call,
                                  IWorkspaceServices& ws,
                                  const std::atomic<bool>* /*cancel_flag*/)
 {
+    if (auto err = tools::reject_unknown_keys(call, {"name"}))
+        return *err;
+
     ToolResult r;
 
     std::string requested;

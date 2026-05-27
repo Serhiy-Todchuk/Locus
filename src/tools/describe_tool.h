@@ -28,6 +28,9 @@ public:
 
     std::string                  name() const override;
     std::string                  description() const override;
+    std::string                  short_description() const override {
+        return "describe_tool(name) -- return full JSON schema for another tool.";
+    }
     std::vector<ToolParam>       params() const override;
     ToolApprovalPolicy           approval_policy() const override;
     ToolResult                   execute(const ToolCall& call,

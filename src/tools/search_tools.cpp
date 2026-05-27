@@ -103,7 +103,19 @@ std::string SearchTool::preview(const ToolCall& call) const
 ToolResult SearchTool::execute(const ToolCall& call, IWorkspaceServices& ws,
                                 const std::atomic<bool>* /*cancel_flag*/)
 {
+    // S6.17 Task D -- union of every per-mode key plus `name` (symbols delegate
+    // accepts both `query` and `name`). `type` / `kind:` aliases land here too
+    // and the helper points the model at the canonical `mode`.
+    if (auto err = tools::reject_unknown_keys(call,
+            {"query", "mode", "path_glob", "case_sensitive", "max_results",
+             "kind", "language", "capture", "name"}))
+        return *err;
+
     std::string mode = call.args.value("mode", "text");
+    // S6.17 Task D -- lowercase the enum-shaped arg before dispatch so
+    // `mode: "REGEX"` doesn't fall through to the default text branch.
+    std::transform(mode.begin(), mode.end(), mode.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
 
     // Rewrite args so the delegate sees exactly what it expects.
     ToolCall sub = call;

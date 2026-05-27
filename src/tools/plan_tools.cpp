@@ -1,7 +1,9 @@
 #include "tools/plan_tools.h"
+#include "tools/shared.h"
 
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <string>
 
 namespace locus {
@@ -49,6 +51,10 @@ std::string ProposePlanTool::preview(const ToolCall& call) const
 ToolResult ProposePlanTool::execute(const ToolCall& call, IWorkspaceServices& /*ws*/,
                                      const std::atomic<bool>* /*cancel_flag*/)
 {
+    if (auto err = tools::reject_unknown_keys(call,
+            {"title", "summary", "steps"}))
+        return *err;
+
     json out;
     out["ok"]      = true;
     out["title"]   = call.args.value("title", std::string{});
@@ -132,6 +138,10 @@ std::string MarkStepDoneTool::preview(const ToolCall& call) const
 ToolResult MarkStepDoneTool::execute(const ToolCall& call, IWorkspaceServices& /*ws*/,
                                       const std::atomic<bool>* /*cancel_flag*/)
 {
+    if (auto err = tools::reject_unknown_keys(call,
+            {"step", "status", "notes"}))
+        return *err;
+
     if (!call.args.contains("step")) {
         ToolResult r;
         r.success = false;
@@ -160,6 +170,9 @@ ToolResult MarkStepDoneTool::execute(const ToolCall& call, IWorkspaceServices& /
     }
 
     std::string status = call.args.value("status", std::string{"done"});
+    // S6.17 Task D -- lowercase enum-shaped args so "DONE" doesn't get rejected.
+    std::transform(status.begin(), status.end(), status.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
     if (status != "done" && status != "failed") {
         ToolResult r;
         r.success = false;

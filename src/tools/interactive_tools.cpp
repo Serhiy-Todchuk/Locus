@@ -1,4 +1,5 @@
 #include "tools/interactive_tools.h"
+#include "tools/shared.h"
 
 #include <string>
 
@@ -12,6 +13,10 @@ std::string AskUserTool::preview(const ToolCall& call) const
 ToolResult AskUserTool::execute(const ToolCall& call, IWorkspaceServices& /*ws*/,
                                  const std::atomic<bool>* /*cancel_flag*/)
 {
+    // `response` is the slot the frontend injects after the user answers.
+    if (auto err = tools::reject_unknown_keys(call, {"question", "response"}))
+        return *err;
+
     // The frontend injects the user's response into args["response"] via the
     // modify flow in tool_decision(). If no response was provided (direct
     // approve), return a note that the user approved without answering.

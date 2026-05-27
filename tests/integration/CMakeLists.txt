@@ -26,7 +26,6 @@ add_executable(locus_integration_tests
     test_int_prompt_templates.cpp
     test_int_history_delete.cpp
     test_int_tabs_and_sessions.cpp
-    test_int_filter_output.cpp
     test_int_lazy_manifest.cpp
     test_int_reasoning_watchdog.cpp
     test_int_tool_calls.cpp

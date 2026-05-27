@@ -26,7 +26,8 @@ public:
                "  search({\"query\": \"reasoning watchdog auto-nudge\", \"mode\": \"hybrid\"})";
     }
     std::string short_description() const override {
-        return "Search workspace: text/regex/symbols/ast/semantic/hybrid.";
+        return "search(query, mode=text|regex|symbols|ast|semantic|hybrid) "
+               "-- workspace search.";
     }
     // S5.A -- prune the mode list (and the `symbols`/`ast` hint) based on
     // the workspace's capability buckets. The `mode` parameter schema is

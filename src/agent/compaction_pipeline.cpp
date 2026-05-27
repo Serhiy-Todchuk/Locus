@@ -12,14 +12,37 @@
 
 namespace locus {
 
+AggressivenessLayers layers_for_aggressiveness(const std::string& preset)
+{
+    // Empty == "balanced" for backward compat with pre-S6.17 configs.
+    const std::string& p = preset.empty() ? std::string("balanced") : preset;
+    if (p == "gentle")
+        return {true, true, false, false, false};
+    if (p == "aggressive")
+        return {true, true, true, true, true};
+    // balanced (default) + any unknown string -> balanced
+    return {true, true, true, false, true};
+}
+
 CompactionLayerSelection selection_from_config(const WorkspaceConfig::Compaction& c)
 {
     CompactionLayerSelection sel;
-    sel.drop_redundant_tool_results           = c.layer_drop_redundant_tool_results;
-    sel.strip_large_tool_bodies               = c.layer_strip_large_tool_bodies;
-    sel.drop_old_reasoning                    = c.layer_drop_old_reasoning;
-    sel.drop_oldest_turns                     = c.layer_drop_oldest_turns;
-    sel.llm_summary                           = c.layer_llm_summary;
+    // S6.17 Task B.3 -- preset selects the layer matrix unless the user
+    // explicitly opted into the per-layer override mode ("custom").
+    if (c.aggressiveness != "custom") {
+        auto m = layers_for_aggressiveness(c.aggressiveness);
+        sel.drop_redundant_tool_results = m.drop_redundant_tool_results;
+        sel.strip_large_tool_bodies     = m.strip_large_tool_bodies;
+        sel.drop_old_reasoning          = m.drop_old_reasoning;
+        sel.drop_oldest_turns           = m.drop_oldest_turns;
+        sel.llm_summary                 = m.llm_summary;
+    } else {
+        sel.drop_redundant_tool_results = c.layer_drop_redundant_tool_results;
+        sel.strip_large_tool_bodies     = c.layer_strip_large_tool_bodies;
+        sel.drop_old_reasoning          = c.layer_drop_old_reasoning;
+        sel.drop_oldest_turns           = c.layer_drop_oldest_turns;
+        sel.llm_summary                 = c.layer_llm_summary;
+    }
     sel.strip_threshold_tokens                = c.strip_threshold_tokens;
     sel.older_than_turns                      = c.older_than_turns;
     sel.keep_recent_turns                     = c.keep_recent_turns;

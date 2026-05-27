@@ -337,3 +337,75 @@ TEST_CASE("lazy_manifest: byte-stable across two equivalent builds (S4.F)",
     REQUIRE(a.full_text() == b.full_text());
     REQUIRE(a.hash() == b.hash());
 }
+
+// S6.17 Task H -- prompt_cost preset.
+
+#include "core/workspace_config.h"
+#include "core/workspace_config_json.h"
+
+TEST_CASE("prompt_cost_to_flags: named presets resolve correctly",
+          "[s6.17][prompt_cost]")
+{
+    using locus::prompt_cost_to_flags;
+    auto min  = prompt_cost_to_flags("minimal",  16000, false, "full");
+    auto bal  = prompt_cost_to_flags("balanced", 16000, false, "full");
+    auto verb = prompt_cost_to_flags("verbose",  16000, false, "full");
+
+    REQUIRE(min.lazy_tool_manifest);
+    REQUIRE(min.system_prompt_profile == "minimal");
+    REQUIRE(bal.lazy_tool_manifest);
+    REQUIRE(bal.system_prompt_profile == "compact");
+    REQUIRE_FALSE(verb.lazy_tool_manifest);
+    REQUIRE(verb.system_prompt_profile == "full");
+
+    // "default" branches on context size.
+    auto def_small  = prompt_cost_to_flags("default",  8000, false, "full");
+    auto def_huge   = prompt_cost_to_flags("default", 128000, false, "full");
+    REQUIRE(def_small.system_prompt_profile == "compact");   // balanced
+    REQUIRE_FALSE(def_huge.lazy_tool_manifest);              // verbose
+
+    // Empty / unknown -> caller's manual flags untouched.
+    auto empty_keeps = prompt_cost_to_flags("",        32000, true, "minimal");
+    REQUIRE(empty_keeps.lazy_tool_manifest);
+    REQUIRE(empty_keeps.system_prompt_profile == "minimal");
+
+    auto bogus = prompt_cost_to_flags("nonsense", 32000, true, "minimal");
+    REQUIRE(bogus.system_prompt_profile == "minimal");
+}
+
+TEST_CASE("prompt_cost_apply: overrides individual flags when preset set",
+          "[s6.17][prompt_cost]")
+{
+    locus::WorkspaceConfig cfg;
+    cfg.llm.context_limit              = 16000;
+    cfg.agent.lazy_tool_manifest       = false;
+    cfg.agent.system_prompt_profile    = "full";
+    cfg.agent.prompt_cost              = "balanced";
+    locus::prompt_cost_apply(cfg);
+    REQUIRE(cfg.agent.lazy_tool_manifest);
+    REQUIRE(cfg.agent.system_prompt_profile == "compact");
+
+    // Empty preset is a no-op (back-compat).
+    locus::WorkspaceConfig cfg2;
+    cfg2.agent.lazy_tool_manifest    = true;
+    cfg2.agent.system_prompt_profile = "minimal";
+    cfg2.agent.prompt_cost           = "";
+    locus::prompt_cost_apply(cfg2);
+    REQUIRE(cfg2.agent.lazy_tool_manifest);
+    REQUIRE(cfg2.agent.system_prompt_profile == "minimal");
+}
+
+TEST_CASE("prompt_cost: JSON round-trips through workspace_config",
+          "[s6.17][prompt_cost]")
+{
+    locus::WorkspaceConfig cfg;
+    cfg.agent.prompt_cost = "minimal";
+    cfg.llm.context_limit = 32000;
+    auto j  = locus::workspace_config_to_json(cfg);
+    auto cb = locus::workspace_config_from_json(j);
+    // Note: from_json applies the preset, so the resolved flags reflect
+    // "minimal" even though the underlying preset string also round-trips.
+    REQUIRE(cb.agent.prompt_cost == "minimal");
+    REQUIRE(cb.agent.lazy_tool_manifest);
+    REQUIRE(cb.agent.system_prompt_profile == "minimal");
+}

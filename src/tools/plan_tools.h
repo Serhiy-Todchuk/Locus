@@ -33,7 +33,8 @@ public:
                "  })";
     }
     std::string short_description() const override {
-        return "Propose a numbered plan for the user to approve (plan mode).";
+        return "propose_plan(steps[], title?, summary?) "
+               "-- plan-mode only; user approves.";
     }
     std::vector<ToolParam> params() const override {
         return {
@@ -71,7 +72,8 @@ public:
                "1-based index of the step you just finished.";
     }
     std::string short_description() const override {
-        return "Mark a plan step as done or failed (execute mode).";
+        return "mark_step_done(step, status=done|failed, notes?) "
+               "-- execute mode only.";
     }
     std::vector<ToolParam> params() const override {
         return {

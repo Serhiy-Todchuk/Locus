@@ -18,7 +18,7 @@ public:
                "  read_file({\"path\": \"src/main.cpp\", \"offset\": 1, \"length\": 100})";
     }
     std::string short_description() const override {
-        return "Read a line range of a text file (paginates large files).";
+        return "read_file(path, offset=1, length=100) -- read a line range.";
     }
     std::vector<ToolParam> params() const override {
         return {
@@ -53,7 +53,7 @@ public:
                "  // overwrite=false (default) refuses if the file exists.";
     }
     std::string short_description() const override {
-        return "Create a new file (set overwrite=true to replace existing).";
+        return "write_file(path, content, overwrite=false) -- create / replace a file.";
     }
     std::vector<ToolParam> params() const override {
         return {
@@ -104,7 +104,8 @@ public:
                "  ]})";
     }
     std::string short_description() const override {
-        return "Apply exact-string edits to a file atomically (read_file first).";
+        return "edit_file(path, edits=[{old_string,new_string,replace_all?}]) "
+               "-- exact-string replace; read_file first.";
     }
     std::vector<ToolParam> params() const override {
         return {
@@ -126,7 +127,7 @@ public:
         return "Permanently delete a file from the workspace. This cannot be undone.";
     }
     std::string short_description() const override {
-        return "Permanently delete a file from the workspace.";
+        return "delete_file(path) -- permanently delete a workspace file.";
     }
     std::vector<ToolParam> params() const override {
         return {

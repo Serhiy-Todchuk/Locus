@@ -29,8 +29,6 @@ void register_builtin_tools(IToolRegistry& registry)
     // when the workspace has no MemoryStore (memory_enabled=false).
     registry.register_tool(std::make_unique<AddMemoryTool>());
     registry.register_tool(std::make_unique<SearchMemoryTool>());
-    // S5.Z task 8 -- regex/substring filter over caller-supplied text.
-    registry.register_tool(std::make_unique<FilterOutputTool>());
     // S6.11 -- lazy-manifest meta-tool. Always registered; hides itself from
     // the LLM manifest when `WorkspaceConfig::Agent::lazy_tool_manifest` is false.
     registry.register_tool(std::make_unique<DescribeTool>(registry));

@@ -77,6 +77,9 @@ std::string ReadFileTool::preview(const ToolCall& call) const
 ToolResult ReadFileTool::execute(const ToolCall& call, IWorkspaceServices& ws,
                                   const std::atomic<bool>* /*cancel_flag*/)
 {
+    if (auto err = tools::reject_unknown_keys(call, {"path", "offset", "length"}))
+        return *err;
+
     std::string rel_path = call.args.value("path", "");
     int offset = call.args.value("offset", 1);
     int length = call.args.value("length", 100);
@@ -114,9 +117,13 @@ ToolResult ReadFileTool::execute(const ToolCall& call, IWorkspaceServices& ws,
         return error_result("Error: offset " + std::to_string(offset) +
                             " exceeds file length (" + std::to_string(total_lines) + " lines)");
 
+    // S6.17 Task D -- embed the args actually applied so the model can
+    // self-correct when a key it sent was silently honoured-as-default.
     std::string header = "[" + rel_path + " lines " + std::to_string(offset) + "-" +
                          std::to_string(std::min(offset + lines_read - 1, total_lines)) +
-                         " of " + std::to_string(total_lines) + "]\n";
+                         " of " + std::to_string(total_lines) +
+                         " (offset=" + std::to_string(offset) +
+                         " length=" + std::to_string(length) + ")]\n";
 
     std::string result_content = header + content.str();
     std::string result_display = result_content;
@@ -150,6 +157,10 @@ std::string WriteFileTool::preview(const ToolCall& call) const
 ToolResult WriteFileTool::execute(const ToolCall& call, IWorkspaceServices& ws,
                                    const std::atomic<bool>* /*cancel_flag*/)
 {
+    if (auto err = tools::reject_unknown_keys(call,
+            {"path", "content", "overwrite"}))
+        return *err;
+
     std::string rel_path = call.args.value("path", "");
     std::string content  = call.args.value("content", "");
     bool overwrite       = call.args.value("overwrite", false);
@@ -321,14 +332,38 @@ std::string EditFileTool::preview(const ToolCall& call) const
 ToolResult EditFileTool::execute(const ToolCall& call, IWorkspaceServices& ws,
                                   const std::atomic<bool>* /*cancel_flag*/)
 {
+    // S6.17 Task D + E -- allow both the canonical edits=[...] form AND the
+    // single-edit shorthand top-level old_string / new_string / replace_all.
+    if (auto err = tools::reject_unknown_keys(call,
+            {"path", "edits", "old_string", "new_string", "replace_all"}))
+        return *err;
+
     std::string rel_path = call.args.value("path", "");
     if (rel_path.empty())
         return error_result("Error: 'path' parameter is required");
 
-    if (!call.args.contains("edits") || !call.args["edits"].is_array())
+    // S6.17 Task E -- single-edit shorthand. Accept top-level old_string +
+    // new_string (+ optional replace_all) as a synonym for edits=[{...}] so
+    // small models that miss the array shape still land their edit.
+    nlohmann::json edits_array;
+    if (!call.args.contains("edits")
+        && call.args.contains("old_string")
+        && call.args.contains("new_string")) {
+        nlohmann::json single = nlohmann::json::object();
+        single["old_string"] = call.args["old_string"];
+        single["new_string"] = call.args["new_string"];
+        if (call.args.contains("replace_all"))
+            single["replace_all"] = call.args["replace_all"];
+        edits_array = nlohmann::json::array({std::move(single)});
+    } else if (call.args.contains("edits") && call.args["edits"].is_array()) {
+        edits_array = call.args["edits"];
+    } else {
         return error_result("Error: 'edits' must be an array of "
-                            "{old_string, new_string, replace_all?} objects");
-    const auto& edits = call.args["edits"];
+                            "{old_string, new_string, replace_all?} objects "
+                            "(or pass a single edit as top-level old_string + "
+                            "new_string)");
+    }
+    const auto& edits = edits_array;
     if (edits.empty())
         return error_result("Error: 'edits' array is empty");
 
@@ -408,6 +443,9 @@ std::string DeleteFileTool::preview(const ToolCall& call) const
 ToolResult DeleteFileTool::execute(const ToolCall& call, IWorkspaceServices& ws,
                                     const std::atomic<bool>* /*cancel_flag*/)
 {
+    if (auto err = tools::reject_unknown_keys(call, {"path"}))
+        return *err;
+
     std::string rel_path = call.args.value("path", "");
 
     if (rel_path.empty())

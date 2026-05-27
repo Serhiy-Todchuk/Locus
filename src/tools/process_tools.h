@@ -27,7 +27,7 @@ public:
                "`output_filter_lines=20`, `output_filter_context=2`.";
     }
     std::string short_description() const override {
-        return "Run a shell command synchronously and return its output.";
+        return "run_command(command) -- run shell command synchronously, return output.";
     }
     std::vector<ToolParam> params() const override {
         return {
@@ -76,7 +76,7 @@ public:
                "  stop_process({\"process_id\": 1})";
     }
     std::string short_description() const override {
-        return "Start a long-running shell process; returns a process_id.";
+        return "run_command_bg(command) -- start long-running shell process; returns process_id.";
     }
     std::vector<ToolParam> params() const override {
         return {
@@ -104,7 +104,7 @@ public:
                "always written to `.locus/locus.log` at trace level.";
     }
     std::string short_description() const override {
-        return "Read new stdout/stderr from a background process_id.";
+        return "read_process_output(process_id) -- read new stdout/stderr from a bg process.";
     }
     std::vector<ToolParam> params() const override {
         return {
@@ -142,7 +142,7 @@ public:
                "The entry stays listed (status=killed) until removed.";
     }
     std::string short_description() const override {
-        return "Terminate a background process tree by process_id.";
+        return "stop_process(process_id) -- terminate a background process tree.";
     }
     std::vector<ToolParam> params() const override {
         return {
@@ -164,7 +164,7 @@ public:
                "and bytes of unread output.";
     }
     std::string short_description() const override {
-        return "List every tracked background process for this workspace.";
+        return "list_processes() -- list every tracked background process.";
     }
     std::vector<ToolParam> params() const override { return {}; }
     ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::auto_approve; }

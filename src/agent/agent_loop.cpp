@@ -10,7 +10,11 @@
 
 #include <spdlog/spdlog.h>
 
+#include <atomic>
 #include <chrono>
+#include <condition_variable>
+#include <mutex>
+#include <thread>
 
 namespace locus {
 
@@ -156,6 +160,12 @@ AgentStepResult AgentLoop::run_step(const ConversationHistory& history,
 
     std::string accumulated_text;
     std::string accumulated_reasoning;
+    // S6.17 Task C.1 -- shadow counters the timer thread can read without
+    // racing on std::string::size() during appends. Updated alongside each
+    // append in the chunk callbacks below.
+    std::atomic<std::size_t> text_chars_atomic{0};
+    std::atomic<std::size_t> reasoning_chars_atomic{0};
+    std::atomic<bool>        tool_call_seen_atomic{false};
     std::vector<ToolCallRequest> tool_call_requests;
     int reasoning_tokens_reported = 0;
     CompletionUsage usage_reported{};
@@ -175,14 +185,18 @@ AgentStepResult AgentLoop::run_step(const ConversationHistory& history,
         wd_max_chars   = ws->config().agent.reasoning_max_chars;
         wd_auto_nudge  = ws->config().agent.reasoning_auto_nudge;
     }
+    std::atomic<bool> watchdog_tripped_atomic{false};
     auto check_watchdog = [&]() {
-        if (out.watchdog_tripped) return;  // one trip per round
+        if (watchdog_tripped_atomic.load(std::memory_order_acquire)) return;
         // chars trigger counts reasoning + text -- a model that streams a long
         // plain-text answer without calling a tool is just as stuck for the
         // watchdog's purposes as one buried in <think> content.
         std::string trigger;
-        int combined = static_cast<int>(accumulated_reasoning.size()
-                                          + accumulated_text.size());
+        // S6.17 Task C.1 -- read atomics so this is safe to call from the
+        // timer thread alongside the chunk callbacks.
+        int text_chars      = static_cast<int>(text_chars_atomic.load());
+        int reasoning_chars = static_cast<int>(reasoning_chars_atomic.load());
+        int combined = text_chars + reasoning_chars;
         if (wd_max_chars > 0 && combined > wd_max_chars) {
             trigger = "chars";
         } else if (wd_max_seconds > 0) {
@@ -191,6 +205,26 @@ AgentStepResult AgentLoop::run_step(const ConversationHistory& history,
             if (elapsed_s > wd_max_seconds) trigger = "seconds";
         }
         if (trigger.empty()) return;
+
+        // S6.17 Task C.2 -- commit-phase skip. When the model is already
+        // streaming plain text and has not committed any tool_calls, the
+        // long stream is the final answer rather than runaway reasoning.
+        // Suppress the trip; don't burn a nudge strike on it.
+        constexpr int k_commit_text_floor = 100;
+        if (!tool_call_seen_atomic.load(std::memory_order_acquire)
+            && text_chars > k_commit_text_floor
+            && reasoning_chars == 0) {
+            spdlog::info("AgentLoop: watchdog tick during commit phase "
+                         "(text_chars={}, reasoning_chars=0, no tool_calls); suppressed",
+                         text_chars);
+            return;
+        }
+
+        // CAS to single-trip; both chunk callbacks AND the timer thread can
+        // race here.
+        bool expected = false;
+        if (!watchdog_tripped_atomic.compare_exchange_strong(expected, true))
+            return;
 
         out.watchdog_tripped = true;
         out.watchdog_trigger = trigger;
@@ -277,6 +311,8 @@ AgentStepResult AgentLoop::run_step(const ConversationHistory& history,
     cbs.on_token = [&](const std::string& token) {
         mark_first_token();
         accumulated_text += token;
+        text_chars_atomic.store(accumulated_text.size(),
+                                std::memory_order_release);
         // S6.13 -- a model that streams a long plain-text answer without
         // ever calling a tool can also trip the watchdog. The trigger sees
         // total stream chars (reasoning + text), not reasoning-only.
@@ -292,6 +328,8 @@ AgentStepResult AgentLoop::run_step(const ConversationHistory& history,
     cbs.on_reasoning_token = [&](const std::string& token) {
         mark_first_token();
         accumulated_reasoning += token;
+        reasoning_chars_atomic.store(accumulated_reasoning.size(),
+                                     std::memory_order_release);
         // S6.13 -- check watchdog before propagating. If auto-nudge fires,
         // cancel_flag_ goes hot here so the next chunk in the stream tail
         // is suppressed below.
@@ -302,6 +340,8 @@ AgentStepResult AgentLoop::run_step(const ConversationHistory& history,
     };
     cbs.on_tool_calls = [&](const std::vector<ToolCallRequest>& calls) {
         tool_call_requests = calls;
+        if (!calls.empty())
+            tool_call_seen_atomic.store(true, std::memory_order_release);
     };
     cbs.on_complete = [&]() {
         spdlog::trace("AgentLoop: LLM step complete, text={} chars, "
@@ -371,7 +411,41 @@ AgentStepResult AgentLoop::run_step(const ConversationHistory& history,
                           stripped_bytes);
         }
     }
+    // S6.17 Task C.1 -- timer thread that ticks check_watchdog() every 5s
+    // independent of chunk arrival. Without this, a 200+ s silent stall
+    // between chunks never trips the watchdog because the chunk callbacks
+    // are the only place check_watchdog() ran pre-S6.17. The thread stops
+    // as soon as stream_completion returns (the stop_flag wakes the wait).
+    std::atomic<bool> watchdog_timer_stop{false};
+    std::condition_variable watchdog_cv;
+    std::mutex              watchdog_mu;
+    std::thread watchdog_timer;
+    if (wd_max_seconds > 0 || wd_max_chars > 0) {
+        watchdog_timer = std::thread([&] {
+            std::unique_lock lk(watchdog_mu);
+            while (!watchdog_timer_stop.load(std::memory_order_acquire)) {
+                if (watchdog_cv.wait_for(lk, std::chrono::seconds(5),
+                        [&] {
+                            return watchdog_timer_stop.load(
+                                std::memory_order_acquire);
+                        }))
+                    break;
+                check_watchdog();
+            }
+        });
+    }
+
     llm_.stream_completion(outgoing, tool_schemas, cbs);
+
+    // Stop the timer thread before reading post-stream state.
+    if (watchdog_timer.joinable()) {
+        {
+            std::lock_guard lk(watchdog_mu);
+            watchdog_timer_stop.store(true, std::memory_order_release);
+        }
+        watchdog_cv.notify_all();
+        watchdog_timer.join();
+    }
 
     auto stream_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                          std::chrono::steady_clock::now() - stream_t0).count();

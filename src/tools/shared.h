@@ -3,7 +3,9 @@
 #include "tool.h"
 
 #include <filesystem>
+#include <initializer_list>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -13,6 +15,24 @@ class IWorkspaceServices;
 }
 
 namespace locus::tools {
+
+// S6.17 Task D -- reject calls that carry unknown argument keys. Without this
+// helper, tools silently fell back to defaults (read_file with `lines:` ->
+// offset=1/length=100, search with `type:` -> mode=text, etc.), which broke
+// small-model agentic workflows because the model had no signal to fix its
+// arg shape. Pass the explicit allow-list; helper returns an error_result
+// when any key sits outside the list, with a suggestion when the key matches
+// a known alias (lines / type / cmd / body / ...).
+//
+// Usage at the top of execute():
+//   if (auto err = reject_unknown_keys(call, {"path", "offset", "length"}))
+//       return *err;
+//
+// Note: tool dispatcher already lifts wrappers (`arguments`, `parameters`,
+// `args`, `input`) so they never reach this helper.
+std::optional<ToolResult> reject_unknown_keys(
+    const ToolCall& call,
+    std::initializer_list<const char*> allowed);
 
 // Resolve the effective approval policy for `tool_name`, given the tool's
 // built-in default and the per-workspace override map.

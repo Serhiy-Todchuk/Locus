@@ -13,7 +13,6 @@
 #include "tools/interactive_tools.h"
 #include "tools/plan_tools.h"
 #include "tools/memory_tools.h"
-#include "tools/filter_output_tool.h"
 #include "tools/describe_tool.h"
 
 namespace locus {

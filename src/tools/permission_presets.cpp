@@ -103,8 +103,7 @@ std::string builtin_tool_category(const std::string& name)
         || name == "get_file_outline"
         || name == "read_process_output"
         || name == "list_processes"
-        || name == "search_memory"
-        || name == "filter_output")
+        || name == "search_memory")
         return "read";
 
     if (name == "write_file" || name == "edit_file")

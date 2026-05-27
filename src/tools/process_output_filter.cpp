@@ -11,9 +11,8 @@ namespace locus {
 
 namespace {
 
-// Split `text` into lines tolerating CRLF / lone CR / LF (mirror of
-// FilterOutputTool::split_lines so a Windows build log doesn't smear into
-// one giant line on the head/tail path).
+// Split `text` into lines tolerating CRLF / lone CR / LF so a Windows
+// build log doesn't smear into one giant line on the head/tail path.
 std::vector<std::string> split_lines(const std::string& text)
 {
     std::vector<std::string> out;

@@ -112,6 +112,10 @@ WorkspaceConfig workspace_config_from_json(const json& j)
         // S6.12 -- system-prompt profile
         if (ag.contains("system_prompt_profile"))
             cfg.agent.system_prompt_profile = ag["system_prompt_profile"].get<std::string>();
+        // S6.17 Task H -- prompt-cost preset (overrides the two flags above
+        // at the apply step below).
+        if (ag.contains("prompt_cost") && ag["prompt_cost"].is_string())
+            cfg.agent.prompt_cost = ag["prompt_cost"].get<std::string>();
         // S6.13 -- reasoning watchdog
         if (ag.contains("reasoning_max_seconds"))
             cfg.agent.reasoning_max_seconds = ag["reasoning_max_seconds"].get<int>();
@@ -203,6 +207,16 @@ WorkspaceConfig workspace_config_from_json(const json& j)
         if (c.contains("layer_llm_summary"))
             cfg.compaction.layer_llm_summary =
                 c["layer_llm_summary"].get<bool>();
+        // S6.17 Task B.3 -- preset selector.
+        if (c.contains("aggressiveness") && c["aggressiveness"].is_string())
+            cfg.compaction.aggressiveness = c["aggressiveness"].get<std::string>();
+        // S6.17 Task B.1 -- count-based heuristic knobs.
+        if (c.contains("count_heuristic_window"))
+            cfg.compaction.count_heuristic_window =
+                c["count_heuristic_window"].get<int>();
+        if (c.contains("count_heuristic_threshold"))
+            cfg.compaction.count_heuristic_threshold =
+                c["count_heuristic_threshold"].get<int>();
     }
 
     if (j.contains("ui")) {
@@ -278,6 +292,11 @@ WorkspaceConfig workspace_config_from_json(const json& j)
         }
     }
 
+    // S6.17 Task H -- resolve the prompt_cost preset (if set) into the
+    // lazy_tool_manifest + system_prompt_profile fields so the rest of the
+    // codebase sees the resolved values without having to know the preset.
+    prompt_cost_apply(cfg);
+
     return cfg;
 }
 
@@ -335,6 +354,7 @@ json workspace_config_to_json(const WorkspaceConfig& cfg)
             {"strip_past_thinking",       cfg.agent.strip_past_thinking},
             {"lazy_tool_manifest",        cfg.agent.lazy_tool_manifest},
             {"system_prompt_profile",     cfg.agent.system_prompt_profile},
+            {"prompt_cost",               cfg.agent.prompt_cost},
             {"reasoning_max_seconds",       cfg.agent.reasoning_max_seconds},
             {"reasoning_max_chars",         cfg.agent.reasoning_max_chars},
             {"reasoning_max_rounds_silent", cfg.agent.reasoning_max_rounds_silent},
@@ -383,7 +403,10 @@ json workspace_config_to_json(const WorkspaceConfig& cfg)
             {"layer_strip_large_tool_bodies",      cfg.compaction.layer_strip_large_tool_bodies},
             {"layer_drop_old_reasoning",           cfg.compaction.layer_drop_old_reasoning},
             {"layer_drop_oldest_turns",            cfg.compaction.layer_drop_oldest_turns},
-            {"layer_llm_summary",                  cfg.compaction.layer_llm_summary}
+            {"layer_llm_summary",                  cfg.compaction.layer_llm_summary},
+            {"aggressiveness",                     cfg.compaction.aggressiveness},
+            {"count_heuristic_window",             cfg.compaction.count_heuristic_window},
+            {"count_heuristic_threshold",          cfg.compaction.count_heuristic_threshold}
         }},
         {"ui", {
             {"show_per_message_tokens", cfg.chat.show_per_message_tokens}
@@ -403,6 +426,41 @@ json workspace_config_to_json(const WorkspaceConfig& cfg)
             {"only_when_unfocused",    cfg.notifications.only_when_unfocused}
         }}
     };
+}
+
+// S6.17 Task H -- prompt_cost preset helpers.
+
+PromptCostFlags prompt_cost_to_flags(const std::string& preset,
+                                     int context_limit,
+                                     bool fallback_lazy,
+                                     const std::string& fallback_profile)
+{
+    // Resolve "default" / empty against the context window. The spec says
+    // <=16k -> balanced, >64k -> verbose, else honour the individual flags.
+    std::string effective = preset;
+    if (effective == "default") {
+        if (context_limit > 0 && context_limit <= 16000)       effective = "balanced";
+        else if (context_limit > 64000)                         effective = "verbose";
+        else                                                    effective.clear();
+    }
+
+    if (effective == "minimal")  return {true,  "minimal"};
+    if (effective == "balanced") return {true,  "compact"};
+    if (effective == "verbose")  return {false, "full"};
+    // Empty / unknown -> fall through to caller's manual flags.
+    return {fallback_lazy, fallback_profile};
+}
+
+void prompt_cost_apply(WorkspaceConfig& cfg)
+{
+    if (cfg.agent.prompt_cost.empty()) return;
+    auto resolved = prompt_cost_to_flags(
+        cfg.agent.prompt_cost,
+        cfg.llm.context_limit,
+        cfg.agent.lazy_tool_manifest,
+        cfg.agent.system_prompt_profile);
+    cfg.agent.lazy_tool_manifest   = resolved.lazy_tool_manifest;
+    cfg.agent.system_prompt_profile = resolved.system_prompt_profile;
 }
 
 } // namespace locus
