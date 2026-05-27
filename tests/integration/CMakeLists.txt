@@ -31,6 +31,7 @@ add_executable(locus_integration_tests
     test_int_tool_calls.cpp
     test_int_small_model_robustness.cpp
     test_int_session_restore.cpp
+    test_int_compaction_replay.cpp
 )
 
 target_include_directories(locus_integration_tests PRIVATE
