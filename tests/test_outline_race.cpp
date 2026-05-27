@@ -110,6 +110,41 @@ TEST_CASE("get_file_outline: baseline - pre-existing file works",
         REQUIRE_THAT(r.content, ContainsSubstring("Point"));
         // The "0 entries" footprint that the agentic finding flagged.
         REQUIRE_THAT(r.content, !ContainsSubstring("(0 entries)"));
+        // Header carries the line count for indexed files.
+        REQUIRE_THAT(r.content, ContainsSubstring("lines)"));
+    }
+
+    fs::remove_all(tmp);
+}
+
+// -- Line-count header on the outline ----------------------------------------
+// Tightly-controlled file so the assertion can pin the exact number.
+
+TEST_CASE("get_file_outline: header includes recorded line count",
+          "[outline][line_count]")
+{
+    auto tmp = make_test_dir("linecount_outline");
+
+    // Exactly 10 lines, trailing newline -- indexer reports 10.
+    std::string body;
+    body += "int alpha() { return 1; }\n";
+    body += "int beta()  { return 2; }\n";
+    body += "int gamma() { return 3; }\n";
+    body += "int delta() { return 4; }\n";
+    body += "int eps()   { return 5; }\n";
+    body += "int zeta()  { return 6; }\n";
+    body += "int eta()   { return 7; }\n";
+    body += "int theta() { return 8; }\n";
+    body += "int iota()  { return 9; }\n";
+    body += "int main()  { return 0; }\n";
+    write_text(tmp / "ten.cpp", body);
+
+    {
+        locus::Workspace ws(tmp);
+        auto r = call_outline(ws, "ten.cpp");
+        REQUIRE(r.success);
+        INFO("outline body:\n" << r.content);
+        REQUIRE_THAT(r.content, ContainsSubstring("(10 lines)"));
     }
 
     fs::remove_all(tmp);

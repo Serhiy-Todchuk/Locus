@@ -97,8 +97,8 @@ The current codebase is a working local-agent application:
   and `/undo`, inline diff rendering, delete/write/edit tools, command execution,
   background processes, and outside-workspace shell-path warnings.
 - **Workspace intelligence**: SQLite FTS5 indexing, document extraction, symbols,
-  headings, AST/regex search, optional local embeddings, hybrid retrieval,
-  reranking, and a retrieval evaluation harness.
+  headings, AST/regex search, optional local embeddings + semantic search,
+  cross-encoder reranking, and a retrieval evaluation harness.
 - **Extensibility and memory**: MCP client support, prompt templates, model presets,
   sampler controls, workspace-scoped memory with search, and git-aware workflows
   including auto-commit support.
@@ -119,7 +119,7 @@ pwsh ./scripts/build_ws3.ps1
 locus_gui.exe D:\Projects\LocusTestWorkspaces\WS3_Documents
 ```
 
-Then ask: **"Which RFC defines HTTP/3?"** -- the agent runs hybrid
+Then ask: **"Which RFC defines HTTP/3?"** -- the agent runs semantic
 retrieval, opens `rfcs/rfc9114.pdf`, and answers with a citation. The
 matching offline-knowledge-base demo (`build_ws2.ps1`) builds a Simple
 English Wikipedia subset from a Kiwix `.zim` snapshot. See

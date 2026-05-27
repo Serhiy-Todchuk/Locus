@@ -80,8 +80,10 @@ and verify the read-only policy from `LOCUS.md` is honoured.
      `.pdf`. Both should rank near the top; either is acceptable.
    - "Give me an outline of RFC 7540." -> agent calls
      `get_file_outline rfcs/rfc7540.pdf` and renders the section
-     structure. Hard fail: if it `read_file`s the whole PDF without
-     an outline call, the PDF heading extractor isn't being trusted.
+     structure. Note: `read_file` on the PDF is also valid now (it
+     returns the extractor's clean text page-by-page, not raw bytes);
+     prefer outline-first when the user asks for "outline" or
+     "structure", `read_file` when they ask to actually read.
    - "Summarise my notes about web protocols." -> draws from
      `notes/web-protocols.md`, optionally cross-references the HTTP/2 +
      HTTP/3 RFCs.

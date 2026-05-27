@@ -352,6 +352,48 @@ TEST_CASE("list_directory returns file metadata", "[s0.4][index_query][list_dir]
     cleanup(tmp);
 }
 
+// -- line_count tests ---------------------------------------------------------
+
+TEST_CASE("indexer records line_count for text files", "[index_query][line_count]")
+{
+    auto tmp = make_test_dir("linecount_basic");
+
+    // 5 lines with a trailing newline -- the indexer should report 5, not 6.
+    write_file(tmp / "five.txt", "one\ntwo\nthree\nfour\nfive\n");
+    // Same body without a trailing newline -- should still report 5.
+    write_file(tmp / "five_no_trailing.txt", "one\ntwo\nthree\nfour\nfive");
+    // Single line, no newlines at all -- 1.
+    write_file(tmp / "oneliner.txt", "just one line");
+    // Empty file -- 0.
+    write_file(tmp / "empty.txt", "");
+
+    {
+        locus::Workspace ws(tmp);
+        auto& q = ws.query();
+
+        REQUIRE(q.get_file_line_count("five.txt").value() == 5);
+        REQUIRE(q.get_file_line_count("five_no_trailing.txt").value() == 5);
+        REQUIRE(q.get_file_line_count("oneliner.txt").value() == 1);
+        // Empty file: indexer flags it as "binary" via is_binary_content's
+        // empty-content branch -> line_count stays 0. The getter still
+        // returns the recorded value (0), not nullopt.
+        auto empty = q.get_file_line_count("empty.txt");
+        REQUIRE(empty.has_value());
+        REQUIRE(*empty == 0);
+
+        // Unknown file -- nullopt.
+        REQUIRE_FALSE(q.get_file_line_count("does_not_exist.txt").has_value());
+
+        // list_directory also exposes the same number on FileEntry.
+        auto entries = q.list_directory("", 0);
+        int64_t observed = -1;
+        for (auto& e : entries) if (e.path == "five.txt") observed = e.line_count;
+        REQUIRE(observed == 5);
+    }
+
+    cleanup(tmp);
+}
+
 TEST_CASE("list_directory with '.' returns same as empty (root)", "[s0.4][index_query][list_dir]")
 {
     auto tmp = make_test_dir("listdir_dot");

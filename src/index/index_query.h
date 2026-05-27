@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -51,6 +52,11 @@ struct FileEntry {
     std::string ext;
     std::string language;
     bool is_binary = false;
+    // Line count from the indexer's content read (or 0 for binary / unknown).
+    // For PDF/DOCX/XLSX this is the extractor's pseudo-line count
+    // (per-page for PDFs); for code/markdown it's the literal '\n'-delimited
+    // count. Populated only for file rows; meaningless on directory rows.
+    int64_t line_count = 0;
 };
 
 struct SearchOptions {
@@ -86,6 +92,20 @@ public:
     // Directory listing from the files table. depth=0 means immediate children only.
     std::vector<FileEntry> list_directory(const std::string& path, int depth = 0) const;
 
+    // Get the indexer-recorded line count for a single file. Returns nullopt
+    // when the file is not in the index (or has no line_count -- legacy rows
+    // from before the schema migration). Used by GetFileOutlineTool to
+    // prepend a "(N lines)" header without forcing a content read.
+    std::optional<int64_t> get_file_line_count(const std::string& path) const;
+
+    // Fetch the extractor-produced text for a single file as one string.
+    // Returns nullopt when the file is not in the index (not yet indexed,
+    // excluded, or never had a content row). Used by ReadFileTool to
+    // paginate PDF / DOCX / XLSX whose raw bytes are useless to the LLM --
+    // the extractor's clean text is what FTS5 already indexed, so reusing it
+    // costs one SELECT against files_fts.content.
+    std::optional<std::string> get_extracted_text(const std::string& path) const;
+
     // Semantic (vector) search via sqlite-vec cosine similarity.
     std::vector<SearchResult> search_semantic(const std::vector<float>& query_embedding,
                                               const SearchOptions& opts = {}) const;
@@ -109,6 +129,8 @@ private:
     sqlite3_stmt* stmt_outline_headings_ = nullptr;
     sqlite3_stmt* stmt_outline_symbols_ = nullptr;
     sqlite3_stmt* stmt_list_dir_ = nullptr;
+    sqlite3_stmt* stmt_file_line_count_ = nullptr;
+    sqlite3_stmt* stmt_extracted_text_ = nullptr;
     sqlite3_stmt* stmt_path_by_file_id_ = nullptr;  // file_id -> path lookup
 
     // Prepared statements on vectors_db_ (null when disabled)

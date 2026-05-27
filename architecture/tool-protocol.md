@@ -119,12 +119,12 @@ mode (those bypass the manifest filter).
 
 | Tool name | Approval | Description |
 |---|---|---|
-| `read_file` | auto | Read file contents (paginated) |
+| `read_file` | auto | Read file contents (paginated). Raw bytes for text/code/Markdown/HTML; for PDF/DOCX/XLSX returns the extractor's clean text (one pseudo-line per page for PDFs). |
 | `write_file` | always | Create a new file; overwrites only when `overwrite=true` |
 | `edit_file` | always | Exact-string replace (single or atomic batch of edits) |
 | `delete_file` | always | Delete a file (extra confirmation in preview) |
-| `list_directory` | auto | List directory tree with index metadata |
-| `search` | auto | Unified text / symbols / semantic / hybrid search (`mode` param) |
+| `list_directory` | auto | List directory tree with index metadata (annotation includes `[<lang>]` + `[N lines]` for indexed text) |
+| `search_text` / `search_regex` / `search_symbols` / `search_semantic` / `search_ast` | auto | Per-mode search tools (S6.17 Task G split the unified `search`; ADR-0009 retired `search_hybrid`). |
 | `get_file_outline` | auto | File structure (headings, symbols) without full content |
 | `run_command` | always | Execute a terminal command in workspace dir |
 | `web_search` | always | Search the web, return titles + URLs + snippets |

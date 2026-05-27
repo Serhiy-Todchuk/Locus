@@ -14,6 +14,7 @@ extern "C" {
 
 #include <stdexcept>
 #include <string>
+#include <string>
 
 namespace locus {
 
@@ -101,9 +102,30 @@ void Database::create_main_schema()
             ext         TEXT,
             is_binary   INTEGER DEFAULT 0,
             language    TEXT,
-            indexed_at  INTEGER
+            indexed_at  INTEGER,
+            line_count  INTEGER
         )
     )");
+
+    // Idempotent migration for workspaces created before line_count landed.
+    // No project-wide migration framework -- the column-exists probe + a
+    // conditional ALTER keeps the path safe on both fresh and aged DBs.
+    {
+        sqlite3_stmt* probe = nullptr;
+        sqlite3_prepare_v2(db_, "PRAGMA table_info(files)", -1, &probe, nullptr);
+        bool has_line_count = false;
+        while (probe && sqlite3_step(probe) == SQLITE_ROW) {
+            const unsigned char* name = sqlite3_column_text(probe, 1);
+            if (name && std::string(reinterpret_cast<const char*>(name)) == "line_count") {
+                has_line_count = true;
+                break;
+            }
+        }
+        if (probe) sqlite3_finalize(probe);
+        if (!has_line_count) {
+            exec("ALTER TABLE files ADD COLUMN line_count INTEGER");
+        }
+    }
 
     // FTS5 full-text search over file contents
     exec(R"(

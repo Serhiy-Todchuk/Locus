@@ -8,14 +8,18 @@ class ReadFileTool : public ITool {
 public:
     std::string name()        const override { return "read_file"; }
     std::string description() const override {
-        return "Read the contents of a text file. Use offset and length to "
-               "paginate large files. Returns line-numbered content. "
-               "For binary document formats (PDF, DOCX, XLSX) read_file "
-               "returns raw bytes -- use `search` instead: those formats "
-               "are extracted to clean text at index time and are fully "
-               "searchable. `get_file_outline` also works on them.\n"
-               "Example:\n"
-               "  read_file({\"path\": \"src/main.cpp\", \"offset\": 1, \"length\": 100})";
+        return "Read the contents of a file. Use offset and length to paginate. "
+               "Returns line-numbered content.\n"
+               "For PDF / DOCX / XLSX, returns the extractor's clean text "
+               "(the same text FTS5 indexed). offset/length apply to "
+               "extracted lines; for PDFs each line is one page, so prefer a "
+               "tighter length on first call. Requires the file to be indexed "
+               "-- retry shortly after a fresh write.\n"
+               "For source code / Markdown / HTML / plain text, returns the "
+               "raw file bytes line by line.\n"
+               "Examples:\n"
+               "  read_file({\"path\": \"src/main.cpp\", \"offset\": 1, \"length\": 100})\n"
+               "  read_file({\"path\": \"docs/spec.pdf\", \"offset\": 1, \"length\": 10})  // 10 pages";
     }
     std::string short_description() const override {
         return "read_file(path, offset=1, length=100) -- read a line range.";

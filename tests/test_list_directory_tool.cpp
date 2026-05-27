@@ -137,6 +137,38 @@ TEST_CASE("ListDirectoryTool: .git and node_modules stay hidden",
     fs::remove_all(tmp);
 }
 
+// -- 4. Indexed text rows carry a [N lines] annotation ----------------------
+// Closes the "model can't tell how big this file is before reading" gap.
+
+TEST_CASE("ListDirectoryTool: indexed text files annotated with [N lines]",
+          "[list_directory][line_count]")
+{
+    auto tmp = make_test_dir("line_count");
+    write_file(tmp / "five.cpp", "1\n2\n3\n4\n5\n");
+    write_file(tmp / "oneliner.md", "# title");
+    // Binary file -- should NOT get the [N lines] annotation.
+    write_png_stub(tmp / "logo.png");
+
+    {
+        locus::Workspace ws(tmp);
+        auto r = invoke_list(ws);
+        REQUIRE(r.success);
+        INFO("list body:\n" << r.content);
+        REQUIRE_THAT(r.content, ContainsSubstring("five.cpp"));
+        REQUIRE_THAT(r.content, ContainsSubstring("[5 lines]"));
+        REQUIRE_THAT(r.content, ContainsSubstring("oneliner.md"));
+        REQUIRE_THAT(r.content, ContainsSubstring("[1 lines]"));
+        // Binary entries skip the line-count annotation entirely.
+        // (The whole line for logo.png is present; the [N lines] suffix is not.)
+        auto png_pos = r.content.find("logo.png");
+        REQUIRE(png_pos != std::string::npos);
+        auto eol = r.content.find('\n', png_pos);
+        std::string png_line = r.content.substr(png_pos, eol - png_pos);
+        REQUIRE(png_line.find("lines]") == std::string::npos);
+    }
+    fs::remove_all(tmp);
+}
+
 // -- 4. Files past the indexer size cap surface as [oversized] ----------------
 
 TEST_CASE("ListDirectoryTool: file past max_file_size_kb shows as [oversized]",

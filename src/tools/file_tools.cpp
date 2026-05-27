@@ -4,9 +4,12 @@
 
 #include "core/workspace.h"
 #include "core/workspace_services.h"
+#include "index/index_query.h"
 
 #include <spdlog/spdlog.h>
 
+#include <algorithm>
+#include <cctype>
 #include <filesystem>
 #include <fstream>
 #include <optional>
@@ -61,6 +64,60 @@ std::optional<ToolResult> check_truncation(IWorkspaceServices& ws,
     return r;
 }
 
+// Binary document formats whose raw bytes are useless to the LLM but whose
+// extractor output is plain text indexed in `files_fts.content`. ReadFileTool
+// branches on this set and pages through the extracted text instead of
+// `std::ifstream`-ing the raw file. Markdown / HTML / source code stay on
+// the raw-bytes path -- their on-disk form is what the model expects.
+bool is_extracted_only_format(const fs::path& path)
+{
+    std::string ext = path.extension().string();
+    std::transform(ext.begin(), ext.end(), ext.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return ext == ".pdf" || ext == ".docx" || ext == ".xlsx";
+}
+
+// Apply the read_file (offset, length) window to a single string already
+// holding the file's text content. Shared between the raw-ifstream path and
+// the extracted-text path -- both produce identical line-numbered output and
+// the same "[path lines X-Y of N (...)]" header shape.
+ToolResult render_line_window(const std::string& rel_path,
+                              const std::string& body,
+                              int offset, int length,
+                              const std::string& header_extra)
+{
+    if (body.empty())
+        return {true, "(empty file)", "(empty file)"};
+
+    std::istringstream iss(body);
+    std::string line;
+    std::ostringstream content;
+    int lines_read = 0;
+    int total_lines = 0;
+    while (std::getline(iss, line)) {
+        ++total_lines;
+        if (total_lines >= offset && lines_read < length) {
+            content << total_lines << "\t" << line << "\n";
+            ++lines_read;
+        }
+    }
+
+    if (offset > total_lines)
+        return error_result("Error: offset " + std::to_string(offset) +
+                            " exceeds file length (" + std::to_string(total_lines) +
+                            " lines)");
+
+    std::string header = "[" + rel_path + " lines " + std::to_string(offset) + "-" +
+                         std::to_string(std::min(offset + lines_read - 1, total_lines)) +
+                         " of " + std::to_string(total_lines);
+    if (!header_extra.empty()) header += "; " + header_extra;
+    header += " (offset=" + std::to_string(offset) +
+              " length=" + std::to_string(length) + ")]\n";
+
+    std::string body_out = header + content.str();
+    return {true, body_out, body_out};
+}
+
 } // namespace
 
 // -- ReadFileTool -----------------------------------------------------------
@@ -93,49 +150,60 @@ ToolResult ReadFileTool::execute(const ToolCall& call, IWorkspaceServices& ws,
     if (full.empty())
         return error_result("Error: path resolves outside workspace");
 
+    // PDF/DOCX/XLSX path: the raw bytes are useless to the model. Read the
+    // extractor's output from `files_fts.content` (the same column FTS5
+    // already indexed) and apply offset/length to its extracted-text lines.
+    // For PDFs each pseudo-line is one page, so length=100 means 100 pages
+    // -- the model is expected to learn from result size and tighten next call.
+    if (is_extracted_only_format(full)) {
+        auto* idx = ws.index();
+        if (!idx)
+            return error_result("Error: workspace index not available -- "
+                                "cannot read extracted text for '" + rel_path + "'");
+        auto extracted = idx->get_extracted_text(rel_path);
+        if (!extracted) {
+            return error_result(
+                "Error: '" + rel_path + "' is not yet in the index. The file "
+                "may still be indexing -- retry shortly. (PDF/DOCX/XLSX raw "
+                "bytes are not useful; read_file returns extractor output for "
+                "these formats, which requires the file to be indexed.)");
+        }
+        std::string ext = full.extension().string();
+        std::transform(ext.begin(), ext.end(), ext.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        std::string extra = "extracted from " + ext;
+        if (ext == ".pdf") extra += " (one line per page)";
+        auto result = render_line_window(rel_path, *extracted, offset, length, extra);
+        if (result.success) {
+            spdlog::trace("read_file: {} (extracted, {} chars)",
+                          rel_path, extracted->size());
+            // S4.A: mark as "seen" so edit_file's precondition is satisfied;
+            // edit_file on a binary file will still fail at content-match time,
+            // but the precondition is path-keyed and format-agnostic.
+            ReadTracker::instance().mark_read(full);
+        }
+        return result;
+    }
+
     std::ifstream file(full);
     if (!file.is_open())
         return error_result("Error: cannot open file: " + rel_path);
 
-    std::string line;
-    std::ostringstream content;
-    int lines_read = 0;
-    int total_lines = 0;
+    std::string body{ std::istreambuf_iterator<char>(file),
+                      std::istreambuf_iterator<char>() };
 
-    while (std::getline(file, line)) {
-        ++total_lines;
-        if (total_lines >= offset && lines_read < length) {
-            content << total_lines << "\t" << line << "\n";
-            ++lines_read;
-        }
+    // S6.17 Task D -- the shared renderer threads the applied (offset, length)
+    // into the header so the model can self-correct when a key it sent was
+    // silently honoured-as-default.
+    auto result = render_line_window(rel_path, body, offset, length, "");
+    if (result.success) {
+        spdlog::trace("read_file: {} (offset={}, length={})",
+                      rel_path, offset, length);
+        // S4.A: mark this path as "agent has seen it" so edit_file /
+        // multi_edit_file will accept subsequent edits without complaining.
+        ReadTracker::instance().mark_read(full);
     }
-
-    if (lines_read == 0 && total_lines == 0)
-        return {true, "(empty file)", "(empty file)"};
-
-    if (offset > total_lines)
-        return error_result("Error: offset " + std::to_string(offset) +
-                            " exceeds file length (" + std::to_string(total_lines) + " lines)");
-
-    // S6.17 Task D -- embed the args actually applied so the model can
-    // self-correct when a key it sent was silently honoured-as-default.
-    std::string header = "[" + rel_path + " lines " + std::to_string(offset) + "-" +
-                         std::to_string(std::min(offset + lines_read - 1, total_lines)) +
-                         " of " + std::to_string(total_lines) +
-                         " (offset=" + std::to_string(offset) +
-                         " length=" + std::to_string(length) + ")]\n";
-
-    std::string result_content = header + content.str();
-    std::string result_display = result_content;
-
-    spdlog::trace("read_file: {} (lines {}-{} of {})", rel_path, offset,
-                  offset + lines_read - 1, total_lines);
-
-    // S4.A: mark this path as "agent has seen it" so edit_file / multi_edit_file
-    // will accept subsequent edits without complaining.
-    ReadTracker::instance().mark_read(full);
-
-    return {true, result_content, result_display};
+    return result;
 }
 
 // -- WriteFileTool ----------------------------------------------------------

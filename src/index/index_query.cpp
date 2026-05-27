@@ -140,10 +140,21 @@ IndexQuery::IndexQuery(Database& main_db, Database* vectors_db)
     )");
 
     stmt_list_dir_ = main_db_.prepare(R"(
-        SELECT path, size_bytes, modified_at, ext, language, is_binary
+        SELECT path, size_bytes, modified_at, ext, language, is_binary, line_count
         FROM files
         ORDER BY path
     )");
+
+    stmt_file_line_count_ = main_db_.prepare(
+        "SELECT line_count FROM files WHERE path = ?1");
+
+    // files_fts.content is the extractor's clean text (the same column that
+    // search_text snippet()s against). Reading it back lets ReadFileTool
+    // serve a paginated view of a PDF/DOCX/XLSX without re-running the
+    // extractor at request time. UNINDEXED `path` column means the WHERE
+    // works without the FTS5 MATCH machinery.
+    stmt_extracted_text_ = main_db_.prepare(
+        "SELECT content FROM files_fts WHERE path = ?1");
 
     // Semantic search: vectors.db knows chunks + embeddings but NOT file paths.
     // We resolve file_id -> path in a second lookup on main_db_.
@@ -172,6 +183,8 @@ IndexQuery::~IndexQuery()
     finalize(stmt_outline_headings_);
     finalize(stmt_outline_symbols_);
     finalize(stmt_list_dir_);
+    finalize(stmt_file_line_count_);
+    finalize(stmt_extracted_text_);
     finalize(stmt_path_by_file_id_);
     finalize(stmt_search_semantic_);
 
@@ -349,6 +362,33 @@ std::vector<OutlineEntry> IndexQuery::get_file_outline(const std::string& path) 
     return entries;
 }
 
+// -- get_file_line_count -----------------------------------------------------
+
+std::optional<int64_t> IndexQuery::get_file_line_count(const std::string& path) const
+{
+    sqlite3_reset(stmt_file_line_count_);
+    sqlite3_bind_text(stmt_file_line_count_, 1, path.c_str(), -1, SQLITE_TRANSIENT);
+    if (sqlite3_step(stmt_file_line_count_) != SQLITE_ROW) return std::nullopt;
+    // Pre-migration rows store NULL in line_count -- treat as "not recorded"
+    // so the caller can decide whether to show "(? lines)" or skip the header.
+    if (sqlite3_column_type(stmt_file_line_count_, 0) == SQLITE_NULL) return std::nullopt;
+    return sqlite3_column_int64(stmt_file_line_count_, 0);
+}
+
+// -- get_extracted_text -----------------------------------------------------
+
+std::optional<std::string> IndexQuery::get_extracted_text(const std::string& path) const
+{
+    sqlite3_reset(stmt_extracted_text_);
+    sqlite3_bind_text(stmt_extracted_text_, 1, path.c_str(), -1, SQLITE_TRANSIENT);
+    if (sqlite3_step(stmt_extracted_text_) != SQLITE_ROW) return std::nullopt;
+    if (sqlite3_column_type(stmt_extracted_text_, 0) == SQLITE_NULL) return std::nullopt;
+    const unsigned char* txt = sqlite3_column_text(stmt_extracted_text_, 0);
+    int n = sqlite3_column_bytes(stmt_extracted_text_, 0);
+    if (!txt || n <= 0) return std::string{};
+    return std::string(reinterpret_cast<const char*>(txt), static_cast<size_t>(n));
+}
+
 // -- list_directory -----------------------------------------------------------
 
 std::vector<FileEntry> IndexQuery::list_directory(const std::string& path, int depth) const
@@ -420,6 +460,11 @@ std::vector<FileEntry> IndexQuery::list_directory(const std::string& path, int d
         e.ext = col_text(stmt_list_dir_, 3);
         e.language = col_text(stmt_list_dir_, 4);
         e.is_binary = sqlite3_column_int(stmt_list_dir_, 5) != 0;
+        // line_count is NULL for legacy rows (before the schema migration); the
+        // column type is INTEGER so sqlite3_column_int64 returns 0 on NULL --
+        // distinguishable from "0 lines" via sqlite3_column_type if a caller
+        // ever needs that distinction. Today both render the same way.
+        e.line_count = sqlite3_column_int64(stmt_list_dir_, 6);
         results.push_back(std::move(e));
     }
 

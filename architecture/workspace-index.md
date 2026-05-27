@@ -286,6 +286,9 @@ The agent never touches SQLite directly. High-level tools only:
 
 All tools return **ranked snippets with locations** -- never full file contents.
 Full content is fetched only via `read_file` when the agent decides it's necessary.
+For PDF / DOCX / XLSX, `read_file` paginates the extractor's clean text (same
+column FTS5 indexed) rather than dumping raw bytes -- one pseudo-line per page
+for PDFs. See [src/tools/file_tools.h](../src/tools/file_tools.h) `ReadFileTool`.
 
 ---
 

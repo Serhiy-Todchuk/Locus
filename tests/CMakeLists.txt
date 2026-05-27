@@ -61,6 +61,7 @@ add_executable(locus_tests
     test_thinking_strip.cpp
     test_quality_monitor.cpp
     test_outline_race.cpp
+    test_read_file_extracted.cpp
     test_tool_arg_validation.cpp
     test_short_descriptions.cpp
     retrieval_eval/metrics.cpp

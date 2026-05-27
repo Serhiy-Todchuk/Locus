@@ -67,6 +67,7 @@ bool dir_excluded(const std::string& rel_str,
 
 struct IndexedMeta {
     int64_t     size_bytes = 0;
+    int64_t     line_count = 0;
     std::string language;
     bool        is_binary  = false;
     bool        present    = false;
@@ -98,6 +99,7 @@ std::string format_file_line(const std::string& rel_str,
 {
     std::string annotation;
 
+    int64_t indexed_line_count = 0;
     if (is_binary_extension(ext)) {
         annotation = "[binary]";
     } else if (cx.size_cap_bytes > 0 && on_disk_size > cx.size_cap_bytes) {
@@ -107,11 +109,13 @@ std::string format_file_line(const std::string& rel_str,
         if (it != cx.index_meta->end() && it->second.present) {
             if (!it->second.is_binary && !it->second.language.empty()) {
                 annotation = "[" + it->second.language + "]";
+                indexed_line_count = it->second.line_count;
             } else if (it->second.is_binary) {
                 annotation = "[binary]";
             } else {
                 // Indexed text without a language tag (e.g. plain `.txt`).
                 annotation = "[text]";
+                indexed_line_count = it->second.line_count;
             }
         } else {
             annotation = "[unindexed]";
@@ -122,6 +126,12 @@ std::string format_file_line(const std::string& rel_str,
     line << "  " << rel_str
          << "  (" << on_disk_size << " bytes)  "
          << annotation;
+    // Append [N lines] for indexed text rows. Binary / oversized / unindexed
+    // entries skip this; legacy rows (line_count NULL -> 0) also skip so the
+    // annotation only ever appears when it's real.
+    if (indexed_line_count > 0) {
+        line << "  [" << indexed_line_count << " lines]";
+    }
     return line.str();
 }
 
@@ -264,6 +274,7 @@ ToolResult ListDirectoryTool::execute(const ToolCall& call, IWorkspaceServices& 
             if (fe.is_directory) continue;
             IndexedMeta m;
             m.size_bytes = fe.size_bytes;
+            m.line_count = fe.line_count;
             m.language   = fe.language;
             m.is_binary  = fe.is_binary;
             m.present    = true;
@@ -345,6 +356,7 @@ ToolResult GetFileOutlineTool::execute(const ToolCall& call, IWorkspaceServices&
         return error_result("Error: workspace index not available");
 
     auto entries = idx->get_file_outline(path);
+    auto line_count = idx->get_file_line_count(path);
 
     // When the index returns nothing, distinguish the failure modes so the
     // agent doesn't see a silent "0 entries" for four different problems.
@@ -376,7 +388,9 @@ ToolResult GetFileOutlineTool::execute(const ToolCall& call, IWorkspaceServices&
         }
 
         std::ostringstream msg;
-        msg << "[" << path << "] no symbols or headings found in the index.\n";
+        msg << "[" << path << "]";
+        if (line_count) msg << " (" << *line_count << " lines)";
+        msg << " no symbols or headings found in the index.\n";
         if (size_cap_bytes > 0 && on_disk_size > size_cap_bytes) {
             msg << "File is " << on_disk_size << " bytes -- above the index "
                 << "size cap (" << size_cap_bytes << " bytes); not indexed.\n"
@@ -398,7 +412,9 @@ ToolResult GetFileOutlineTool::execute(const ToolCall& call, IWorkspaceServices&
     }
 
     std::ostringstream content;
-    content << "[" << path << "] outline (" << entries.size() << " entries)\n";
+    content << "[" << path << "]";
+    if (line_count) content << " (" << *line_count << " lines)";
+    content << " outline (" << entries.size() << " entries)\n";
     for (auto& e : entries) {
         if (e.type == OutlineEntry::Heading) {
             for (int i = 0; i < e.level; ++i) content << "#";

@@ -410,6 +410,19 @@ void Indexer::index_file(const fs::path& rel_path)
                  is_binary_content(content.data(), content.size());
     }
 
+    // Count lines in the extracted/text content -- for text files this is the
+    // number of '\n' (plus 1 if non-empty); for binary files line_count = 0.
+    // For PDF/DOCX/XLSX `content` is the extractor's pseudo-line text, so the
+    // count is "pseudo-lines" (per-page for PDFs). Surfaces via FileEntry +
+    // get_file_line_count so get_file_outline / list_directory can show it.
+    int64_t line_count = 0;
+    if (!binary && !content.empty()) {
+        line_count = 1;
+        for (char c : content) if (c == '\n') ++line_count;
+        // A trailing '\n' counts as a separator, not a fresh empty line.
+        if (content.back() == '\n') --line_count;
+    }
+
     // Upsert files row
     sqlite3_reset(stmts_.upsert_file);
     sqlite3_bind_text(stmts_.upsert_file, 1, rel_str.c_str(), -1, SQLITE_TRANSIENT);
@@ -420,6 +433,7 @@ void Indexer::index_file(const fs::path& rel_path)
     sqlite3_bind_int(stmts_.upsert_file, 6, binary ? 1 : 0);
     sqlite3_bind_text(stmts_.upsert_file, 7, language.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_bind_int64(stmts_.upsert_file, 8, unix_now());
+    sqlite3_bind_int64(stmts_.upsert_file, 9, line_count);
     sqlite3_step(stmts_.upsert_file);
 
     ++stats_.files_total;

@@ -9,11 +9,11 @@ namespace locus {
 IndexerStatements::IndexerStatements(Database& main_db, Database* vectors_db)
 {
     upsert_file = main_db.prepare(R"(
-        INSERT INTO files (path, abs_path, size_bytes, modified_at, ext, is_binary, language, indexed_at)
-        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+        INSERT INTO files (path, abs_path, size_bytes, modified_at, ext, is_binary, language, indexed_at, line_count)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
         ON CONFLICT(path) DO UPDATE SET
             abs_path=?2, size_bytes=?3, modified_at=?4, ext=?5,
-            is_binary=?6, language=?7, indexed_at=?8
+            is_binary=?6, language=?7, indexed_at=?8, line_count=?9
     )");
 
     delete_file = main_db.prepare("DELETE FROM files WHERE path = ?1");

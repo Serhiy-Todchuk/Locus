@@ -1,15 +1,14 @@
 - "Build kicked off in the background; harness will notify me when it finishes." - I want this features in Locus for background commands :)
-+ Is it good that we are not reading XLSX, DOCX and PDFs with read_file tool (or any other)? So the agent can search for something, but cannot read full info?
 - Fix "Control surface" section in About window: there approval policies mentioned as something special, but it's common thing for all harnesses. Put there something about flexibility/efficiency/transparency/control as benefits, but keep overall About text consistent. Same fixes in docs (README.md?, other?).
 - This needs to be revisited: Auto-detect loaded model and auto-apply preset
 - Shrink CLAUDE.md
-+ Compaction seems doesn’t work as expected - it frees up too little part of context, but I can see wrong numbers. Think out integration or agentic test for it involving a lot of communication with LLM, so we get near real scenario tested.
 - Ask user tool with pre-determined answers
 - Ask user auto answer feature
 - Voice chat input
 - Add image attachment for LLM prompt
 - FastDebug
 - Agentic test of CLI
+- Why read_file treats line numbers as pages for PDFs?
 
 - Claude Blender
 - GoodOldSoftware
