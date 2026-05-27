@@ -170,7 +170,7 @@ TEST_CASE("S6.10 Task F: find_preset_for_model returns a sensible preset for "
 
 // ---- Task E -- built-in tool manifest carries `Example:` blocks --------------
 
-TEST_CASE("S6.10 Task E: search / write_file / edit_file descriptions carry "
+TEST_CASE("S6.10 Task E: search_* / write_file / edit_file descriptions carry "
           "Example: blocks in the LLM-facing schema",
           "[integration][s6.10][examples]")
 {
@@ -178,6 +178,8 @@ TEST_CASE("S6.10 Task E: search / write_file / edit_file descriptions carry "
     // assertion specifically targets the full-manifest path -- which is what
     // gets sent on first encounter, after a workspace re-open, and to any
     // LLM call site that doesn't opt into lazy.
+    // S6.17 Task G: the unified `search` tool was split into six per-mode
+    // tools; spot-check one of them carries its Example: block.
     auto& h = harness();
     ToolRegistry reg;
     register_builtin_tools(reg);
@@ -193,8 +195,10 @@ TEST_CASE("S6.10 Task E: search / write_file / edit_file descriptions carry "
         return "";
     };
 
-    INFO("search desc: " << desc_for("search"));
-    REQUIRE(desc_for("search").find("Example") != std::string::npos);
+    INFO("search_text desc: " << desc_for("search_text"));
+    REQUIRE(desc_for("search_text").find("Example") != std::string::npos);
+    REQUIRE(desc_for("search_regex").find("Example") != std::string::npos);
+    REQUIRE(desc_for("search_ast").find("Example") != std::string::npos);
     REQUIRE(desc_for("write_file").find("Example") != std::string::npos);
     REQUIRE(desc_for("edit_file").find("Example") != std::string::npos);
     REQUIRE(desc_for("read_file").find("Example") != std::string::npos);

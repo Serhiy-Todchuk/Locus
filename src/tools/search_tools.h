@@ -4,146 +4,60 @@
 
 namespace locus {
 
-// S3.L: unified search face. Replaces the four individual search tools in the
-// exposed manifest -- dispatches to the same underlying index calls via an
-// internal `mode` parameter. Registered by `register_builtin_tools()`.
-class SearchTool : public ITool {
-public:
-    std::string name()        const override { return "search"; }
-    std::string description() const override {
-        return "Unified workspace search. `mode` selects the backend: "
-               "text (FTS5 keyword, default), regex (raw-content ECMAScript regex, "
-               "preserves punctuation/case), symbols (code definitions), "
-               "ast (Tree-sitter structural query, e.g. all `malloc` call sites), "
-               "semantic (vector similarity), hybrid (BM25 + vector). "
-               "Semantic and hybrid require semantic search to be enabled.\n"
-               "Examples:\n"
-               "  search({\"query\": \"WorkspaceConfig\"})  // text (default)\n"
-               "  search({\"query\": \"->m_cache\", \"mode\": \"regex\"})\n"
-               "  search({\"query\": \"ToolDispatcher\", \"mode\": \"symbols\", \"kind\": \"class\"})\n"
-               "  search({\"query\": \"(call_expression function: (identifier) @fn (#eq? @fn \\\"malloc\\\"))\", \"mode\": \"ast\", \"language\": \"c\"})\n"
-               "  search({\"query\": \"how does the indexer batch file events\", \"mode\": \"semantic\"})\n"
-               "  search({\"query\": \"reasoning watchdog auto-nudge\", \"mode\": \"hybrid\"})";
-    }
-    std::string short_description() const override {
-        return "search(query, mode=text|regex|symbols|ast|semantic|hybrid) "
-               "-- workspace search.";
-    }
-    // S5.A -- prune the mode list (and the `symbols`/`ast` hint) based on
-    // the workspace's capability buckets. The `mode` parameter schema is
-    // unchanged so the LLM CAN still send a hidden mode -- it just won't
-    // be advertised and the runtime returns the existing "not enabled"
-    // error if it tries. Parameter type stability keeps KV cache intact
-    // (see S4.F).
-    std::string description_for(IWorkspaceServices& ws) const override;
-    std::vector<ToolParam> params() const override {
-        return {
-            {"query",          "string",  "Search query. Keywords for text/hybrid, "
-                                          "symbol name/prefix for symbols, "
-                                          "natural language for semantic, "
-                                          "ECMAScript regex for regex (preserves "
-                                          "punctuation and case -- good for exact "
-                                          "identifiers like `->m_cache` or `TODO(XXX)`), "
-                                          "Tree-sitter S-expression for ast "
-                                          "(e.g. `(call_expression function: "
-                                          "(identifier) @fn (#eq? @fn \"malloc\"))`).", false},
-            {"mode",           "string",  "One of: text, regex, symbols, ast, semantic, hybrid. "
-                                          "Defaults to text.", false},
-            {"path_glob",      "string",  "regex/ast modes: optional glob to limit which "
-                                          "indexed files are searched (e.g. `**/*.cpp`).", false},
-            {"case_sensitive", "boolean", "regex mode only: defaults to true.", false},
-            {"max_results",    "integer", "Maximum results (default 8 for text, "
-                                          "5 for semantic/hybrid, 10 for symbols, "
-                                          "50 for regex/ast). Raise it when you "
-                                          "want breadth; the defaults are tuned "
-                                          "for short-context local LLMs.", false},
-            {"kind",           "string",  "symbols mode only: filter by kind "
-                                          "(function, class, struct, method).", false},
-            {"language",       "string",  "symbols mode: filter by language. "
-                                          "ast mode: required -- one of c, cpp, python, "
-                                          "javascript, typescript, go, rust, java, csharp, "
-                                          "ruby, php, bash, json, yaml, markdown, swift, kotlin.", false},
-            {"capture",        "string",  "ast mode only: report only this @capture name "
-                                          "from the query (default: report every capture).", false},
-        };
-    }
-    ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::auto_approve; }
-    std::string preview(const ToolCall& call) const override;
-    ToolResult execute(const ToolCall& call, IWorkspaceServices& ws,
-                       const std::atomic<bool>* cancel_flag = nullptr) override;
-};
-
-// The four individual search tools below remain available as direct `ITool`s
-// (e.g. for slash-command testing) but are NOT registered by
-// `register_builtin_tools()` since S3.L -- the LLM sees a single `search` face.
+// S6.17 Task G -- six per-mode top-level tools (ADR-0008). The unified
+// `SearchTool` dispatcher was retired here: a tool whose identity depends on
+// a string discriminator (`mode`) inside the args is harder for an LLM to
+// call correctly than N tools named after their actual purpose. Per-mode
+// tools were already implemented as separate classes (this file's bottom
+// half); they are now the direct registry entries.
+//
+// Capability gating (S5.A):
+//   semantic_search  off -> search_semantic / search_hybrid hide via available()
+//   code_aware_search off -> search_symbols  / search_ast   hide via available()
+//
+// Backward-compat shim for saved sessions lives in SessionManager::load /
+// load_full (one milestone; removed next milestone).
 
 class SearchTextTool : public ITool {
 public:
     std::string name()        const override { return "search_text"; }
     std::string description() const override {
-        return "Full-text search across all indexed files. Returns ranked results with snippets.";
+        return "FTS5 keyword search across indexed text content. Indexed "
+               "content is the EXTRACTED text from every file: source code "
+               "as-is, Markdown / HTML stripped of markup, and PDF / DOCX / "
+               "XLSX extracted via PDFium / OOXML parsers. Returns ranked "
+               "results with snippets.\n"
+               "Example:\n"
+               "  search_text({\"query\": \"WorkspaceConfig\"})";
+    }
+    std::string short_description() const override {
+        return "search_text(query, max_results=8) -- FTS5 keyword search.";
     }
     std::vector<ToolParam> params() const override {
         return {
-            {"query",       "string",  "Search query (FTS5 syntax supported)", true},
-            {"max_results", "integer", "Maximum results to return (default 20)", false},
+            {"query",       "string",  "Keyword search query (FTS5 syntax supported).", true},
+            {"max_results", "integer", "Maximum results (default 8).", false},
         };
     }
     ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::auto_approve; }
+    std::string preview(const ToolCall& call) const override;
     ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws,
                         const std::atomic<bool>* cancel_flag = nullptr) override;
 };
 
-class SearchSymbolsTool : public ITool {
-public:
-    std::string name()        const override { return "search_symbols"; }
-    std::string description() const override {
-        return "Search for code symbols (functions, classes, structs, methods) by name. "
-               "Supports prefix matching.";
-    }
-    std::vector<ToolParam> params() const override {
-        return {
-            {"name",     "string", "Symbol name or prefix to search for", true},
-            {"kind",     "string", "Filter by kind: function, class, struct, method (optional)", false},
-            {"language", "string", "Filter by language (optional)", false},
-        };
-    }
-    ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::auto_approve; }
-    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws,
-                        const std::atomic<bool>* cancel_flag = nullptr) override;
-};
-
-class SearchSemanticTool : public ITool {
-public:
-    std::string name()        const override { return "search_semantic"; }
-    std::string description() const override {
-        return "Semantic search across all indexed files using vector similarity. "
-               "Finds conceptually related content even without exact keyword matches. "
-               "Requires semantic search to be enabled.";
-    }
-    std::vector<ToolParam> params() const override {
-        return {
-            {"query",       "string",  "Natural language query describing what to find", true},
-            {"max_results", "integer", "Maximum results to return (default 10)", false},
-        };
-    }
-    ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::auto_approve; }
-    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws,
-                        const std::atomic<bool>* cancel_flag = nullptr) override;
-};
-
-// Raw-content regex search. Runs in-process over indexed (non-binary) files via
-// `std::regex` (ECMAScript). Kept out of `register_builtin_tools()` -- the LLM
-// reaches it through `SearchTool`'s `mode=regex`. Exposed as a standalone
-// `ITool` so unit tests and the slash-command surface can invoke it directly,
-// matching the pattern used by the other per-mode tools.
 class SearchRegexTool : public ITool {
 public:
     std::string name()        const override { return "search_regex"; }
     std::string description() const override {
-        return "Regex search over raw file content (ECMAScript syntax). "
-               "Unlike `search_text`, preserves punctuation and case -- "
-               "use for exact identifiers, operators, and TODO tags.";
+        return "ECMAScript regex search over raw file content. Unlike "
+               "`search_text`, preserves punctuation and case -- use for "
+               "exact identifiers (`->m_cache`), operators, and TODO tags "
+               "(`TODO(XXX)`). Returns one match per line.\n"
+               "Example:\n"
+               "  search_regex({\"query\": \"->m_cache\"})";
+    }
+    std::string short_description() const override {
+        return "search_regex(query, path_glob?, case_sensitive=true, max_results=50) -- ECMAScript regex per-line.";
     }
     std::vector<ToolParam> params() const override {
         return {
@@ -155,23 +69,108 @@ public:
         };
     }
     ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::auto_approve; }
+    std::string preview(const ToolCall& call) const override;
+    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws,
+                        const std::atomic<bool>* cancel_flag = nullptr) override;
+};
+
+class SearchSymbolsTool : public ITool {
+public:
+    std::string name()        const override { return "search_symbols"; }
+    std::string description() const override {
+        return "Look up code symbols (functions, classes, structs, methods) "
+               "by name. Supports prefix matching. Takes `name`, not "
+               "`query` (unlike the other search_* tools).\n"
+               "Example:\n"
+               "  search_symbols({\"name\": \"ToolDispatcher\", \"kind\": \"class\"})";
+    }
+    std::string short_description() const override {
+        return "search_symbols(name, kind?, language?) -- code-symbol lookup.";
+    }
+    std::vector<ToolParam> params() const override {
+        return {
+            {"name",     "string", "Symbol name or prefix to search for.", true},
+            {"kind",     "string", "Filter by kind: function, class, struct, method (optional).", false},
+            {"language", "string", "Filter by language (optional).", false},
+        };
+    }
+    ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::auto_approve; }
+    bool available(IWorkspaceServices& ws) const override;
+    std::string preview(const ToolCall& call) const override;
+    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws,
+                        const std::atomic<bool>* cancel_flag = nullptr) override;
+};
+
+class SearchSemanticTool : public ITool {
+public:
+    std::string name()        const override { return "search_semantic"; }
+    std::string description() const override {
+        return "Vector-cosine similarity search across indexed chunks. "
+               "Finds conceptually related content even without exact "
+               "keyword matches. Requires semantic search to be enabled.\n"
+               "Example:\n"
+               "  search_semantic({\"query\": \"how does the indexer batch file events\"})";
+    }
+    std::string short_description() const override {
+        return "search_semantic(query, max_results=5) -- vector similarity.";
+    }
+    std::vector<ToolParam> params() const override {
+        return {
+            {"query",       "string",  "Natural language query describing what to find.", true},
+            {"max_results", "integer", "Maximum results to return (default 5).", false},
+        };
+    }
+    ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::auto_approve; }
+    bool available(IWorkspaceServices& ws) const override;
+    std::string preview(const ToolCall& call) const override;
+    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws,
+                        const std::atomic<bool>* cancel_flag = nullptr) override;
+};
+
+class SearchHybridTool : public ITool {
+public:
+    std::string name()        const override { return "search_hybrid"; }
+    std::string description() const override {
+        return "BM25 + semantic vector blend with optional reranker. Best "
+               "for queries that benefit from both exact keyword matches "
+               "and conceptual similarity. Requires semantic search to be "
+               "enabled.\n"
+               "Example:\n"
+               "  search_hybrid({\"query\": \"reasoning watchdog auto-nudge\"})";
+    }
+    std::string short_description() const override {
+        return "search_hybrid(query, max_results=5) -- BM25 + semantic blend.";
+    }
+    std::vector<ToolParam> params() const override {
+        return {
+            {"query",       "string",  "Search query (supports both keywords and natural language).", true},
+            {"max_results", "integer", "Maximum results to return (default 5).", false},
+        };
+    }
+    ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::auto_approve; }
+    bool available(IWorkspaceServices& ws) const override;
+    std::string preview(const ToolCall& call) const override;
     ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws,
                         const std::atomic<bool>* cancel_flag = nullptr) override;
 };
 
 // Tree-sitter structural search (S4.M). Compiles a `.scm` query against the
 // chosen language's grammar and reports every match across the indexed files.
-// Like the regex tool, kept out of `register_builtin_tools()` -- the LLM
-// reaches it through `SearchTool`'s `mode=ast`. Exposed standalone so unit
-// tests can drive it directly.
 class SearchAstTool : public ITool {
 public:
     std::string name()        const override { return "search_ast"; }
     std::string description() const override {
-        return "Structural search using Tree-sitter S-expression queries. "
-               "Finds shapes (e.g. all `malloc` calls, classes inheriting "
-               "ITool, empty if-bodies), not just names. Requires `language` "
-               "and a `query` written against that grammar.";
+        return "Tree-sitter S-expression structural search. Finds shapes "
+               "(e.g. all `malloc` calls, classes inheriting `ITool`, empty "
+               "if-bodies) -- not just names. Requires `language` and a "
+               "`query` written against that grammar.\n"
+               "Example:\n"
+               "  search_ast({\"language\": \"cpp\", "
+               "\"query\": \"(call_expression function: (identifier) @fn "
+               "(#eq? @fn \\\"malloc\\\"))\"})";
+    }
+    std::string short_description() const override {
+        return "search_ast(language, query, path_glob?, capture?, max_results=50) -- Tree-sitter S-expression queries.";
     }
     std::vector<ToolParam> params() const override {
         return {
@@ -190,25 +189,8 @@ public:
         };
     }
     ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::auto_approve; }
-    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws,
-                        const std::atomic<bool>* cancel_flag = nullptr) override;
-};
-
-class SearchHybridTool : public ITool {
-public:
-    std::string name()        const override { return "search_hybrid"; }
-    std::string description() const override {
-        return "Hybrid search combining keyword (BM25) and semantic (vector) search. "
-               "Best for queries that benefit from both exact matches and conceptual similarity. "
-               "Requires semantic search to be enabled.";
-    }
-    std::vector<ToolParam> params() const override {
-        return {
-            {"query",       "string",  "Search query (supports both keywords and natural language)", true},
-            {"max_results", "integer", "Maximum results to return (default 10)", false},
-        };
-    }
-    ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::auto_approve; }
+    bool available(IWorkspaceServices& ws) const override;
+    std::string preview(const ToolCall& call) const override;
     ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws,
                         const std::atomic<bool>* cancel_flag = nullptr) override;
 };

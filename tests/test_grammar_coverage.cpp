@@ -96,7 +96,7 @@ bool contains_pair(const std::vector<std::pair<std::string, std::string>>& v,
 
 locus::ToolCall ast_call(const nlohmann::json& args)
 {
-    return {"a1", "search", args};
+    return {"a1", "search_ast", args};
 }
 
 } // namespace
@@ -307,7 +307,7 @@ TEST_CASE("YamlExtractor emits top-level keys as headings", "[s4.y][extractor][y
 
 // -- AST search round trip per new language ---------------------------------
 
-TEST_CASE("search mode=ast finds calls in ruby fixture", "[s4.y][search][ast][ruby]")
+TEST_CASE("search_ast finds calls in ruby fixture", "[s4.y][s6.17][search][ast][ruby]")
 {
     auto tmp = make_test_dir("ast_ruby");
     write_file(tmp / "a.rb",
@@ -317,9 +317,8 @@ TEST_CASE("search mode=ast finds calls in ruby fixture", "[s4.y][search][ast][ru
 
     {
         locus::Workspace ws(tmp);
-        locus::SearchTool tool;
+        locus::SearchAstTool tool;
         auto result = tool.execute(ast_call({
-            {"mode", "ast"},
             {"language", "ruby"},
             {"query", "(call method: (identifier) @fn)"},
         }), ws);
@@ -331,7 +330,7 @@ TEST_CASE("search mode=ast finds calls in ruby fixture", "[s4.y][search][ast][ru
     cleanup(tmp);
 }
 
-TEST_CASE("search mode=ast finds heading nodes in markdown", "[s4.y][search][ast][markdown]")
+TEST_CASE("search_ast finds heading nodes in markdown", "[s4.y][s6.17][search][ast][markdown]")
 {
     auto tmp = make_test_dir("ast_md");
     write_file(tmp / "notes.md",
@@ -342,9 +341,8 @@ TEST_CASE("search mode=ast finds heading nodes in markdown", "[s4.y][search][ast
 
     {
         locus::Workspace ws(tmp);
-        locus::SearchTool tool;
+        locus::SearchAstTool tool;
         auto result = tool.execute(ast_call({
-            {"mode", "ast"},
             {"language", "markdown"},
             {"query", "(atx_heading) @h"},
         }), ws);
@@ -356,16 +354,15 @@ TEST_CASE("search mode=ast finds heading nodes in markdown", "[s4.y][search][ast
     cleanup(tmp);
 }
 
-TEST_CASE("search mode=ast finds keys in json", "[s4.y][search][ast][json]")
+TEST_CASE("search_ast finds keys in json", "[s4.y][s6.17][search][ast][json]")
 {
     auto tmp = make_test_dir("ast_json");
     write_file(tmp / "a.json", "{\"port\": 1234, \"host\": \"localhost\"}\n");
 
     {
         locus::Workspace ws(tmp);
-        locus::SearchTool tool;
+        locus::SearchAstTool tool;
         auto result = tool.execute(ast_call({
-            {"mode", "ast"},
             {"language", "json"},
             {"query", "(pair key: (string) @k)"},
         }), ws);
@@ -377,17 +374,16 @@ TEST_CASE("search mode=ast finds keys in json", "[s4.y][search][ast][json]")
     cleanup(tmp);
 }
 
-TEST_CASE("search mode=ast rejects deferred SQL language gracefully",
-          "[s4.y][search][ast][sql]")
+TEST_CASE("search_ast rejects deferred SQL language gracefully",
+          "[s4.y][s6.17][search][ast][sql]")
 {
     auto tmp = make_test_dir("ast_sql");
     write_file(tmp / "a.sql", "SELECT * FROM t;\n");
 
     {
         locus::Workspace ws(tmp);
-        locus::SearchTool tool;
+        locus::SearchAstTool tool;
         auto result = tool.execute(ast_call({
-            {"mode", "ast"},
             {"language", "sql"},
             {"query", "(select) @s"},
         }), ws);

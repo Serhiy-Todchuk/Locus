@@ -106,11 +106,12 @@ public:
 
     // S5.A -- context-aware description used by the filtered schema builder
     // (the one that already takes `IWorkspaceServices`). Default: return the
-    // static description. `SearchTool` overrides to prune the mode list to
-    // match the current capability bucket layout (semantic / code-aware off
-    // -> drop the corresponding modes from the description text). The
-    // schema's `mode` parameter type is unchanged across calls so this does
-    // NOT torch the KV cache -- see S4.F.
+    // static description. Originally used by `SearchTool` to prune the mode
+    // list under capability flips; post-S6.17 the per-mode search_* tools
+    // hide themselves via `available()` instead, but the hook remains for
+    // any future tool that wants to tailor its description text by workspace
+    // configuration. The schema's parameter shape must NOT change across
+    // calls so KV cache survives -- see S4.F.
     virtual std::string description_for(IWorkspaceServices& /*ws*/) const
     {
         return description();

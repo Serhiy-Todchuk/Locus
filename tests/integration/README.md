@@ -20,7 +20,7 @@ Tag filters match [Catch2 test tags](https://github.com/catchorg/Catch2/blob/dev
 | Tag | Source | What it exercises |
 |---|---|---|
 | `[smoke]`    | [test_int_smoke.cpp](test_int_smoke.cpp)        | LLM reachability gate, workspace opens + indexes, `read_file` via LLM. |
-| `[search]`   | [test_int_search.cpp](test_int_search.cpp)      | Unified `search` tool -- text (FTS5), regex (raw-content `std::regex`), symbols (tree-sitter), ast (Tree-sitter S-expression queries), semantic (vectors), hybrid (RRF merge). |
+| `[search]`   | [test_int_search.cpp](test_int_search.cpp)      | Six per-mode search tools (S6.17 Task G / ADR-0008) -- `search_text` (FTS5), `search_regex` (raw-content `std::regex`), `search_symbols` (tree-sitter), `search_ast` (Tree-sitter S-expression queries), `search_semantic` (vectors), `search_hybrid` (RRF merge). |
 | `[outline]`  | [test_int_outline.cpp](test_int_outline.cpp)    | `get_file_outline` against every extractor -- `.md`, `.pdf` (PDFium), `.docx` (miniz+pugixml), `.xlsx`. |
 | `[fs]`       | [test_int_fs_lifecycle.cpp](test_int_fs_lifecycle.cpp) | Full lifecycle in a scratch dir: `write_file` -> `read_file` + `edit_file` (with `replace_all`) -> indexer picks up change -> `delete_file`. Also covers `list_directory`. |
 | `[shell]`    | [test_int_shell.cpp](test_int_shell.cpp)        | `run_command` executes and captures stdout. |
@@ -162,13 +162,31 @@ Design notes:
   a lazy-initialized `IntegrationHarness` singleton. The repo is indexed once
   (~1500 files, ~1700 embeddings on first run) and then reused across every
   case -- otherwise a 20-case run would re-index the repo 20x.
+- **Conversation history persists across cases in the same file.** The
+  Catch2 `IntegrationSessionListener` calls `h.agent().reset_conversation()`
+  only when the source FILE changes, so sibling cases in the same
+  `test_int_*.cpp` see each other's tool_calls. **This bites tests that
+  assert on `r.tool_called(X)` for an identical call sibling cases also
+  make** -- `QualityMonitor::evaluate` (S6.10 Task B) walks backwards
+  through history, finds the previous matching call, and injects a
+  `repeated_tool_call` nudge instead of dispatching. Net effect:
+  `r.tool_called(X)` returns false, the assertion fails on whichever random
+  order Catch2 picks. **Fix**: call `h.agent().reset_conversation()` at the
+  top of each case that needs a clean history -- see
+  `test_int_metrics.cpp` / `test_int_edit_file_shorthand.cpp` /
+  `test_int_read_file_alias_rejection.cpp` for the pattern. Or, when the
+  test inherently exercises multiple tool calls in sequence and small-model
+  variance makes one-prompt-multiple-calls flaky, split into separate
+  `h.prompt(...)` calls (see edit_file_shorthand's read-then-edit split).
 - **All tools forced to `ask` policy.** The fixture overrides
   `Workspace::config().tool_approval_policies` to route every tool call
   through `on_tool_call_pending`, regardless of its default policy. The
   harness then auto-approves synchronously (no real round-trip latency).
-  Reason: auto-approve tools (`read_file`, `search`, `list_directory`,
-  `get_file_outline`) skip `on_tool_call_pending` in normal operation -- so
-  tests couldn't observe them. Forcing `ask` gives uniform observability.
+  Reason: auto-approve tools (`read_file`, `search_text` / `search_regex` /
+  `search_symbols` / `search_semantic` / `search_hybrid` / `search_ast`,
+  `list_directory`, `get_file_outline`) skip `on_tool_call_pending` in
+  normal operation -- so tests couldn't observe them. Forcing `ask` gives
+  uniform observability.
 - **Deterministic vs LLM-driven assertions.** When verifying system-level
   behavior (indexer picked up a new file, DB contains a symbol), the tests
   call `IndexQuery` directly rather than prompting the LLM to do a search.
@@ -198,6 +216,11 @@ Design notes:
 
    TEST_CASE("my scenario", "[integration][llm][my_topic]") {
        auto& h = harness();
+       h.agent().reset_conversation();  // see "Conversation history
+                                         // persists across cases" above --
+                                         // skip only when the case is
+                                         // genuinely first-in-file or
+                                         // doesn't assert on tool_called.
        PromptResult r = h.prompt("ask the LLM to do the thing");
        REQUIRE_FALSE(r.timed_out);
        REQUIRE(r.tool_called("expected_tool"));
@@ -206,8 +229,11 @@ Design notes:
 4. Assert on **observable behavior** (tool invoked, file on disk, index
    updated) -- not on exact LLM prose. Local models are non-deterministic.
 5. Where prompt wording matters for the LLM to choose the right tool, spell
-   it out: "Use the search tool in text mode..." beats "search for...". Small
-   models especially respond to explicit tool naming.
+   it out: "Use the search_text tool..." beats "search for...". Small
+   models especially respond to explicit tool naming. Avoid chaining two
+   tool calls in one prompt against small models -- split into two
+   `h.prompt(...)` calls (each round verifies one tool_called); see
+   `test_int_edit_file_shorthand.cpp` for the pattern.
 
 ## Troubleshooting
 

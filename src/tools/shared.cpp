@@ -136,7 +136,15 @@ struct AliasEntry {
     std::string_view suggest;
 };
 
-constexpr std::array<AliasEntry, 17> k_aliases = {{
+// Suggestion text used for `type` / `kind` / `search_mode` keys sent against
+// a per-mode search_* tool (Task G split: the unified `search` face is gone,
+// so a `mode` arg is meaningless -- the model picks the right tool by name).
+constexpr const char* k_search_mode_hint =
+    "the unified 'search' tool was split (S6.17 Task G) -- pick by name: "
+    "search_text / search_regex / search_symbols / search_semantic / "
+    "search_hybrid / search_ast";
+
+constexpr std::array<AliasEntry, 33> k_aliases = {{
     // read_file (TestLocalVibe2 Pass 2/5: lines:"100-152" silently became
     // offset=1/length=100; agent retried 6 times before working around it).
     {"read_file",   "lines",       "use 'offset' (1-based) + 'length' instead, e.g. {\"path\":\"...\",\"offset\":100,\"length\":53}"},
@@ -145,11 +153,29 @@ constexpr std::array<AliasEntry, 17> k_aliases = {{
     {"read_file",   "start",       "use 'offset' + 'length' instead"},
     {"read_file",   "end",         "use 'offset' + 'length' instead"},
 
-    // search / search_* (post-Task-G the tool name is search_<mode> but the
-    // unified `search` form is still in this run -- alias on both).
-    {"search",        "type",         "use 'mode' (text / regex / symbols / semantic / hybrid)"},
-    {"search",        "kind",         "use 'mode' (text / regex / symbols / semantic / hybrid)"},
-    {"search",        "search_mode",  "use 'mode' (text / regex / symbols / semantic / hybrid)"},
+    // Per-mode search_* tools: a model that sent `type` / `kind` / `search_mode`
+    // was reaching for the retired discriminator. Aliases on every per-mode
+    // tool point the model at the per-tool naming. `kind` is a real arg on
+    // search_symbols (kind=function / class / etc.) so it is NOT aliased there.
+    {"search_text",     "type",        k_search_mode_hint},
+    {"search_text",     "kind",        k_search_mode_hint},
+    {"search_text",     "search_mode", k_search_mode_hint},
+    {"search_text",     "mode",        k_search_mode_hint},
+    {"search_regex",    "type",        k_search_mode_hint},
+    {"search_regex",    "kind",        k_search_mode_hint},
+    {"search_regex",    "search_mode", k_search_mode_hint},
+    {"search_regex",    "mode",        k_search_mode_hint},
+    {"search_symbols",  "type",        k_search_mode_hint},
+    {"search_symbols",  "search_mode", k_search_mode_hint},
+    {"search_symbols",  "mode",        k_search_mode_hint},
+    {"search_semantic", "type",        k_search_mode_hint},
+    {"search_semantic", "kind",        k_search_mode_hint},
+    {"search_semantic", "search_mode", k_search_mode_hint},
+    {"search_semantic", "mode",        k_search_mode_hint},
+    {"search_hybrid",   "type",        k_search_mode_hint},
+    {"search_hybrid",   "kind",        k_search_mode_hint},
+    {"search_hybrid",   "search_mode", k_search_mode_hint},
+    {"search_hybrid",   "mode",        k_search_mode_hint},
 
     // run_command / run_command_bg (TestLocalVibe2 Pass 5 hit `cmd:` first).
     {"run_command",     "cmd",   "use 'command' (the shell command line)"},

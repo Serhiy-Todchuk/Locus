@@ -170,6 +170,56 @@ void SessionManager::save(const std::string& id,
 
 // -- Load ---------------------------------------------------------------------
 
+namespace {
+
+// S6.17 Task G (ADR-0008) one-version shim: rewrite legacy `{name:"search"}`
+// tool calls in saved-session JSON into the matching per-mode tool name
+// (search_text / search_regex / ...). Drops the now-meaningless `mode` arg.
+// `tool_calls[].arguments` is a JSON string at the session-file layer (it
+// rides as the raw string the API returned), so we parse it, edit, dump.
+// Removed next milestone.
+void rewrite_legacy_search_calls(json& messages)
+{
+    if (!messages.is_array()) return;
+    for (auto& msg : messages) {
+        if (!msg.is_object()) continue;
+        auto it = msg.find("tool_calls");
+        if (it == msg.end() || !it->is_array()) continue;
+        for (auto& tc : *it) {
+            if (!tc.is_object()) continue;
+            auto fn = tc.find("function");
+            if (fn == tc.end() || !fn->is_object()) continue;
+            auto name_it = fn->find("name");
+            if (name_it == fn->end() || !name_it->is_string()) continue;
+            if (name_it->get<std::string>() != "search") continue;
+
+            // Parse the arguments string; default to text mode when missing.
+            std::string mode = "text";
+            json args = json::object();
+            auto args_it = fn->find("arguments");
+            if (args_it != fn->end() && args_it->is_string()) {
+                try {
+                    args = json::parse(args_it->get<std::string>());
+                } catch (...) {
+                    args = json::object();
+                }
+            }
+            if (args.is_object()) {
+                auto m = args.find("mode");
+                if (m != args.end() && m->is_string())
+                    mode = m->get<std::string>();
+                args.erase("mode");
+            }
+
+            std::string new_name = "search_" + mode;
+            (*fn)["name"]      = new_name;
+            (*fn)["arguments"] = args.dump();
+        }
+    }
+}
+
+}  // namespace
+
 ConversationHistory SessionManager::load(const std::string& id) const
 {
     auto path = sessions_dir_ / (id + ".json");
@@ -185,6 +235,8 @@ ConversationHistory SessionManager::load(const std::string& id) const
 
     if (!j.contains("messages"))
         throw std::runtime_error("Invalid session file (no messages): " + id);
+
+    rewrite_legacy_search_calls(j["messages"]);
 
     auto history = ConversationHistory::from_json(j["messages"]);
     spdlog::info("SessionManager: loaded session '{}' ({} messages)",
@@ -207,6 +259,7 @@ json SessionManager::load_full(const std::string& id) const
     if (!j.is_object() || !j.contains("messages"))
         throw std::runtime_error("Invalid session file (no messages): " + id);
 
+    rewrite_legacy_search_calls(j["messages"]);
     return j;
 }
 

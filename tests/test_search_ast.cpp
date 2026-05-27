@@ -1,4 +1,5 @@
-// S4.M -- Tree-sitter structural query tool (`search` mode=ast).
+// S4.M / S6.17 Task G -- `search_ast` tool (Tree-sitter structural queries).
+// Originally `search` mode=ast; restored to a top-level tool by S6.17 (ADR-0008).
 //
 // These tests open a real `Workspace` so the indexer runs over the temp dir
 // and the AST search reads from the populated `files` table.
@@ -44,14 +45,14 @@ void cleanup(const fs::path& dir)
 
 locus::ToolCall ast_call(const nlohmann::json& args)
 {
-    return {"a1", "search", args};
+    return {"a1", "search_ast", args};
 }
 
 } // namespace
 
 // -- Dispatch ---------------------------------------------------------------
 
-TEST_CASE("search mode=ast dispatches to ast backend", "[s4.m][search][ast]")
+TEST_CASE("search_ast runs against indexed files", "[s4.m][s6.17][search][ast]")
 {
     auto tmp = make_test_dir("dispatch");
     write_file(tmp / "a.cpp",
@@ -61,10 +62,9 @@ TEST_CASE("search mode=ast dispatches to ast backend", "[s4.m][search][ast]")
 
     {
         locus::Workspace ws(tmp);
-        locus::SearchTool tool;
+        locus::SearchAstTool tool;
 
         auto result = tool.execute(ast_call({
-            {"mode", "ast"},
             {"language", "cpp"},
             {"query", "(call_expression function: (identifier) @fn)"},
         }), ws);
@@ -360,17 +360,19 @@ TEST_CASE("search ast finds classes inheriting from a base type", "[s4.m][search
 
 // -- Schema -----------------------------------------------------------------
 
-TEST_CASE("search tool advertises ast mode in its schema", "[s4.m][search][ast]")
+TEST_CASE("search_ast advertises its params in the schema", "[s4.m][s6.17][search][ast]")
 {
-    locus::SearchTool tool;
+    locus::SearchAstTool tool;
     auto desc = tool.description();
-    REQUIRE_THAT(desc, ContainsSubstring("ast"));
+    REQUIRE_THAT(desc, ContainsSubstring("Tree-sitter"));
 
-    bool has_capture = false, has_lang = false;
+    bool has_capture = false, has_lang = false, has_query = false;
     for (auto& p : tool.params()) {
         if (p.name == "capture")  has_capture = true;
         if (p.name == "language") has_lang    = true;
+        if (p.name == "query")    has_query   = true;
     }
     REQUIRE(has_capture);
     REQUIRE(has_lang);
+    REQUIRE(has_query);
 }

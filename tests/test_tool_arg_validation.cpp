@@ -81,36 +81,53 @@ TEST_CASE("read_file accepts canonical offset+length without rejection",
     fs::remove_all(tmp);
 }
 
-TEST_CASE("search rejects 'type' alias with mode suggestion",
+// S6.17 Task G -- the unified `search` tool was split into per-mode tools.
+// A model that sends `type: "regex"` to `search_text` (looking for the
+// retired discriminator) gets an explicit error pointing at the per-tool
+// naming, instead of a silent fall-through to text-mode behaviour.
+TEST_CASE("search_text rejects 'type' alias with per-tool-name suggestion",
           "[s6.17][tool_arg_validation]")
 {
     auto tmp = make_tmp();
     locus::test::FakeWorkspaceServices ws{tmp};
-    locus::SearchTool tool;
-    locus::ToolCall call{"c1", "search",
+    locus::SearchTextTool tool;
+    locus::ToolCall call{"c1", "search_text",
         {{"query", "x"}, {"type", "regex"}}};
     auto r = tool.execute(call, ws);
     REQUIRE_FALSE(r.success);
     REQUIRE_THAT(r.content, ContainsSubstring("unrecognized argument 'type'"));
-    REQUIRE_THAT(r.content, ContainsSubstring("mode"));
+    REQUIRE_THAT(r.content, ContainsSubstring("search_regex"));
 
     fs::remove_all(tmp);
 }
 
-TEST_CASE("search lowercases enum-shaped mode arg",
+TEST_CASE("search_text rejects 'mode' arg (Task G discriminator retired)",
           "[s6.17][tool_arg_validation]")
 {
     auto tmp = make_tmp();
     locus::test::FakeWorkspaceServices ws{tmp};
-    locus::SearchTool tool;
-    locus::ToolCall call{"c1", "search",
-        {{"query", "x"}, {"mode", "TEXT"}}};
-    // No workspace index in FakeWorkspaceServices -> the underlying text mode
-    // returns its own error. The point of the test is that `mode: "TEXT"`
-    // didn't fall through to the unknown-mode branch.
+    locus::SearchTextTool tool;
+    locus::ToolCall call{"c1", "search_text",
+        {{"query", "x"}, {"mode", "text"}}};
     auto r = tool.execute(call, ws);
     REQUIRE_FALSE(r.success);
-    REQUIRE_THAT(r.content, !ContainsSubstring("unknown search mode"));
+    REQUIRE_THAT(r.content, ContainsSubstring("unrecognized argument 'mode'"));
+
+    fs::remove_all(tmp);
+}
+
+TEST_CASE("search_symbols keeps 'kind' as a real arg (not aliased)",
+          "[s6.17][tool_arg_validation]")
+{
+    auto tmp = make_tmp();
+    locus::test::FakeWorkspaceServices ws{tmp};
+    locus::SearchSymbolsTool tool;
+    locus::ToolCall call{"c1", "search_symbols",
+        {{"name", "Foo"}, {"kind", "class"}}};
+    auto r = tool.execute(call, ws);
+    // FakeWorkspaceServices has no real index -> tool returns its own error.
+    // What matters: the result is NOT "unrecognized argument 'kind'".
+    REQUIRE_THAT(r.content, !ContainsSubstring("unrecognized argument 'kind'"));
 
     fs::remove_all(tmp);
 }

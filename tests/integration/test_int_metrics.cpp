@@ -45,6 +45,12 @@ TEST_CASE("/metrics summarises tokens and per-tool counts after a real turn",
           "[integration][llm][metrics]")
 {
     auto& h = harness();
+    // The shared harness's history persists across cases in this file.
+    // QualityMonitor's repeated_tool_call detector trips when a sibling case
+    // already called read_file with identical args; reset gives this case a
+    // clean conversation so the tool-call assertion isn't gated on the order
+    // Catch2 happened to pick.
+    h.agent().reset_conversation();
 
     // Drive one real LLM round that calls a tool. read_file is a stable,
     // small-cost call available in every test build.
@@ -74,6 +80,8 @@ TEST_CASE("/export_metrics json writes a file under .locus/metrics/",
           "[integration][llm][metrics]")
 {
     auto& h = harness();
+    h.agent().reset_conversation();  // sibling cases share history; fresh start
+                                      // for QualityMonitor's repeated_tool_call.
 
     const fs::path metrics_dir = h.workspace_root() / ".locus" / "metrics";
     auto before = list_metrics_files(metrics_dir);
@@ -120,6 +128,8 @@ TEST_CASE("/export_metrics csv writes a file under .locus/metrics/",
           "[integration][llm][metrics]")
 {
     auto& h = harness();
+    h.agent().reset_conversation();  // sibling cases share history; fresh start
+                                      // for QualityMonitor's repeated_tool_call.
 
     const fs::path metrics_dir = h.workspace_root() / ".locus" / "metrics";
     auto before = list_metrics_files(metrics_dir);

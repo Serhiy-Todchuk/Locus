@@ -1,7 +1,8 @@
-// S4.P -- regex mode on the unified `search` tool.
+// S4.P / S6.17 Task G -- `search_regex` tool. Originally regex mode on the
+// unified `search` tool; restored to a top-level tool by S6.17 (ADR-0008).
 //
 // These tests drive the real `Workspace` so the indexer's file enumeration
-// (which regex mode consumes via `list_directory`) is exercised end-to-end.
+// (which the tool consumes via `list_directory`) is exercised end-to-end.
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
@@ -44,14 +45,14 @@ void cleanup(const fs::path& dir)
 
 locus::ToolCall regex_call(const nlohmann::json& args)
 {
-    return {"r1", "search", args};
+    return {"r1", "search_regex", args};
 }
 
 } // namespace
 
 // -- Dispatch ---------------------------------------------------------------
 
-TEST_CASE("search mode=regex dispatches to regex backend", "[s4.p][search][regex]")
+TEST_CASE("search_regex runs against indexed files", "[s4.p][s6.17][search][regex]")
 {
     auto tmp = make_test_dir("dispatch");
     write_file(tmp / "foo.cpp", "int x = 42;\nreturn x;");
@@ -59,9 +60,8 @@ TEST_CASE("search mode=regex dispatches to regex backend", "[s4.p][search][regex
     {
         locus::Workspace ws(tmp);
 
-        locus::SearchTool tool;
+        locus::SearchRegexTool tool;
         auto result = tool.execute(regex_call({
-            {"mode", "regex"},
             {"query", "int\\s+\\w+"},
         }), ws);
 
@@ -71,15 +71,15 @@ TEST_CASE("search mode=regex dispatches to regex backend", "[s4.p][search][regex
     cleanup(tmp);
 }
 
-TEST_CASE("search mode=regex requires query", "[s4.p][search][regex]")
+TEST_CASE("search_regex requires query", "[s4.p][s6.17][search][regex]")
 {
     auto tmp = make_test_dir("needs_query");
     write_file(tmp / "a.txt", "hello");
 
     {
         locus::Workspace ws(tmp);
-        locus::SearchTool tool;
-        auto result = tool.execute(regex_call({{"mode", "regex"}}), ws);
+        locus::SearchRegexTool tool;
+        auto result = tool.execute(regex_call(nlohmann::json::object()), ws);
 
         REQUIRE_FALSE(result.success);
         REQUIRE_THAT(result.content, ContainsSubstring("query"));
@@ -87,17 +87,16 @@ TEST_CASE("search mode=regex requires query", "[s4.p][search][regex]")
     cleanup(tmp);
 }
 
-TEST_CASE("search mode=regex rejects malformed pattern", "[s4.p][search][regex]")
+TEST_CASE("search_regex rejects malformed pattern", "[s4.p][s6.17][search][regex]")
 {
     auto tmp = make_test_dir("bad_pattern");
     write_file(tmp / "a.txt", "hello");
 
     {
         locus::Workspace ws(tmp);
-        locus::SearchTool tool;
+        locus::SearchRegexTool tool;
         // Unclosed group -- invalid ECMAScript regex.
         auto result = tool.execute(regex_call({
-            {"mode", "regex"},
             {"query", "foo("},
         }), ws);
 
@@ -319,24 +318,27 @@ TEST_CASE("search regex skips binary files", "[s4.p][search][regex]")
 
 // -- Schema --------------------------------------------------------------------
 
-TEST_CASE("search tool exposes regex params in its schema", "[s4.p][search][regex]")
+TEST_CASE("search_regex exposes its params in the schema", "[s4.p][s6.17][search][regex]")
 {
-    locus::SearchTool tool;
+    locus::SearchRegexTool tool;
     auto params = tool.params();
 
-    bool has_query = false, has_glob = false, has_case = false, has_mode = false;
-    bool has_pattern_leftover = false;
+    bool has_query = false, has_glob = false, has_case = false, has_max = false;
+    bool has_mode_leftover = false, has_pattern_leftover = false;
     for (auto& p : params) {
         if (p.name == "query")          has_query   = true;
         if (p.name == "path_glob")      has_glob    = true;
         if (p.name == "case_sensitive") has_case    = true;
-        if (p.name == "mode")           has_mode    = true;
+        if (p.name == "max_results")    has_max     = true;
+        if (p.name == "mode")           has_mode_leftover    = true;
         if (p.name == "pattern")        has_pattern_leftover = true;
     }
     REQUIRE(has_query);
     REQUIRE(has_glob);
     REQUIRE(has_case);
-    REQUIRE(has_mode);
+    REQUIRE(has_max);
+    // Post-S6.17 the per-mode tool name carries the mode; no `mode` arg.
+    REQUIRE_FALSE(has_mode_leftover);
     // Regex mode reuses `query`; the legacy `pattern` arg is gone.
     REQUIRE_FALSE(has_pattern_leftover);
 

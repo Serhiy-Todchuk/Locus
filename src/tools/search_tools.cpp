@@ -27,139 +27,47 @@ namespace fs = std::filesystem;
 
 using tools::error_result;
 
-// -- SearchTool (unified face) ----------------------------------------------
-// Dispatches on `mode` to one of the four implementations below. Keeps the
-// exposed tool catalog small (S3.L) without duplicating search logic.
+// -- Capability gating helpers ---------------------------------------------
 
-std::string SearchTool::description_for(IWorkspaceServices& ws) const
+namespace {
+
+bool has_semantic(IWorkspaceServices& ws)
 {
-    auto* w = ws.workspace();
-    bool semantic = w ? w->config().capabilities.semantic_search   : true;
-    bool code     = w ? w->config().capabilities.code_aware_search : true;
-
-    // The base list always carries text + regex. `symbols`/`ast` follow
-    // code-aware-search; `semantic`/`hybrid` follow semantic-search.
-    std::string desc = "Unified workspace search. Indexed content is the "
-                       "EXTRACTED text from every file: source code as-is, "
-                       "Markdown / HTML stripped of markup, and PDF / DOCX / "
-                       "XLSX extracted via PDFium / OOXML parsers. These "
-                       "binary document formats are first-class searchable "
-                       "(spreadsheet cells, PDF body text, Word paragraphs) "
-                       "even though `read_file` only returns their raw "
-                       "bytes. `mode` selects the backend: "
-                       "text (FTS5 keyword, default), regex (raw-content "
-                       "ECMAScript regex, preserves punctuation/case)";
-    if (code)     desc += ", symbols (code definitions), ast (Tree-sitter "
-                          "structural query, e.g. all `malloc` call sites)";
-    if (semantic) desc += ", semantic (vector similarity), hybrid (BM25 + "
-                          "vector)";
-    desc += ".";
-    if (semantic) desc += " Semantic and hybrid require semantic search to be "
-                          "enabled.";
-
-    // S6.10 Task E -- per-mode examples. Only render examples for modes
-    // actually available in this workspace; mirrors the mode-list filter
-    // above so the LLM doesn't see hints for tools it can't call.
-    desc += "\nExamples:\n";
-    desc += "  search({\"query\": \"WorkspaceConfig\"})  // text (default)\n";
-    desc += "  search({\"query\": \"->m_cache\", \"mode\": \"regex\"})\n";
-    if (code) {
-        desc += "  search({\"query\": \"ToolDispatcher\", \"mode\": \"symbols\", "
-                "\"kind\": \"class\"})\n";
-        desc += "  search({\"query\": \"(call_expression function: (identifier) "
-                "@fn (#eq? @fn \\\"malloc\\\"))\", \"mode\": \"ast\", "
-                "\"language\": \"c\"})\n";
-    }
-    if (semantic) {
-        desc += "  search({\"query\": \"how does the indexer batch file "
-                "events\", \"mode\": \"semantic\"})\n";
-        desc += "  search({\"query\": \"reasoning watchdog auto-nudge\", "
-                "\"mode\": \"hybrid\"})";
-    }
-    return desc;
+    if (auto* w = ws.workspace()) return w->config().capabilities.semantic_search;
+    return ws.embedder() != nullptr;  // tests without a Workspace handle
 }
 
-std::string SearchTool::preview(const ToolCall& call) const
+bool has_code_aware(IWorkspaceServices& ws)
 {
-    std::string mode = call.args.value("mode", "text");
-    // Symbols mode reads `name`; ast mode's `query` is an S-expression -- a
-    // fully expanded one swamps the bubble. Truncate both at 80 chars so the
-    // mode tag stays visible.
-    std::string q;
-    if (mode == "symbols") q = call.args.value("name", "");
-    else                   q = call.args.value("query", "");
-    if (q.size() > 80) q = q.substr(0, 77) + "...";
-
-    std::string out = "search [" + mode + "]";
-    if (!q.empty()) out += ": " + q;
-
-    // A path_glob narrows the scan dramatically -- worth surfacing.
-    std::string glob = call.args.value("path_glob", "");
-    if (!glob.empty()) out += "  in " + glob;
-
-    return out;
+    if (auto* w = ws.workspace()) return w->config().capabilities.code_aware_search;
+    return true;
 }
 
-ToolResult SearchTool::execute(const ToolCall& call, IWorkspaceServices& ws,
-                                const std::atomic<bool>* /*cancel_flag*/)
+// Truncate the preview query so the chat bubble stays readable.
+std::string preview_query(const std::string& q, std::size_t cap = 80)
 {
-    // S6.17 Task D -- union of every per-mode key plus `name` (symbols delegate
-    // accepts both `query` and `name`). `type` / `kind:` aliases land here too
-    // and the helper points the model at the canonical `mode`.
-    if (auto err = tools::reject_unknown_keys(call,
-            {"query", "mode", "path_glob", "case_sensitive", "max_results",
-             "kind", "language", "capture", "name"}))
-        return *err;
-
-    std::string mode = call.args.value("mode", "text");
-    // S6.17 Task D -- lowercase the enum-shaped arg before dispatch so
-    // `mode: "REGEX"` doesn't fall through to the default text branch.
-    std::transform(mode.begin(), mode.end(), mode.begin(),
-                   [](unsigned char c) { return std::tolower(c); });
-
-    // Rewrite args so the delegate sees exactly what it expects.
-    ToolCall sub = call;
-
-    if (mode == "text") {
-        SearchTextTool impl;
-        return impl.execute(sub, ws);
-    }
-    if (mode == "symbols") {
-        // SearchSymbolsTool expects `name` rather than `query` -- translate.
-        if (!sub.args.contains("name") && sub.args.contains("query"))
-            sub.args["name"] = sub.args["query"];
-        SearchSymbolsTool impl;
-        return impl.execute(sub, ws);
-    }
-    if (mode == "semantic") {
-        SearchSemanticTool impl;
-        return impl.execute(sub, ws);
-    }
-    if (mode == "hybrid") {
-        SearchHybridTool impl;
-        return impl.execute(sub, ws);
-    }
-    if (mode == "regex") {
-        SearchRegexTool impl;
-        return impl.execute(sub, ws);
-    }
-    if (mode == "ast") {
-        SearchAstTool impl;
-        return impl.execute(sub, ws);
-    }
-    return error_result("Error: unknown search mode '" + mode +
-                        "'. Supported: text, regex, symbols, ast, semantic, hybrid.");
+    if (q.size() <= cap) return q;
+    return q.substr(0, cap - 3) + "...";
 }
+
+} // namespace
 
 // -- SearchTextTool ---------------------------------------------------------
+
+std::string SearchTextTool::preview(const ToolCall& call) const
+{
+    std::string q = preview_query(call.args.value("query", ""));
+    return q.empty() ? std::string("search_text") : ("search_text: " + q);
+}
 
 ToolResult SearchTextTool::execute(const ToolCall& call, IWorkspaceServices& ws,
                                     const std::atomic<bool>* /*cancel_flag*/)
 {
+    if (auto err = tools::reject_unknown_keys(call,
+            {"query", "max_results"}))
+        return *err;
+
     std::string query = call.args.value("query", "");
-    // Default tightened from 20 -> 8 in S5.N: local LLMs lose tokens fast
-    // on long search results; FTS5 ranks the right file at the top anyway.
-    // Caller can still pass max_results=20 when breadth matters.
     int max_results = call.args.value("max_results", 8);
 
     if (query.empty())
@@ -191,9 +99,24 @@ ToolResult SearchTextTool::execute(const ToolCall& call, IWorkspaceServices& ws,
 
 // -- SearchSymbolsTool ------------------------------------------------------
 
+bool SearchSymbolsTool::available(IWorkspaceServices& ws) const
+{
+    return has_code_aware(ws);
+}
+
+std::string SearchSymbolsTool::preview(const ToolCall& call) const
+{
+    std::string q = preview_query(call.args.value("name", ""));
+    return q.empty() ? std::string("search_symbols") : ("search_symbols: " + q);
+}
+
 ToolResult SearchSymbolsTool::execute(const ToolCall& call, IWorkspaceServices& ws,
                                        const std::atomic<bool>* /*cancel_flag*/)
 {
+    if (auto err = tools::reject_unknown_keys(call,
+            {"name", "kind", "language"}))
+        return *err;
+
     std::string name_query = call.args.value("name", "");
     std::string kind     = call.args.value("kind", "");
     std::string language = call.args.value("language", "");
@@ -309,9 +232,24 @@ std::string indexing_progress_note(IWorkspaceServices& ws)
 
 } // namespace
 
+bool SearchSemanticTool::available(IWorkspaceServices& ws) const
+{
+    return has_semantic(ws);
+}
+
+std::string SearchSemanticTool::preview(const ToolCall& call) const
+{
+    std::string q = preview_query(call.args.value("query", ""));
+    return q.empty() ? std::string("search_semantic") : ("search_semantic: " + q);
+}
+
 ToolResult SearchSemanticTool::execute(const ToolCall& call, IWorkspaceServices& ws,
                                         const std::atomic<bool>* /*cancel_flag*/)
 {
+    if (auto err = tools::reject_unknown_keys(call,
+            {"query", "max_results"}))
+        return *err;
+
     auto* emb = ws.embedder();
     if (!emb)
         return error_result("Error: semantic search is not enabled. "
@@ -324,9 +262,6 @@ ToolResult SearchSemanticTool::execute(const ToolCall& call, IWorkspaceServices&
     if (query.empty())
         return error_result("Error: 'query' parameter is required");
 
-    // Default tightened from 10 -> 5 in S5.N (semantic mode). Semantic search
-    // on local-LLM-friendly workspaces hits MRR=~1.0 on most queries; the
-    // right file is almost always rank 1-2. Caller can override.
     int max_results = call.args.value("max_results", 5);
 
     auto embedding = emb->embed_query(query);
@@ -412,12 +347,25 @@ std::string extract_regex_snippet(const std::string& content,
 
 } // namespace
 
+std::string SearchRegexTool::preview(const ToolCall& call) const
+{
+    std::string q = preview_query(call.args.value("query", ""));
+    std::string out = q.empty() ? std::string("search_regex") : ("search_regex: " + q);
+    std::string glob = call.args.value("path_glob", "");
+    if (!glob.empty()) out += "  in " + glob;
+    return out;
+}
+
 ToolResult SearchRegexTool::execute(const ToolCall& call, IWorkspaceServices& ws,
                                      const std::atomic<bool>* /*cancel_flag*/)
 {
+    if (auto err = tools::reject_unknown_keys(call,
+            {"query", "path_glob", "case_sensitive", "max_results"}))
+        return *err;
+
     std::string pattern = call.args.value("query", "");
     if (pattern.empty())
-        return error_result("Error: 'query' parameter is required (regex mode)");
+        return error_result("Error: 'query' parameter is required");
 
     std::string path_glob    = call.args.value("path_glob", "");
     bool        case_sens    = call.args.value("case_sensitive", true);
@@ -642,9 +590,28 @@ bool match_passes_predicates(TSQuery* query, const TSQueryMatch& m,
 
 } // namespace
 
+bool SearchAstTool::available(IWorkspaceServices& ws) const
+{
+    return has_code_aware(ws);
+}
+
+std::string SearchAstTool::preview(const ToolCall& call) const
+{
+    std::string lang = call.args.value("language", "");
+    std::string q = preview_query(call.args.value("query", ""));
+    std::string out = std::string("search_ast");
+    if (!lang.empty()) out += " [" + lang + "]";
+    if (!q.empty())    out += ": " + q;
+    return out;
+}
+
 ToolResult SearchAstTool::execute(const ToolCall& call, IWorkspaceServices& ws,
                                    const std::atomic<bool>* /*cancel_flag*/)
 {
+    if (auto err = tools::reject_unknown_keys(call,
+            {"language", "query", "path_glob", "capture", "max_results"}))
+        return *err;
+
     std::string language       = call.args.value("language", "");
     std::string query_src      = call.args.value("query", "");
     std::string path_glob      = call.args.value("path_glob", "");
@@ -802,9 +769,24 @@ ToolResult SearchAstTool::execute(const ToolCall& call, IWorkspaceServices& ws,
 
 // -- SearchHybridTool -------------------------------------------------------
 
+bool SearchHybridTool::available(IWorkspaceServices& ws) const
+{
+    return has_semantic(ws);
+}
+
+std::string SearchHybridTool::preview(const ToolCall& call) const
+{
+    std::string q = preview_query(call.args.value("query", ""));
+    return q.empty() ? std::string("search_hybrid") : ("search_hybrid: " + q);
+}
+
 ToolResult SearchHybridTool::execute(const ToolCall& call, IWorkspaceServices& ws,
                                       const std::atomic<bool>* /*cancel_flag*/)
 {
+    if (auto err = tools::reject_unknown_keys(call,
+            {"query", "max_results"}))
+        return *err;
+
     auto* emb = ws.embedder();
     if (!emb)
         return error_result("Error: semantic search is not enabled. "
@@ -817,11 +799,6 @@ ToolResult SearchHybridTool::execute(const ToolCall& call, IWorkspaceServices& w
     if (query.empty())
         return error_result("Error: 'query' parameter is required");
 
-    // Default tightened from 10 -> 5 in S5.N (hybrid mode). Hybrid is the
-    // most token-heavy search path because each hit carries a snippet from
-    // either the BM25 or semantic side; a 10-hit response on a non-code
-    // workspace was costing ~1200 tokens. Caller can pass max_results=20
-    // when breadth matters (broad survey queries, retrieval eval).
     int max_results = call.args.value("max_results", 5);
 
     auto embedding = emb->embed_query(query);

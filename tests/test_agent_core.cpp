@@ -178,8 +178,8 @@ TEST_CASE("SystemPromptBuilder assembles all sections", "[s0.7]")
     // Should contain tool names.
     REQUIRE(prompt.find("read_file") != std::string::npos);
     REQUIRE(prompt.find("write_file") != std::string::npos);
-    // S3.L: the four search_* tools collapsed into one `search` face.
-    REQUIRE(prompt.find("search") != std::string::npos);
+    // S6.17 Task G: per-mode search_* tools (split from the unified `search`).
+    REQUIRE(prompt.find("search_text") != std::string::npos);
 }
 
 TEST_CASE("SystemPromptBuilder without LOCUS.md", "[s0.7]")

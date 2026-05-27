@@ -57,7 +57,7 @@ namespace {
 // Build one OpenAI function-calling entry for a tool:
 //   { "type": "function", "function": { "name", "description", "parameters" } }
 // When `ws` is non-null, the tool's `description_for(ws)` is used so
-// context-aware descriptions (S5.A SearchTool mode-list pruning) take effect.
+// context-aware descriptions (S5.A description_for hook) take effect.
 //
 // S6.11 -- `lazy` collapses parameters to a permissive schema for every tool
 // EXCEPT describe_tool itself (the meta-tool needs its real schema so the

@@ -32,6 +32,10 @@ TEST_CASE("edit_file single-edit shorthand round-trips end-to-end",
           "[integration][llm][s6.17][edit_file_shorthand]")
 {
     auto& h = harness();
+    // Fresh conversation: prior cases in the same file boundary may have
+    // primed QualityMonitor with similar tool_calls; reset eliminates that
+    // as a confounder for the assertions below.
+    h.agent().reset_conversation();
 
     const std::string rel_path  = "tests/integration_tmp/shorthand_edit.txt";
     const fs::path    abs_path  = h.workspace_root() / rel_path;
@@ -42,13 +46,23 @@ TEST_CASE("edit_file single-edit shorthand round-trips end-to-end",
     std::ofstream(abs_path, std::ios::binary)
         << "The quick brown fox jumps over the lazy dog.\n";
 
+    // Split into two prompts so a small model only has to follow one
+    // instruction per turn -- gemma-4-e4b (the minimum verified model)
+    // occasionally drops the second tool call when asked to chain both in
+    // one prompt. Turn 1 primes ReadTracker; turn 2 is the actual shorthand
+    // exercise.
+    PromptResult r1 = h.prompt(
+        "Call read_file on `" + rel_path + "` to confirm its content.");
+    REQUIRE_FALSE(r1.timed_out);
+    REQUIRE(r1.errors.empty());
+    REQUIRE(r1.tool_called("read_file"));
+
     // Tell the model to emit the shorthand form explicitly. Small local
     // models trained on the canonical `edits=[...]` shape would otherwise
     // pick the canonical form by default and never exercise the shorthand
     // codepath. The prompt names the exact key shape we need to see.
     PromptResult r = h.prompt(
-        "First call read_file on `" + rel_path + "` to confirm its content. "
-        "Then call edit_file using the SHORTHAND form: pass `path`, "
+        "Now call edit_file using the SHORTHAND form: pass `path`, "
         "`old_string`, and `new_string` as TOP-LEVEL keys -- DO NOT wrap "
         "them in an `edits` array. Change the word `quick` to the word "
         "`speedy`. Use exactly this shape:\n"
@@ -57,7 +71,6 @@ TEST_CASE("edit_file single-edit shorthand round-trips end-to-end",
 
     REQUIRE_FALSE(r.timed_out);
     REQUIRE(r.errors.empty());
-    REQUIRE(r.tool_called("read_file"));
     REQUIRE(r.tool_called("edit_file"));
 
     const auto* edit_call = r.find_tool_call("edit_file");

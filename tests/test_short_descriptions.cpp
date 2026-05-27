@@ -53,12 +53,42 @@ TEST_CASE("short_description: delete_file names path",
     assert_cues("delete_file", {"path"});
 }
 
-TEST_CASE("short_description: search names query+mode enum values",
+// S6.17 Task G -- the unified `search` tool was split into per-mode tools.
+// Each per-mode tool now names its own canonical args inline.
+TEST_CASE("short_description: search_text names query",
           "[s6.17][short_description]")
 {
-    assert_cues("search",
-        {"query", "mode", "text", "regex", "symbols",
-         "semantic", "hybrid"});
+    assert_cues("search_text", {"query"});
+}
+
+TEST_CASE("short_description: search_regex names query+max_results",
+          "[s6.17][short_description]")
+{
+    assert_cues("search_regex", {"query", "max_results"});
+}
+
+TEST_CASE("short_description: search_symbols names name arg (not query)",
+          "[s6.17][short_description]")
+{
+    assert_cues("search_symbols", {"name"});
+}
+
+TEST_CASE("short_description: search_semantic names query",
+          "[s6.17][short_description]")
+{
+    assert_cues("search_semantic", {"query"});
+}
+
+TEST_CASE("short_description: search_hybrid names query",
+          "[s6.17][short_description]")
+{
+    assert_cues("search_hybrid", {"query"});
+}
+
+TEST_CASE("short_description: search_ast names language+query+capture",
+          "[s6.17][short_description]")
+{
+    assert_cues("search_ast", {"language", "query", "capture"});
 }
 
 TEST_CASE("short_description: list_directory names path+depth",

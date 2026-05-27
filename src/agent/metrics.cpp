@@ -409,9 +409,9 @@ std::optional<int> parse_search_result_count(const std::string& tool_name,
     // Tool name gating: we want to track only retrieval calls. Both the
     // unified `search` face and the per-mode tools share the same headers.
     static const std::vector<std::string> retrieval_tools = {
-        "search",
+        "search",  // legacy (pre-S6.17 Task G); kept for back-compat
         "search_text", "search_regex", "search_symbols",
-        "search_semantic", "search_hybrid",
+        "search_semantic", "search_hybrid", "search_ast",
     };
     bool match = false;
     for (const auto& n : retrieval_tools) if (n == tool_name) { match = true; break; }

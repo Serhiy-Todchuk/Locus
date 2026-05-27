@@ -11,8 +11,15 @@ void register_builtin_tools(IToolRegistry& registry)
     registry.register_tool(std::make_unique<EditFileTool>());
     registry.register_tool(std::make_unique<DeleteFileTool>());
     registry.register_tool(std::make_unique<ListDirectoryTool>());
-    // S3.L: one unified `search` face instead of four separate tools.
-    registry.register_tool(std::make_unique<SearchTool>());
+    // S6.17 Task G (ADR-0008): per-mode top-level search tools. The unified
+    // `search` face was retired -- per-mode names match the LLM's training
+    // priors better than a mode-discriminator arg.
+    registry.register_tool(std::make_unique<SearchTextTool>());
+    registry.register_tool(std::make_unique<SearchRegexTool>());
+    registry.register_tool(std::make_unique<SearchSymbolsTool>());
+    registry.register_tool(std::make_unique<SearchSemanticTool>());
+    registry.register_tool(std::make_unique<SearchHybridTool>());
+    registry.register_tool(std::make_unique<SearchAstTool>());
     registry.register_tool(std::make_unique<GetFileOutlineTool>());
     registry.register_tool(std::make_unique<RunCommandTool>());
     // S4.I -- long-running shell processes.

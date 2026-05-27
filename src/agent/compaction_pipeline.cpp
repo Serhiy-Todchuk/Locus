@@ -234,9 +234,20 @@ std::string brief_args(const std::string& tool_name, const std::string& args)
             if (j.contains("path") && j["path"].is_string())
                 return j["path"].get<std::string>();
         }
-        if (tool_name == "search") {
+        // Legacy unified `search` + post-S6.17 per-mode search_* tools all
+        // accept a `query` arg, except search_symbols which uses `name`.
+        if (tool_name == "search"
+            || tool_name == "search_text"
+            || tool_name == "search_regex"
+            || tool_name == "search_semantic"
+            || tool_name == "search_hybrid"
+            || tool_name == "search_ast") {
             if (j.contains("query") && j["query"].is_string())
                 return j["query"].get<std::string>();
+        }
+        if (tool_name == "search_symbols") {
+            if (j.contains("name") && j["name"].is_string())
+                return j["name"].get<std::string>();
         }
     } catch (...) {
         // Malformed args -- fall through to raw-string preview.

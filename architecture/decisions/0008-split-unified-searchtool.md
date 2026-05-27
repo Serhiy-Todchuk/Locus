@@ -1,6 +1,6 @@
 # 0008. Split unified `SearchTool` into per-mode tools
 
-- **Status**: Proposed
+- **Status**: Accepted (shipped 2026-05-27)
 - **Date**: 2026-05-26
 - **Related stage**: [S6.17 -- Compaction Fixes + Tool-Arg Robustness](../../roadmap/M6/S6.17-compaction-fixes-and-tool-robustness.md) Task G
 

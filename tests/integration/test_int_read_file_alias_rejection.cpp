@@ -30,6 +30,9 @@ TEST_CASE("read_file rejects `lines` alias with explicit offset+length suggestio
           "[integration][llm][s6.17][read_file_alias]")
 {
     auto& h = harness();
+    h.agent().reset_conversation();  // sibling cases share history; clear it
+                                      // so QualityMonitor doesn't trip on a
+                                      // similar prior tool_call.
 
     // Stage a multi-page file so the prompt's "read lines 100-200" framing
     // is plausible (the model often refuses obviously-broken instructions

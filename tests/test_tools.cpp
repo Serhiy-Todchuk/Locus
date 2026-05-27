@@ -49,25 +49,30 @@ TEST_CASE("ToolRegistry: build_schema_json produces valid OpenAI schema", "[s0.6
     auto schema = registry.build_schema_json();
 
     REQUIRE(schema.is_array());
-    // S3.L: 4 search tools collapsed into a single unified `search` face (9 total).
+    // S3.L: 4 search tools collapsed into a single unified `search` face.
     // S4.A: +1 `edit_file` (exact-string edits, single or atomic batch),
     //       -1 `create_file` (merged into `write_file` with optional `overwrite`).
     // S4.D: +2 `propose_plan`, `mark_step_done` (visible only in plan/execute modes).
     // S4.R: +2 `add_memory`, `search_memory` (memory bank).
     // S6.11: +1 `describe_tool` (lazy-manifest meta-tool; always registered).
     // S6.17 Task A: -1 `filter_output` (removed; inline output_filter_mode covers).
-    REQUIRE(schema.size() == 18);
+    // S6.17 Task G: +5 -- the unified `search` tool re-split into six per-mode
+    //                     tools (search_text/regex/symbols/semantic/hybrid/ast).
+    REQUIRE(schema.size() == 23);
 
-    // One `search` entry, no split search_* tools.
-    bool has_search = false;
+    // No bare `search` entry; six per-mode search_* tools instead.
+    int search_count = 0;
+    bool has_bare_search = false;
     for (auto& entry : schema) {
-        if (entry["function"]["name"] == "search") has_search = true;
-        REQUIRE(entry["function"]["name"] != "search_text");
-        REQUIRE(entry["function"]["name"] != "search_symbols");
-        REQUIRE(entry["function"]["name"] != "search_semantic");
-        REQUIRE(entry["function"]["name"] != "search_hybrid");
+        const std::string n = entry["function"]["name"];
+        if (n == "search") has_bare_search = true;
+        if (n == "search_text" || n == "search_regex" ||
+            n == "search_symbols" || n == "search_semantic" ||
+            n == "search_hybrid" || n == "search_ast")
+            ++search_count;
     }
-    REQUIRE(has_search);
+    REQUIRE_FALSE(has_bare_search);
+    REQUIRE(search_count == 6);
 
     for (auto& entry : schema) {
         REQUIRE(entry.contains("type"));
@@ -99,10 +104,11 @@ TEST_CASE("ToolRegistry: all returns all tools", "[s0.6]")
     locus::register_builtin_tools(registry);
 
     auto all = registry.all();
-    REQUIRE(all.size() == 18);  // S4.D adds propose_plan + mark_step_done;
+    REQUIRE(all.size() == 23);  // S4.D adds propose_plan + mark_step_done;
                                 // S4.R adds add_memory + search_memory;
                                 // S6.11 adds describe_tool;
-                                // S6.17 Task A removed filter_output.
+                                // S6.17 Task A removed filter_output;
+                                // S6.17 Task G re-split `search` into 6 per-mode tools.
 }
 
 TEST_CASE("ToolRegistry: parse_tool_call handles valid and empty JSON", "[s0.6]")
@@ -449,43 +455,43 @@ TEST_CASE("DeleteFileTool: preview contains warning", "[s0.6]")
 // The chat panel renders preview() as a one-liner under the tool name; these
 // guard against accidental regression to "tool name only".
 
-TEST_CASE("SearchTool: preview surfaces mode and query", "[preview]")
+// S6.17 Task G -- per-mode search_* preview tests. Each tool's preview names
+// itself + its key arg so the chat-bubble caption stays informative.
+TEST_CASE("SearchHybridTool: preview surfaces tool name + query", "[preview]")
 {
-    locus::SearchTool tool;
-    locus::ToolCall call{"c1", "search",
-        {{"query", "fts5 sanitise"}, {"mode", "hybrid"}}};
+    locus::SearchHybridTool tool;
+    locus::ToolCall call{"c1", "search_hybrid", {{"query", "fts5 sanitise"}}};
 
     auto preview = tool.preview(call);
-    REQUIRE_THAT(preview, ContainsSubstring("hybrid"));
+    REQUIRE_THAT(preview, ContainsSubstring("search_hybrid"));
     REQUIRE_THAT(preview, ContainsSubstring("fts5 sanitise"));
 }
 
-TEST_CASE("SearchTool: preview defaults mode to text", "[preview]")
+TEST_CASE("SearchTextTool: preview surfaces tool name + query", "[preview]")
 {
-    locus::SearchTool tool;
-    locus::ToolCall call{"c1", "search", {{"query", "hello"}}};
+    locus::SearchTextTool tool;
+    locus::ToolCall call{"c1", "search_text", {{"query", "hello"}}};
 
     auto preview = tool.preview(call);
-    REQUIRE_THAT(preview, ContainsSubstring("text"));
+    REQUIRE_THAT(preview, ContainsSubstring("search_text"));
     REQUIRE_THAT(preview, ContainsSubstring("hello"));
 }
 
-TEST_CASE("SearchTool: preview reads `name` for symbols mode", "[preview]")
+TEST_CASE("SearchSymbolsTool: preview reads `name`", "[preview]")
 {
-    locus::SearchTool tool;
-    locus::ToolCall call{"c1", "search",
-        {{"mode", "symbols"}, {"name", "AgentCore"}}};
+    locus::SearchSymbolsTool tool;
+    locus::ToolCall call{"c1", "search_symbols", {{"name", "AgentCore"}}};
 
     auto preview = tool.preview(call);
-    REQUIRE_THAT(preview, ContainsSubstring("symbols"));
+    REQUIRE_THAT(preview, ContainsSubstring("search_symbols"));
     REQUIRE_THAT(preview, ContainsSubstring("AgentCore"));
 }
 
-TEST_CASE("SearchTool: preview truncates long queries", "[preview]")
+TEST_CASE("SearchTextTool: preview truncates long queries", "[preview]")
 {
-    locus::SearchTool tool;
+    locus::SearchTextTool tool;
     std::string long_q(200, 'x');
-    locus::ToolCall call{"c1", "search", {{"query", long_q}}};
+    locus::ToolCall call{"c1", "search_text", {{"query", long_q}}};
 
     auto preview = tool.preview(call);
     REQUIRE(preview.size() < 200);
@@ -730,12 +736,20 @@ TEST_CASE("ITool defaults: available()=true, visible_in_mode only in agent", "[s
     auto agent = registry.build_schema_json(ws, locus::ToolMode::agent);
     auto plan  = registry.build_schema_json(ws, locus::ToolMode::plan);
 
-    // 9 baseline + 4 background-process tools (S4.I). The bg tools mark
-    // themselves unavailable when the workspace has no ProcessRegistry,
-    // which the FakeWorkspaceServices used here does not. plan-mode and
-    // execute-mode-only tools (S4.D propose_plan, mark_step_done) are also
-    // hidden from agent mode. S6.17 Task A removed filter_output.
-    REQUIRE(agent.size() == 9);
+    // Under FakeWorkspaceServices (no real Workspace, no ProcessRegistry, no
+    // EmbeddingWorker), visible in agent mode:
+    //   read_file, write_file, edit_file, delete_file,
+    //   list_directory, get_file_outline,
+    //   search_text, search_regex, search_symbols, search_ast,
+    //   run_command, ask_user                                          = 12
+    // Hidden: bg-process tools (S4.I, need ProcessRegistry),
+    //         search_semantic / search_hybrid (S6.17 Task G, need embedder),
+    //         propose_plan / mark_step_done (plan/execute mode-only),
+    //         add_memory / search_memory (need MemoryStore),
+    //         describe_tool (needs Workspace handle).
+    // S6.17 Task A removed filter_output; Task G split the unified `search`
+    // tool into six per-mode tools (semantic/hybrid hidden here).
+    REQUIRE(agent.size() == 12);
     REQUIRE(plan.size()  == 1);  // S4.D: propose_plan is the one plan-mode tool
 }
 
@@ -749,7 +763,13 @@ TEST_CASE("Tool approval policies are correct", "[s0.6]")
     // auto tools (read-only)
     REQUIRE(registry.find("read_file")->approval_policy() == locus::ToolApprovalPolicy::auto_approve);
     REQUIRE(registry.find("list_directory")->approval_policy() == locus::ToolApprovalPolicy::auto_approve);
-    REQUIRE(registry.find("search")->approval_policy() == locus::ToolApprovalPolicy::auto_approve);
+    // S6.17 Task G -- six per-mode search_* tools instead of the unified `search`.
+    REQUIRE(registry.find("search_text")->approval_policy() == locus::ToolApprovalPolicy::auto_approve);
+    REQUIRE(registry.find("search_regex")->approval_policy() == locus::ToolApprovalPolicy::auto_approve);
+    REQUIRE(registry.find("search_symbols")->approval_policy() == locus::ToolApprovalPolicy::auto_approve);
+    REQUIRE(registry.find("search_semantic")->approval_policy() == locus::ToolApprovalPolicy::auto_approve);
+    REQUIRE(registry.find("search_hybrid")->approval_policy() == locus::ToolApprovalPolicy::auto_approve);
+    REQUIRE(registry.find("search_ast")->approval_policy() == locus::ToolApprovalPolicy::auto_approve);
     REQUIRE(registry.find("get_file_outline")->approval_policy() == locus::ToolApprovalPolicy::auto_approve);
 
     // ask tools (mutating)

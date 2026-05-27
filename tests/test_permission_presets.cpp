@@ -43,7 +43,13 @@ TEST_CASE("PermissionPreset: builtin_tool_category covers built-in tools",
           "[s5.s][permission_presets]")
 {
     REQUIRE(builtin_tool_category("read_file")       == "read");
-    REQUIRE(builtin_tool_category("search")          == "read");
+    // S6.17 Task G -- six per-mode search_* tools instead of the unified `search`.
+    REQUIRE(builtin_tool_category("search_text")     == "read");
+    REQUIRE(builtin_tool_category("search_regex")    == "read");
+    REQUIRE(builtin_tool_category("search_symbols")  == "read");
+    REQUIRE(builtin_tool_category("search_semantic") == "read");
+    REQUIRE(builtin_tool_category("search_hybrid")   == "read");
+    REQUIRE(builtin_tool_category("search_ast")      == "read");
     REQUIRE(builtin_tool_category("list_directory")  == "read");
     REQUIRE(builtin_tool_category("write_file")      == "edit");
     REQUIRE(builtin_tool_category("edit_file")       == "edit");
@@ -181,9 +187,12 @@ TEST_CASE("PermissionPreset: read_only denies all mutations, keeps reads",
     REQUIRE(effective(reg, sig, "run_command_bg") == ToolApprovalPolicy::deny);
     REQUIRE(effective(reg, sig, "stop_process")   == ToolApprovalPolicy::deny);
     REQUIRE(effective(reg, sig, "add_memory")     == ToolApprovalPolicy::deny);
-    REQUIRE(effective(reg, sig, "read_file")      == ToolApprovalPolicy::auto_approve);
-    REQUIRE(effective(reg, sig, "search")         == ToolApprovalPolicy::auto_approve);
-    REQUIRE(effective(reg, sig, "list_directory") == ToolApprovalPolicy::auto_approve);
+    REQUIRE(effective(reg, sig, "read_file")        == ToolApprovalPolicy::auto_approve);
+    // S6.17 Task G -- per-mode search_* tools instead of the unified `search`.
+    REQUIRE(effective(reg, sig, "search_text")      == ToolApprovalPolicy::auto_approve);
+    REQUIRE(effective(reg, sig, "search_regex")     == ToolApprovalPolicy::auto_approve);
+    REQUIRE(effective(reg, sig, "search_semantic")  == ToolApprovalPolicy::auto_approve);
+    REQUIRE(effective(reg, sig, "list_directory")   == ToolApprovalPolicy::auto_approve);
 }
 
 TEST_CASE("PermissionPreset: hand-tuned single cell falls to Custom",

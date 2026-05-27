@@ -61,16 +61,6 @@ bool manifest_has_tool(const nlohmann::json& schema, const std::string& name)
     return false;
 }
 
-std::string manifest_description(const nlohmann::json& schema, const std::string& name)
-{
-    for (auto& entry : schema) {
-        if (entry.value("type", "") != "function") continue;
-        if (entry["function"].value("name", "") == name)
-            return entry["function"].value("description", "");
-    }
-    return "";
-}
-
 } // namespace
 
 TEST_CASE("Capabilities: default values match the stage doc", "[s5.a][capabilities]")
@@ -134,40 +124,42 @@ TEST_CASE("Capabilities: code_aware_search off hides get_file_outline",
     REQUIRE_FALSE(manifest_has_tool(schema, "get_file_outline"));
 }
 
-TEST_CASE("Capabilities: SearchTool description prunes mode list with toggles",
-          "[s5.a][capabilities][search]")
+// S6.17 Task G (ADR-0008) -- per-mode search_* tools. Capability gating is
+// per-tool via available() instead of mode-list pruning on a unified tool.
+TEST_CASE("Capabilities: per-mode search_* tools gate on capability buckets",
+          "[s5.a][s6.17][capabilities][search]")
 {
     auto root = tmp_root("search_modes");
     auto kit  = make_ws(root);
 
+    // All six per-mode tools visible by default.
     auto schema = kit.tools->build_schema_json(*kit.ws, locus::ToolMode::agent);
-    std::string desc = manifest_description(schema, "search");
-    REQUIRE_FALSE(desc.empty());
-    // All four optional modes mentioned by default.
-    REQUIRE(desc.find("symbols")  != std::string::npos);
-    REQUIRE(desc.find("ast")      != std::string::npos);
-    REQUIRE(desc.find("semantic") != std::string::npos);
-    REQUIRE(desc.find("hybrid")   != std::string::npos);
+    REQUIRE(manifest_has_tool(schema, "search_text"));
+    REQUIRE(manifest_has_tool(schema, "search_regex"));
+    REQUIRE(manifest_has_tool(schema, "search_symbols"));
+    REQUIRE(manifest_has_tool(schema, "search_semantic"));
+    REQUIRE(manifest_has_tool(schema, "search_hybrid"));
+    REQUIRE(manifest_has_tool(schema, "search_ast"));
 
-    // Turn code-aware off -> symbols + ast drop.
+    // Turn code-aware off -> symbols + ast drop. text / regex / semantic / hybrid stay.
     kit.ws->config().capabilities.code_aware_search = false;
     schema = kit.tools->build_schema_json(*kit.ws, locus::ToolMode::agent);
-    desc = manifest_description(schema, "search");
-    REQUIRE(desc.find("symbols")  == std::string::npos);
-    REQUIRE(desc.find("ast")      == std::string::npos);
-    REQUIRE(desc.find("semantic") != std::string::npos);
-    REQUIRE(desc.find("hybrid")   != std::string::npos);
+    REQUIRE(manifest_has_tool(schema, "search_text"));
+    REQUIRE(manifest_has_tool(schema, "search_regex"));
+    REQUIRE_FALSE(manifest_has_tool(schema, "search_symbols"));
+    REQUIRE_FALSE(manifest_has_tool(schema, "search_ast"));
+    REQUIRE(manifest_has_tool(schema, "search_semantic"));
+    REQUIRE(manifest_has_tool(schema, "search_hybrid"));
 
-    // Turn semantic off too -> only text + regex left in the mode list.
+    // Turn semantic off too -> only text + regex remain visible.
     kit.ws->config().capabilities.semantic_search = false;
     schema = kit.tools->build_schema_json(*kit.ws, locus::ToolMode::agent);
-    desc = manifest_description(schema, "search");
-    REQUIRE(desc.find("symbols")  == std::string::npos);
-    REQUIRE(desc.find("ast")      == std::string::npos);
-    REQUIRE(desc.find("semantic") == std::string::npos);
-    REQUIRE(desc.find("hybrid")   == std::string::npos);
-    REQUIRE(desc.find("text")     != std::string::npos);
-    REQUIRE(desc.find("regex")    != std::string::npos);
+    REQUIRE(manifest_has_tool(schema, "search_text"));
+    REQUIRE(manifest_has_tool(schema, "search_regex"));
+    REQUIRE_FALSE(manifest_has_tool(schema, "search_symbols"));
+    REQUIRE_FALSE(manifest_has_tool(schema, "search_ast"));
+    REQUIRE_FALSE(manifest_has_tool(schema, "search_semantic"));
+    REQUIRE_FALSE(manifest_has_tool(schema, "search_hybrid"));
 }
 
 TEST_CASE("Capabilities: round-trip through config.json preserves values",
@@ -231,23 +223,25 @@ TEST_CASE("Capabilities: legacy config (no capabilities block) migrates cleanly"
     REQUIRE(c.web_retrieval        == false);
 }
 
-TEST_CASE("Capabilities: unfiltered schema is unchanged (description() static)",
-          "[s5.a][capabilities][schema]")
+TEST_CASE("Capabilities: unfiltered schema lists every search_* tool regardless of toggles",
+          "[s5.a][s6.17][capabilities][schema]")
 {
     auto root = tmp_root("unfiltered");
     auto kit  = make_ws(root);
 
-    // The unfiltered build path doesn't apply description_for; it MUST
-    // continue to mention every mode regardless of capability flips so
-    // tools and the system-prompt text builder stay deterministic.
+    // The unfiltered build path doesn't apply available(); it MUST list every
+    // registered tool regardless of capability flips so tests and the
+    // system-prompt text builder stay deterministic.
     kit.ws->config().capabilities.code_aware_search = false;
     kit.ws->config().capabilities.semantic_search   = false;
 
     auto schema = kit.tools->build_schema_json();
-    std::string desc = manifest_description(schema, "search");
-    REQUIRE(desc.find("symbols")  != std::string::npos);
-    REQUIRE(desc.find("ast")      != std::string::npos);
-    REQUIRE(desc.find("semantic") != std::string::npos);
+    REQUIRE(manifest_has_tool(schema, "search_text"));
+    REQUIRE(manifest_has_tool(schema, "search_regex"));
+    REQUIRE(manifest_has_tool(schema, "search_symbols"));
+    REQUIRE(manifest_has_tool(schema, "search_semantic"));
+    REQUIRE(manifest_has_tool(schema, "search_hybrid"));
+    REQUIRE(manifest_has_tool(schema, "search_ast"));
 }
 
 TEST_CASE("Capabilities: web_retrieval toggle has no manifest effect today",
