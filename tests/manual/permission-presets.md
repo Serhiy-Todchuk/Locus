@@ -13,16 +13,19 @@ closed).
 2. Pick "Read-only" from the preset dropdown. Expect: no warning modal (the
    safe-direction picks don't prompt). The per-tool dropdowns below repaint
    so write_file / edit_file / delete_file / run_command / run_command_bg /
-   add_memory / stop_process all show "Deny". read_file / search /
-   list_directory / get_file_outline stay "Auto-Approve". ask_user stays
-   "Ask Every Time".
+   add_memory / stop_process all show "Deny". `ask_user` stays
+   "Ask Every Time". Read tools (read_file / search_* / list_directory /
+   get_file_outline / list_processes / read_process_output / search_memory)
+   are not in the per-tool grid -- they're always auto-approved and a
+   one-line notice at the top of the tab calls that out.
 3. Click OK. Re-open Settings -> Tool Approvals. Expect: the preset
    dropdown still reads "Read-only", and the per-tool dropdowns still
    reflect the snapshot.
 4. Open `.locus/config.json` and confirm the new `tool_approvals` map
    includes explicit entries for every mutating tool (`"deny"`) plus an
-   `"mcp:*": "ask"` wildcard. Reads + plan tools don't appear (they were
-   already at their built-in defaults).
+   `"mcp:*": "ask"` wildcard. Read tools, plan tools, and ask_user don't
+   appear -- reads are dispatcher-forced to auto regardless of any entry,
+   and the other two were already at their built-in defaults.
 5. Re-open Settings -> Tool Approvals. Pick "Allow all". Expect: a warning
    modal -- "Apply 'Allow all' preset?" with copy that calls out
    shell auto-approval and MCP still asking. Click "Apply preset".

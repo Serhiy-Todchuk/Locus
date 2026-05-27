@@ -49,7 +49,12 @@ const char* preset_description(PermissionPreset p);
 // the policy for its built-in category. MCP tools are covered by a single
 // "mcp:*" entry (per-server overrides are managed in the MCP panel).
 // `propose_plan` / `mark_step_done` keep their own default (auto) -- listing
-// them per preset would be noise. `ask_user` is always `ask`.
+// them per preset would be noise. `ask_user` is always `ask`. Read-category
+// tools (read_file / search_* / list_directory / get_file_outline /
+// list_processes / read_process_output / search_memory) are unconditionally
+// auto-approved at the dispatcher and never appear in the signature; the
+// workspace boundary is the trust boundary, so a per-tool gate for reads
+// would just be UI clutter that every named preset reverts anyway.
 //
 // Returns custom -> empty map (custom is detection-only; the caller is
 // expected to keep the user's hand-tweaked map unchanged).
@@ -60,7 +65,10 @@ preset_signature(PermissionPreset preset, const IToolRegistry& registry);
 // named preset (if any) matches exactly. Tools without an override are treated
 // as their built-in default (ITool::approval_policy()). A bare-prefix entry
 // outside the supported "mcp:*" channel, or per-server "mcp:<name>:*" entries
-// that diverge from the wildcard, flips detection to Custom.
+// that diverge from the wildcard, flips detection to Custom. Stale overrides
+// on read-category tools are ignored during comparison (the dispatcher
+// hard-forces read tools to auto_approve regardless), so an old config that
+// wrote e.g. `read_file: ask` doesn't break preset detection.
 PermissionPreset
 detect_preset(const std::unordered_map<std::string, ToolApprovalPolicy>& overrides,
               const IToolRegistry& registry);

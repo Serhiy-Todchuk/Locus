@@ -75,9 +75,10 @@ default for `edit_file` / `write_file` / `delete_file` / `run_command` /
 ### Test 3 -- Multiple sequential approvals in one turn
 
 1. Ask the agent something that requires two or more separate
-   approvals, e.g. `please read CLAUDE.md and then read README.md`
-   if `read_file` is set to Ask, OR `please run "dir" then run "echo hello"`
-   if `run_command` is Ask.
+   approvals, e.g. `please run "dir" then run "echo hello"` with
+   `run_command` set to Ask. (Read tools are dispatcher-forced to
+   auto_approve and never reach the approval modal regardless of the
+   override map.)
 2. After approving the first call, the modal should disappear and
    reappear for the second call.
 
