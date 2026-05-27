@@ -411,7 +411,7 @@ std::optional<int> parse_search_result_count(const std::string& tool_name,
     static const std::vector<std::string> retrieval_tools = {
         "search",  // legacy (pre-S6.17 Task G); kept for back-compat
         "search_text", "search_regex", "search_symbols",
-        "search_semantic", "search_hybrid", "search_ast",
+        "search_semantic", "search_ast",
     };
     bool match = false;
     for (const auto& n : retrieval_tools) if (n == tool_name) { match = true; break; }

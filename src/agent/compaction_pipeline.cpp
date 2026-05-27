@@ -240,7 +240,6 @@ std::string brief_args(const std::string& tool_name, const std::string& args)
             || tool_name == "search_text"
             || tool_name == "search_regex"
             || tool_name == "search_semantic"
-            || tool_name == "search_hybrid"
             || tool_name == "search_ast") {
             if (j.contains("query") && j["query"].is_string())
                 return j["query"].get<std::string>();

@@ -20,7 +20,7 @@ Tag filters match [Catch2 test tags](https://github.com/catchorg/Catch2/blob/dev
 | Tag | Source | What it exercises |
 |---|---|---|
 | `[smoke]`    | [test_int_smoke.cpp](test_int_smoke.cpp)        | LLM reachability gate, workspace opens + indexes, `read_file` via LLM. |
-| `[search]`   | [test_int_search.cpp](test_int_search.cpp)      | Six per-mode search tools (S6.17 Task G / ADR-0008) -- `search_text` (FTS5), `search_regex` (raw-content `std::regex`), `search_symbols` (tree-sitter), `search_ast` (Tree-sitter S-expression queries), `search_semantic` (vectors), `search_hybrid` (RRF merge). |
+| `[search]`   | [test_int_search.cpp](test_int_search.cpp)      | Five per-mode search tools (S6.17 Task G / ADR-0008; ADR-0009 retired `search_hybrid`) -- `search_text` (FTS5), `search_regex` (raw-content `std::regex`), `search_symbols` (tree-sitter), `search_ast` (Tree-sitter S-expression queries), `search_semantic` (vectors). |
 | `[outline]`  | [test_int_outline.cpp](test_int_outline.cpp)    | `get_file_outline` against every extractor -- `.md`, `.pdf` (PDFium), `.docx` (miniz+pugixml), `.xlsx`. |
 | `[fs]`       | [test_int_fs_lifecycle.cpp](test_int_fs_lifecycle.cpp) | Full lifecycle in a scratch dir: `write_file` -> `read_file` + `edit_file` (with `replace_all`) -> indexer picks up change -> `delete_file`. Also covers `list_directory`. |
 | `[shell]`    | [test_int_shell.cpp](test_int_shell.cpp)        | `run_command` executes and captures stdout. |
@@ -183,10 +183,9 @@ Design notes:
   through `on_tool_call_pending`, regardless of its default policy. The
   harness then auto-approves synchronously (no real round-trip latency).
   Reason: auto-approve tools (`read_file`, `search_text` / `search_regex` /
-  `search_symbols` / `search_semantic` / `search_hybrid` / `search_ast`,
-  `list_directory`, `get_file_outline`) skip `on_tool_call_pending` in
-  normal operation -- so tests couldn't observe them. Forcing `ask` gives
-  uniform observability.
+  `search_symbols` / `search_semantic` / `search_ast`, `list_directory`,
+  `get_file_outline`) skip `on_tool_call_pending` in normal operation --
+  so tests couldn't observe them. Forcing `ask` gives uniform observability.
 - **Deterministic vs LLM-driven assertions.** When verifying system-level
   behavior (indexer picked up a new file, DB contains a symbol), the tests
   call `IndexQuery` directly rather than prompting the LLM to do a search.

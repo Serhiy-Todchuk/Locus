@@ -132,16 +132,16 @@ TEST_CASE("Capabilities: per-mode search_* tools gate on capability buckets",
     auto root = tmp_root("search_modes");
     auto kit  = make_ws(root);
 
-    // All six per-mode tools visible by default.
+    // All five per-mode tools visible by default (search_hybrid retired ADR-0009).
     auto schema = kit.tools->build_schema_json(*kit.ws, locus::ToolMode::agent);
     REQUIRE(manifest_has_tool(schema, "search_text"));
     REQUIRE(manifest_has_tool(schema, "search_regex"));
     REQUIRE(manifest_has_tool(schema, "search_symbols"));
     REQUIRE(manifest_has_tool(schema, "search_semantic"));
-    REQUIRE(manifest_has_tool(schema, "search_hybrid"));
     REQUIRE(manifest_has_tool(schema, "search_ast"));
+    REQUIRE_FALSE(manifest_has_tool(schema, "search_hybrid"));
 
-    // Turn code-aware off -> symbols + ast drop. text / regex / semantic / hybrid stay.
+    // Turn code-aware off -> symbols + ast drop. text / regex / semantic stay.
     kit.ws->config().capabilities.code_aware_search = false;
     schema = kit.tools->build_schema_json(*kit.ws, locus::ToolMode::agent);
     REQUIRE(manifest_has_tool(schema, "search_text"));
@@ -149,7 +149,6 @@ TEST_CASE("Capabilities: per-mode search_* tools gate on capability buckets",
     REQUIRE_FALSE(manifest_has_tool(schema, "search_symbols"));
     REQUIRE_FALSE(manifest_has_tool(schema, "search_ast"));
     REQUIRE(manifest_has_tool(schema, "search_semantic"));
-    REQUIRE(manifest_has_tool(schema, "search_hybrid"));
 
     // Turn semantic off too -> only text + regex remain visible.
     kit.ws->config().capabilities.semantic_search = false;
@@ -159,7 +158,6 @@ TEST_CASE("Capabilities: per-mode search_* tools gate on capability buckets",
     REQUIRE_FALSE(manifest_has_tool(schema, "search_symbols"));
     REQUIRE_FALSE(manifest_has_tool(schema, "search_ast"));
     REQUIRE_FALSE(manifest_has_tool(schema, "search_semantic"));
-    REQUIRE_FALSE(manifest_has_tool(schema, "search_hybrid"));
 }
 
 TEST_CASE("Capabilities: round-trip through config.json preserves values",
@@ -240,8 +238,9 @@ TEST_CASE("Capabilities: unfiltered schema lists every search_* tool regardless 
     REQUIRE(manifest_has_tool(schema, "search_regex"));
     REQUIRE(manifest_has_tool(schema, "search_symbols"));
     REQUIRE(manifest_has_tool(schema, "search_semantic"));
-    REQUIRE(manifest_has_tool(schema, "search_hybrid"));
     REQUIRE(manifest_has_tool(schema, "search_ast"));
+    // search_hybrid retired in ADR-0009 (ADR-0009).
+    REQUIRE_FALSE(manifest_has_tool(schema, "search_hybrid"));
 }
 
 TEST_CASE("Capabilities: web_retrieval toggle has no manifest effect today",

@@ -17,8 +17,14 @@ void register_builtin_tools(IToolRegistry& registry)
     registry.register_tool(std::make_unique<SearchTextTool>());
     registry.register_tool(std::make_unique<SearchRegexTool>());
     registry.register_tool(std::make_unique<SearchSymbolsTool>());
+    // ADR-0009: `search_hybrid` retired. Retrieval-eval data showed semantic
+    // dominates on WS2 (+14pt recall@1) and ties on WS3; the BM25+vector
+    // blend is corpus-dependent and not Pareto-improving. The blended score
+    // is also harder for the LLM to reason about than a clean cosine.
+    // `IndexQuery::search_hybrid` is still callable from the retrieval-eval
+    // harness so future BM25+vector tuning can be measured against the
+    // per-corpus baseline.
     registry.register_tool(std::make_unique<SearchSemanticTool>());
-    registry.register_tool(std::make_unique<SearchHybridTool>());
     registry.register_tool(std::make_unique<SearchAstTool>());
     registry.register_tool(std::make_unique<GetFileOutlineTool>());
     registry.register_tool(std::make_unique<RunCommandTool>());

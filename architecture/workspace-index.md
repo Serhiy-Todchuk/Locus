@@ -242,18 +242,31 @@ Query: "memory allocation management"
     { path, line_start, label, snippet, score }
 ```
 
-### `search_hybrid(query, options?)` -- default search tool
-Runs both and merges. Returns ranked snippets, not full files.
-Options: filter by path prefix, extension, language, symbol kind.
+### `search_semantic(query, options?)` -- default vector search
+Pure cosine similarity over indexed chunks. Returns ranked snippets, not full files.
+Options: `max_results`. Hidden when semantic search is disabled.
 
 ### `search_text(query, options?)` -- keyword only
-FTS5 BM25. Used when semantic is disabled or for exact-match queries.
+FTS5 BM25. The only general text search when semantic is disabled; faster than
+semantic for exact-keyword queries.
 
-### `search_symbols(name, kind?, language?)` -- code symbol lookup
+### `search_symbols(name, kind?, language?, max_results?)` -- code symbol lookup
 Exact + prefix match on the `symbols` table. Fast, no embedding needed.
 
-### `search_semantic(query, options?)` -- vector only
-Pure cosine similarity. Useful when exact terms are unknown.
+### `search_regex(query, path_glob?, case_sensitive?, max_results?)` -- raw regex
+ECMAScript regex over raw file bytes. Preserves punctuation/case; for exact
+identifiers like `->m_cache` and patterns like `TODO(XXX)`.
+
+### `search_ast(language, query, ...)` -- structural search
+Tree-sitter S-expression queries for shapes (all `malloc` calls, classes
+inheriting `ITool`, etc.). Requires `code_aware_search` capability.
+
+> `search_hybrid` (BM25 + semantic RRF merge) is **retired from the LLM tool
+> surface** per [ADR-0009](decisions/0009-retire-search-hybrid.md). The RRF
+> diagram above still describes `IndexQuery::search_hybrid`, which is kept in
+> code for the retrieval-eval harness. Retrieval-eval shows semantic dominates
+> on WS2 by 14pt recall@1 and ties on WS3 -- the blend isn't a Pareto
+> improvement, and the LLM has no clear signal to pick between the two.
 
 ---
 
@@ -263,9 +276,11 @@ The agent never touches SQLite directly. High-level tools only:
 
 | Tool | Search type | Token cost | When to use |
 |---|---|---|---|
-| `search_hybrid` | BM25 + semantic | Low | Default -- most queries |
+| `search_semantic` | Vector cosine | Low | Default conceptual search |
 | `search_text` | BM25 keyword | Very low | Exact names, IDs, error strings |
 | `search_symbols` | Symbol table | Minimal | "Where is class X defined?" |
+| `search_regex` | Per-line regex | Low | Exhaustive pattern hunt (`TODO(XXX)`, `->m_cache`) |
+| `search_ast` | Tree-sitter query | Low | Structural shape (all callers of X, classes inheriting Y) |
 | `get_file_outline` | Index metadata | Minimal | Understand a file before reading it |
 | `list_directory` | File registry | Minimal | Explore folder structure |
 

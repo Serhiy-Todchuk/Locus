@@ -56,8 +56,9 @@ large HTML-only corpus, and that the agent cites the right article files.
 
 **Expected.** 3 of 4 prompts produce sourced answers. Activity panel for
 each successful prompt shows at least one `search_text` / `search_semantic`
-/ `search_hybrid` call followed by a `read_file` on a hit. The negative
-prompt explicitly admits no coverage.
+call followed by a `read_file` on a hit. The negative prompt explicitly
+admits no coverage. (`search_hybrid` retired in ADR-0009 -- not in the
+LLM-facing tool surface; still measurable via the retrieval-eval harness.)
 
 ---
 
@@ -145,11 +146,12 @@ plan.
    - **WS3** (bge-m3 profile, PDF-only RFCs + Markdown notes): semantic
      and hybrid 13/13 at recall@5; text 6/13 (RFC formal language
      doesn't align with natural-language queries).
-   - Pattern to expect: search_hybrid ~ search_semantic > search_text.
-     Pure-keyword running below 50% hit-rate on a non-code corpus is
-     normal and means semantic is earning its keep, not that something
-     is broken.
-   - Below ~75% hit-rate on hybrid means re-check extraction first
+   - Pattern to expect: search_semantic ~ search_hybrid > search_text.
+     `search_hybrid` is retired from the LLM tool surface in ADR-0009
+     but the eval harness still measures it for reference. Pure-keyword
+     running below 50% hit-rate on a non-code corpus is normal and means
+     semantic is earning its keep, not that something is broken.
+   - Below ~75% hit-rate on semantic means re-check extraction first
      (open a hit's `read_file` output, confirm HTMLExtractor / PDFium
      produced usable text). The S5.N investigation surfaced two
      extraction/indexing bugs this way: see

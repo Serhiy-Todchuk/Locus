@@ -114,12 +114,14 @@ ToolResult SearchSymbolsTool::execute(const ToolCall& call, IWorkspaceServices& 
                                        const std::atomic<bool>* /*cancel_flag*/)
 {
     if (auto err = tools::reject_unknown_keys(call,
-            {"name", "kind", "language"}))
+            {"name", "kind", "language", "max_results"}))
         return *err;
 
     std::string name_query = call.args.value("name", "");
     std::string kind     = call.args.value("kind", "");
     std::string language = call.args.value("language", "");
+    int         max_results = call.args.value("max_results", 50);
+    if (max_results <= 0) max_results = 50;
 
     if (name_query.empty())
         return error_result("Error: 'name' parameter is required");
@@ -129,9 +131,16 @@ ToolResult SearchSymbolsTool::execute(const ToolCall& call, IWorkspaceServices& 
         return error_result("Error: workspace index not available");
 
     auto results = idx->search_symbols(name_query, kind, language);
+    bool truncated = false;
+    if (static_cast<int>(results.size()) > max_results) {
+        results.resize(static_cast<size_t>(max_results));
+        truncated = true;
+    }
 
     std::ostringstream content;
-    content << results.size() << " symbols matching \"" << name_query << "\"\n";
+    content << results.size() << " symbols matching \"" << name_query << "\"";
+    if (truncated) content << " [truncated at max_results]";
+    content << "\n";
     for (auto& s : results) {
         content << "  " << s.kind << " " << s.name;
         if (!s.signature.empty()) content << s.signature;
@@ -767,72 +776,7 @@ ToolResult SearchAstTool::execute(const ToolCall& call, IWorkspaceServices& ws,
     return {true, result, result};
 }
 
-// -- SearchHybridTool -------------------------------------------------------
-
-bool SearchHybridTool::available(IWorkspaceServices& ws) const
-{
-    return has_semantic(ws);
-}
-
-std::string SearchHybridTool::preview(const ToolCall& call) const
-{
-    std::string q = preview_query(call.args.value("query", ""));
-    return q.empty() ? std::string("search_hybrid") : ("search_hybrid: " + q);
-}
-
-ToolResult SearchHybridTool::execute(const ToolCall& call, IWorkspaceServices& ws,
-                                      const std::atomic<bool>* /*cancel_flag*/)
-{
-    if (auto err = tools::reject_unknown_keys(call,
-            {"query", "max_results"}))
-        return *err;
-
-    auto* emb = ws.embedder();
-    if (!emb)
-        return error_result("Error: semantic search is not enabled. "
-                            "Enable it in Settings > Index > Semantic Search.");
-    auto* idx = ws.index();
-    if (!idx)
-        return error_result("Error: workspace index not available");
-
-    std::string query = call.args.value("query", "");
-    if (query.empty())
-        return error_result("Error: 'query' parameter is required");
-
-    int max_results = call.args.value("max_results", 5);
-
-    auto embedding = emb->embed_query(query);
-
-    SearchOptions opts;
-    bool use_rr = ws.reranker() != nullptr;
-    opts.max_results = use_rr
-        ? std::max(max_results, reranker_top_k_for(ws, 50))
-        : max_results;
-    auto results = idx->search_hybrid(query, embedding, opts);
-
-    apply_reranker(results, ws, query, max_results);
-
-    std::string progress = indexing_progress_note(ws);
-
-    if (results.empty()) {
-        std::string body = progress + "No matches found.";
-        return {true, body, body};
-    }
-
-    std::ostringstream out;
-    out << progress
-        << results.size() << " hybrid matches (BM25 + semantic"
-        << (use_rr ? " + rerank):\n" : "):\n");
-    for (size_t i = 0; i < results.size(); ++i) {
-        auto& r = results[i];
-        out << "\n[" << (i + 1) << "] " << r.path;
-        if (r.line > 0) out << ":" << r.line;
-        out << " (score: " << std::fixed << std::setprecision(4) << r.score << ")\n";
-        out << r.snippet << "\n";
-    }
-
-    std::string result = out.str();
-    return {true, result, result};
-}
+// SearchHybridTool retired in ADR-0009. `IndexQuery::search_hybrid` remains
+// for the retrieval-eval harness; no back-compat shim for saved sessions.
 
 } // namespace locus

@@ -495,12 +495,12 @@ void ToolDispatcher::dispatch(const ToolCall& call, const AppendFn& append_resul
                                                               result.content);
         std::optional<int> rcap;
         if (rcount.has_value()) {
-            // search_text/symbols default to 20, semantic/hybrid 10, regex 50.
+            // search_text default 20, semantic 10, regex/symbols 50.
             int default_cap = 20;
-            if (call.tool_name == "search_semantic"
-                || call.tool_name == "search_hybrid")
+            if (call.tool_name == "search_semantic")
                 default_cap = 10;
-            else if (call.tool_name == "search_regex")
+            else if (call.tool_name == "search_regex"
+                     || call.tool_name == "search_symbols")
                 default_cap = 50;
             rcap = effective_call.args.value("max_results", default_cap);
         }

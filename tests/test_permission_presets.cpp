@@ -43,12 +43,12 @@ TEST_CASE("PermissionPreset: builtin_tool_category covers built-in tools",
           "[s5.s][permission_presets]")
 {
     REQUIRE(builtin_tool_category("read_file")       == "read");
-    // S6.17 Task G -- six per-mode search_* tools instead of the unified `search`.
+    // S6.17 Task G -- per-mode search_* tools instead of the unified `search`.
+    // ADR-0009 -- search_hybrid retired; only five search_* survive.
     REQUIRE(builtin_tool_category("search_text")     == "read");
     REQUIRE(builtin_tool_category("search_regex")    == "read");
     REQUIRE(builtin_tool_category("search_symbols")  == "read");
     REQUIRE(builtin_tool_category("search_semantic") == "read");
-    REQUIRE(builtin_tool_category("search_hybrid")   == "read");
     REQUIRE(builtin_tool_category("search_ast")      == "read");
     REQUIRE(builtin_tool_category("list_directory")  == "read");
     REQUIRE(builtin_tool_category("write_file")      == "edit");

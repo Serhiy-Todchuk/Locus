@@ -187,7 +187,7 @@ article title with characters Windows disallows replaced by underscores
 
 This workspace has no code. Do not suggest code-related tools; in particular
 the `code-aware search` capability bucket should stay off (Settings ->
-Capabilities). Prefer `search_hybrid` for topic questions and `search_text`
+Capabilities). Prefer `search_semantic` for topic questions and `search_text`
 when the user names an article exactly.
 
 If a question cannot be answered from the indexed articles, say so plainly

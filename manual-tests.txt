@@ -4,7 +4,7 @@
 
 3	Use search_semantic to find code related to embedding inference
 
-4	Use search_hybrid to find files about file watching and debouncing
+4	Use search_semantic to find files about file watching and debouncing
 
 5	Add temperature control for LLM to settings dialog in src/gui. Default it to "0.1". Start by reading
 CLAUDE.md to get project context, then propose what to change.

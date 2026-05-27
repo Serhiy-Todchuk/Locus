@@ -97,7 +97,6 @@ std::string builtin_tool_category(const std::string& name)
         || name == "search_regex"
         || name == "search_symbols"
         || name == "search_semantic"
-        || name == "search_hybrid"
         || name == "search_ast"
         || name == "list_directory"
         || name == "get_file_outline"

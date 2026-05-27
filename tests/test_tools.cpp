@@ -58,21 +58,25 @@ TEST_CASE("ToolRegistry: build_schema_json produces valid OpenAI schema", "[s0.6
     // S6.17 Task A: -1 `filter_output` (removed; inline output_filter_mode covers).
     // S6.17 Task G: +5 -- the unified `search` tool re-split into six per-mode
     //                     tools (search_text/regex/symbols/semantic/hybrid/ast).
-    REQUIRE(schema.size() == 23);
+    // ADR-0009: -1 `search_hybrid` retired (corpus-dependent vs semantic).
+    REQUIRE(schema.size() == 22);
 
-    // No bare `search` entry; six per-mode search_* tools instead.
+    // No bare `search` entry; five per-mode search_* tools (hybrid retired).
     int search_count = 0;
     bool has_bare_search = false;
+    bool has_hybrid = false;
     for (auto& entry : schema) {
         const std::string n = entry["function"]["name"];
         if (n == "search") has_bare_search = true;
+        if (n == "search_hybrid") has_hybrid = true;
         if (n == "search_text" || n == "search_regex" ||
             n == "search_symbols" || n == "search_semantic" ||
-            n == "search_hybrid" || n == "search_ast")
+            n == "search_ast")
             ++search_count;
     }
     REQUIRE_FALSE(has_bare_search);
-    REQUIRE(search_count == 6);
+    REQUIRE_FALSE(has_hybrid);
+    REQUIRE(search_count == 5);
 
     for (auto& entry : schema) {
         REQUIRE(entry.contains("type"));
@@ -104,11 +108,12 @@ TEST_CASE("ToolRegistry: all returns all tools", "[s0.6]")
     locus::register_builtin_tools(registry);
 
     auto all = registry.all();
-    REQUIRE(all.size() == 23);  // S4.D adds propose_plan + mark_step_done;
+    REQUIRE(all.size() == 22);  // S4.D adds propose_plan + mark_step_done;
                                 // S4.R adds add_memory + search_memory;
                                 // S6.11 adds describe_tool;
                                 // S6.17 Task A removed filter_output;
                                 // S6.17 Task G re-split `search` into 6 per-mode tools.
+                                // ADR-0009 retired search_hybrid (6 -> 5 search_* tools).
 }
 
 TEST_CASE("ToolRegistry: parse_tool_call handles valid and empty JSON", "[s0.6]")
@@ -457,15 +462,7 @@ TEST_CASE("DeleteFileTool: preview contains warning", "[s0.6]")
 
 // S6.17 Task G -- per-mode search_* preview tests. Each tool's preview names
 // itself + its key arg so the chat-bubble caption stays informative.
-TEST_CASE("SearchHybridTool: preview surfaces tool name + query", "[preview]")
-{
-    locus::SearchHybridTool tool;
-    locus::ToolCall call{"c1", "search_hybrid", {{"query", "fts5 sanitise"}}};
-
-    auto preview = tool.preview(call);
-    REQUIRE_THAT(preview, ContainsSubstring("search_hybrid"));
-    REQUIRE_THAT(preview, ContainsSubstring("fts5 sanitise"));
-}
+// (SearchHybridTool was retired in ADR-0009.)
 
 TEST_CASE("SearchTextTool: preview surfaces tool name + query", "[preview]")
 {
@@ -743,12 +740,13 @@ TEST_CASE("ITool defaults: available()=true, visible_in_mode only in agent", "[s
     //   search_text, search_regex, search_symbols, search_ast,
     //   run_command, ask_user                                          = 12
     // Hidden: bg-process tools (S4.I, need ProcessRegistry),
-    //         search_semantic / search_hybrid (S6.17 Task G, need embedder),
+    //         search_semantic (S6.17 Task G, needs embedder),
     //         propose_plan / mark_step_done (plan/execute mode-only),
     //         add_memory / search_memory (need MemoryStore),
     //         describe_tool (needs Workspace handle).
     // S6.17 Task A removed filter_output; Task G split the unified `search`
-    // tool into six per-mode tools (semantic/hybrid hidden here).
+    // tool into per-mode tools (semantic hidden here).
+    // ADR-0009 retired search_hybrid (was hidden here previously).
     REQUIRE(agent.size() == 12);
     REQUIRE(plan.size()  == 1);  // S4.D: propose_plan is the one plan-mode tool
 }
@@ -768,8 +766,9 @@ TEST_CASE("Tool approval policies are correct", "[s0.6]")
     REQUIRE(registry.find("search_regex")->approval_policy() == locus::ToolApprovalPolicy::auto_approve);
     REQUIRE(registry.find("search_symbols")->approval_policy() == locus::ToolApprovalPolicy::auto_approve);
     REQUIRE(registry.find("search_semantic")->approval_policy() == locus::ToolApprovalPolicy::auto_approve);
-    REQUIRE(registry.find("search_hybrid")->approval_policy() == locus::ToolApprovalPolicy::auto_approve);
     REQUIRE(registry.find("search_ast")->approval_policy() == locus::ToolApprovalPolicy::auto_approve);
+    // ADR-0009: search_hybrid retired -- find() returns nullptr.
+    REQUIRE(registry.find("search_hybrid") == nullptr);
     REQUIRE(registry.find("get_file_outline")->approval_policy() == locus::ToolApprovalPolicy::auto_approve);
 
     // ask tools (mutating)

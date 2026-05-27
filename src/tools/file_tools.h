@@ -104,7 +104,7 @@ public:
                "  ]})";
     }
     std::string short_description() const override {
-        return "edit_file(path, edits=[{old_string,new_string,replace_all?}]) "
+        return "edit_file(path, edits=[{old_string,new_string,replace_all=false}]) "
                "-- exact-string replace; read_file first.";
     }
     std::vector<ToolParam> params() const override {

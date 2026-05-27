@@ -132,6 +132,22 @@ TEST_CASE("search_symbols keeps 'kind' as a real arg (not aliased)",
     fs::remove_all(tmp);
 }
 
+// search_symbols gained a max_results arg (ADR-0009 follow-up to S6.17 G).
+// Verify the key passes reject_unknown_keys.
+TEST_CASE("search_symbols accepts max_results (post-ADR-0009)",
+          "[tool_arg_validation]")
+{
+    auto tmp = make_tmp();
+    locus::test::FakeWorkspaceServices ws{tmp};
+    locus::SearchSymbolsTool tool;
+    locus::ToolCall call{"c1", "search_symbols",
+        {{"name", "Foo"}, {"max_results", 5}}};
+    auto r = tool.execute(call, ws);
+    REQUIRE_THAT(r.content, !ContainsSubstring("unrecognized argument 'max_results'"));
+
+    fs::remove_all(tmp);
+}
+
 #ifdef _WIN32
 
 TEST_CASE("run_command rejects 'cmd' alias with command suggestion",

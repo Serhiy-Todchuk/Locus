@@ -11,12 +11,12 @@ namespace {
 
 // Returns true if any tool result from a search_* call mentions `needle` in
 // its display text. After S6.17 Task G the unified `search` was split into
-// six per-mode tools, so the check generalises across all of them.
+// per-mode tools; ADR-0009 retired `search_hybrid`.
 bool search_result_mentions(const PromptResult& r, std::string_view needle)
 {
     static const char* k_search_tools[] = {
-        "search_text",   "search_regex",   "search_symbols",
-        "search_semantic","search_hybrid", "search_ast",
+        "search_text", "search_regex", "search_symbols",
+        "search_semantic", "search_ast",
         "search",  // legacy back-compat, harmless if never called
     };
     for (const auto& call : r.tool_calls) {
@@ -37,8 +37,8 @@ bool search_result_mentions(const PromptResult& r, std::string_view needle)
 bool any_search_called(const PromptResult& r)
 {
     static const char* k_search_tools[] = {
-        "search_text",   "search_regex",   "search_symbols",
-        "search_semantic","search_hybrid", "search_ast",
+        "search_text", "search_regex", "search_symbols",
+        "search_semantic", "search_ast",
         "search",  // legacy
     };
     for (auto* n : k_search_tools)
@@ -76,7 +76,7 @@ TEST_CASE("symbol search locates a class definition", "[integration][llm][search
              search_result_mentions(r, "agent_core.cpp")));
 }
 
-TEST_CASE("semantic / hybrid search finds embedding code", "[integration][llm][search][semantic]")
+TEST_CASE("semantic search finds embedding code", "[integration][llm][search][semantic]")
 {
     auto& h = harness();
     // Make sure embeddings are caught up before running semantic query -
@@ -90,8 +90,6 @@ TEST_CASE("semantic / hybrid search finds embedding code", "[integration][llm][s
     REQUIRE_FALSE(r.timed_out);
     REQUIRE(any_search_called(r));
 
-    // Accept either semantic or hybrid -- both should surface code in the
-    // "chunk embeddings into a vector database" pipeline.
     bool plausible =
         search_result_mentions(r, "embedding_worker") ||
         search_result_mentions(r, "embedder")         ||
@@ -104,23 +102,25 @@ TEST_CASE("semantic / hybrid search finds embedding code", "[integration][llm][s
     REQUIRE(plausible);
 }
 
-TEST_CASE("hybrid search returns RRF-merged results", "[integration][llm][search]")
+// ADR-0009: search_hybrid retired. The old "hybrid search returns RRF-merged
+// results" case is replaced by a semantic-only repro that confirms the same
+// "find code about atomic file writes" workload still surfaces the right
+// region. Hybrid's BM25+vector blend was corpus-dependent and lost to
+// semantic on WS2 by 14pt recall@1; the LLM-facing tool surface drops it.
+TEST_CASE("semantic search finds atomic-write code", "[integration][llm][search][semantic]")
 {
     auto& h = harness();
     REQUIRE(h.wait_for_embedding_idle());
 
     PromptResult r = h.prompt(
-        "Use search_hybrid to find code related to atomic "
+        "Use search_semantic to find code related to atomic "
         "file writes using a temp file and rename. Which file implements that?");
 
     REQUIRE_FALSE(r.timed_out);
     REQUIRE(any_search_called(r));
 
-    // S5.O lifted `write_atomic` out of file_tools.cpp into the shared
-    // helper module (src/tools/shared.cpp), keeping the call sites in
-    // file_tools.cpp. Either surfacing in the hybrid result is good enough
-    // -- the assertion is "the right region of the code lights up", not "a
-    // specific filename".
+    // S5.O lifted `write_atomic` into src/tools/shared.cpp; call sites stay
+    // in file_tools.cpp. Either surfacing in the result is good enough.
     bool mentioned =
         search_result_mentions(r, "shared.cpp")    ||
         search_result_mentions(r, "shared.h")      ||

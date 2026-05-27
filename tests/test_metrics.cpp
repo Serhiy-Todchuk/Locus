@@ -156,8 +156,10 @@ TEST_CASE("parse_search_result_count: leading integer extraction", "[s4.s][metri
                                       "3 symbols matching \"baz\"\n").value() == 3);
     REQUIRE(parse_search_result_count("search_semantic",
                                       "8 semantic matches:\n").value() == 8);
-    REQUIRE(parse_search_result_count("search_hybrid",
-                                      "10 hybrid matches (BM25 + semantic):\n").value() == 10);
+    // search_hybrid retired in ADR-0009: not in the retrieval-tools list.
+    REQUIRE_FALSE(parse_search_result_count("search_hybrid",
+                                            "10 hybrid matches (BM25 + semantic):\n")
+                  .has_value());
 }
 
 TEST_CASE("parse_search_result_count: zero-result strings", "[s4.s][metrics]")

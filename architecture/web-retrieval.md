@@ -167,7 +167,7 @@ Result:      Text content of the requested section, paginated.
 ```
 
 After `web_fetch`, the agent has three ways to access web content:
-1. `search_text` / `search_hybrid` -- finds specific terms across local + web
+1. `search_text` / `search_semantic` -- finds specific terms across local + web
 2. `web_read` -- reads a specific section by heading (like `read_file` but for web pages)
 3. Both return snippets/sections, never full pages
 

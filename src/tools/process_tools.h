@@ -27,7 +27,9 @@ public:
                "`output_filter_lines=20`, `output_filter_context=2`.";
     }
     std::string short_description() const override {
-        return "run_command(command) -- run shell command synchronously, return output.";
+        return "run_command(command, output_filter_mode=head_tail, output_filter_pattern?, "
+               "output_filter_lines?, output_filter_context=0) "
+               "-- run shell command synchronously; default head_tail truncate.";
     }
     std::vector<ToolParam> params() const override {
         return {
@@ -104,7 +106,9 @@ public:
                "always written to `.locus/locus.log` at trace level.";
     }
     std::string short_description() const override {
-        return "read_process_output(process_id) -- read new stdout/stderr from a bg process.";
+        return "read_process_output(process_id, since_offset?, output_filter_mode=head_tail, "
+               "output_filter_pattern?, output_filter_lines?, output_filter_context=0) "
+               "-- read new stdout/stderr; default head_tail truncate.";
     }
     std::vector<ToolParam> params() const override {
         return {

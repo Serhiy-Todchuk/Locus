@@ -49,8 +49,9 @@ struct WorkspaceConfig {
 
         // Reranker (cross-encoder, S4.J). Off by default until the model is
         // present so first-run users without the GGUF aren't blocked. When on,
-        // search_semantic / search_hybrid fetch reranker_top_k bi-encoder
-        // candidates and rerank to the requested max_results.
+        // search_semantic fetches reranker_top_k bi-encoder candidates and
+        // reranks to the requested max_results. (search_hybrid was retired in
+        // ADR-0009; the eval harness still exercises it directly via IndexQuery.)
         bool reranker_enabled = false;
         std::string reranker_model = "bge-reranker-v2-m3-Q8_0.gguf";
         // 20 candidates x ~100ms/rerank in Release on CPU = ~2s wall-clock per

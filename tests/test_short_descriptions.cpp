@@ -79,11 +79,7 @@ TEST_CASE("short_description: search_semantic names query",
     assert_cues("search_semantic", {"query"});
 }
 
-TEST_CASE("short_description: search_hybrid names query",
-          "[s6.17][short_description]")
-{
-    assert_cues("search_hybrid", {"query"});
-}
+// search_hybrid retired in ADR-0009 -- no short_description to assert.
 
 TEST_CASE("short_description: search_ast names language+query+capture",
           "[s6.17][short_description]")

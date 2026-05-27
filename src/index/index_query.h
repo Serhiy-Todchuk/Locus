@@ -64,7 +64,7 @@ struct SearchOptions {
 class IndexQuery {
 public:
     // `vectors_db` is optional: pass null when semantic search is disabled.
-    // search_semantic / search_hybrid then return empty / fall back to BM25.
+    // search_semantic then returns empty.
     IndexQuery(Database& main_db, Database* vectors_db);
     ~IndexQuery();
 
@@ -91,6 +91,10 @@ public:
                                               const SearchOptions& opts = {}) const;
 
     // Hybrid search: FTS5 BM25 + semantic, merged with Reciprocal Rank Fusion.
+    // ADR-0009: retired from the LLM tool registry. Still reachable
+    // from the retrieval-eval harness so future BM25+vector tuning can
+    // be measured against the per-corpus baseline. Removed next milestone
+    // if no compelling re-introduction case has emerged.
     std::vector<SearchResult> search_hybrid(const std::string& query_text,
                                             const std::vector<float>& query_embedding,
                                             const SearchOptions& opts = {}) const;

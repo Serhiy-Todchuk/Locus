@@ -4,19 +4,35 @@
 
 namespace locus {
 
-// S6.17 Task G -- six per-mode top-level tools (ADR-0008). The unified
+// S6.17 Task G -- per-mode top-level tools (ADR-0008). The unified
 // `SearchTool` dispatcher was retired here: a tool whose identity depends on
 // a string discriminator (`mode`) inside the args is harder for an LLM to
 // call correctly than N tools named after their actual purpose. Per-mode
 // tools were already implemented as separate classes (this file's bottom
-// half); they are now the direct registry entries.
+// half); they are now the direct registry entries. ADR-0009 later retired
+// `search_hybrid` leaving five: text / regex / symbols / semantic / ast.
 //
 // Capability gating (S5.A):
-//   semantic_search  off -> search_semantic / search_hybrid hide via available()
-//   code_aware_search off -> search_symbols  / search_ast   hide via available()
+//   semantic_search   off -> search_semantic hides via available()
+//   code_aware_search off -> search_symbols / search_ast hide via available()
 //
 // Backward-compat shim for saved sessions lives in SessionManager::load /
 // load_full (one milestone; removed next milestone).
+//
+// max_results defaults -- DO NOT change without re-doing the math:
+//   text     = 8   -- top-N relevance; FTS5 snippet ~24 tokens (~100 chars).
+//                    Total ~800 chars. Tightened in S5.N after WS2 (HTML
+//                    corpus) showed raw-bytes snippets dumping ~1200 tok per
+//                    call.
+//   semantic = 5   -- top-N relevance; chunk snippet capped 250 chars
+//   hybrid   = 5      ([search_tools.cpp] -- search of "k_snippet" / 250).
+//                    Total ~1250 chars. Same S5.N reshape.
+//   regex    = 50  -- EXHAUSTIVE: "all callers of foo", "every TODO(XXX)".
+//   ast      = 50    Per-hit ~150-250 chars (path:line + 2-line snippet,
+//   symbols  = 50    inline_match_text capped 200). Total ~10 KB / ~2500 tok.
+//                    50 is the safety net, not a relevance trim. (symbols
+//                    rows are tiny, but ambiguous names like "init" can
+//                    return 100+ -- same cap applies as a guardrail.)
 
 class SearchTextTool : public ITool {
 public:
@@ -85,13 +101,14 @@ public:
                "  search_symbols({\"name\": \"ToolDispatcher\", \"kind\": \"class\"})";
     }
     std::string short_description() const override {
-        return "search_symbols(name, kind?, language?) -- code-symbol lookup.";
+        return "search_symbols(name, kind?, language?, max_results=50) -- code-symbol lookup.";
     }
     std::vector<ToolParam> params() const override {
         return {
-            {"name",     "string", "Symbol name or prefix to search for.", true},
-            {"kind",     "string", "Filter by kind: function, class, struct, method (optional).", false},
-            {"language", "string", "Filter by language (optional).", false},
+            {"name",        "string",  "Symbol name or prefix to search for.", true},
+            {"kind",        "string",  "Filter by kind: function, class, struct, method (optional).", false},
+            {"language",    "string",  "Filter by language (optional).", false},
+            {"max_results", "integer", "Maximum symbols to return (default 50).", false},
         };
     }
     ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::auto_approve; }
@@ -127,32 +144,10 @@ public:
                         const std::atomic<bool>* cancel_flag = nullptr) override;
 };
 
-class SearchHybridTool : public ITool {
-public:
-    std::string name()        const override { return "search_hybrid"; }
-    std::string description() const override {
-        return "BM25 + semantic vector blend with optional reranker. Best "
-               "for queries that benefit from both exact keyword matches "
-               "and conceptual similarity. Requires semantic search to be "
-               "enabled.\n"
-               "Example:\n"
-               "  search_hybrid({\"query\": \"reasoning watchdog auto-nudge\"})";
-    }
-    std::string short_description() const override {
-        return "search_hybrid(query, max_results=5) -- BM25 + semantic blend.";
-    }
-    std::vector<ToolParam> params() const override {
-        return {
-            {"query",       "string",  "Search query (supports both keywords and natural language).", true},
-            {"max_results", "integer", "Maximum results to return (default 5).", false},
-        };
-    }
-    ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::auto_approve; }
-    bool available(IWorkspaceServices& ws) const override;
-    std::string preview(const ToolCall& call) const override;
-    ToolResult  execute(const ToolCall& call, IWorkspaceServices& ws,
-                        const std::atomic<bool>* cancel_flag = nullptr) override;
-};
+// ADR-0009: `SearchHybridTool` retired. The class is gone from the header;
+// `IndexQuery::search_hybrid` is still reachable from the retrieval-eval
+// harness. No back-compat shim -- saved sessions that referenced
+// `search_hybrid` fail at dispatch with an unknown-tool error.
 
 // Tree-sitter structural search (S4.M). Compiles a `.scm` query against the
 // chosen language's grammar and reports every match across the indexed files.

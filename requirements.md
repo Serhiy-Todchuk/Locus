@@ -159,7 +159,7 @@ The user is presented with a compaction dialog and chooses the strategy.
 - [ ] `web_fetch` tool: download URL -> extract text (gumbo-parser) -> index in `web_fts` -> return outline only (~30 tokens)
 - [ ] `web_read` tool: read a section of a fetched page by heading or line range
 - [ ] Full web pages never enter LLM context -- agent queries indexed content via existing search tools
-- [ ] `search_text` / `search_hybrid` extended with optional `sources` param to include web content
+- [ ] `search_text` / `search_semantic` extended with optional `sources` param to include web content
 - [ ] User approves every search query and every URL fetch (approval: always)
 - [ ] Web cache: per-session scoping, configurable TTL and size cap
 - [ ] Search API is configurable: Brave Search (default), SearXNG (self-hosted), or custom endpoint

@@ -142,9 +142,9 @@ struct AliasEntry {
 constexpr const char* k_search_mode_hint =
     "the unified 'search' tool was split (S6.17 Task G) -- pick by name: "
     "search_text / search_regex / search_symbols / search_semantic / "
-    "search_hybrid / search_ast";
+    "search_ast";
 
-constexpr std::array<AliasEntry, 33> k_aliases = {{
+constexpr std::array<AliasEntry, 29> k_aliases = {{
     // read_file (TestLocalVibe2 Pass 2/5: lines:"100-152" silently became
     // offset=1/length=100; agent retried 6 times before working around it).
     {"read_file",   "lines",       "use 'offset' (1-based) + 'length' instead, e.g. {\"path\":\"...\",\"offset\":100,\"length\":53}"},
@@ -172,10 +172,6 @@ constexpr std::array<AliasEntry, 33> k_aliases = {{
     {"search_semantic", "kind",        k_search_mode_hint},
     {"search_semantic", "search_mode", k_search_mode_hint},
     {"search_semantic", "mode",        k_search_mode_hint},
-    {"search_hybrid",   "type",        k_search_mode_hint},
-    {"search_hybrid",   "kind",        k_search_mode_hint},
-    {"search_hybrid",   "search_mode", k_search_mode_hint},
-    {"search_hybrid",   "mode",        k_search_mode_hint},
 
     // run_command / run_command_bg (TestLocalVibe2 Pass 5 hit `cmd:` first).
     {"run_command",     "cmd",   "use 'command' (the shell command line)"},
