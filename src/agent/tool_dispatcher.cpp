@@ -246,6 +246,14 @@ void ToolDispatcher::dispatch(const ToolCall& call, const AppendFn& append_resul
         }
     }
 
+    // Read tools are unconditionally auto-approved. The workspace boundary
+    // is the trust boundary: if you opened the folder, the agent may look
+    // around inside it. Stale per-tool overrides on read tools (e.g. an
+    // older config that explicitly set `read_file` to `ask`) are ignored
+    // here for forward compat; the Settings panel no longer surfaces them.
+    if (tools::builtin_tool_category(call.tool_name) == "read")
+        policy = ToolApprovalPolicy::auto_approve;
+
     // S4.V Task 5 -- outside-workspace path guard for shell tools. If the
     // command string references absolute paths, parent-traversal segments,
     // or env-var expansions, surface them as safety warnings and force the

@@ -229,6 +229,18 @@ ToolApprovalsSettingsPanel::ToolApprovalsSettingsPanel(wxWindow* parent,
         outer->Add(row, 0, wxLEFT | wxRIGHT | wxTOP, 8);
     }
 
+    // Read tools (file/index reads, searches, outline, list_directory,
+    // search_memory, list_processes, read_process_output) are always
+    // auto-approved -- the workspace boundary is the trust boundary. Skip
+    // them in the per-tool grid so the panel stays focused on the tools
+    // that actually warrant a per-call gate.
+    auto* read_notice = new wxStaticText(this, wxID_ANY,
+        "Read tools (read_file, search_*, list_directory, get_file_outline, "
+        "list_processes, read_process_output, search_memory) are always "
+        "auto-approved.");
+    read_notice->Wrap(560);
+    outer->Add(read_notice, 0, wxLEFT | wxRIGHT | wxBOTTOM, 8);
+
     auto* scroll = new wxScrolledWindow(this, wxID_ANY,
         wxDefaultPosition, wxDefaultSize,
         wxVSCROLL | wxBORDER_SIMPLE);
@@ -240,6 +252,12 @@ ToolApprovalsSettingsPanel::ToolApprovalsSettingsPanel(wxWindow* parent,
     scroll_sizer->AddGrowableCol(0, 1);
 
     std::vector<ITool*> sorted_tools = tools_.all();
+    sorted_tools.erase(
+        std::remove_if(sorted_tools.begin(), sorted_tools.end(),
+            [](ITool* t) {
+                return tools::builtin_tool_category(t->name()) == "read";
+            }),
+        sorted_tools.end());
     std::sort(sorted_tools.begin(), sorted_tools.end(),
               [](ITool* a, ITool* b) { return a->name() < b->name(); });
 

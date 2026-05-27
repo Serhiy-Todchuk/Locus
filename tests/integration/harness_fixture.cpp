@@ -288,12 +288,16 @@ IntegrationHarness::IntegrationHarness()
     tools_ = std::make_unique<ToolRegistry>();
     register_builtin_tools(*tools_);
 
-    // Force every tool through the approval gate so the harness sees a
-    // uniform on_tool_call_pending callback regardless of each tool's default
-    // policy (read_file / search / list_directory / get_file_outline are
-    // auto-approve in normal operation -- we override here so the test can
-    // observe every tool invocation). The harness's on_tool_call_pending
-    // auto-approves synchronously, so there's no real approval round-trip.
+    // Route every mutating tool through the approval gate so the harness can
+    // exercise the gate path (the harness frontend auto-approves synchronously
+    // inside on_tool_call_pending, so there's no real round-trip; the wait
+    // path is exercised in test_tool_safety). Read-category tools are
+    // hard-forced to auto_approve by the dispatcher regardless of override
+    // (the workspace boundary is the trust boundary -- you opened the
+    // folder); their entries here are silently ignored at dispatch time but
+    // do no harm. The harness's on_tool_call_pending callback fires for
+    // every dispatch regardless of policy, so `tool_called(name)` /
+    // `find_result_for(name)` introspection works for read tools too.
     for (auto* tool : tools_->all()) {
         workspace_->config().tool_approval_policies[tool->name()] =
             ToolApprovalPolicy::ask;

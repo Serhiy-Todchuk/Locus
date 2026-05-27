@@ -260,3 +260,42 @@ TEST_CASE("PermissionPreset: preset_from_string round-trips",
         REQUIRE(preset_from_string(to_string(p)) == p);
     }
 }
+
+TEST_CASE("PermissionPreset: preset_signature never emits read-tool entries",
+          "[permission_presets][read_always_auto]")
+{
+    auto reg = make_builtin_registry();
+    for (auto p : {PermissionPreset::read_only,
+                   PermissionPreset::ask_before_edits,
+                   PermissionPreset::allow_edits,
+                   PermissionPreset::allow_all}) {
+        auto sig = preset_signature(p, reg);
+        INFO("preset=" << locus::tools::to_string(p));
+        for (const auto& [name, _policy] : sig) {
+            // mcp:* wildcard is allowed; no other read-category entry should
+            // appear in the signature.
+            if (name == "mcp:*") continue;
+            INFO("offending entry=" << name);
+            REQUIRE(builtin_tool_category(name) != "read");
+        }
+    }
+}
+
+TEST_CASE("PermissionPreset: stale read-tool override does not flip detection to Custom",
+          "[permission_presets][read_always_auto]")
+{
+    auto reg = make_builtin_registry();
+    // Simulate an old config that wrote read_file=ask + search_text=deny
+    // before the read-is-always-auto invariant landed. Detection must still
+    // return the named preset, not Custom.
+    for (auto p : {PermissionPreset::read_only,
+                   PermissionPreset::ask_before_edits,
+                   PermissionPreset::allow_edits,
+                   PermissionPreset::allow_all}) {
+        auto sig = preset_signature(p, reg);
+        sig["read_file"]   = ToolApprovalPolicy::ask;
+        sig["search_text"] = ToolApprovalPolicy::deny;
+        INFO("preset=" << locus::tools::to_string(p));
+        REQUIRE(detect_preset(sig, reg) == p);
+    }
+}

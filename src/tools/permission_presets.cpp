@@ -189,6 +189,11 @@ preset_signature(PermissionPreset preset, const IToolRegistry& registry)
         const std::string name = tool->name();
         const std::string cat  = builtin_tool_category(name);
         if (cat == "plan" || cat == "other") continue;            // not preset-controlled
+        // Read tools are unconditionally auto-approved at the dispatcher (the
+        // workspace is the trust boundary -- you opened the folder). The
+        // preset never writes a per-tool entry for them, and a stale entry
+        // from an old config is ignored at evaluation time.
+        if (cat == "read") continue;
         if (cat == "interactive") {
             // ask_user is always ask. Only record it as an override when the
             // tool's built-in default disagrees; today it agrees, so this stays
@@ -260,6 +265,9 @@ detect_preset(const std::unordered_map<std::string, ToolApprovalPolicy>& overrid
             const std::string name = tool->name();
             const std::string cat  = builtin_tool_category(name);
             if (cat == "plan" || cat == "other" || cat == "mcp") continue;
+            // Read tools are dispatcher-forced to auto_approve; a stale
+            // override on a read tool must not flip detection to Custom.
+            if (cat == "read") continue;
 
             ToolApprovalPolicy want =
                 policy_for_category(preset, cat, tool->approval_policy());
