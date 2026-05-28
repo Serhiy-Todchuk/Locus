@@ -65,17 +65,49 @@ public:
     //   - `force_wipe` is true.
     // After wipe, the indexer's next scan re-chunks every file and the
     // embedding worker re-embeds them. Persists dim + model_id to meta.
+    // S6.18 Task A.1: the vec0 tables (`chunk_vectors` / `memory_vectors`)
+    // are NOT created eagerly here -- the empty 4 MiB-per-table bucket
+    // dominates the on-disk size of empty workspaces. The first writer
+    // calls `ensure_chunk_vectors_table()` / `ensure_memory_vectors_table()`
+    // to mint the table on demand. Read paths check `chunk_vectors_present()`
+    // / `memory_vectors_present()` and short-circuit when absent.
     // Returns true if a wipe happened.
     bool ensure_vectors_schema(int dim, const std::string& model_id,
                                bool force_wipe = false);
+
+    // S6.18 Task A.1 -- on-demand vec0 table creation. Idempotent: a second
+    // call when the table already exists is a no-op. Requires
+    // `ensure_vectors_schema` to have set the stored dim first; throws
+    // otherwise. Vectors-only.
+    void ensure_chunk_vectors_table();
+    void ensure_memory_vectors_table();
+    bool chunk_vectors_present() const  { return chunk_vectors_present_; }
+    bool memory_vectors_present() const { return memory_vectors_present_; }
+
+    // S6.18 Task A.6 -- best-effort PASSIVE WAL checkpoint. Never blocks
+    // readers/writers; opportunistically commits whatever pages it can.
+    // Called when the indexer/embedding worker reaches a quiet point (queue
+    // drain, shutdown) so we don't leak megabyte-scale WAL bytes between
+    // sessions. Traces the frames committed.
+    void wal_checkpoint_passive(const char* tag);
 
 private:
     void create_main_schema();
     void create_vectors_skeleton();  // chunks + meta only
     void load_sqlite_vec();
+    bool probe_table_exists(const char* name);
 
     sqlite3* db_ = nullptr;
     DbKind kind_;
+
+    // S6.18 Task A.1 -- lazy-create state. Set true after the vec0 CREATE
+    // succeeds (or probed true at startup if a prior session left the table
+    // in place); false after a dim-mismatch wipe drops it. `vectors_dim_`
+    // remembers the dim from the most recent `ensure_vectors_schema` so the
+    // lazy CREATE can run without re-querying meta.
+    int  vectors_dim_           = 0;
+    bool chunk_vectors_present_ = false;
+    bool memory_vectors_present_= false;
 };
 
 } // namespace locus

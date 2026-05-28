@@ -408,7 +408,12 @@ TEST_CASE("[s5.f][heuristics] short user messages preserved",
     h.add(make_msg(MessageRole::assistant, std::string(3000, 'b')));
     // One big user message -- drop-eligible.
     h.add(make_msg(MessageRole::user, std::string(4000, 'q')));
-    h.add(make_msg(MessageRole::assistant, std::string(2000, 'c')));
+    // S6.18 Task B.1 -- end the conversation on a tool_call rather than
+    // assistant-text so the "last assistant text" pin lands earlier (at
+    // index 5, inside an already-preserved short turn). Otherwise the new
+    // pin would shield the trailing turn group [6,7] and break the
+    // "big user turn drops" assertion.
+    h.add(make_tool_call("t1", "search_text", "{}"));
 
     CompactionLayerSelection sel;
     sel.drop_oldest_turns = true;
@@ -437,7 +442,10 @@ TEST_CASE("[s5.f][heuristics] short user threshold of 0 disables heuristic",
     h.add(make_msg(MessageRole::system, "system"));
     h.add(make_msg(MessageRole::user, "first"));
     h.add(make_msg(MessageRole::user, "short"));
-    h.add(make_msg(MessageRole::assistant, std::string(2000, 'a')));
+    // S6.18 Task B.1 -- close the trailing turn with a tool_call rather
+    // than free-text so the new "pin last assistant-text" rule doesn't
+    // shield the only droppable turn here.
+    h.add(make_tool_call("t1", "search_text", "{}"));
 
     CompactionLayerSelection sel;
     sel.drop_oldest_turns = true;

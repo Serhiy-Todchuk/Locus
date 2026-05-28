@@ -47,10 +47,14 @@ int heading_level(const pugi::xml_node& p)
     const char* val = pStyle.attribute("w:val").value();
     if (!val || !*val) return 0;
 
-    // Common styles: "Heading1".."Heading9", "Title"
+    // Common styles: "Heading1".."Heading9", "Title". Some authoring tools
+    // emit a bare "Heading" with no digit -- guard against it so std::stoi
+    // doesn't throw on an empty substring (Debug builds otherwise break on
+    // the first-chance std::invalid_argument every time we re-index the file).
     std::string s = val;
     if (s == "Title") return 1;
-    if (s.rfind("Heading", 0) == 0) {
+    if (s.rfind("Heading", 0) == 0 && s.size() > 7
+        && s[7] >= '0' && s[7] <= '9') {
         try {
             int lvl = std::stoi(s.substr(7));
             if (lvl >= 1 && lvl <= 6) return lvl;

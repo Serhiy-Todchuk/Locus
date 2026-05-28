@@ -219,8 +219,30 @@ void Database::create_vectors_skeleton()
         )
     )");
 
+    // S6.18 Task A.1 -- probe whether vec0 tables left over from a prior
+    // session are still on disk. If so, keep the flag set; the lazy-create
+    // path will short-circuit. If not, the first writer creates them.
+    chunk_vectors_present_  = probe_table_exists("chunk_vectors");
+    memory_vectors_present_ = probe_table_exists("memory_vectors");
+
     spdlog::trace("Vectors DB skeleton initialised "
-                  "(chunk_vectors + memory_vectors created lazily)");
+                  "(chunk_vectors present={}, memory_vectors present={})",
+                  chunk_vectors_present_, memory_vectors_present_);
+}
+
+bool Database::probe_table_exists(const char* name)
+{
+    sqlite3_stmt* stmt = nullptr;
+    bool exists = false;
+    if (sqlite3_prepare_v2(db_,
+            "SELECT 1 FROM sqlite_master "
+            "WHERE type IN ('table','view') AND name = ?1",
+            -1, &stmt, nullptr) == SQLITE_OK) {
+        sqlite3_bind_text(stmt, 1, name, -1, SQLITE_TRANSIENT);
+        exists = (sqlite3_step(stmt) == SQLITE_ROW);
+        sqlite3_finalize(stmt);
+    }
+    return exists;
 }
 
 std::string Database::stored_embedding_model()
@@ -314,20 +336,15 @@ bool Database::ensure_vectors_schema(int dim, const std::string& model_id,
         if (err) { sqlite3_free(err); err = nullptr; }
         sqlite3_exec(db_, "DELETE FROM memory_keys", nullptr, nullptr, &err);
         if (err) { sqlite3_free(err); err = nullptr; }
+        chunk_vectors_present_  = false;
+        memory_vectors_present_ = false;
     }
 
-    // Create chunk_vectors with the requested dim if missing.  vec0 syntax
-    // requires the dim to be embedded in the column type.
-    std::string create_sql =
-        "CREATE VIRTUAL TABLE IF NOT EXISTS chunk_vectors USING vec0("
-        "chunk_id INTEGER PRIMARY KEY, embedding float[" + std::to_string(dim) + "])";
-    exec(create_sql.c_str());
-
-    // Mirror schema for the memory bank (S4.R). Same dim, same wipe story.
-    std::string memory_create_sql =
-        "CREATE VIRTUAL TABLE IF NOT EXISTS memory_vectors USING vec0("
-        "memory_rowid INTEGER PRIMARY KEY, embedding float[" + std::to_string(dim) + "])";
-    exec(memory_create_sql.c_str());
+    // S6.18 Task A.1 -- remember the dim so ensure_chunk_vectors_table /
+    // ensure_memory_vectors_table can mint the vec0 tables on demand. The
+    // 4 MiB-per-table empty bucket was the dominant on-disk cost for
+    // workspaces that had not yet produced any embeddings.
+    vectors_dim_ = dim;
 
     // Persist (upsert) dim + model_id in meta.
     auto upsert = [&](const char* key, const std::string& value) {
@@ -345,9 +362,69 @@ bool Database::ensure_vectors_schema(int dim, const std::string& model_id,
     upsert("embedding_dim",   std::to_string(dim));
     upsert("embedding_model", model_id);
 
-    spdlog::info("Vectors schema ready: dim={}, model='{}'{}",
-                 dim, model_id, wipe ? " (wiped)" : "");
+    spdlog::info("Vectors schema ready: dim={}, model='{}'{} "
+                 "(chunk_vectors {}, memory_vectors {})",
+                 dim, model_id, wipe ? " (wiped)" : "",
+                 chunk_vectors_present_  ? "present" : "lazy",
+                 memory_vectors_present_ ? "present" : "lazy");
     return wipe;
+}
+
+void Database::ensure_chunk_vectors_table()
+{
+    if (chunk_vectors_present_) return;
+    if (vectors_dim_ <= 0) {
+        throw std::runtime_error(
+            "ensure_chunk_vectors_table: dim not set "
+            "(call ensure_vectors_schema first)");
+    }
+    std::string create_sql =
+        "CREATE VIRTUAL TABLE IF NOT EXISTS chunk_vectors USING vec0("
+        "chunk_id INTEGER PRIMARY KEY, embedding float["
+        + std::to_string(vectors_dim_) + "])";
+    exec(create_sql.c_str());
+    chunk_vectors_present_ = true;
+    spdlog::info("Created chunk_vectors table (dim={})", vectors_dim_);
+}
+
+void Database::ensure_memory_vectors_table()
+{
+    if (memory_vectors_present_) return;
+    if (vectors_dim_ <= 0) {
+        throw std::runtime_error(
+            "ensure_memory_vectors_table: dim not set "
+            "(call ensure_vectors_schema first)");
+    }
+    std::string create_sql =
+        "CREATE VIRTUAL TABLE IF NOT EXISTS memory_vectors USING vec0("
+        "memory_rowid INTEGER PRIMARY KEY, embedding float["
+        + std::to_string(vectors_dim_) + "])";
+    exec(create_sql.c_str());
+    memory_vectors_present_ = true;
+    spdlog::info("Created memory_vectors table (dim={})", vectors_dim_);
+}
+
+void Database::wal_checkpoint_passive(const char* tag)
+{
+    // PRAGMA wal_checkpoint(PASSIVE) returns three columns:
+    //   busy, log (total frames in WAL), checkpointed (frames moved into DB)
+    // Use sqlite3_step / sqlite3_column_int instead of exec() so we can log
+    // a useful "frames=X" instead of silently committing.
+    sqlite3_stmt* stmt = nullptr;
+    if (sqlite3_prepare_v2(db_, "PRAGMA wal_checkpoint(PASSIVE)",
+                            -1, &stmt, nullptr) != SQLITE_OK) {
+        log_db()->trace("wal_checkpoint prepare failed ({}): {}",
+                        tag, sqlite3_errmsg(db_));
+        return;
+    }
+    if (sqlite3_step(stmt) == SQLITE_ROW) {
+        int busy        = sqlite3_column_int(stmt, 0);
+        int log_frames  = sqlite3_column_int(stmt, 1);
+        int checkpointed= sqlite3_column_int(stmt, 2);
+        log_db()->trace("wal_checkpoint({}) busy={} frames={} checkpointed={}",
+                        tag, busy, log_frames, checkpointed);
+    }
+    sqlite3_finalize(stmt);
 }
 
 void Database::drop_legacy_semantic_tables()

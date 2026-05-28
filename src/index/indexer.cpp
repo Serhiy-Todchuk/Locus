@@ -75,6 +75,13 @@ Indexer::Indexer(Database& main_db, Database* vectors_db,
 
 Indexer::~Indexer()
 {
+    // S6.18 Task A.6 -- fold the WAL back into the main DB on workspace close
+    // so successive sessions don't keep accumulating WAL bytes between clean
+    // shutdowns. PASSIVE checkpoint never blocks; opportunistic.
+    main_db_.wal_checkpoint_passive("indexer shutdown");
+    if (vectors_db_) {
+        vectors_db_->wal_checkpoint_passive("indexer shutdown vectors");
+    }
     log_fs()->trace("Indexer destroyed");
 }
 
@@ -235,6 +242,32 @@ int Indexer::reconcile_nonexistent_files()
         if (vectors_db_) vectors_db_->exec("COMMIT");
     }
     return static_cast<int>(to_drop.size());
+}
+
+// -- Lazy chunk_vectors-delete preparation (S6.18 Task A.1) ------------------
+
+// `delete_chunk_vecs` references the vec0 `chunk_vectors` table. If that
+// table doesn't exist yet (brand-new workspace or post-wipe), the prepare
+// inside IndexerStatements is deferred. This helper materialises the table
+// (cheap: vec0 CREATE without dim cost is fine since the prepare side
+// needs the schema) and the prepared statement on first use. Returns the
+// statement, or nullptr when the caller should skip the DELETE (no
+// vectors_db_, or the table genuinely cannot be created right now).
+static sqlite3_stmt* ensure_delete_chunk_vecs_stmt(Database* vectors_db,
+                                                   IndexerStatements& stmts)
+{
+    if (!vectors_db) return nullptr;
+    if (stmts.delete_chunk_vecs) return stmts.delete_chunk_vecs;
+    if (!vectors_db->chunk_vectors_present()) {
+        // No table to DELETE from -- nothing to do. The first writer (the
+        // embedding worker) will mint it; until then, our DELETE would be a
+        // no-op anyway.
+        return nullptr;
+    }
+    stmts.delete_chunk_vecs = vectors_db->prepare(
+        "DELETE FROM chunk_vectors WHERE chunk_id IN "
+        "(SELECT id FROM chunks WHERE file_id = ?1)");
+    return stmts.delete_chunk_vecs;
 }
 
 // -- FTS5 operations ----------------------------------------------------------
@@ -463,9 +496,11 @@ void Indexer::index_file(const fs::path& rel_path)
     sqlite3_step(stmts_.delete_heads);
 
     if (vectors_db_ && config_.index.semantic_search_enabled) {
-        sqlite3_reset(stmts_.delete_chunk_vecs);
-        sqlite3_bind_int64(stmts_.delete_chunk_vecs, 1, file_id);
-        sqlite3_step(stmts_.delete_chunk_vecs);
+        if (auto* del_vecs = ensure_delete_chunk_vecs_stmt(vectors_db_, stmts_)) {
+            sqlite3_reset(del_vecs);
+            sqlite3_bind_int64(del_vecs, 1, file_id);
+            sqlite3_step(del_vecs);
+        }
 
         sqlite3_reset(stmts_.delete_chunks);
         sqlite3_bind_int64(stmts_.delete_chunks, 1, file_id);
@@ -491,7 +526,33 @@ void Indexer::index_file(const fs::path& rel_path)
     if (vectors_db_ && config_.index.semantic_search_enabled && !content.empty()) {
         std::vector<Chunk> chunks;
         if (!symbol_spans.empty()) {
-            chunks = chunk_code(content, symbol_spans,
+            // S6.18 Task A.3 -- leaf-symbol pre-filter. The symbol extractor
+            // emits both container symbols (namespace, class) and the leaves
+            // they enclose (method, function). Feeding the full set to
+            // chunk_code overlaps every leaf inside its container -- on the
+            // TestLocalVibe2 corpus that produced 220/238 overlapping chunks
+            // for a 3-file workspace and doubled the embedder's workload.
+            // Keep only spans that don't strictly contain another span.
+            // O(n^2) sweep is fine; n is <500 per file in practice.
+            std::vector<SymbolSpan> leaf_spans;
+            leaf_spans.reserve(symbol_spans.size());
+            for (size_t i = 0; i < symbol_spans.size(); ++i) {
+                const auto& s = symbol_spans[i];
+                bool contains_another = false;
+                for (size_t j = 0; j < symbol_spans.size(); ++j) {
+                    if (i == j) continue;
+                    const auto& other = symbol_spans[j];
+                    if (s.line_start <= other.line_start
+                        && s.line_end   >= other.line_end
+                        && (s.line_start < other.line_start
+                            || s.line_end   > other.line_end)) {
+                        contains_another = true;
+                        break;
+                    }
+                }
+                if (!contains_another) leaf_spans.push_back(s);
+            }
+            chunks = chunk_code(content, leaf_spans,
                                 config_.index.chunk_size_lines, config_.index.chunk_overlap_lines);
         } else if (!headings.empty()) {
             chunks = chunk_document(content, headings,
@@ -504,6 +565,11 @@ void Indexer::index_file(const fs::path& rel_path)
         std::vector<int64_t> chunk_ids;
         for (int ci = 0; ci < static_cast<int>(chunks.size()); ++ci) {
             const auto& chunk = chunks[ci];
+            // S6.18 Task A.4 -- belt-and-suspenders skip for any chunk whose
+            // content slipped through chunk_code's defensive walk as empty
+            // (e.g. via a future codepath we haven't audited). Persisting
+            // empty content wastes a chunks-row + an embedder forward pass.
+            if (chunk.content.empty()) continue;
             sqlite3_reset(stmts_.insert_chunk);
             sqlite3_bind_int64(stmts_.insert_chunk, 1, file_id);
             sqlite3_bind_int(stmts_.insert_chunk, 2, ci);
@@ -516,7 +582,7 @@ void Indexer::index_file(const fs::path& rel_path)
             chunk_ids.push_back(chunk_id);
         }
 
-        stats_.chunks_total += static_cast<int>(chunks.size());
+        stats_.chunks_total += static_cast<int>(chunk_ids.size());
 
         if (on_chunks_created && !chunk_ids.empty()) {
             on_chunks_created(std::move(chunk_ids));
@@ -548,9 +614,11 @@ void Indexer::remove_file(const fs::path& rel_path)
 
         // Clean up chunks and their vectors (in vectors.db)
         if (vectors_db_) {
-            sqlite3_reset(stmts_.delete_chunk_vecs);
-            sqlite3_bind_int64(stmts_.delete_chunk_vecs, 1, file_id);
-            sqlite3_step(stmts_.delete_chunk_vecs);
+            if (auto* del_vecs = ensure_delete_chunk_vecs_stmt(vectors_db_, stmts_)) {
+                sqlite3_reset(del_vecs);
+                sqlite3_bind_int64(del_vecs, 1, file_id);
+                sqlite3_step(del_vecs);
+            }
 
             sqlite3_reset(stmts_.delete_chunks);
             sqlite3_bind_int64(stmts_.delete_chunks, 1, file_id);

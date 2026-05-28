@@ -174,6 +174,13 @@ private:
     // Look up rowid for an existing memory id. Returns 0 if absent.
     std::int64_t lookup_rowid(const std::string& id) const;
 
+    // S6.18 Task A.1 -- prepare the three statements that touch the lazy
+    // `memory_vectors` vec0 table. Called from `prepare_statements` when the
+    // table already exists (post-wipe / pre-existing workspace) and again
+    // from `vec_embed_and_store` after the first insert calls
+    // `ensure_memory_vectors_table` on the Database. Idempotent.
+    void ensure_memory_vector_statements();
+
     std::string  mint_id(const std::string& source) const;
     void         touch_last_used(const std::string& id, std::int64_t now);
 

@@ -42,8 +42,15 @@ IndexerStatements::IndexerStatements(Database& main_db, Database* vectors_db)
             VALUES (?1, ?2, ?3, ?4, ?5)
         )");
         delete_chunks     = vectors_db->prepare("DELETE FROM chunks WHERE file_id = ?1");
-        delete_chunk_vecs = vectors_db->prepare(
-            "DELETE FROM chunk_vectors WHERE chunk_id IN (SELECT id FROM chunks WHERE file_id = ?1)");
+        // S6.18 Task A.1 -- prepare `delete_chunk_vecs` only if the vec0
+        // table already exists. Brand-new workspaces (and ones whose vec0
+        // table was wiped by a dim swap) skip the prepare; the indexer
+        // lazy-prepares on first use via Indexer::ensure_delete_chunk_vecs_stmt.
+        if (vectors_db->chunk_vectors_present()) {
+            delete_chunk_vecs = vectors_db->prepare(
+                "DELETE FROM chunk_vectors WHERE chunk_id IN "
+                "(SELECT id FROM chunks WHERE file_id = ?1)");
+        }
         file_has_chunks   = vectors_db->prepare(
             "SELECT EXISTS(SELECT 1 FROM chunks WHERE file_id = ?1)");
     }

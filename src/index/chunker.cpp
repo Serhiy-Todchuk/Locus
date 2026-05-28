@@ -1,6 +1,7 @@
 #include "chunker.h"
 
 #include <algorithm>
+#include <optional>
 #include <sstream>
 
 namespace locus {
@@ -22,9 +23,16 @@ static std::vector<std::string> split_lines(const std::string& content)
 }
 
 // Build a Chunk from a range of lines [start, end) (0-based indices).
-static Chunk make_chunk(const std::vector<std::string>& lines,
-                        int begin_idx, int end_idx)
+// S6.18 Task A.4 -- refuses degenerate ranges (`begin >= end`) so a caller
+// that's lost cursor monotonicity through nested symbols can't synthesise a
+// chunk with empty content + inverted line numbers. Returns nullopt on
+// rejection; callers skip and move on.
+static std::optional<Chunk> make_chunk(const std::vector<std::string>& lines,
+                                       int begin_idx, int end_idx)
 {
+    if (begin_idx >= end_idx) return std::nullopt;
+    if (begin_idx < 0 || end_idx > static_cast<int>(lines.size())) return std::nullopt;
+
     Chunk c;
     c.start_line = begin_idx + 1;  // 1-based
     c.end_line = end_idx;          // 1-based inclusive
@@ -44,9 +52,13 @@ static void sliding_split(const std::vector<std::string>& lines,
                           int max_lines, int overlap,
                           std::vector<Chunk>& out)
 {
+    if (begin_idx >= end_idx) return;  // A.4 belt-and-suspenders
+
     int len = end_idx - begin_idx;
     if (len <= max_lines) {
-        out.push_back(make_chunk(lines, begin_idx, end_idx));
+        if (auto c = make_chunk(lines, begin_idx, end_idx)) {
+            out.push_back(std::move(*c));
+        }
         return;
     }
 
@@ -55,7 +67,9 @@ static void sliding_split(const std::vector<std::string>& lines,
 
     for (int pos = begin_idx; pos < end_idx; pos += step) {
         int chunk_end = std::min(pos + max_lines, end_idx);
-        out.push_back(make_chunk(lines, pos, chunk_end));
+        if (auto c = make_chunk(lines, pos, chunk_end)) {
+            out.push_back(std::move(*c));
+        }
         if (chunk_end == end_idx) break;
     }
 }
@@ -93,6 +107,15 @@ std::vector<Chunk> chunk_code(const std::string& content,
         if (sym_begin < cursor) sym_begin = cursor;  // overlapping symbols
         if (sym_begin >= total) break;
 
+        // S6.18 Task A.2 -- defensive walk against degenerate spans. When a
+        // nested symbol ends before the cursor (or its begin clamp pushes it
+        // past its own end), `sym_begin >= sym_end` produces an inverted
+        // range that the old code happily turned into a chunk with
+        // start_line > end_line + empty content, and the assignment
+        // `cursor = sym_end` then moved the cursor backwards. Drop the span
+        // entirely; the enclosing leaf chunk already covered the content.
+        if (sym_begin >= sym_end) continue;
+
         // Gap before this symbol
         if (cursor < sym_begin) {
             sliding_split(lines, cursor, sym_begin, max_lines, overlap, chunks);
@@ -100,7 +123,10 @@ std::vector<Chunk> chunk_code(const std::string& content,
 
         // The symbol itself
         sliding_split(lines, sym_begin, sym_end, max_lines, overlap, chunks);
-        cursor = sym_end;
+        // Cursor must never move backwards (paired with the leaf-symbol
+        // pre-filter in indexer.cpp). Take the max in case a later defensive
+        // sort or filter ever permits an end that pre-dates the prior end.
+        if (sym_end > cursor) cursor = sym_end;
     }
 
     // Trailing content after last symbol

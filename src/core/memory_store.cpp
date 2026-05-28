@@ -303,18 +303,43 @@ void MemoryStore::prepare_statements()
         "ORDER BY rank LIMIT ?2");
 
     if (vectors_db_) {
+        // memory_keys is a regular table (created eagerly in
+        // Database::create_vectors_skeleton). Its prepares always succeed.
         stmt_keys_lookup_ = vectors_db_->prepare(
             "SELECT rowid FROM memory_keys WHERE id = ?1");
         stmt_keys_insert_ = vectors_db_->prepare(
             "INSERT INTO memory_keys(id) VALUES (?1)");
         stmt_keys_delete_ = vectors_db_->prepare(
             "DELETE FROM memory_keys WHERE id = ?1");
-        stmt_vec_insert_  = vectors_db_->prepare(
+        // S6.18 Task A.1 -- `memory_vectors` is now a lazy vec0 table; defer
+        // its prepares to ensure_memory_vector_statements() so an empty
+        // workspace pays 0 bytes for vec0 buckets instead of 4 MiB.
+        if (vectors_db_->memory_vectors_present()) {
+            ensure_memory_vector_statements();
+        }
+    }
+}
+
+void MemoryStore::ensure_memory_vector_statements()
+{
+    if (!vectors_db_) return;
+    if (stmt_vec_insert_ && stmt_vec_delete_ && stmt_vec_search_) return;
+
+    // The caller is responsible for ensuring the table exists (writers call
+    // ensure_memory_vectors_table; readers gate on memory_vectors_present()).
+    if (!vectors_db_->memory_vectors_present()) return;
+
+    if (!stmt_vec_insert_) {
+        stmt_vec_insert_ = vectors_db_->prepare(
             "INSERT OR REPLACE INTO memory_vectors(memory_rowid, embedding) "
             "VALUES (?1, ?2)");
-        stmt_vec_delete_  = vectors_db_->prepare(
+    }
+    if (!stmt_vec_delete_) {
+        stmt_vec_delete_ = vectors_db_->prepare(
             "DELETE FROM memory_vectors WHERE memory_rowid = ?1");
-        stmt_vec_search_  = vectors_db_->prepare(
+    }
+    if (!stmt_vec_search_) {
+        stmt_vec_search_ = vectors_db_->prepare(
             "SELECT mk.id, mv.distance "
             "FROM memory_vectors mv "
             "JOIN memory_keys mk ON mk.rowid = mv.memory_rowid "
@@ -381,22 +406,27 @@ void MemoryStore::load_from_disk()
     // Reconcile vec0: anything we have in-memory but lacking a vector gets
     // re-embedded. After a dim-mismatch wipe `memory_vectors` is empty so
     // every entry re-embeds. Lazy: skipped entirely when embedder is null.
+    // S6.18 Task A.1 -- when `memory_vectors` hasn't been minted yet (brand-
+    // new workspace), the "have" map stays empty and every in-memory entry
+    // is re-embedded -- which lazy-creates the table via `vec_embed_and_store`.
     if (embedder_ && vectors_db_) {
         // Cheap existence check: select all rowids and compare against ids.
         std::unordered_map<std::string, std::int64_t> have;
-        sqlite3_stmt* iter = nullptr;
-        if (sqlite3_prepare_v2(vectors_db_->handle(),
-                "SELECT mk.id, mv.memory_rowid "
-                "FROM memory_vectors mv "
-                "JOIN memory_keys mk ON mk.rowid = mv.memory_rowid",
-                -1, &iter, nullptr) == SQLITE_OK) {
-            while (sqlite3_step(iter) == SQLITE_ROW) {
-                const auto* idp = sqlite3_column_text(iter, 0);
-                if (!idp) continue;
-                have.emplace(reinterpret_cast<const char*>(idp),
-                             sqlite3_column_int64(iter, 1));
+        if (vectors_db_->memory_vectors_present()) {
+            sqlite3_stmt* iter = nullptr;
+            if (sqlite3_prepare_v2(vectors_db_->handle(),
+                    "SELECT mk.id, mv.memory_rowid "
+                    "FROM memory_vectors mv "
+                    "JOIN memory_keys mk ON mk.rowid = mv.memory_rowid",
+                    -1, &iter, nullptr) == SQLITE_OK) {
+                while (sqlite3_step(iter) == SQLITE_ROW) {
+                    const auto* idp = sqlite3_column_text(iter, 0);
+                    if (!idp) continue;
+                    have.emplace(reinterpret_cast<const char*>(idp),
+                                 sqlite3_column_int64(iter, 1));
+                }
+                sqlite3_finalize(iter);
             }
-            sqlite3_finalize(iter);
         }
         for (auto& [id, e] : entries_) {
             if (have.count(id)) continue;
@@ -479,6 +509,14 @@ bool MemoryStore::vec_embed_and_store(const std::string& id, const std::string& 
     auto vec = embedder_->embed_query(text);
     if (vec.empty()) return false;
 
+    // S6.18 Task A.1 -- materialise the lazy vec0 table + its prepared
+    // statements on first use. The chunks-side `chunk_vectors` and the
+    // memory-side `memory_vectors` are independent; either or both may be
+    // dormant when this MemoryStore was constructed.
+    vectors_db_->ensure_memory_vectors_table();
+    ensure_memory_vector_statements();
+    if (!stmt_vec_insert_) return false;  // prepare failed (shouldn't happen)
+
     std::int64_t rowid = lookup_rowid(id);
     if (rowid == 0) {
         sqlite3_reset(stmt_keys_insert_);
@@ -509,10 +547,13 @@ void MemoryStore::vec_delete(const std::string& id)
 {
     if (!vectors_db_) return;
     std::int64_t rowid = lookup_rowid(id);
-    if (rowid != 0) {
-        sqlite3_reset(stmt_vec_delete_);
-        sqlite3_bind_int64(stmt_vec_delete_, 1, rowid);
-        sqlite3_step(stmt_vec_delete_);
+    if (rowid != 0 && vectors_db_->memory_vectors_present()) {
+        ensure_memory_vector_statements();
+        if (stmt_vec_delete_) {
+            sqlite3_reset(stmt_vec_delete_);
+            sqlite3_bind_int64(stmt_vec_delete_, 1, rowid);
+            sqlite3_step(stmt_vec_delete_);
+        }
     }
     sqlite3_reset(stmt_keys_delete_);
     sqlite3_bind_text(stmt_keys_delete_, 1, id.c_str(), -1, SQLITE_TRANSIENT);
@@ -863,6 +904,13 @@ MemoryStore::search(const std::string&              query,
     }
 
     // -- vector channel
+    // S6.18 Task A.1 -- lazy-prepare on first search after the table came
+    // into existence (e.g. user added their first memory entry this session,
+    // which materialised memory_vectors mid-flight).
+    if (embedder_ && vectors_db_ && vectors_db_->memory_vectors_present()
+        && !stmt_vec_search_) {
+        ensure_memory_vector_statements();
+    }
     if (embedder_ && stmt_vec_search_ && !query.empty()) {
         try {
             auto qv = embedder_->embed_query(query);

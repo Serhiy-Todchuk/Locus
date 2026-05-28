@@ -1069,6 +1069,54 @@ void AgentCore::apply_pending_compaction()
             ctx_->history(), pipeline_sel, pipeline_target,
             &llm_, ctx_->llm_config());
 
+        // S6.18 Task B.2 -- when the cascade ran with drop_oldest_turns
+        // enabled and still couldn't reach target, fall back to hard-trim:
+        // delete the oldest turn group (between system[0] + first-user and
+        // the most recent kept block) one turn at a time until target is
+        // hit. The cascade's drop_candidates honours the preservation
+        // heuristic; the hard-trim path doesn't. This is the floor that
+        // makes "every turn is essential" workspaces (zero-stripping shape)
+        // forward-progressable instead of stuck forever.
+        if (!result.reached_target && pipeline_sel.drop_oldest_turns) {
+            std::vector<ChatMessage> msgs = ctx_->history().messages();
+            int now = TokenCounter::estimate(msgs);
+            int hard_trimmed = 0;
+            while (now > pipeline_target) {
+                // Collect user-message indices; need at least 3 user
+                // messages so we can drop the 2nd's group while keeping
+                // system[0], the 1st user (session seed), and a recent
+                // user message. Two users -> nothing to hard-trim;
+                // user-less history -> can't establish boundaries.
+                std::vector<std::size_t> users;
+                for (std::size_t i = 0; i < msgs.size(); ++i) {
+                    if (msgs[i].role == MessageRole::user) users.push_back(i);
+                }
+                if (users.size() < 3) break;
+                std::size_t drop_begin = users[1];
+                std::size_t drop_end   = users[2];
+                msgs.erase(msgs.begin() + static_cast<ptrdiff_t>(drop_begin),
+                           msgs.begin() + static_cast<ptrdiff_t>(drop_end));
+                ++hard_trimmed;
+                now = TokenCounter::estimate(msgs);
+            }
+            if (hard_trimmed > 0) {
+                spdlog::warn("CompactionPipeline: saturated, hard-trimmed {} turn(s) "
+                             "(target {}, before-hardtrim {}, after-hardtrim {})",
+                             hard_trimmed, pipeline_target,
+                             result.after_tokens, now);
+                ctx_->history().clear();
+                for (auto& m : msgs) ctx_->history().add(std::move(m));
+                result.after_tokens   = now;
+                result.reached_target = (now <= pipeline_target);
+                activity_->emit(ActivityKind::compaction,
+                                "Compaction hard-trim (saturated)",
+                                "trimmed_turns=" + std::to_string(hard_trimmed) +
+                                " before_hardtrim=" + std::to_string(before_tokens) +
+                                " after_hardtrim=" + std::to_string(now) +
+                                " target=" + std::to_string(pipeline_target));
+            }
+        }
+
         // Invalidate the budget's cached server total so the meter recomputes
         // against the new heuristic.
         ctx_->budget().set_server_total(0);
@@ -1078,10 +1126,24 @@ void AgentCore::apply_pending_compaction()
         // the volatile-tail rule from S4.F isn't broken. Only when an archive
         // was actually written.
         if (counter > 0) {
-            std::string note = "[Earlier context compacted; full pre-compaction "
-                               "history archived at " +
-                               HistoryArchive::footnote_relative_path(
-                                   ctx_->session_id(), counter) + "]";
+            // S6.18 Task B.1 -- progress-preserving sentinel. When Layer 6
+            // produced a summary, prepend it as "Progress so far: <summary>"
+            // so the post-compaction model reads the breadcrumb instead of
+            // a context-free "history was compacted" line.
+            std::string note;
+            const std::string& progress = result.llm_summary_text;
+            const std::string archive_rel =
+                HistoryArchive::footnote_relative_path(ctx_->session_id(), counter);
+            if (!progress.empty()) {
+                note  = "[Earlier context compacted. Progress so far: ";
+                note += progress;
+                if (!note.empty() && note.back() != '.' && note.back() != '\n')
+                    note += ".";
+                note += " Full pre-compaction history archived at " + archive_rel + "]";
+            } else {
+                note = "[Earlier context compacted; full pre-compaction "
+                       "history archived at " + archive_rel + "]";
+            }
             ChatMessage fn;
             fn.role    = MessageRole::user;
             fn.content = note;

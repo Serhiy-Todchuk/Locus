@@ -158,14 +158,20 @@ IndexQuery::IndexQuery(Database& main_db, Database* vectors_db)
 
     // Semantic search: vectors.db knows chunks + embeddings but NOT file paths.
     // We resolve file_id -> path in a second lookup on main_db_.
+    // S6.18 Task A.1 -- the vec0 `chunk_vectors` table may not exist yet on
+    // brand-new (or post-wipe) workspaces; prepare is deferred until the
+    // table is minted. `search_semantic` lazy-prepares on first call where
+    // the table has become present.
     if (vectors_db_) {
-        stmt_search_semantic_ = vectors_db_->prepare(R"(
-            SELECT c.content, c.start_line, c.file_id, cv.distance
-            FROM chunk_vectors cv
-            JOIN chunks c ON c.id = cv.chunk_id
-            WHERE cv.embedding MATCH ?1 AND k = ?2
-            ORDER BY cv.distance
-        )");
+        if (vectors_db_->chunk_vectors_present()) {
+            stmt_search_semantic_ = vectors_db_->prepare(R"(
+                SELECT c.content, c.start_line, c.file_id, cv.distance
+                FROM chunk_vectors cv
+                JOIN chunks c ON c.id = cv.chunk_id
+                WHERE cv.embedding MATCH ?1 AND k = ?2
+                ORDER BY cv.distance
+            )");
+        }
 
         stmt_path_by_file_id_ = main_db_.prepare("SELECT path FROM files WHERE id = ?1");
     }
@@ -488,6 +494,26 @@ std::vector<SearchResult> IndexQuery::search_semantic(
                   query_embedding.size(), opts.max_results);
 
     std::vector<SearchResult> results;
+
+    // S6.18 Task A.1 -- the vec0 table may have been minted after
+    // IndexQuery's ctor ran (first file just embedded, mid-session model
+    // swap, etc.). Lazy-prepare here so semantic search starts working as
+    // soon as content exists.
+    if (!stmt_search_semantic_ && vectors_db_
+        && vectors_db_->chunk_vectors_present()) {
+        // mutable_cast: prepared statement caches are conceptually owned by
+        // the read path, but the const search_semantic surface forced us
+        // into a const_cast to mint the lazy one. The alternative (mutex +
+        // shared_mutex flip) is overkill for a once-per-workspace event.
+        auto* self = const_cast<IndexQuery*>(this);
+        self->stmt_search_semantic_ = vectors_db_->prepare(R"(
+            SELECT c.content, c.start_line, c.file_id, cv.distance
+            FROM chunk_vectors cv
+            JOIN chunks c ON c.id = cv.chunk_id
+            WHERE cv.embedding MATCH ?1 AND k = ?2
+            ORDER BY cv.distance
+        )");
+    }
 
     if (!stmt_search_semantic_) {
         log_fs()->trace("search_semantic: vectors DB not present, returning empty");

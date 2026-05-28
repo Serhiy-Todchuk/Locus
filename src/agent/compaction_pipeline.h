@@ -69,6 +69,12 @@ struct PipelineResult {
     int                      target_tokens = 0;
     std::vector<LayerResult> layers;
     bool                     reached_target = false;
+    // S6.18 Task B.1 -- the LLM-produced progress summary from Layer 6
+    // (`composed` minus the deterministic failure-notes block). Empty when
+    // Layer 6 didn't run or returned nothing. AgentCore prepends this into
+    // the post-compaction footnote at index 1 so the LLM still sees what
+    // it was working on, not just "history was compacted".
+    std::string              llm_summary_text;
 };
 
 class CompactionPipeline {
@@ -87,12 +93,19 @@ public:
     // ---- Helpers reused by the dialog preview ----------------------------
 
     // Returns true when this message must NOT be dropped/touched by Layers 5/6
-    // under the auto-preservation heuristics.
+    // under the auto-preservation heuristics. S6.18 Task B.1 added the
+    // `last_assistant_text_idx` argument: the index of the most recent
+    // assistant-role message with non-empty `content` and no `tool_calls`.
+    // Pinning that message keeps the model's last "free-text answer"
+    // (the closest thing the conversation has to "what we just figured
+    // out") across drop_old_reasoning + drop_oldest_turns layers. Pass
+    // `msgs.size()` when no such message exists.
     static bool is_preserved(const std::vector<ChatMessage>& msgs,
                              std::size_t idx,
                              const CompactionLayerSelection& cfg,
                              std::size_t first_user_idx,
-                             std::size_t keep_recent_from);
+                             std::size_t keep_recent_from,
+                             std::size_t last_assistant_text_idx = std::string::npos);
 
     // Compute the index ranges Layer 5 / Layer 6 would consider as drop
     // candidates (oldest turn-groups that contain no preserved message).

@@ -91,8 +91,13 @@ void EmbeddingWorker::thread_func()
     // Prepared statements for this thread (SQLite statements are not thread-safe)
     sqlite3_stmt* stmt_read = db_.prepare(
         "SELECT content FROM chunks WHERE id = ?1");
-    sqlite3_stmt* stmt_insert = db_.prepare(
-        "INSERT INTO chunk_vectors (chunk_id, embedding) VALUES (?1, ?2)");
+    // S6.18 Task A.1 -- prepare the INSERT lazily so a workspace that opens
+    // semantic search but never embeds doesn't materialise the 4 MiB-per-table
+    // vec0 bucket. S6.18 Task A.5 -- INSERT OR REPLACE handles the rare
+    // rowid-reuse race where `chunks.id` (INTEGER PRIMARY KEY without
+    // AUTOINCREMENT) is recycled by SQLite after a fast file-rewrite, and a
+    // new chunk_vectors row would otherwise collide with a stale embedding.
+    sqlite3_stmt* stmt_insert = nullptr;
 
     while (running_.load()) {
         int64_t chunk_id = -1;
@@ -102,7 +107,11 @@ void EmbeddingWorker::thread_func()
             queue_cv_.wait(lock, [this] {
                 return !pending_ids_.empty() || !running_.load();
             });
-            if (!running_.load() && pending_ids_.empty()) break;
+            if (!running_.load() && pending_ids_.empty()) {
+                // S6.18 Task A.6 -- final drain checkpoint on shutdown.
+                db_.wal_checkpoint_passive("embedding_worker shutdown");
+                break;
+            }
             if (pending_ids_.empty()) continue;
 
             chunk_id = pending_ids_.front();
@@ -138,7 +147,16 @@ void EmbeddingWorker::thread_func()
             continue;
         }
 
-        // Write vector to chunk_vectors
+        // Write vector to chunk_vectors. S6.18 Task A.1: ensure the table
+        // exists and lazily prepare the INSERT on first use. S6.18 Task A.5:
+        // OR REPLACE so a recycled chunk_id always carries the current
+        // chunk's embedding, not a stale one from a freed predecessor.
+        if (!stmt_insert) {
+            db_.ensure_chunk_vectors_table();
+            stmt_insert = db_.prepare(
+                "INSERT OR REPLACE INTO chunk_vectors "
+                "(chunk_id, embedding) VALUES (?1, ?2)");
+        }
         sqlite3_reset(stmt_insert);
         sqlite3_bind_int64(stmt_insert, 1, chunk_id);
         sqlite3_bind_blob(stmt_insert, 2,
@@ -147,6 +165,9 @@ void EmbeddingWorker::thread_func()
                           SQLITE_TRANSIENT);
         rc = sqlite3_step(stmt_insert);
         if (rc != SQLITE_DONE) {
+            // With OR REPLACE the UNIQUE-constraint silent-drop path is
+            // closed; remaining errors are real (out-of-disk, locked DB,
+            // sqlite-vec extension misconfig). Keep warn for visibility.
             spdlog::warn("Failed to insert vector for chunk {}: {}",
                          chunk_id, sqlite3_errmsg(db_.handle()));
         }
@@ -196,10 +217,20 @@ void EmbeddingWorker::thread_func()
                 last_activity_time_ = std::chrono::steady_clock::now();
             }
         }
+
+        // S6.18 Task A.6 -- when the queue drains, fold the WAL back into the
+        // main DB file. The agentic Tetris vectors.db had a 4.5 MB-per-empty-
+        // workspace WAL bloat purely because no caller ever issued a
+        // checkpoint between sessions; SQLite's auto-checkpoint kicks in only
+        // when WAL crosses ~1000 frames, which a moderate workspace easily
+        // exceeds and a tiny one never reaches before clean shutdown.
+        if (current_done == current_total && current_total > 0) {
+            db_.wal_checkpoint_passive("embedding_worker drain");
+        }
     }
 
     sqlite3_finalize(stmt_read);
-    sqlite3_finalize(stmt_insert);
+    if (stmt_insert) sqlite3_finalize(stmt_insert);
 }
 
 } // namespace locus

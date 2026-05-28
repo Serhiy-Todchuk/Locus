@@ -98,6 +98,24 @@ std::size_t find_first_user(const std::vector<ChatMessage>& msgs)
     return msgs.size();
 }
 
+// S6.18 Task B.1 -- find the most recent assistant message whose `content`
+// is non-empty AND that has no `tool_calls`. That is the model's last
+// "free-text" answer; pinning it makes the post-compaction history readable
+// to the model ("here's the last thing I told the user") rather than ending
+// with a stripped tool result. Returns msgs.size() when no such message
+// exists (e.g. a session that has only made tool calls so far).
+std::size_t find_last_assistant_text(const std::vector<ChatMessage>& msgs)
+{
+    for (std::size_t i = msgs.size(); i-- > 0; ) {
+        const auto& m = msgs[i];
+        if (m.role != MessageRole::assistant) continue;
+        if (!m.tool_calls.empty()) continue;
+        if (m.content.empty()) continue;
+        return i;
+    }
+    return msgs.size();
+}
+
 // Walk turn boundaries from index `from` to compute the cutoff index of
 // "the most recent `keep_recent` turn pairs". A turn is a contiguous block
 // starting with a user message (or assistant-without-tool-calls when the
@@ -360,12 +378,14 @@ bool CompactionPipeline::is_preserved(const std::vector<ChatMessage>& msgs,
                                       std::size_t idx,
                                       const CompactionLayerSelection& cfg,
                                       std::size_t first_user_idx,
-                                      std::size_t keep_recent_from)
+                                      std::size_t keep_recent_from,
+                                      std::size_t last_assistant_text_idx)
 {
     if (idx >= msgs.size()) return true;
     const auto& m = msgs[idx];
     if (m.role == MessageRole::system) return true;
     if (idx == first_user_idx) return true;
+    if (idx == last_assistant_text_idx) return true;  // S6.18 Task B.1
     if (idx >= keep_recent_from) return true;
 
     if (m.role == MessageRole::user) {
@@ -402,8 +422,9 @@ CompactionPipeline::drop_candidates(const std::vector<ChatMessage>& msgs,
     std::vector<DropSpan> out;
     if (msgs.empty()) return out;
 
-    std::size_t first_user = find_first_user(msgs);
-    std::size_t recent_cut = keep_recent_cutoff(msgs, cfg.keep_recent_turns);
+    std::size_t first_user    = find_first_user(msgs);
+    std::size_t recent_cut    = keep_recent_cutoff(msgs, cfg.keep_recent_turns);
+    std::size_t last_asst_txt = find_last_assistant_text(msgs);
 
     // Walk message-aligned turn groups starting at each user message.
     std::vector<std::size_t> boundaries;
@@ -420,7 +441,7 @@ CompactionPipeline::drop_candidates(const std::vector<ChatMessage>& msgs,
 
         bool any_preserved = false;
         for (std::size_t i = begin; i < end; ++i) {
-            if (is_preserved(msgs, i, cfg, first_user, recent_cut)) {
+            if (is_preserved(msgs, i, cfg, first_user, recent_cut, last_asst_txt)) {
                 any_preserved = true;
                 break;
             }
@@ -763,7 +784,13 @@ PipelineResult CompactionPipeline::run(ConversationHistory& history,
         });
     }
 
-    if (now > target_tokens && cfg.llm_summary && llm) {
+    // S6.18 Task B.1 -- when the cascade hasn't reached target by this point,
+    // fire Layer 6 unconditionally (relax the `cfg.llm_summary` gate). The
+    // progress sentinel injected by AgentCore reads its "Progress so far:"
+    // body from the summary the layer produces; without that body the
+    // post-compaction model sees an empty breadcrumb. Only the user toggling
+    // off the entire LLM (no `llm` pointer) skips this branch.
+    if (now > target_tokens && llm) {
         execute_layer([&](std::vector<ChatMessage>& m) {
             return layer6_llm_summary(m, cfg, target_tokens, now, llm, llm_config);
         });
@@ -771,6 +798,16 @@ PipelineResult CompactionPipeline::run(ConversationHistory& history,
 
     pr.after_tokens    = now;
     pr.reached_target  = (now <= target_tokens);
+
+    // Surface the Layer 6 summary text (verbatim from the LLM, without the
+    // appended failure-notes block) so AgentCore can inject it into the
+    // index-1 footnote.
+    for (const auto& lr : pr.layers) {
+        if (!lr.summary_text.empty()) {
+            pr.llm_summary_text = lr.summary_text;
+            break;
+        }
+    }
 
     // Commit the mutated message vector back to history. We replace the
     // entire vector; ConversationHistory's owner-thread fence asserts this
