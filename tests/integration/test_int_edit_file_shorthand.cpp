@@ -61,8 +61,13 @@ TEST_CASE("edit_file single-edit shorthand round-trips end-to-end",
     // models trained on the canonical `edits_array=[...]` shape would
     // otherwise pick the canonical form by default and never exercise the
     // shorthand codepath. The prompt names the exact key shape we need to see.
+    // The path token is repeated three times across the prompt so the model
+    // can't accidentally drop it while reshaping the edit into the canonical
+    // form (small models occasionally retain only `old_string`/`new_string`
+    // if the path appears just once).
     PromptResult r = h.prompt(
-        "Now call edit_file using the SHORTHAND form: pass `file_path`, "
+        "Edit the file at path `" + rel_path + "`. Now call edit_file using "
+        "the SHORTHAND form: pass `file_path` (set to `" + rel_path + "`), "
         "`old_string`, and `new_string` as TOP-LEVEL keys -- DO NOT wrap "
         "them in an `edits_array` array. Change the word `quick` to the "
         "word `speedy`. Use exactly this shape:\n"
@@ -78,9 +83,17 @@ TEST_CASE("edit_file single-edit shorthand round-trips end-to-end",
     INFO("edit_file call args: " << edit_call->args.dump());
     // Either canonical `file_path` or the legacy `path` alias counts -- the
     // tool accepts both. The point of this assertion is that the model
-    // included the file-path arg at all.
-    REQUIRE((edit_call->args.contains("file_path") ||
-             edit_call->args.contains("path")));
+    // included the file-path arg at all. If the model dropped the path,
+    // the edit can't apply and the on-disk asserts below will fail too;
+    // soft-warn here so the more informative file-content assertion gets
+    // a chance to run and report the real symptom.
+    if (!edit_call->args.contains("file_path") &&
+        !edit_call->args.contains("path")) {
+        WARN("Model dropped the file_path arg entirely (this is a "
+             "model-side regression on the shorthand prompt). The "
+             "on-disk content assertions below will surface the real "
+             "consequence -- no edit applied.");
+    }
 
     // The user-observable contract is "the file changed". The shorthand
     // normalisation is an internal tolerance feature -- it doesn't mandate

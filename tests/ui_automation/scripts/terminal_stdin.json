@@ -40,15 +40,20 @@
       }
     },
 
-    { "op": "press_key", "args": { "key": "BACKTICK", "modifiers": "CTRL" } },
+    {
+      "comment": "Wait for the agent to be idle -- by then run_command_bg has spawned the bg process AND the first-command auto-show has raised the terminal pane. Pressing Ctrl+` here would TOGGLE the pane back to hidden (it's a toggle, not show-if-hidden), so we skip it.",
+      "op": "wait_for_agent_idle",
+      "args": { "timeout_ms": 240000, "quiet_ms": 3000 }
+    },
     { "op": "sleep", "args": { "ms": 800 } },
     {
       "op": "assert_visible",
-      "args": { "automation_id": "locus.terminal.panel", "timeout_ms": 240000 }
+      "args": { "automation_id": "locus.terminal.panel", "timeout_ms": 10000 }
     },
     {
+      "comment": "Select the bg tab (index 1) FIRST so wxWidgets realizes its child widgets -- non-active notebook pages stay unrealized and their named children won't appear in the UIA tree. With the bg tab active the stdin_input widget materializes and `find` can locate it.",
       "op": "select_tab",
-      "args": { "parent_aid": "locus.terminal.notebook", "index": 1, "timeout_ms": 240000 }
+      "args": { "parent_aid": "locus.terminal.notebook", "index": 1, "timeout_ms": 5000 }
     },
     { "op": "sleep", "args": { "ms": 500 } },
     {

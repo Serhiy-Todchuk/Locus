@@ -43,6 +43,46 @@ bool has_code_aware(IWorkspaceServices& ws)
     return true;
 }
 
+// Split path_glob on `,` / `|` separators so a model can pass
+// `**/*.cpp, **/*.h` as a single arg. Trims surrounding whitespace per token,
+// drops empties, and returns {} for an empty input (caller treats {} as "no
+// filter"). Patterns that mean "any path" -- `*`, `**`, `**/*`, `**/**` --
+// also flatten to {} so an LLM that picked the wrong wildcard for "match
+// everything" doesn't accidentally exclude all nested files.
+std::vector<std::string> split_path_glob(const std::string& glob)
+{
+    std::vector<std::string> out;
+    std::string cur;
+    auto flush = [&]() {
+        size_t a = 0;
+        while (a < cur.size() && (cur[a] == ' ' || cur[a] == '\t')) ++a;
+        size_t b = cur.size();
+        while (b > a && (cur[b - 1] == ' ' || cur[b - 1] == '\t')) --b;
+        if (b > a) out.push_back(cur.substr(a, b - a));
+        cur.clear();
+    };
+    for (char c : glob) {
+        if (c == ',' || c == '|') flush();
+        else cur.push_back(c);
+    }
+    flush();
+
+    // Collapse trivial match-all patterns. If EVERY surviving token is one of
+    // the all-files shapes, return empty so the caller treats this as no
+    // filter. Mixed lists (e.g. `*, **/*.cpp`) keep their non-trivial tokens.
+    auto is_match_all = [](const std::string& g) {
+        return g == "*" || g == "**" || g == "**/*" || g == "**/**" || g == "/**";
+    };
+    std::vector<std::string> kept;
+    bool saw_match_all = false;
+    for (auto& g : out) {
+        if (is_match_all(g)) saw_match_all = true;
+        else kept.push_back(g);
+    }
+    if (kept.empty() && saw_match_all) return {};
+    return kept.empty() ? out : kept;
+}
+
 // Truncate the preview query so the chat bubble stays readable.
 std::string preview_query(const std::string& q, std::size_t cap = 80)
 {
@@ -385,6 +425,11 @@ ToolResult SearchRegexTool::execute(const ToolCall& call, IWorkspaceServices& ws
     int         max_results  = call.args.value("max_results", 50);
     if (max_results <= 0) max_results = 50;
 
+    // Split comma- or pipe-separated patterns so the model can pass
+    // `**/*.cpp, **/*.h` as a single arg (a common shape). Empty token list
+    // means "no filter" -- equivalent to omitting path_glob.
+    std::vector<std::string> path_globs = split_path_glob(path_glob);
+
     auto* idx = ws.index();
     if (!idx) return error_result("Error: workspace index not available");
 
@@ -419,7 +464,12 @@ ToolResult SearchRegexTool::execute(const ToolCall& call, IWorkspaceServices& ws
         if (fe.is_directory) continue;
         if (fe.is_binary)    continue;
 
-        if (!path_glob.empty() && !glob_match(path_glob, fe.path)) continue;
+        if (!path_globs.empty()) {
+            bool any = false;
+            for (auto& g : path_globs)
+                if (glob_match(g, fe.path)) { any = true; break; }
+            if (!any) continue;
+        }
 
         fs::path abs = ws.root() / fe.path;
         std::ifstream f(abs, std::ios::binary);
@@ -632,6 +682,8 @@ ToolResult SearchAstTool::execute(const ToolCall& call, IWorkspaceServices& ws,
     int         max_results    = call.args.value("max_results", 50);
     if (max_results <= 0) max_results = 50;
 
+    std::vector<std::string> path_globs = split_path_glob(path_glob);
+
     if (language.empty())
         return tools::missing_required_arg(*this, "language",
             "one of c / cpp / python / javascript / typescript / go / rust / java / csharp / ruby / php / bash / json / yaml / markdown / swift / kotlin");
@@ -688,7 +740,12 @@ ToolResult SearchAstTool::execute(const ToolCall& call, IWorkspaceServices& ws,
         if (fe.is_directory) continue;
         if (fe.is_binary)    continue;
         if (fe.language != language) continue;
-        if (!path_glob.empty() && !glob_match(path_glob, fe.path)) continue;
+        if (!path_globs.empty()) {
+            bool any = false;
+            for (auto& g : path_globs)
+                if (glob_match(g, fe.path)) { any = true; break; }
+            if (!any) continue;
+        }
 
         fs::path abs = ws.root() / fe.path;
         std::ifstream f(abs, std::ios::binary);

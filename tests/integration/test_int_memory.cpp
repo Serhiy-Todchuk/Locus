@@ -240,9 +240,16 @@ TEST_CASE("search_memory tool retrieves a pre-seeded entry",
 
     // Ask the LLM to retrieve it. The unique marker means a hit is
     // unambiguous; the model is free to phrase its summary however it likes.
+    // We nudge max_results=10 because the workspace's reranker
+    // (`ms-marco-MiniLM-L6-v2`) overrides BM25/recency scoring entirely on
+    // hybrid hits -- and a random-hex marker has no semantic signal, so the
+    // cross-encoder sometimes pushes the seeded entry below the top-5. With
+    // max_results=10 the strong-BM25 match always surfaces, regardless of
+    // how the reranker happens to score random-hex queries this run.
     PromptResult r = h.prompt(
         "Use the search_memory tool to look up notes about the marker "
-        "string `" + marker + "`. Then in your reply quote the marker "
+        "string `" + marker + "`. Pass max_results=10 so a less-frequent "
+        "exact match still surfaces. Then in your reply quote the marker "
         "exactly so I know you found it.");
 
     REQUIRE_FALSE(r.timed_out);

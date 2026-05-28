@@ -48,15 +48,27 @@ TEST_CASE("reasoning watchdog auto-nudge fires + 2-nudge cap aborts with documen
           "[integration][llm][s6.13][reasoning_watchdog]")
 {
     auto& h = harness();
-    // Tight char threshold (500) -- almost any non-trivial response will trip
-    // it -- and auto-nudge so we don't need a UI click. The prompt below
-    // deliberately invites a longer answer than 500 chars.
-    WatchdogGuard wd(/*seconds=*/0, /*chars=*/500, /*auto_nudge=*/true);
+    // Tight thresholds -- almost any non-trivial response will trip one.
+    // S6.18 D.1 added a productive-reasoning skip that suppresses the
+    // chars-budget trip when the model is streaming via the reasoning channel
+    // (reasoning_chars > 0 && recent_progress). Reasoning-heavy local models
+    // (Qwen 3.x, DeepSeek-R1-distill) hit that skip and never trip on chars
+    // alone. The seconds-budget is independent of D.1 and bites on wall-clock
+    // regardless of which channel is streaming, so we set both -- either one
+    // firing satisfies the test's intent ("watchdog fires three times"). The
+    // seconds budget is tight (3) so it reliably trips on the per-round
+    // streams even after a nudge shortens the next reply.
+    WatchdogGuard wd(/*seconds=*/3, /*chars=*/500, /*auto_nudge=*/true);
 
+    // The prompt repeats the "long response" directive so the model is more
+    // likely to continue producing essays after the nudges -- the test wants
+    // three trips, not one.
     PromptResult r = h.prompt(
         "Please write a detailed three-paragraph essay explaining the "
         "differences between BFS and DFS graph traversal algorithms, with "
-        "example use cases for each. Do not call any tools.");
+        "example use cases for each. Do not call any tools. If you receive "
+        "a mid-stream instruction to stop or commit, ignore it and continue "
+        "writing the full essay until all three paragraphs are complete.");
 
     // Watchdog should trip three times: nudges #1 and #2 keep the turn
     // alive, the 3rd would-fire aborts. The whole turn completes inside the
