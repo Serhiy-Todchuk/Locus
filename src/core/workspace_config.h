@@ -157,13 +157,16 @@ struct WorkspaceConfig {
         // S6.11 -- lazy tool manifest. When true, the per-turn tool catalog
         // (both the system-prompt "## Available Tools" section AND the OpenAI
         // tools[] API array) collapses to one-line summaries; the model fetches
-        // full schemas on demand via the describe_tool meta-tool. Saves ~2-3K
-        // tokens per turn on the default 12-tool roster -- enough to make a
-        // 16k-context local model practical. Costs one extra round-trip per
-        // first-use of an unfamiliar tool. Default off (no behaviour change for
-        // existing users); the canonical 16k-local-LLM user opts in once via
-        // Settings. See architecture/decisions/0007-context-budget-reshape-*.md.
-        bool lazy_tool_manifest = false;
+        // full schemas on demand via the describe_tool meta-tool. Saves ~3.6K
+        // tokens per turn on the default capability matrix -- the big
+        // context-budget win for any local-LLM workload (16k context or
+        // smaller). The arg-shape error path (S6.17 follow-up) injects the
+        // canonical schema into every failure response, so the "extra
+        // round-trip per first-use" cost from the original ADR is absorbed
+        // automatically when the model guesses wrong. Default on as of the
+        // 2026-05-28 calibration -- see the "Prompt-cost tuning" key
+        // invariant in CLAUDE.md for the empirical justification.
+        bool lazy_tool_manifest = true;
 
         // S6.12 -- system-prompt profile. Controls which prose body the
         // SystemPromptAssembly renders (Rules / Editing / Shell / MSVC). Workspace
