@@ -120,6 +120,14 @@ ScriptResult ScriptRunner::run()
             };
             cfg["sessions"]["auto_cleanup_enabled"] = false;
             cfg["sessions"]["restore_last"]        = false;
+            // S6.10 Tasks I + J -- minimized tool manifest with full
+            // system-prompt prose. Lazy manifest is the big context-budget
+            // win; full prose pays dividends in small-model reliability
+            // (compact / minimal both flake under attention pressure). Set
+            // as individual flags so any script's setup overrides can still
+            // toggle them independently if needed.
+            cfg["agent"]["lazy_tool_manifest"]    = true;
+            cfg["agent"]["system_prompt_profile"] = "full";
             if (script_.contains("setup") && script_["setup"].is_object()) {
                 const auto& setup = script_["setup"];
                 if (setup.contains("sessions_config") &&

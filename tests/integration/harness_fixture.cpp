@@ -194,6 +194,18 @@ void IntegrationHarness::shutdown_shared()
 
 IntegrationHarness::IntegrationHarness()
 {
+    // Phase timer -- prints delta-ms since the previous phase at warn level
+    // so the lines survive the test stderr filter. Used to attribute the
+    // multi-minute harness startup cost to a specific subphase.
+    auto last_phase_t = std::chrono::steady_clock::now();
+    auto phase_done = [&](const char* label) {
+        auto now = std::chrono::steady_clock::now();
+        auto ms  = std::chrono::duration_cast<std::chrono::milliseconds>(
+                       now - last_phase_t).count();
+        last_phase_t = now;
+        spdlog::warn("[harness-timing] {} (+{} ms)", label, ms);
+    };
+
     workspace_root_ = resolve_workspace_root();
     tmp_dir_        = workspace_root_ / "tests" / "integration_tmp";
 
@@ -203,6 +215,7 @@ IntegrationHarness::IntegrationHarness()
     fs::create_directories(tmp_dir_);
 
     init_integration_logging(workspace_root_ / ".locus");
+    phase_done("ctor entry + scratch dir reset + logging init");
 
     // LLM config from env (with sane defaults).
     llm_config_.base_url      = env_or("LOCUS_INT_TEST_ENDPOINT", "http://127.0.0.1:1234");
@@ -213,9 +226,11 @@ IntegrationHarness::IntegrationHarness()
     llm_config_.timeout_ms    = 120000;  // local models can stall longer than usual
 
     llm_ = create_llm_client(llm_config_);
+    phase_done("create_llm_client");
 
     // Reachability gate -- THE requirement: fail fast if LM Studio is not up.
     ModelInfo mi = llm_->query_model_info();
+    phase_done("query_model_info (LM Studio /v1/models probe)");
     if (mi.id.empty()) {
         throw std::runtime_error(
             "LM Studio not reachable at " + llm_config_.base_url +
@@ -238,6 +253,7 @@ IntegrationHarness::IntegrationHarness()
     // harness construction instead. Non-LM-Studio backends don't implement
     // the v0 endpoint -- we treat that as "unknown" and proceed.
     auto caps = fetch_model_capabilities(llm_config_.base_url, model_id_);
+    phase_done("fetch_model_capabilities (LM Studio /api/v0 probe)");
     if (caps.has_value()) {
         bool has_tool_use = std::any_of(
             caps->begin(), caps->end(),
@@ -266,6 +282,7 @@ IntegrationHarness::IntegrationHarness()
 
     // Workspace (blocking initial index).
     workspace_ = std::make_unique<Workspace>(workspace_root_);
+    phase_done("Workspace ctor (bge load + reranker load + initial index pass)");
 
     // The repo's .gitignore excludes tests/integration_tmp/ -- the harness
     // writes its scratch files there and the indexer needs to see them.
@@ -279,6 +296,27 @@ IntegrationHarness::IntegrationHarness()
         spdlog::info("Integration harness: disabled .gitignore respect for "
                      "scratch-dir visibility (tests/integration_tmp).");
     }
+    phase_done("reload_gitignore");
+
+    // Tool-manifest warning fires per-turn whenever the schema JSON exceeds
+    // the threshold. The full-schema default capability matrix sits at
+    // ~4003t -- 3t over the production default of 4000t -- so the warning
+    // becomes a constant per-turn flood that drowns Catch2's output in the
+    // captured stderr stream. Bump well above the measured baseline so the
+    // guardrail still catches a real regression (e.g. a refactor that
+    // doubles the manifest) without spamming on the steady-state cost.
+    workspace_->config().agent.tool_manifest_warn_tokens = 8000;
+
+    // S6.10 Tasks I + J -- exercise the minimized tool-manifest path AND
+    // keep full system-prompt prose. Lazy manifest is the big context-budget
+    // win (per-turn schema collapse from ~4000t to ~400t); the prose body is
+    // only ~1500 chars even at `full` and pays dividends in small-model
+    // reliability (compact / minimal both flake on search-tool args + query
+    // refinement under attention pressure). Not a named prompt_cost preset
+    // -- set the individual flags directly since the preset is resolved at
+    // load time and we're overriding after Workspace ctor loaded config.
+    workspace_->config().agent.lazy_tool_manifest    = true;
+    workspace_->config().agent.system_prompt_profile = "full";
 
     const auto& st = workspace_->indexer().stats();
     spdlog::info("Integration harness: index ready -- {} files, {} symbols, {} headings",
@@ -335,12 +373,16 @@ IntegrationHarness::IntegrationHarness()
         };
 
     agent_->start();
+    phase_done("tool registry + agent core + frontend wiring + agent start");
 
     // Wait for any initial embedding backlog to drain so semantic queries are
     // meaningful on turn one. The harness ctor can't REQUIRE (no Catch test
     // context yet), so we just log; per-test wait_for_embedding_idle calls
     // are the enforcement point.
-    if (!wait_for_embedding_idle()) {
+    bool embed_ok = wait_for_embedding_idle();
+    phase_done(embed_ok ? "wait_for_embedding_idle (drained)"
+                        : "wait_for_embedding_idle (TIMED OUT)");
+    if (!embed_ok) {
         spdlog::error("Initial embedding did not finish within timeout - "
                       "semantic test cases will likely fail");
     }
