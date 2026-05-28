@@ -113,3 +113,15 @@ Both knobs become part of the `SystemPromptAssembly` cache key. Toggling either 
 - This ADR governs two stage docs: [S6.11 (Lazy Tool Manifest)](../../roadmap/M6/S6.11-lazy-tool-manifest.md) and [S6.12 (System-Prompt Profiles)](../../roadmap/M6/S6.12-system-prompt-profiles.md). Each stage doc carries the implementation task list; this ADR carries the cross-cutting design rationale.
 - Companion runtime work: [S6.13 (Reasoning Watchdog)](../../roadmap/M6/S6.13-reasoning-watchdog.md) caps misbehaviour during a single round; [S6.14 (Thinking Knob)](../../roadmap/M6/S6.14-thinking-knob.md) disables reasoning at the source. The four stages together turn "make Locus work on a 16K-context local model" from aspirational into operational.
 - Reversing this decision is cheap: both knobs default to "off" / "full" which is current behaviour. The cost of the decision is mostly the new `describe_tool` tool surface and the test matrix.
+
+## Addendum 2026-05-28 -- `lazy_tool_manifest` default flipped to `true`
+
+The original "default off; revisit once telemetry shows the round-trip cost of `describe_tool` calls in practice" plan at line 54 has been revisited. The default is now `true` for any newly-opened workspace.
+
+What changed since the ADR was written:
+
+- Empirical small-LLM calibration on Gemma 4 E4B / Qwen 3 14B-class local models showed the per-turn manifest savings (~3.6K tokens) are the dominant context-budget win -- system-prompt prose is a one-time cost that prefix-caches every subsequent turn, so trimming it for budget rarely pays off.
+- The arg-shape error path now auto-injects the canonical schema (see [src/tools/shared.h](../../src/tools/shared.h) -- `render_tool_schema` / `error_with_schema` / `missing_required_arg`). The dispatcher catches every unknown-key / missing-required / malformed-shape error and appends the schema so a model that guesses wrong gets the schema on the same round. That absorbs the "extra round-trip per first-use of an unfamiliar tool" cost cited as the main reason to keep lazy off by default.
+- Better signature cues (descriptive arg names like `file_path` / `edits_array` + `* = required` markers on multiple required args at once) reduced the frequency of arg-shape misses, so the safety net fires less often than the worst-case math suggested.
+
+For very-large-context cloud models where context isn't the bottleneck, set `lazy_tool_manifest=false` in `.locus/config.json` to ship full schemas every turn. The cross-cutting calibration finding is captured in the "Prompt-cost tuning" key invariant in [CLAUDE.md](../../CLAUDE.md) -- read that before flipping the default back or proposing a "small" / "large" preset.
