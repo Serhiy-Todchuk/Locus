@@ -16,6 +16,7 @@ class ToolApprovalsSettingsPanel;
 class McpSettingsPanel;
 class NotificationsSettingsPanel;
 class SessionsSettingsPanel;
+class AgentSettingsPanel;
 
 // Modal dialog for editing workspace + LLM settings.
 // Thin shell: owns a wxNotebook and one per-tab ISettingsPanel. On OK, calls
@@ -58,6 +59,7 @@ private:
     McpSettingsPanel*           mcp_panel_           = nullptr;
     NotificationsSettingsPanel* notifications_panel_ = nullptr;
     SessionsSettingsPanel*      sessions_panel_      = nullptr;
+    AgentSettingsPanel*         agent_panel_         = nullptr;
 
     bool changed_              = false;
     bool llm_changed_          = false;

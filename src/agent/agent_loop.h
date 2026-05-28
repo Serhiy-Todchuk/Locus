@@ -39,6 +39,29 @@ struct AgentStepResult {
     std::string watchdog_trigger;
 };
 
+// S6.18 D.2 -- pure-function watchdog decision. Lifted out of run_step()'s
+// in-line check_watchdog lambda so the silent-stream / text-only commit /
+// reasoning-channel-heavy cases can be exercised without a mock LLM
+// stream. Inputs are the bare state the closure was consulting; output is
+// the trigger string ("" = no trip, "chars" | "seconds" = trip) AFTER the
+// commit-phase and reasoning-channel-progress skips have been applied.
+//
+// `elapsed_seconds` is the time since stream start.
+// `wd_max_chars` / `wd_max_seconds` are the configured budgets (0 = off).
+// `recent_progress` is the most-recent timer-tick's observation of
+// "delta > 0" -- maintained by the AgentLoop timer thread.
+struct WatchdogDecisionInputs {
+    int  text_chars        = 0;
+    int  reasoning_chars   = 0;
+    bool tool_call_seen    = false;
+    long elapsed_seconds   = 0;
+    int  wd_max_chars      = 0;
+    int  wd_max_seconds    = 0;
+    bool recent_progress   = true;
+};
+
+std::string evaluate_watchdog(const WatchdogDecisionInputs& in);
+
 // Drives a single LLM call: builds the tool schema, streams tokens,
 // accumulates reasoning/text/tool-call fragments, records an activity
 // event, and returns the pieces that belong to the conversation. Does

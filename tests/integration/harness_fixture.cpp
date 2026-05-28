@@ -223,7 +223,18 @@ IntegrationHarness::IntegrationHarness()
     llm_config_.temperature   = 0.2;     // deterministic-ish
     llm_config_.max_tokens    = 2048;
     llm_config_.context_limit = 0;       // auto-detect
-    llm_config_.timeout_ms    = 120000;  // local models can stall longer than usual
+    // Stream-stall timeout: how long a stream may go without producing ANY
+    // chunk before the OpenAI transport retries. Reasoning-heavy local
+    // models (Qwen 3.6-27B and up) can sit silent for 3-5 minutes on the
+    // first turn while they reason before emitting the first reasoning
+    // chunk. The S6.18 acceptance pass needs the higher floor; an env var
+    // lets faster setups dial it back.
+    {
+        auto t = env_or("LOCUS_INT_TEST_TIMEOUT_MS", "");
+        long parsed = 0;
+        try { parsed = std::stol(t); } catch (...) { parsed = 0; }
+        llm_config_.timeout_ms = (parsed > 0) ? parsed : 360000;  // 6 min default
+    }
 
     llm_ = create_llm_client(llm_config_);
     phase_done("create_llm_client");

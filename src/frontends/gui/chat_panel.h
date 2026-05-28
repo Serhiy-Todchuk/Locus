@@ -126,7 +126,18 @@ public:
 
     // S5.Z task 6 -- compactions counter chip. `archive_dir` is opened with
     // the OS default app on chip click. Pass count == 0 to hide.
-    void set_compacted_count(int count, const wxString& archive_dir);
+    // S6.18 C.3 -- `no_op_count` is the running total of reached=no
+    // compactions in this session; when > 0 the chip text reads
+    // "compacted: N (M no-op)" so a stuck pipeline is visible at a glance.
+    void set_compacted_count(int count, int no_op_count,
+                             const wxString& archive_dir);
+
+    // S6.18 C.4 -- session-scoped auto-corrections counter. AgentEventRouter
+    // calls bump() once per ActivityKind::quality_correction event from the
+    // source tab; reset_auto_correction_count() runs on session reset so a
+    // new conversation starts at zero.
+    void bump_auto_correction_count();
+    void reset_auto_correction_count();
 
     // Agentic Tetris findings #5 -- in-flight round counter ("round N/M").
     // Pass round <= 0 to hide. `max_rounds == 0` means "unbounded" and
@@ -274,6 +285,11 @@ private:
 
     // Must precede the collaborator unique_ptrs: the renderer holds `int&` into this.
     int message_id_ = 0;
+
+    // S6.18 C.4 -- session-scoped auto-corrections counter. Incremented by
+    // AgentEventRouter on every ActivityKind::quality_correction event from
+    // this tab; reset on session reset.
+    int auto_corrections_count_ = 0;
 
     // Collaborators (owned by unique_ptr so forward declarations above suffice).
     std::unique_ptr<ChatStreamRenderer> renderer_;

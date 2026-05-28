@@ -189,11 +189,13 @@ void AgentEventRouter::on_agent_compaction(wxThreadEvent& /*evt*/)
 void AgentEventRouter::on_agent_compaction_archived(wxThreadEvent& evt)
 {
     int counter = evt.GetInt();
+    // S6.18 C.3 -- no-op count piggybacked via ExtraLong.
+    int no_op_count = static_cast<int>(evt.GetExtraLong());
     auto* ui = frame_.find_tab_ui(evt.GetId());
     if (!ui || !ui->chat || !ui->tab) return;
     auto archive_dir = frame_.workspace_.root() / ".locus" / "sessions" /
                        ui->tab->session_id();
-    ui->chat->set_compacted_count(counter,
+    ui->chat->set_compacted_count(counter, no_op_count,
         wxString::FromUTF8(archive_dir.string()));
 }
 
@@ -281,6 +283,14 @@ void AgentEventRouter::on_agent_activity(wxThreadEvent& evt)
     auto ev = evt.GetPayload<ActivityEvent>();
     if (frame_.activity_panel_) frame_.activity_panel_->append(ev);
     if (frame_.memory_bank_panel_) frame_.memory_bank_panel_->on_activity_event(ev);
+    // S6.18 C.4 -- per-tab auto-corrections chip. The source tab id rides
+    // on evt.GetId(); a quality_correction event increments the chip
+    // counter on that tab's chat panel only.
+    if (ev.kind == ActivityKind::quality_correction) {
+        if (auto* ui = frame_.find_tab_ui(evt.GetId())) {
+            if (ui->chat) ui->chat->bump_auto_correction_count();
+        }
+    }
 }
 
 void AgentEventRouter::on_agent_activity_updated(wxThreadEvent& evt)

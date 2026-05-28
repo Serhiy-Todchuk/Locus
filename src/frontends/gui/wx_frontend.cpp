@@ -128,10 +128,13 @@ void WxFrontend::on_compaction_needed(int used_tokens, int limit)
     wxQueueEvent(handler_, evt);
 }
 
-void WxFrontend::on_compaction_archived(int counter)
+void WxFrontend::on_compaction_archived(int counter, int no_op_count)
 {
     auto* evt = new_evt(EVT_AGENT_COMPACTION_ARCHIVED, tab_id_);
     evt->SetInt(counter);
+    // S6.18 C.3 -- carry the no-op total alongside the archive counter.
+    // ExtraLong is the existing piggyback channel for these events.
+    evt->SetExtraLong(no_op_count);
     wxQueueEvent(handler_, evt);
 }
 

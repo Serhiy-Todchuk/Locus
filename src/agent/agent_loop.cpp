@@ -18,6 +18,45 @@
 
 namespace locus {
 
+// S6.18 D.2 -- pure decision shared with the run_step closure and tests.
+// Returns "" when no trip, "chars" / "seconds" when the named budget fires
+// AFTER the C.2 (text-only commit) and D.1 (reasoning-channel-progress)
+// skips have been applied. The seconds budget is evaluated independently of
+// chars: when a chars trigger is skipped, the function falls through to
+// re-check the seconds budget so a genuinely-stuck stream (long elapsed,
+// large chars) still trips on seconds. C.2 / D.1 only suppress chars.
+std::string evaluate_watchdog(const WatchdogDecisionInputs& in)
+{
+    constexpr int k_commit_text_floor = 100;
+    int combined = in.text_chars + in.reasoning_chars;
+
+    bool chars_trigger = (in.wd_max_chars > 0 && combined > in.wd_max_chars);
+    bool seconds_trigger = (in.wd_max_seconds > 0
+                            && in.elapsed_seconds > in.wd_max_seconds);
+
+    // C.2 -- text-only commit-phase suppresses chars (S6.17). The model is
+    // mid-final-answer; not stuck. Seconds still bites if it's actually idle.
+    if (chars_trigger
+        && !in.tool_call_seen
+        && in.text_chars > k_commit_text_floor
+        && in.reasoning_chars == 0) {
+        chars_trigger = false;
+    }
+
+    // D.1 -- reasoning-channel-progress suppresses chars (S6.18). Productive
+    // reasoning streams shouldn't burn a nudge strike on volume alone.
+    if (chars_trigger
+        && !in.tool_call_seen
+        && in.reasoning_chars > 0
+        && in.recent_progress) {
+        chars_trigger = false;
+    }
+
+    if (chars_trigger) return "chars";
+    if (seconds_trigger) return "seconds";
+    return {};
+}
+
 AgentLoop::AgentLoop(ILLMClient& llm,
                      IToolRegistry& tools,
                      IWorkspaceServices& services,
@@ -186,37 +225,59 @@ AgentStepResult AgentLoop::run_step(const ConversationHistory& history,
         wd_auto_nudge  = ws->config().agent.reasoning_auto_nudge;
     }
     std::atomic<bool> watchdog_tripped_atomic{false};
+    // S6.18 D.1 -- "progress observed on the most recent timer tick" flag.
+    // Maintained by the timer thread only: at every tick it reads the
+    // current text+reasoning total, compares against its private prev
+    // reading, and sets this flag to (delta > 0). evaluate_watchdog()
+    // consults the flag to suppress chars-budget trips during productive
+    // reasoning-channel-heavy streams. Putting the delta computation on
+    // the timer thread keeps the per-tick semantics clean -- chunk
+    // callbacks fire too frequently to participate in delta tracking
+    // themselves.
+    std::atomic<bool> wd_recent_progress_atomic{true};  // assume progress at t=0
+    std::atomic<bool> wd_skip_logged_atomic{false};     // S6.18 D.2 diag throttle
     auto check_watchdog = [&]() {
         if (watchdog_tripped_atomic.load(std::memory_order_acquire)) return;
-        // chars trigger counts reasoning + text -- a model that streams a long
-        // plain-text answer without calling a tool is just as stuck for the
-        // watchdog's purposes as one buried in <think> content.
-        std::string trigger;
         // S6.17 Task C.1 -- read atomics so this is safe to call from the
         // timer thread alongside the chunk callbacks.
-        int text_chars      = static_cast<int>(text_chars_atomic.load());
-        int reasoning_chars = static_cast<int>(reasoning_chars_atomic.load());
-        int combined = text_chars + reasoning_chars;
-        if (wd_max_chars > 0 && combined > wd_max_chars) {
-            trigger = "chars";
-        } else if (wd_max_seconds > 0) {
-            auto elapsed_s = std::chrono::duration_cast<std::chrono::seconds>(
+        WatchdogDecisionInputs in;
+        in.text_chars      = static_cast<int>(text_chars_atomic.load());
+        in.reasoning_chars = static_cast<int>(reasoning_chars_atomic.load());
+        in.tool_call_seen  = tool_call_seen_atomic.load(std::memory_order_acquire);
+        in.elapsed_seconds = std::chrono::duration_cast<std::chrono::seconds>(
                                  std::chrono::steady_clock::now() - stream_t0).count();
-            if (elapsed_s > wd_max_seconds) trigger = "seconds";
-        }
-        if (trigger.empty()) return;
+        in.wd_max_chars    = wd_max_chars;
+        in.wd_max_seconds  = wd_max_seconds;
+        in.recent_progress = wd_recent_progress_atomic.load(std::memory_order_acquire);
 
-        // S6.17 Task C.2 -- commit-phase skip. When the model is already
-        // streaming plain text and has not committed any tool_calls, the
-        // long stream is the final answer rather than runaway reasoning.
-        // Suppress the trip; don't burn a nudge strike on it.
-        constexpr int k_commit_text_floor = 100;
-        if (!tool_call_seen_atomic.load(std::memory_order_acquire)
-            && text_chars > k_commit_text_floor
-            && reasoning_chars == 0) {
-            spdlog::info("AgentLoop: watchdog tick during commit phase "
-                         "(text_chars={}, reasoning_chars=0, no tool_calls); suppressed",
-                         text_chars);
+        std::string trigger = evaluate_watchdog(in);
+        if (trigger.empty()) {
+            // S6.18 D.2 -- per-skip diagnostic. evaluate_watchdog already
+            // applied the C.2 / D.1 skip rules; mirror them here so the log
+            // tells the user WHY the watchdog stayed silent during a stream
+            // that nominally exceeded the chars budget. The throttle is the
+            // single-shot `wd_skip_logged_atomic` -- one info line per stream
+            // is enough.
+            bool combined_over = (in.wd_max_chars > 0
+                                  && (in.text_chars + in.reasoning_chars)
+                                     > in.wd_max_chars);
+            if (combined_over && !wd_skip_logged_atomic.exchange(true)) {
+                if (!in.tool_call_seen
+                    && in.text_chars > 100
+                    && in.reasoning_chars == 0) {
+                    spdlog::info("AgentLoop: watchdog tick during commit phase "
+                                 "(text_chars={}, reasoning_chars=0, no tool_calls); "
+                                 "suppressed chars-budget trip",
+                                 in.text_chars);
+                } else if (!in.tool_call_seen
+                           && in.reasoning_chars > 0
+                           && in.recent_progress) {
+                    spdlog::info("AgentLoop: watchdog tick during productive "
+                                 "reasoning (reasoning_chars={}, text_chars={}); "
+                                 "suppressed chars-budget trip",
+                                 in.reasoning_chars, in.text_chars);
+                }
+            }
             return;
         }
 
@@ -226,6 +287,7 @@ AgentStepResult AgentLoop::run_step(const ConversationHistory& history,
         if (!watchdog_tripped_atomic.compare_exchange_strong(expected, true))
             return;
 
+        int combined = in.text_chars + in.reasoning_chars;
         out.watchdog_tripped = true;
         out.watchdog_trigger = trigger;
         spdlog::warn("AgentLoop: reasoning watchdog tripped (trigger={}, "
@@ -423,6 +485,10 @@ AgentStepResult AgentLoop::run_step(const ConversationHistory& history,
     if (wd_max_seconds > 0 || wd_max_chars > 0) {
         watchdog_timer = std::thread([&] {
             std::unique_lock lk(watchdog_mu);
+            // S6.18 D.1 -- per-tick total tracking. Lives on the timer
+            // thread so the delta is "progress across the last 5s tick"
+            // rather than "since the last chunk arrival".
+            std::size_t prev_total = 0;
             while (!watchdog_timer_stop.load(std::memory_order_acquire)) {
                 if (watchdog_cv.wait_for(lk, std::chrono::seconds(5),
                         [&] {
@@ -430,6 +496,13 @@ AgentStepResult AgentLoop::run_step(const ConversationHistory& history,
                                 std::memory_order_acquire);
                         }))
                     break;
+                std::size_t cur_total =
+                    text_chars_atomic.load(std::memory_order_acquire)
+                    + reasoning_chars_atomic.load(std::memory_order_acquire);
+                bool progress = cur_total > prev_total;
+                prev_total = cur_total;
+                wd_recent_progress_atomic.store(progress,
+                    std::memory_order_release);
                 check_watchdog();
             }
         });

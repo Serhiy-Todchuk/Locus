@@ -1035,8 +1035,9 @@ void AgentCore::apply_pending_compaction()
         // counter is monotonically increasing, so it equals the on-disk
         // count *as observed by the chip*, even after GC drops earlier ones.
         if (counter > 0) {
-            frontends_.broadcast([&](IFrontend& fe) {
-                fe.on_compaction_archived(counter);
+            int no_op_total = compaction_no_op_total_;
+            frontends_.broadcast([&, no_op_total](IFrontend& fe) {
+                fe.on_compaction_archived(counter, no_op_total);
             });
         }
 

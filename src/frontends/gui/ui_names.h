@@ -91,6 +91,12 @@ inline constexpr const char* kSettingsTabMcp          = "locus.settings.tab.mcp"
 inline constexpr const char* kSettingsTabCapabilities = "locus.settings.tab.capabilities";
 inline constexpr const char* kSettingsTabNotifications = "locus.settings.tab.notifications";
 inline constexpr const char* kSettingsTabSessions     = "locus.settings.tab.sessions";
+inline constexpr const char* kSettingsTabAgent        = "locus.settings.tab.agent";
+// S6.18 C.1 / C.2 -- Settings > Agent tab named chooser widgets.
+inline constexpr const char* kSettingsCompactionAggressiveness =
+    "locus.settings.compaction.aggressiveness";
+inline constexpr const char* kSettingsAgentPromptCost =
+    "locus.settings.agent.prompt_cost";
 inline constexpr const char* kSettingsSessionsRestoreLast      = "locus.settings.sessions.restore_last";
 inline constexpr const char* kSettingsSessionsPersistActivity  = "locus.settings.sessions.persist_activity";
 inline constexpr const char* kSettingsSaveAsGlobalBtn = "locus.settings.save_as_global_btn";

@@ -35,15 +35,24 @@ ChatFooterChips::ChatFooterChips(wxWindow* parent)
     compacted_btn_ = new wxButton(parent, wxID_ANY, "0",
                                   wxDefaultPosition, wxSize(36, -1),
                                   wxBU_EXACTFIT);
+    // S6.18 C.4 -- auto-corrections chip. Hidden by default; surfaced only
+    // when the QualityMonitor has fired in this session.
+    auto_corrections_chip_ = new wxStaticText(parent, wxID_ANY, "");
+    auto_corrections_chip_->SetToolTip(
+        "Number of times the QualityMonitor injected a corrective message "
+        "this session (empty-response or repeated-tool-call detectors).");
     round_chip_->Hide();
     compacted_btn_->Hide();
+    auto_corrections_chip_->Hide();
 
     ctx_label_->SetName(ui_names::kChatCtxLabel);
     compacted_btn_->SetName(ui_names::kChatCompactedChip);
     round_chip_->SetName(ui_names::kChatRoundChip);
+    auto_corrections_chip_->SetName("locus.chat.auto_corrections_chip");
     gui::apply_locus_accessible_name(ctx_label_);
     gui::apply_locus_accessible_name(compacted_btn_);
     gui::apply_locus_accessible_name(round_chip_);
+    gui::apply_locus_accessible_name(auto_corrections_chip_);
 }
 
 bool ChatFooterChips::set_context_meter(int used, int limit,
@@ -113,7 +122,8 @@ bool ChatFooterChips::hide_round_progress()
     return true;
 }
 
-bool ChatFooterChips::set_compacted_count(int count, const wxString& archive_dir)
+bool ChatFooterChips::set_compacted_count(int count, int no_op_count,
+                                          const wxString& archive_dir)
 {
     if (!compacted_btn_) return false;
     compacted_archive_dir_ = archive_dir;
@@ -124,14 +134,45 @@ bool ChatFooterChips::set_compacted_count(int count, const wxString& archive_dir
         return true;
     }
     const bool was_hidden = !compacted_btn_->IsShown();
-    compacted_btn_->SetLabel(wxString::Format("%d", count));
+    // S6.18 C.3 -- suffix "(M no-op)" so a stuck compaction pipeline is
+    // visible at a glance. When no-op == 0 the chip text stays as just the
+    // digit string (back-compat with the S5.Z manual test plan).
+    wxString new_label = (no_op_count > 0)
+        ? wxString::Format("%d (%d no-op)", count, no_op_count)
+        : wxString::Format("%d", count);
+    bool label_changed = (new_label != compacted_btn_->GetLabel());
+    compacted_btn_->SetLabel(new_label);
     wxString tip = wxString::Format(
         "%d compaction%s in this session", count, count == 1 ? "" : "s");
+    if (no_op_count > 0) {
+        tip += wxString::Format(
+            " (%d no-op: pipeline did not reduce token count)",
+            no_op_count);
+    }
     if (!archive_dir.empty())
         tip += " - click to open archive folder";
     compacted_btn_->SetToolTip(tip);
     compacted_btn_->Show();
-    return was_hidden;  // re-layout only on visibility flip
+    // S6.18 -- if the label widened to fit "(M no-op)", trigger Layout so
+    // the chip's parent sizer can re-flow.
+    return was_hidden || label_changed;
+}
+
+bool ChatFooterChips::set_auto_correction_count(int count)
+{
+    if (!auto_corrections_chip_) return false;
+    if (count <= 0) {
+        if (!auto_corrections_chip_->IsShown()) return false;
+        auto_corrections_chip_->SetLabel("");
+        auto_corrections_chip_->Hide();
+        return true;
+    }
+    wxString new_label = wxString::Format("auto-corrections: %d", count);
+    bool was_hidden = !auto_corrections_chip_->IsShown();
+    bool label_changed = (new_label != auto_corrections_chip_->GetLabel());
+    auto_corrections_chip_->SetLabel(new_label);
+    auto_corrections_chip_->Show();
+    return was_hidden || label_changed;
 }
 
 bool ChatFooterChips::on_plan_proposed(const std::string& plan_id,

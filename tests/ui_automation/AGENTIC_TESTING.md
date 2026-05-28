@@ -181,6 +181,18 @@ send a `launch` op. This lets you stage files (e.g. write a custom
   content, file contents, listings). `detail` is free-text. `id` is
   echoed back if you sent one.
 
+- **Ops serialise server-side.** The agentic server dispatches one op
+  at a time on the UI thread. If you fire `wait_for_agent_idle` from
+  one connection and then a `read_chat` / `read_locus_log` from another
+  while the wait is still in flight, the second op blocks behind the
+  wait and will time out on the client side -- not because the server
+  is broken, but because the wait holds the dispatch lock until it
+  returns. Two practical consequences: (1) use the helper's
+  `-TimeoutMs` (default 600000 = 10 min) when you queue a `read_*` op
+  after a long wait, so the client doesn't bail before the server frees
+  the dispatcher; (2) prefer chaining ops sequentially from one client
+  rather than racing them from two.
+
 ### PowerShell helper -- ship-and-use, or inline-paste
 
 Future-you will not have a persistent shell across `Bash` tool calls.
@@ -207,6 +219,10 @@ $resp.data.text
 Exit codes: 0 = response returned (whether ok=true or false), 2 = socket
 error / server not running, 3 = bad argument combo. The script is one
 ~80-line file with no external dependencies -- copy-deployable.
+
+Default `-TimeoutMs` is 600000 (10 min) -- sized for `wait_for_agent_idle`
+on a slow local model. Drop it (e.g. `-TimeoutMs 5000`) for cheap
+round-trips when you want to fail fast if the server has wedged.
 
 **Option B (legacy) -- inline preamble.** If you'd rather not depend on
 the shipped helper, the same logic in one function:

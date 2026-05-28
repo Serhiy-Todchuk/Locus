@@ -55,6 +55,14 @@ LocusFrame::LocusFrame(LocusSession& session)
     gui::apply_locus_accessible_name(this);
 
     saved_ui_state_ = load_ui_state();
+    // S6.18 G.2 -- AUI perspective lives per-workspace now (carried on
+    // WorkspaceUiState alongside the open-tabs list). The load below
+    // hydrates open_tabs for the restore path AND the perspective for
+    // the AUI restore further down; reuse it for both.
+    {
+        auto wui = load_workspace_ui_state(workspace_.locus_dir());
+        saved_ui_state_.aui_perspective = std::move(wui.aui_perspective);
+    }
 
     aui_.SetManagedWindow(this);
 
@@ -513,8 +521,14 @@ void LocusFrame::configure_chat_panel(ChatPanel* chat, LocusTab& tab)
     {
         std::string sid = tab.session_id();
         int n = agent_ptr->compacted_archive_count(sid);
+        // S6.18 C.3 -- no-op total is only tracked in memory for the
+        // current session; a resync from disk doesn't recover it, so the
+        // chip just shows the historic count without the no-op suffix.
+        // The live increment path (on_compaction_archived) supplies the
+        // no-op count for subsequent compactions in this run.
         auto archive_dir = workspace_.root() / ".locus" / "sessions" / sid;
-        chat->set_compacted_count(n, wxString::FromUTF8(archive_dir.string()));
+        chat->set_compacted_count(n, 0,
+            wxString::FromUTF8(archive_dir.string()));
     }
 
     {
@@ -1201,6 +1215,9 @@ void LocusFrame::apply_saved_window_geometry()
 void LocusFrame::on_close(wxCloseEvent& evt)
 {
     // S5.I -- capture open_tabs + active tab into workspace UI state.
+    // S6.18 G.2 -- same struct also carries the AUI perspective so the
+    // workspace's docking layout survives across launches without
+    // bleeding into other workspaces.
     {
         WorkspaceUiState wui;
         // Persist tabs first so all have session ids.
@@ -1214,6 +1231,7 @@ void LocusFrame::on_close(wxCloseEvent& evt)
             ot.active     = (i == session_.active_index());
             wui.open_tabs.push_back(ot);
         }
+        wui.aui_perspective = aui_.SavePerspective().ToStdString();
         save_workspace_ui_state(workspace_.locus_dir(), wui);
     }
 
@@ -1225,7 +1243,6 @@ void LocusFrame::on_close(wxCloseEvent& evt)
         s.window_y      = r.GetY();
         s.window_width  = r.GetWidth();
         s.window_height = r.GetHeight();
-        s.aui_perspective = aui_.SavePerspective().ToStdString();
         save_ui_state(s);
     }
 

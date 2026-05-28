@@ -105,8 +105,12 @@ public:
     // S5.Z task 6 -- a pre-compaction history snapshot was just written.
     // `counter` is the monotonic 1-based archive number; the chat-footer
     // chip uses this to surface "compacted: N" without scraping disk.
-    // Optional -- the CLI ignores it.
-    virtual void on_compaction_archived(int /*counter*/) {}
+    // S6.18 C.3 -- `no_op_count` is the running total of compactions that
+    // returned reached=no (no archive written, no history change). The
+    // chat-footer chip suffixes "(M no-op)" when > 0 so a stuck compaction
+    // pipeline is visible at a glance without trawling .locus/locus.log.
+    // Both default to legacy meaning for CLI / test frontends that ignore it.
+    virtual void on_compaction_archived(int /*counter*/, int /*no_op_count*/ = 0) {}
 
     // Conversation was reset (history cleared, system prompt re-seeded).
     virtual void on_session_reset() = 0;

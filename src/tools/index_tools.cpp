@@ -73,11 +73,33 @@ struct IndexedMeta {
     bool        present    = false;
 };
 
+// S6.18 F -- Windows-style case-insensitive form used as a fallback lookup
+// key. The indexer stores paths with whatever case the FS produced when the
+// file was indexed; the walk produces paths with whatever case
+// `directory_iterator` reports today. On Windows these can diverge (renames
+// across casings, watcher event vs. fresh-walk delivery, etc.) and the
+// case-sensitive `unordered_map::find` then misses, surfacing as
+// `[unindexed]` for a file that IS in the index. Lowercase ASCII fold is
+// enough -- non-ASCII paths on Windows are rare in our test corpora and the
+// fold is a one-direction normalisation, not a search.
+std::string to_lower_lookup_key(std::string s)
+{
+    for (auto& c : s) {
+        unsigned char uc = static_cast<unsigned char>(c);
+        c = static_cast<char>(std::tolower(uc));
+    }
+    return s;
+}
+
 struct WalkContext {
     fs::path                                 abs_root;
     const std::vector<std::string>*          excludes      = nullptr;
     int64_t                                  size_cap_bytes = 0;  // 0 = no cap
     const std::unordered_map<std::string, IndexedMeta>* index_meta = nullptr;
+    // S6.18 F -- secondary case-insensitive map. Filled alongside index_meta;
+    // consulted only when the primary find misses. Keys lowercased via
+    // to_lower_lookup_key.
+    const std::unordered_map<std::string, const IndexedMeta*>* index_meta_ci = nullptr;
     int                                      max_entries   = 200;
 };
 
@@ -105,17 +127,32 @@ std::string format_file_line(const std::string& rel_str,
     } else if (cx.size_cap_bytes > 0 && on_disk_size > cx.size_cap_bytes) {
         annotation = "[oversized]";
     } else {
+        const IndexedMeta* meta = nullptr;
         auto it = cx.index_meta->find(rel_str);
         if (it != cx.index_meta->end() && it->second.present) {
-            if (!it->second.is_binary && !it->second.language.empty()) {
-                annotation = "[" + it->second.language + "]";
-                indexed_line_count = it->second.line_count;
-            } else if (it->second.is_binary) {
+            meta = &it->second;
+        } else if (cx.index_meta_ci) {
+            // Case-insensitive fallback. Windows-only failure mode in
+            // practice; the lowercase fold is cheap enough to apply
+            // unconditionally so the same code holds on case-sensitive
+            // filesystems (where the primary find never misses for a
+            // mismatched-case path because that path doesn't exist).
+            auto ci_it = cx.index_meta_ci->find(to_lower_lookup_key(rel_str));
+            if (ci_it != cx.index_meta_ci->end() && ci_it->second
+                && ci_it->second->present) {
+                meta = ci_it->second;
+            }
+        }
+        if (meta) {
+            if (!meta->is_binary && !meta->language.empty()) {
+                annotation = "[" + meta->language + "]";
+                indexed_line_count = meta->line_count;
+            } else if (meta->is_binary) {
                 annotation = "[binary]";
             } else {
                 // Indexed text without a language tag (e.g. plain `.txt`).
                 annotation = "[text]";
-                indexed_line_count = it->second.line_count;
+                indexed_line_count = meta->line_count;
             }
         } else {
             annotation = "[unindexed]";
@@ -265,6 +302,9 @@ ToolResult ListDirectoryTool::execute(const ToolCall& call, IWorkspaceServices& 
     // knows file size / language / binary-flag; we hand each filesystem entry
     // through this hashmap for the annotation pass.
     std::unordered_map<std::string, IndexedMeta> index_meta;
+    // S6.18 F -- case-insensitive sibling for the Windows-rename failure mode.
+    // Points into index_meta values; both maps share lifetime with this scope.
+    std::unordered_map<std::string, const IndexedMeta*> index_meta_ci;
     {
         // A generous depth keeps every indexed file under the requested path
         // visible to the annotation pass regardless of nesting.
@@ -278,7 +318,8 @@ ToolResult ListDirectoryTool::execute(const ToolCall& call, IWorkspaceServices& 
             m.language   = fe.language;
             m.is_binary  = fe.is_binary;
             m.present    = true;
-            index_meta.emplace(fe.path, std::move(m));
+            auto [it, inserted] = index_meta.emplace(fe.path, std::move(m));
+            index_meta_ci.emplace(to_lower_lookup_key(fe.path), &it->second);
         }
     }
 
@@ -307,6 +348,7 @@ ToolResult ListDirectoryTool::execute(const ToolCall& call, IWorkspaceServices& 
     cx.excludes       = &excludes;
     cx.size_cap_bytes = size_cap_bytes;
     cx.index_meta     = &index_meta;
+    cx.index_meta_ci  = &index_meta_ci;
     cx.max_entries    = max_entries;
 
     WalkOut out;

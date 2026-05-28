@@ -167,6 +167,8 @@ ChatPanel::ChatPanel(wxWindow* parent,
     footer->Add(footer_chips_->ctx_label(),   1, wxALIGN_CENTER_VERTICAL | wxRIGHT, 12);
     footer->Add(footer_chips_->round_chip(),  0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 12);
     footer->Add(footer_chips_->compacted_btn(), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
+    // S6.18 C.4 -- auto-corrections chip, after compacted, hidden by default.
+    footer->Add(footer_chips_->auto_corrections_chip(), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
     // S5.Z task 6 -- click the compacted button opens the session's archive
     // folder. wxLaunchDefaultApplication is unreliable for directories on
     // Windows (silently no-ops in some shell configurations); use the same
@@ -707,6 +709,8 @@ void ChatPanel::on_session_reset()
     pending_tool_history_id_ = 0;
     // S5.Z task 2 -- previous find state references DOM that no longer exists.
     if (is_find_bar_visible()) hide_find_bar();
+    // S6.18 C.4 -- a new conversation starts fresh.
+    reset_auto_correction_count();
 }
 
 // ---------------------------------------------------------------------------
@@ -825,9 +829,25 @@ wxString ChatPanel::commit_status_text() const
     return footer_chips_ ? footer_chips_->commit_text() : wxString{};
 }
 
-void ChatPanel::set_compacted_count(int count, const wxString& archive_dir)
+void ChatPanel::set_compacted_count(int count, int no_op_count,
+                                    const wxString& archive_dir)
 {
-    if (footer_chips_->set_compacted_count(count, archive_dir)) Layout();
+    if (footer_chips_->set_compacted_count(count, no_op_count, archive_dir))
+        Layout();
+}
+
+void ChatPanel::bump_auto_correction_count()
+{
+    ++auto_corrections_count_;
+    if (footer_chips_->set_auto_correction_count(auto_corrections_count_))
+        Layout();
+}
+
+void ChatPanel::reset_auto_correction_count()
+{
+    auto_corrections_count_ = 0;
+    if (footer_chips_->set_auto_correction_count(0))
+        Layout();
 }
 
 void ChatPanel::set_round_progress(int round, int max_rounds)

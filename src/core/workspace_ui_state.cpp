@@ -43,6 +43,10 @@ WorkspaceUiState load_workspace_ui_state(const fs::path& locus_dir)
                     s.open_tabs.push_back(std::move(ot));
             }
         }
+        // S6.18 G.2 -- per-workspace AUI perspective. Missing field is
+        // fine; first save_workspace_ui_state will write it.
+        if (j.contains("aui_perspective") && j["aui_perspective"].is_string())
+            s.aui_perspective = j["aui_perspective"].get<std::string>();
     } catch (const json::exception& e) {
         spdlog::warn("workspace_ui_state: parse error in {}: {} -- using defaults",
                      path.string(), e.what());
@@ -67,7 +71,10 @@ bool save_workspace_ui_state(const fs::path& locus_dir,
         });
     }
 
-    json j = { {"open_tabs", arr} };
+    json j = {
+        {"open_tabs",       arr},
+        {"aui_perspective", state.aui_perspective}
+    };
 
     auto path = state_path(locus_dir);
     std::ofstream f(path);

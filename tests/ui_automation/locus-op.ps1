@@ -43,7 +43,7 @@ param(
 
     [int]$Port = 7878,
     [string]$BindHost = '127.0.0.1',
-    [int]$TimeoutMs = 30000
+    [int]$TimeoutMs = 600000
 )
 
 if ($PSCmdlet.ParameterSetName -eq 'Op') {

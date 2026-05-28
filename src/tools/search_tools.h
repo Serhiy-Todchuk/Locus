@@ -43,6 +43,7 @@ public:
                "as-is, Markdown / HTML stripped of markup, and PDF / DOCX / "
                "XLSX extracted via PDFium / OOXML parsers. Returns ranked "
                "results with snippets.\n"
+               "Granularity: one row per file (FTS5 snippet of the strongest match).\n"
                "Example:\n"
                "  search_text({\"query\": \"WorkspaceConfig\"})";
     }
@@ -68,7 +69,8 @@ public:
         return "ECMAScript regex search over raw file content. Unlike "
                "`search_text`, preserves punctuation and case -- use for "
                "exact identifiers (`->m_cache`), operators, and TODO tags "
-               "(`TODO(XXX)`). Returns one match per line.\n"
+               "(`TODO(XXX)`).\n"
+               "Granularity: one row per match (capped at `max_results`).\n"
                "Example:\n"
                "  search_regex({\"query\": \"->m_cache\"})";
     }
@@ -97,6 +99,7 @@ public:
         return "Look up code symbols (functions, classes, structs, methods) "
                "by name. Supports prefix matching. Takes `name`, not "
                "`query` (unlike the other search_* tools).\n"
+               "Granularity: one row per symbol declaration.\n"
                "Example:\n"
                "  search_symbols({\"name\": \"ToolDispatcher\", \"kind\": \"class\"})";
     }
@@ -125,6 +128,7 @@ public:
         return "Vector-cosine similarity search across indexed chunks. "
                "Finds conceptually related content even without exact "
                "keyword matches. Requires semantic search to be enabled.\n"
+               "Granularity: one row per chunk (ranked by similarity).\n"
                "Example:\n"
                "  search_semantic({\"query\": \"how does the indexer batch file events\"})";
     }
@@ -159,6 +163,7 @@ public:
                "(e.g. all `malloc` calls, classes inheriting `ITool`, empty "
                "if-bodies) -- not just names. Requires `language` and a "
                "`query` written against that grammar.\n"
+               "Granularity: one row per AST node match.\n"
                "Example:\n"
                "  search_ast({\"language\": \"cpp\", "
                "\"query\": \"(call_expression function: (identifier) @fn "

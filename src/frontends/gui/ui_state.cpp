@@ -13,7 +13,7 @@ namespace fs = std::filesystem;
 using json = nlohmann::json;
 
 namespace {
-fs::path ui_state_path()
+fs::path global_ui_state_path()
 {
     auto d = global_paths::global_dir();
     return d.empty() ? fs::path{} : d / "ui_state.json";
@@ -22,7 +22,7 @@ fs::path ui_state_path()
 
 UiState load_ui_state()
 {
-    auto path = ui_state_path();
+    auto path = global_ui_state_path();
     if (path.empty() || !fs::exists(path)) return UiState{};
 
     std::ifstream f(path);
@@ -47,8 +47,9 @@ UiState load_ui_state()
             if (w.contains("maximized") && w["maximized"].is_boolean())
                 s.window_maximized = w["maximized"].get<bool>();
         }
-        if (j.contains("aui_perspective") && j["aui_perspective"].is_string())
-            s.aui_perspective = j["aui_perspective"].get<std::string>();
+        // aui_perspective is intentionally NOT loaded here -- it moved to the
+        // per-workspace file in S6.18 G.2. load_workspace_ui_state() reads it
+        // and handles migration from the legacy global value.
         return s;
     } catch (const json::exception& e) {
         spdlog::warn("ui_state: parse error in {}: {} -- using defaults",
@@ -59,12 +60,13 @@ UiState load_ui_state()
 
 bool save_ui_state(const UiState& state)
 {
-    auto path = ui_state_path();
+    auto path = global_ui_state_path();
     if (path.empty()) {
         spdlog::warn("ui_state: home dir unresolved, cannot save");
         return false;
     }
 
+    // Window-only -- aui_perspective lives per-workspace now (G.2).
     json j = {
         {"window", {
             {"x",         state.window_x},
@@ -72,8 +74,7 @@ bool save_ui_state(const UiState& state)
             {"width",     state.window_width},
             {"height",    state.window_height},
             {"maximized", state.window_maximized}
-        }},
-        {"aui_perspective", state.aui_perspective}
+        }}
     };
 
     std::error_code ec;

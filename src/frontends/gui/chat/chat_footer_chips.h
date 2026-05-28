@@ -54,14 +54,25 @@ public:
 
     // S5.Z task 6 -- compactions counter button. `count <= 0` hides it;
     // positive values render the number itself as the label.
+    // S6.18 C.3 -- when `no_op_count > 0` the label suffixes "(M no-op)"
+    // and the chip widens to fit; the tooltip explains the no-op concept.
     // `archive_dir` is the user-facing path that opens on click; pass
     // empty to disable the click handler. Returns true if Layout() is
     // needed (visibility flip or label width change).
-    bool set_compacted_count(int count, const wxString& archive_dir);
+    bool set_compacted_count(int count, int no_op_count,
+                             const wxString& archive_dir);
 
     // Agentic Tetris findings #5 -- in-flight round counter.
     bool set_round_progress(int round, int max_rounds);
     bool hide_round_progress();
+
+    // S6.18 C.4 -- per-session auto-corrections counter chip. The chip is
+    // hidden when N == 0; reads "auto-corrections: N" when N > 0. Source
+    // of truth is the `quality_correction` activity-log event count; this
+    // accessor lets ChatPanel bump on each event without owning the
+    // widget itself. Returns true when Layout is needed.
+    bool set_auto_correction_count(int count);
+    wxStaticText* auto_corrections_chip() const { return auto_corrections_chip_; }
 
     // Plan-chip state updates (no chat-side widget after the declutter
     // pass; LocusFrame reads `plan_text()` and writes it to a status-bar
@@ -96,6 +107,7 @@ private:
     wxStaticText* ctx_label_      = nullptr;
     wxButton*     compacted_btn_  = nullptr;
     wxStaticText* round_chip_     = nullptr;
+    wxStaticText* auto_corrections_chip_ = nullptr;  // S6.18 C.4
 
     int last_ctx_used_            = 0;
     int last_ctx_limit_           = 0;

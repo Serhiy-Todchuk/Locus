@@ -18,6 +18,12 @@ struct WorkspaceUiState {
         bool        active = false;
     };
     std::vector<OpenTab> open_tabs;
+
+    // S6.18 G.2 -- wxAuiManager::SavePerspective() output. Empty = no
+    // saved perspective. Moved here from the global ui_state.json so each
+    // workspace can carry its own docking layout; the global file was
+    // bleeding one workspace's perspective into every other one.
+    std::string aui_perspective;
 };
 
 WorkspaceUiState load_workspace_ui_state(const std::filesystem::path& locus_dir);
