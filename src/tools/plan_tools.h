@@ -33,8 +33,9 @@ public:
                "  })";
     }
     std::string short_description() const override {
-        return "propose_plan(steps[], title?, summary?) "
-               "-- plan-mode only; user approves.";
+        return "propose_plan(steps*=[{description*,tools_needed?}], title?, summary?) "
+               "-- plan mode: call FIRST to surface a plan for user approval; "
+               "* = required.";
     }
     std::vector<ToolParam> params() const override {
         return {
@@ -72,8 +73,8 @@ public:
                "1-based index of the step you just finished.";
     }
     std::string short_description() const override {
-        return "mark_step_done(step, status=done|failed, notes?) "
-               "-- execute mode only.";
+        return "mark_step_done(step*, status*=done|failed, notes?) "
+               "-- execute mode: call after each completed step; * = required.";
     }
     std::vector<ToolParam> params() const override {
         return {
