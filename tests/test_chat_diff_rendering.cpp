@@ -47,8 +47,8 @@ TEST_CASE("HTML escape handles the dangerous five", "[s5.c][diff]")
 TEST_CASE("edit_file: single edit emits one del + one add line", "[s5.c][diff][edit_file]")
 {
     json args = {
-        {"path", "src/foo.cpp"},
-        {"edits", json::array({
+        {"file_path", "src/foo.cpp"},
+        {"edits_array", json::array({
             json{{"old_string", "old line"}, {"new_string", "new line"}}
         })}
     };
@@ -71,8 +71,8 @@ TEST_CASE("edit_file: single edit emits one del + one add line", "[s5.c][diff][e
 TEST_CASE("edit_file: batched edits produce multiple hunks in order", "[s5.c][diff][edit_file]")
 {
     json args = {
-        {"path", "x.txt"},
-        {"edits", json::array({
+        {"file_path", "x.txt"},
+        {"edits_array", json::array({
             json{{"old_string", "a"}, {"new_string", "AAA"}},
             json{{"old_string", "b"}, {"new_string", "BBB"}, {"replace_all", true}},
             json{{"old_string", "c"}, {"new_string", "CCC"}}
@@ -98,6 +98,9 @@ TEST_CASE("edit_file: malformed args yields empty output", "[s5.c][diff][edit_fi
 {
     REQUIRE(render_edit_file_diff_html(json::object(),     std::nullopt, {}).empty());
     REQUIRE(render_edit_file_diff_html(json::array(),      std::nullopt, {}).empty());
+    REQUIRE(render_edit_file_diff_html(json{{"edits_array", json::array()}},
+                                        std::nullopt, {}).empty());
+    // Legacy alias `edits` still recognised but empty -> still empty output.
     REQUIRE(render_edit_file_diff_html(json{{"edits", json::array()}},
                                         std::nullopt, {}).empty());
 }
@@ -106,8 +109,8 @@ TEST_CASE("edit_file: multi-line old/new_string splits into N diff lines",
           "[s5.c][diff][edit_file]")
 {
     json args = {
-        {"path", "x.cpp"},
-        {"edits", json::array({
+        {"file_path", "x.cpp"},
+        {"edits_array", json::array({
             json{{"old_string", "line1\nline2\nline3"},
                  {"new_string", "alpha\nbeta"}}
         })}
@@ -126,8 +129,8 @@ TEST_CASE("edit_file: multi-line old/new_string splits into N diff lines",
 TEST_CASE("edit_file: HTML in args is escaped", "[s5.c][diff][edit_file]")
 {
     json args = {
-        {"path", "<scary>.cpp"},
-        {"edits", json::array({
+        {"file_path", "<scary>.cpp"},
+        {"edits_array", json::array({
             json{{"old_string", "<script>alert(1)</script>"},
                  {"new_string", "safe & sound"}}
         })}
@@ -146,7 +149,7 @@ TEST_CASE("edit_file: max_lines cap inserts truncation marker", "[s5.c][diff][ed
     for (int i = 0; i < 50; ++i) {
         edits.push_back(json{{"old_string", "o"}, {"new_string", "n"}});
     }
-    json args = {{"path", "x"}, {"edits", edits}};
+    json args = {{"file_path", "x"}, {"edits_array", edits}};
 
     DiffRenderOptions opts;
     opts.max_lines = 30;
@@ -295,7 +298,7 @@ TEST_CASE("edit_file: with old_content emits line numbers + 4-line context",
 
     json args = {
         {"path", "f.txt"},
-        {"edits", json::array({
+        {"edits_array", json::array({
             json{{"old_string", "line6"}, {"new_string", "LINE6"}}
         })}
     };
@@ -336,7 +339,7 @@ TEST_CASE("edit_file: context_lines=0 disables context entirely",
     std::string file = "a\nb\nc\nFIND\nd\ne\n";
     json args = {
         {"path", "f.txt"},
-        {"edits", json::array({
+        {"edits_array", json::array({
             json{{"old_string", "FIND"}, {"new_string", "FOUND"}}
         })}
     };
@@ -355,7 +358,7 @@ TEST_CASE("edit_file: context clamps at start of file",
     std::string file = "a\nFIND\nb\nc\nd\ne\nf\n";
     json args = {
         {"path", "f.txt"},
-        {"edits", json::array({
+        {"edits_array", json::array({
             json{{"old_string", "FIND"}, {"new_string", "X"}}
         })}
     };

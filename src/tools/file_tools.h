@@ -87,7 +87,7 @@ public:
     std::string name()        const override { return "edit_file"; }
     std::string description() const override {
         return "Edit a file by exact string replacement. Prefer this over write_file -- "
-               "it is faster, cheaper, and immune to drift. Pass an `edits` array "
+               "it is faster, cheaper, and immune to drift. Pass an `edits_array` "
                "(use a single element for one change, multiple for an atomic batch). "
                "Each `old_string` must match byte-for-byte (including whitespace) and "
                "must be unique in the file unless `replace_all` is true. Edits apply in "
@@ -98,23 +98,23 @@ public:
                "edits against stale assumptions about file contents.\n"
                "Examples:\n"
                "  // Single edit:\n"
-               "  edit_file({\"path\": \"src/foo.cpp\", \"edits\": [\n"
+               "  edit_file({\"file_path\": \"src/foo.cpp\", \"edits_array\": [\n"
                "    {\"old_string\": \"int total = 0;\", \"new_string\": \"int total = 1;\"}\n"
                "  ]})\n"
                "  // Atomic batch of two:\n"
-               "  edit_file({\"path\": \"src/foo.cpp\", \"edits\": [\n"
+               "  edit_file({\"file_path\": \"src/foo.cpp\", \"edits_array\": [\n"
                "    {\"old_string\": \"oldFn(\", \"new_string\": \"newFn(\", \"replace_all\": true},\n"
                "    {\"old_string\": \"// TODO\", \"new_string\": \"// DONE\"}\n"
                "  ]})";
     }
     std::string short_description() const override {
-        return "edit_file(path, edits=[{old_string,new_string,replace_all=false}]) "
-               "-- exact-string replace; read_file first.";
+        return "edit_file(file_path*, edits_array*=[{old_string*,new_string*,replace_all=false}]) "
+               "-- replace exact strings in file_path; * = required; read_file first.";
     }
     std::vector<ToolParam> params() const override {
         return {
-            {"path",  "string", "Relative path from workspace root", true},
-            {"edits", "array",
+            {"file_path",   "string", "Relative path from workspace root", true},
+            {"edits_array", "array",
              "Ordered list of replacements. Each item: "
              "{\"old_string\": str, \"new_string\": str, \"replace_all\"?: bool}.", true},
         };

@@ -231,6 +231,10 @@ std::string brief_args(const std::string& tool_name, const std::string& args)
         }
         if (tool_name == "edit_file" || tool_name == "write_file" ||
             tool_name == "read_file" || tool_name == "delete_file") {
+            // edit_file uses `file_path` (Claude Code convention); others
+            // still use `path`. Try canonical first, fall back to legacy.
+            if (j.contains("file_path") && j["file_path"].is_string())
+                return j["file_path"].get<std::string>();
             if (j.contains("path") && j["path"].is_string())
                 return j["path"].get<std::string>();
         }

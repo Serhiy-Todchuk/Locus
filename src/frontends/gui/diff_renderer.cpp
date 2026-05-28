@@ -163,13 +163,23 @@ std::string render_edit_file_diff_html(const nlohmann::json&             args,
                                        const std::optional<std::string>& old_content,
                                        const DiffRenderOptions&          opts)
 {
-    if (!args.is_object() || !args.contains("edits") || !args["edits"].is_array())
-        return {};
+    // Canonical key is `edits_array` (uniform compound-name signature);
+    // legacy `edits` accepted so saved sessions still render.
+    if (!args.is_object()) return {};
+    const char* edits_key = nullptr;
+    if (args.contains("edits_array") && args["edits_array"].is_array())
+        edits_key = "edits_array";
+    else if (args.contains("edits") && args["edits"].is_array())
+        edits_key = "edits";
+    if (!edits_key) return {};
 
-    const auto& edits = args["edits"];
+    const auto& edits = args[edits_key];
     if (edits.empty()) return {};
 
-    const std::string path = args.value("path", std::string{});
+    // Canonical arg is `file_path` (Claude Code convention); `path` accepted
+    // as a legacy alias so saved sessions + unit tests continue to render.
+    std::string path = args.value("file_path", std::string{});
+    if (path.empty()) path = args.value("path", std::string{});
 
     std::ostringstream html;
     html << "<div class=\"tool-diff\">";

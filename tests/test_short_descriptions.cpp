@@ -41,10 +41,14 @@ TEST_CASE("short_description: write_file names path+content",
     assert_cues("write_file", {"path", "content"});
 }
 
-TEST_CASE("short_description: edit_file names path+edits",
+TEST_CASE("short_description: edit_file names file_path+edits",
           "[s6.17][short_description]")
 {
-    assert_cues("edit_file", {"path", "edits", "old_string", "new_string"});
+    // Canonical arg name is `file_path` (renamed from `path` to match the
+    // Claude Code convention; small models drop the bare generic `path` arg
+    // under lazy_tool_manifest).
+    assert_cues("edit_file",
+                {"file_path", "edits", "old_string", "new_string"});
 }
 
 TEST_CASE("short_description: delete_file names path",

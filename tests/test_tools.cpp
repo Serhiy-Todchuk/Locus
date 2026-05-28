@@ -414,7 +414,7 @@ TEST_CASE("EditFileTool: refuses new_string with truncation markers",
                          {"new_string",
                           "do_work();\n    // rest of the implementation\n"}});
         locus::ToolCall call{"c1", "edit_file",
-            {{"path", "src.cpp"}, {"edits", edits}}};
+            {{"file_path", "src.cpp"}, {"edits_array", edits}}};
 
         auto result = tool.execute(call, wctx);
         REQUIRE_FALSE(result.success);
@@ -807,7 +807,8 @@ locus::ToolCall one_edit(const std::string& rel, const std::string& old_s,
     nlohmann::json edit = {{"old_string", old_s}, {"new_string", new_s}};
     if (replace_all) edit["replace_all"] = true;
     return {"c1", "edit_file",
-            {{"path", rel}, {"edits", nlohmann::json::array({edit})}}};
+            {{"file_path", rel},
+             {"edits_array", nlohmann::json::array({edit})}}};
 }
 
 } // namespace

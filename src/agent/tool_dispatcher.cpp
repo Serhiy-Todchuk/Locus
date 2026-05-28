@@ -104,7 +104,12 @@ void ToolDispatcher::maybe_snapshot(const ToolCall& call)
     else if (call.tool_name == "delete_file") action = "delete";
     else                                      return;
 
-    std::string rel = call.args.value("path", "");
+    // edit_file's canonical path arg is `file_path` (renamed from `path`
+    // for small-model robustness; legacy `path` still accepted by the tool).
+    // write_file / delete_file still use `path`. Try the canonical name
+    // first then fall back so both call shapes get snapshotted correctly.
+    std::string rel = call.args.value("file_path", "");
+    if (rel.empty()) rel = call.args.value("path", "");
     if (rel.empty()) return;
 
     auto full = tools::resolve_path(services_, rel);

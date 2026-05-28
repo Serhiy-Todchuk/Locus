@@ -275,14 +275,25 @@ bool ToolApprovalDialog::render_diff_view()
 {
     if (tool_name_ != "edit_file") return false;
 
-    // Gather edits from the unified `edits[]` array.
+    // Gather edits from the canonical `edits_array` (legacy `edits` alias
+    // still accepted for saved sessions). Same fallback shape as the
+    // execute / diff_renderer paths so all three agree.
     struct EditPair { std::string old_s; std::string new_s; bool all; };
     std::vector<EditPair> edits;
 
-    std::string path = original_args_.value("path", "");
-    if (original_args_.contains("edits") &&
-        original_args_["edits"].is_array()) {
-        for (const auto& e : original_args_["edits"]) {
+    std::string path = original_args_.value("file_path", "");
+    if (path.empty()) path = original_args_.value("path", "");
+
+    const nlohmann::json* edits_json = nullptr;
+    if (original_args_.contains("edits_array") &&
+        original_args_["edits_array"].is_array())
+        edits_json = &original_args_["edits_array"];
+    else if (original_args_.contains("edits") &&
+             original_args_["edits"].is_array())
+        edits_json = &original_args_["edits"];
+
+    if (edits_json) {
+        for (const auto& e : *edits_json) {
             edits.push_back({e.value("old_string", ""),
                              e.value("new_string", ""),
                              e.value("replace_all", false)});

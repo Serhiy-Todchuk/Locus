@@ -377,8 +377,16 @@ std::string make_edit_preview(const std::string& old_s, const std::string& new_s
 
 std::string EditFileTool::preview(const ToolCall& call) const
 {
-    std::string path = call.args.value("path", "");
-    const auto& edits = call.args.value("edits", nlohmann::json::array());
+    // Canonical keys: `file_path` + `edits_array` (Claude Code conventions;
+    // small models drop bare generic names like `path` / `edits` under
+    // lazy_tool_manifest and uniform compound-name signatures parse better).
+    // Legacy `path` / `edits` stay accepted so unit tests + saved sessions
+    // continue to render.
+    std::string path = call.args.value("file_path", "");
+    if (path.empty()) path = call.args.value("path", "");
+    nlohmann::json edits = call.args.value("edits_array", nlohmann::json::array());
+    if (edits.empty())
+        edits = call.args.value("edits", nlohmann::json::array());
     std::ostringstream ss;
     ss << "Edit " << path;
     if (edits.size() != 1)
@@ -400,40 +408,54 @@ std::string EditFileTool::preview(const ToolCall& call) const
 ToolResult EditFileTool::execute(const ToolCall& call, IWorkspaceServices& ws,
                                   const std::atomic<bool>* /*cancel_flag*/)
 {
-    // S6.17 Task D + E -- allow both the canonical edits=[...] form AND the
-    // single-edit shorthand top-level old_string / new_string / replace_all.
+    // S6.17 Task D + E -- allow both the canonical edits_array=[...] form AND
+    // the single-edit shorthand top-level old_string / new_string / replace_all.
+    // Canonical arg names are `file_path` + `edits_array` (Claude Code
+    // conventions; small models do better with uniform compound names). Legacy
+    // `path` / `edits` are accepted as aliases for in-flight callers + saved
+    // sessions.
     if (auto err = tools::reject_unknown_keys(call,
-            {"path", "edits", "old_string", "new_string", "replace_all"}))
+            {"file_path", "path", "edits_array", "edits",
+             "old_string", "new_string", "replace_all"}))
         return *err;
 
-    std::string rel_path = call.args.value("path", "");
+    std::string rel_path = call.args.value("file_path", "");
+    if (rel_path.empty()) rel_path = call.args.value("path", "");
     if (rel_path.empty())
-        return error_result("Error: 'path' parameter is required");
+        return error_result("Error: 'file_path' parameter is required");
 
     // S6.17 Task E -- single-edit shorthand. Accept top-level old_string +
-    // new_string (+ optional replace_all) as a synonym for edits=[{...}] so
-    // small models that miss the array shape still land their edit.
-    nlohmann::json edits_array;
-    if (!call.args.contains("edits")
-        && call.args.contains("old_string")
-        && call.args.contains("new_string")) {
+    // new_string (+ optional replace_all) as a synonym for edits_array=[{...}]
+    // so small models that miss the array shape still land their edit.
+    auto edits_present = [&]() -> const nlohmann::json* {
+        if (call.args.contains("edits_array") &&
+            call.args["edits_array"].is_array())
+            return &call.args["edits_array"];
+        if (call.args.contains("edits") && call.args["edits"].is_array())
+            return &call.args["edits"];
+        return nullptr;
+    };
+
+    nlohmann::json effective_edits;
+    if (auto* arr = edits_present()) {
+        effective_edits = *arr;
+    } else if (call.args.contains("old_string")
+            && call.args.contains("new_string")) {
         nlohmann::json single = nlohmann::json::object();
         single["old_string"] = call.args["old_string"];
         single["new_string"] = call.args["new_string"];
         if (call.args.contains("replace_all"))
             single["replace_all"] = call.args["replace_all"];
-        edits_array = nlohmann::json::array({std::move(single)});
-    } else if (call.args.contains("edits") && call.args["edits"].is_array()) {
-        edits_array = call.args["edits"];
+        effective_edits = nlohmann::json::array({std::move(single)});
     } else {
-        return error_result("Error: 'edits' must be an array of "
+        return error_result("Error: 'edits_array' must be an array of "
                             "{old_string, new_string, replace_all?} objects "
                             "(or pass a single edit as top-level old_string + "
                             "new_string)");
     }
-    const auto& edits = edits_array;
+    const auto& edits = effective_edits;
     if (edits.empty())
-        return error_result("Error: 'edits' array is empty");
+        return error_result("Error: 'edits_array' is empty");
 
     fs::path full = resolve_path(ws, rel_path);
     if (full.empty())

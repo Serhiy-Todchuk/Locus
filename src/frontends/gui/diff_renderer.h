@@ -35,7 +35,8 @@ struct DiffRenderOptions {
     bool dark_mode     = false;  // reserved -- v1 styling is theme-agnostic via CSS
 };
 
-// Render an `edit_file` call. Parses `args["edits"]` (an array of
+// Render an `edit_file` call. Parses `args["edits_array"]` (with `args["edits"]`
+// accepted as a legacy alias) -- an array of
 // `{old_string, new_string, replace_all?}`) and emits one hunk per edit.
 // Each hunk's `old_string` lines render as `del` and `new_string` lines as
 // `add`. When `old_content` is supplied (typically the S4.B pre-mutation

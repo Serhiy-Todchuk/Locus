@@ -1,7 +1,7 @@
 // S6.17 Task E -- edit_file single-edit shorthand round-trip (live LLM).
 //
 // Verifies that when a model emits the shorthand form
-//   edit_file({"path": "...", "old_string": "...", "new_string": "..."})
+//   edit_file({"file_path": "...", "old_string": "...", "new_string": "..."})
 // (no `edits` array), the tool normalises it to a one-edit array internally
 // and the file change actually applies. Captures the raw call.args so the
 // test can prove the model sent the shorthand, not the canonical form.
@@ -58,15 +58,15 @@ TEST_CASE("edit_file single-edit shorthand round-trips end-to-end",
     REQUIRE(r1.tool_called("read_file"));
 
     // Tell the model to emit the shorthand form explicitly. Small local
-    // models trained on the canonical `edits=[...]` shape would otherwise
-    // pick the canonical form by default and never exercise the shorthand
-    // codepath. The prompt names the exact key shape we need to see.
+    // models trained on the canonical `edits_array=[...]` shape would
+    // otherwise pick the canonical form by default and never exercise the
+    // shorthand codepath. The prompt names the exact key shape we need to see.
     PromptResult r = h.prompt(
-        "Now call edit_file using the SHORTHAND form: pass `path`, "
+        "Now call edit_file using the SHORTHAND form: pass `file_path`, "
         "`old_string`, and `new_string` as TOP-LEVEL keys -- DO NOT wrap "
-        "them in an `edits` array. Change the word `quick` to the word "
-        "`speedy`. Use exactly this shape:\n"
-        "  edit_file({\"path\":\"" + rel_path + "\","
+        "them in an `edits_array` array. Change the word `quick` to the "
+        "word `speedy`. Use exactly this shape:\n"
+        "  edit_file({\"file_path\":\"" + rel_path + "\","
         " \"old_string\":\"quick\", \"new_string\":\"speedy\"})");
 
     REQUIRE_FALSE(r.timed_out);
@@ -76,7 +76,11 @@ TEST_CASE("edit_file single-edit shorthand round-trips end-to-end",
     const auto* edit_call = r.find_tool_call("edit_file");
     REQUIRE(edit_call != nullptr);
     INFO("edit_file call args: " << edit_call->args.dump());
-    REQUIRE(edit_call->args.contains("path"));
+    // Either canonical `file_path` or the legacy `path` alias counts -- the
+    // tool accepts both. The point of this assertion is that the model
+    // included the file-path arg at all.
+    REQUIRE((edit_call->args.contains("file_path") ||
+             edit_call->args.contains("path")));
 
     // The user-observable contract is "the file changed". The shorthand
     // normalisation is an internal tolerance feature -- it doesn't mandate

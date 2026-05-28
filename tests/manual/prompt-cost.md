@@ -27,7 +27,7 @@ Two paired Settings -- `Lazy tool manifest` (checkbox) and `System prompt profil
 
 1. Settings: lazy manifest **on**, profile any. OK.
 2. Prompt: *"Call `describe_tool` for the name `edit_file` and tell me the parameters."* (Or wait for the agent to call it itself on a turn that uses an unfamiliar tool.)
-3. Observe in chat: a `describe_tool` tool-call bubble, then its result contains the full OpenAI-format JSON schema for `edit_file` (including `edits` array shape, `path`, `replace_all`, etc.).
+3. Observe in chat: a `describe_tool` tool-call bubble, then its result contains the full OpenAI-format JSON schema for `edit_file` (including `edits` array shape, `file_path`, `replace_all`, etc.).
 4. Prompt: *"Call `describe_tool` for the name `bogus_tool`."* Result is a `success=false` bubble with text like `"tool 'bogus_tool' is not registered. Did you mean '...'? Available tools: ..."`.
 5. Toggle lazy manifest **off**, OK, send any prompt. The `Tool manifest:` log line bounces back to the full ~2854 t shape and `describe_tool` is no longer in the per-turn manifest (verify via the activity log's `tool_manifest` event).
 

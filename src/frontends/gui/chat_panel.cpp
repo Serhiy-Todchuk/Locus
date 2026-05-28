@@ -921,7 +921,11 @@ void ChatPanel::on_tool_result(const wxString& call_id,
         opts.collapse_threshold = diff_collapse_threshold_;
 
         if (tool_name == "edit_file") {
-            const std::string path = args.value("path", std::string{});
+            // edit_file's canonical path arg is `file_path` (renamed from
+            // `path` for small-model robustness); accept both for diff
+            // rendering so saved sessions + legacy calls still draw.
+            std::string path = args.value("file_path", std::string{});
+            if (path.empty()) path = args.value("path", std::string{});
             std::optional<std::string> old_content;
             if (pre_mutation_fetcher_ && !path.empty())
                 old_content = pre_mutation_fetcher_(path);
