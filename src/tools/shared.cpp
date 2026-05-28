@@ -199,9 +199,68 @@ std::optional<std::string> suggest_for(const std::string& tool,
 
 } // namespace
 
+std::string render_tool_schema(const ITool& tool)
+{
+    nlohmann::json schema = nlohmann::json::object();
+    schema["name"]        = tool.name();
+    schema["description"] = tool.description();
+
+    // Prefer the tool's full JSON Schema if it supplied one (MCP path).
+    // Otherwise project params() into a minimal {properties, required} body.
+    nlohmann::json raw = tool.parameters_schema();
+    if (raw.is_object() && !raw.empty()) {
+        if (!raw.contains("type")) raw["type"] = "object";
+        schema["parameters"] = std::move(raw);
+    } else {
+        nlohmann::json props = nlohmann::json::object();
+        nlohmann::json required_list = nlohmann::json::array();
+        for (auto& p : tool.params()) {
+            nlohmann::json prop;
+            prop["type"]        = p.type;
+            prop["description"] = p.description;
+            props[p.name]       = prop;
+            if (p.required) required_list.push_back(p.name);
+        }
+        nlohmann::json params_schema = nlohmann::json::object();
+        params_schema["type"]       = "object";
+        params_schema["properties"] = std::move(props);
+        if (!required_list.empty())
+            params_schema["required"] = std::move(required_list);
+        schema["parameters"] = std::move(params_schema);
+    }
+    return schema.dump(2);
+}
+
+ToolResult error_with_schema(const std::string& message, const ITool& tool)
+{
+    std::string body = message;
+    body += "\n\nTool schema for retry (use these arg names + types):\n";
+    body += render_tool_schema(tool);
+    return error_result(body);
+}
+
+ToolResult missing_required_arg(const ITool& tool,
+                                std::string_view arg_name,
+                                std::string_view detail)
+{
+    std::string msg = "Error: missing required argument '";
+    msg.append(arg_name);
+    msg += "' for tool '";
+    msg += tool.name();
+    msg += "'";
+    if (!detail.empty()) {
+        msg += " (";
+        msg.append(detail);
+        msg += ")";
+    }
+    msg += ".";
+    return error_with_schema(msg, tool);
+}
+
 std::optional<ToolResult> reject_unknown_keys(
     const ToolCall& call,
-    std::initializer_list<const char*> allowed)
+    std::initializer_list<const char*> allowed,
+    const ITool* tool)
 {
     if (!call.args.is_object()) return std::nullopt;
     for (auto it = call.args.begin(); it != call.args.end(); ++it) {
@@ -217,8 +276,13 @@ std::optional<ToolResult> reject_unknown_keys(
         if (auto s = suggest_for(call.tool_name, key))
             msg += "; " + *s + ".";
         else
-            msg += ". Call describe_tool('" + call.tool_name +
-                   "') for the schema.";
+            msg += ".";
+
+        if (tool != nullptr)
+            return error_with_schema(msg, *tool);
+
+        // Legacy path: no tool pointer -> point the model at describe_tool.
+        msg += " Call describe_tool('" + call.tool_name + "') for the schema.";
         return error_result(msg);
     }
     return std::nullopt;

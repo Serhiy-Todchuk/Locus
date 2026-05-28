@@ -104,7 +104,7 @@ ToolResult AddMemoryTool::execute(const ToolCall& call, IWorkspaceServices& ws,
                                    const std::atomic<bool>* /*cancel_flag*/)
 {
     if (auto err = tools::reject_unknown_keys(call,
-            {"content", "tags", "pinned", "source"}))
+            {"content", "tags", "pinned", "source"}, this))
         return *err;
 
     auto* mem = ws.memory();
@@ -114,7 +114,8 @@ ToolResult AddMemoryTool::execute(const ToolCall& call, IWorkspaceServices& ws,
     if (call.args.contains("content") && call.args["content"].is_string())
         content = call.args["content"].get<std::string>();
     if (content.empty())
-        return error_result("Error: 'content' is required");
+        return tools::missing_required_arg(*this, "content",
+            "the verbatim note text to save to the memory bank");
 
     std::vector<std::string> tags;
     if (call.args.contains("tags")) tags = parse_tag_arg(call.args["tags"]);
@@ -184,7 +185,7 @@ ToolResult SearchMemoryTool::execute(const ToolCall& call, IWorkspaceServices& w
                                       const std::atomic<bool>* /*cancel_flag*/)
 {
     if (auto err = tools::reject_unknown_keys(call,
-            {"query", "tags", "max_results"}))
+            {"query", "tags", "max_results"}, this))
         return *err;
 
     auto* mem = ws.memory();

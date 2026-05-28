@@ -205,3 +205,103 @@ TEST_CASE("reject_unknown_keys: all-allowed call returns nullopt",
         {"path", "offset", "length"});
     REQUIRE_FALSE(err.has_value());
 }
+
+// -- Schema-on-error safety net --------------------------------------------
+//
+// When tools pass `this` as the third arg, the canonical schema is appended
+// to the error so the model can self-correct on the next round without a
+// separate `describe_tool` call. Critical for lazy_tool_manifest -- the
+// model never had the full schema in its manifest.
+
+TEST_CASE("render_tool_schema emits name + description + parameters",
+          "[schema_on_error]")
+{
+    locus::EditFileTool tool;
+    std::string s = locus::tools::render_tool_schema(tool);
+    REQUIRE_THAT(s, ContainsSubstring("\"name\""));
+    REQUIRE_THAT(s, ContainsSubstring("edit_file"));
+    REQUIRE_THAT(s, ContainsSubstring("\"description\""));
+    REQUIRE_THAT(s, ContainsSubstring("\"parameters\""));
+    REQUIRE_THAT(s, ContainsSubstring("\"properties\""));
+    REQUIRE_THAT(s, ContainsSubstring("\"required\""));
+    REQUIRE_THAT(s, ContainsSubstring("file_path"));
+    REQUIRE_THAT(s, ContainsSubstring("edits_array"));
+}
+
+TEST_CASE("missing_required_arg appends schema + names the arg",
+          "[schema_on_error]")
+{
+    locus::EditFileTool tool;
+    auto r = locus::tools::missing_required_arg(tool, "file_path",
+        "the workspace-relative path to the file to edit");
+    REQUIRE_FALSE(r.success);
+    REQUIRE_THAT(r.content, ContainsSubstring("missing required argument"));
+    REQUIRE_THAT(r.content, ContainsSubstring("'file_path'"));
+    REQUIRE_THAT(r.content,
+        ContainsSubstring("the workspace-relative path to the file to edit"));
+    REQUIRE_THAT(r.content, ContainsSubstring("Tool schema for retry"));
+    REQUIRE_THAT(r.content, ContainsSubstring("edits_array"));
+}
+
+TEST_CASE("error_with_schema appends schema after the message",
+          "[schema_on_error]")
+{
+    locus::EditFileTool tool;
+    auto r = locus::tools::error_with_schema(
+        "Error: 'edits_array' must be an array.", tool);
+    REQUIRE_FALSE(r.success);
+    REQUIRE_THAT(r.content,
+        ContainsSubstring("'edits_array' must be an array"));
+    REQUIRE_THAT(r.content, ContainsSubstring("Tool schema for retry"));
+    REQUIRE_THAT(r.content, ContainsSubstring("file_path"));
+}
+
+TEST_CASE("reject_unknown_keys with tool pointer injects schema, not describe_tool hint",
+          "[schema_on_error]")
+{
+    locus::EditFileTool tool;
+    locus::ToolCall call{"c1", "edit_file",
+        {{"file_path", "x"}, {"bogus_key", 1}}};
+    auto err = locus::tools::reject_unknown_keys(call,
+        {"file_path", "edits_array"}, &tool);
+    REQUIRE(err.has_value());
+    REQUIRE_THAT(err->content,
+        ContainsSubstring("unrecognized argument 'bogus_key'"));
+    REQUIRE_THAT(err->content, ContainsSubstring("Tool schema for retry"));
+    REQUIRE_THAT(err->content, ContainsSubstring("file_path"));
+    // describe_tool hint is NOT in the schema-injection path -- the schema
+    // is the proactive equivalent of what describe_tool would have returned.
+    REQUIRE_FALSE(err->content.find("describe_tool") != std::string::npos);
+}
+
+TEST_CASE("reject_unknown_keys without tool pointer keeps legacy describe_tool hint",
+          "[schema_on_error]")
+{
+    locus::ToolCall call{"c1", "read_file",
+        {{"path", "x"}, {"bogus", 1}}};
+    auto err = locus::tools::reject_unknown_keys(call,
+        {"path", "offset", "length"});
+    REQUIRE(err.has_value());
+    REQUIRE_THAT(err->content, ContainsSubstring("describe_tool"));
+    REQUIRE_FALSE(err->content.find("Tool schema for retry") != std::string::npos);
+}
+
+TEST_CASE("edit_file end-to-end: missing file_path returns schema in error",
+          "[schema_on_error]")
+{
+    auto tmp = make_tmp();
+    locus::test::FakeWorkspaceServices ws{tmp};
+    locus::EditFileTool tool;
+    // Canonical form -- edits_array present, file_path missing.
+    locus::ToolCall call{"c1", "edit_file",
+        {{"edits_array", nlohmann::json::array({
+            nlohmann::json{{"old_string", "a"}, {"new_string", "b"}}
+        })}}};
+    auto r = tool.execute(call, ws);
+    REQUIRE_FALSE(r.success);
+    REQUIRE_THAT(r.content, ContainsSubstring("missing required argument"));
+    REQUIRE_THAT(r.content, ContainsSubstring("'file_path'"));
+    REQUIRE_THAT(r.content, ContainsSubstring("Tool schema for retry"));
+    REQUIRE_THAT(r.content, ContainsSubstring("edits_array"));
+    fs::remove_all(tmp);
+}

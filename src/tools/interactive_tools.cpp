@@ -14,7 +14,7 @@ ToolResult AskUserTool::execute(const ToolCall& call, IWorkspaceServices& /*ws*/
                                  const std::atomic<bool>* /*cancel_flag*/)
 {
     // `response` is the slot the frontend injects after the user answers.
-    if (auto err = tools::reject_unknown_keys(call, {"question", "response"}))
+    if (auto err = tools::reject_unknown_keys(call, {"question", "response"}, this))
         return *err;
 
     // The frontend injects the user's response into args["response"] via the

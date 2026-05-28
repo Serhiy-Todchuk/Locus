@@ -43,7 +43,7 @@ ToolResult RunCommandTool::execute(const ToolCall& call, IWorkspaceServices& ws,
             {"command", "timeout_ms",
              "output_filter_mode", "output_filter_pattern",
              "output_filter_lines", "output_filter_context",
-             "output_filter_case_sensitive"}))
+             "output_filter_case_sensitive"}, this))
         return *err;
 
     std::string command = call.args.value("command", "");
@@ -54,7 +54,8 @@ ToolResult RunCommandTool::execute(const ToolCall& call, IWorkspaceServices& ws,
     int timeout_ms = call.args.value("timeout_ms", 1800000);
 
     if (command.empty())
-        return error_result("Error: 'command' parameter is required");
+        return tools::missing_required_arg(*this, "command",
+            "the shell command line to execute");
 
     spdlog::trace("run_command: '{}'", command);
 
@@ -461,7 +462,7 @@ std::string RunCommandBgTool::preview(const ToolCall& call) const
 ToolResult RunCommandBgTool::execute(const ToolCall& call, IWorkspaceServices& ws,
                                       const std::atomic<bool>* /*cancel_flag*/)
 {
-    if (auto err = tools::reject_unknown_keys(call, {"command"}))
+    if (auto err = tools::reject_unknown_keys(call, {"command"}, this))
         return *err;
 
     auto* reg = ws.processes();
@@ -469,7 +470,8 @@ ToolResult RunCommandBgTool::execute(const ToolCall& call, IWorkspaceServices& w
 
     std::string command = call.args.value("command", "");
     if (command.empty())
-        return error_result("Error: 'command' parameter is required");
+        return tools::missing_required_arg(*this, "command",
+            "the shell command line to spawn as a background process");
 
     int id = 0;
     try {
@@ -506,14 +508,15 @@ ToolResult ReadProcessOutputTool::execute(const ToolCall& call, IWorkspaceServic
             {"process_id", "since_offset",
              "output_filter_mode", "output_filter_pattern",
              "output_filter_lines", "output_filter_context",
-             "output_filter_case_sensitive"}))
+             "output_filter_case_sensitive"}, this))
         return *err;
 
     auto* reg = ws.processes();
     if (!reg) return no_registry();
 
     if (!call.args.contains("process_id"))
-        return error_result("Error: 'process_id' parameter is required");
+        return tools::missing_required_arg(*this, "process_id",
+            "the integer id of a background process previously spawned via run_command_bg");
     int id = call.args.value("process_id", 0);
 
     std::optional<std::size_t> since;
@@ -578,14 +581,15 @@ std::string StopProcessTool::preview(const ToolCall& call) const
 ToolResult StopProcessTool::execute(const ToolCall& call, IWorkspaceServices& ws,
                                      const std::atomic<bool>* /*cancel_flag*/)
 {
-    if (auto err = tools::reject_unknown_keys(call, {"process_id"}))
+    if (auto err = tools::reject_unknown_keys(call, {"process_id"}, this))
         return *err;
 
     auto* reg = ws.processes();
     if (!reg) return no_registry();
 
     if (!call.args.contains("process_id"))
-        return error_result("Error: 'process_id' parameter is required");
+        return tools::missing_required_arg(*this, "process_id",
+            "the integer id of the background process to terminate");
     int id = call.args.value("process_id", 0);
 
     if (!reg->stop(id))

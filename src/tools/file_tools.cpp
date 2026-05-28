@@ -134,7 +134,7 @@ std::string ReadFileTool::preview(const ToolCall& call) const
 ToolResult ReadFileTool::execute(const ToolCall& call, IWorkspaceServices& ws,
                                   const std::atomic<bool>* /*cancel_flag*/)
 {
-    if (auto err = tools::reject_unknown_keys(call, {"path", "offset", "length"}))
+    if (auto err = tools::reject_unknown_keys(call, {"path", "offset", "length"}, this))
         return *err;
 
     std::string rel_path = call.args.value("path", "");
@@ -142,7 +142,8 @@ ToolResult ReadFileTool::execute(const ToolCall& call, IWorkspaceServices& ws,
     int length = call.args.value("length", 100);
 
     if (rel_path.empty())
-        return error_result("Error: 'path' parameter is required");
+        return tools::missing_required_arg(*this, "path",
+            "the workspace-relative path to read");
     if (offset < 1) offset = 1;
     if (length < 1) length = 100;
 
@@ -226,7 +227,7 @@ ToolResult WriteFileTool::execute(const ToolCall& call, IWorkspaceServices& ws,
                                    const std::atomic<bool>* /*cancel_flag*/)
 {
     if (auto err = tools::reject_unknown_keys(call,
-            {"path", "content", "overwrite"}))
+            {"path", "content", "overwrite"}, this))
         return *err;
 
     std::string rel_path = call.args.value("path", "");
@@ -234,7 +235,8 @@ ToolResult WriteFileTool::execute(const ToolCall& call, IWorkspaceServices& ws,
     bool overwrite       = call.args.value("overwrite", false);
 
     if (rel_path.empty())
-        return error_result("Error: 'path' parameter is required");
+        return tools::missing_required_arg(*this, "path",
+            "the workspace-relative path to create or replace");
 
     fs::path full = resolve_path(ws, rel_path);
     if (full.empty())
@@ -416,13 +418,14 @@ ToolResult EditFileTool::execute(const ToolCall& call, IWorkspaceServices& ws,
     // sessions.
     if (auto err = tools::reject_unknown_keys(call,
             {"file_path", "path", "edits_array", "edits",
-             "old_string", "new_string", "replace_all"}))
+             "old_string", "new_string", "replace_all"}, this))
         return *err;
 
     std::string rel_path = call.args.value("file_path", "");
     if (rel_path.empty()) rel_path = call.args.value("path", "");
     if (rel_path.empty())
-        return error_result("Error: 'file_path' parameter is required");
+        return tools::missing_required_arg(*this, "file_path",
+            "the workspace-relative path to the file to edit");
 
     // S6.17 Task E -- single-edit shorthand. Accept top-level old_string +
     // new_string (+ optional replace_all) as a synonym for edits_array=[{...}]
@@ -448,10 +451,11 @@ ToolResult EditFileTool::execute(const ToolCall& call, IWorkspaceServices& ws,
             single["replace_all"] = call.args["replace_all"];
         effective_edits = nlohmann::json::array({std::move(single)});
     } else {
-        return error_result("Error: 'edits_array' must be an array of "
-                            "{old_string, new_string, replace_all?} objects "
-                            "(or pass a single edit as top-level old_string + "
-                            "new_string)");
+        return tools::error_with_schema(
+            "Error: 'edits_array' must be an array of "
+            "{old_string, new_string, replace_all?} objects "
+            "(or pass a single edit as top-level old_string + "
+            "new_string).", *this);
     }
     const auto& edits = effective_edits;
     if (edits.empty())
@@ -533,13 +537,14 @@ std::string DeleteFileTool::preview(const ToolCall& call) const
 ToolResult DeleteFileTool::execute(const ToolCall& call, IWorkspaceServices& ws,
                                     const std::atomic<bool>* /*cancel_flag*/)
 {
-    if (auto err = tools::reject_unknown_keys(call, {"path"}))
+    if (auto err = tools::reject_unknown_keys(call, {"path"}, this))
         return *err;
 
     std::string rel_path = call.args.value("path", "");
 
     if (rel_path.empty())
-        return error_result("Error: 'path' parameter is required");
+        return tools::missing_required_arg(*this, "path",
+            "the workspace-relative path to delete");
 
     fs::path full = resolve_path(ws, rel_path);
     if (full.empty())

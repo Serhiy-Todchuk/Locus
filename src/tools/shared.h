@@ -24,15 +24,45 @@ namespace locus::tools {
 // when any key sits outside the list, with a suggestion when the key matches
 // a known alias (lines / type / cmd / body / ...).
 //
+// Schema-on-error: when `tool` is non-null, the canonical schema (built from
+// `tool->params()` or `tool->parameters_schema()`) is appended to the error
+// content so the model can self-correct on the next round without burning a
+// separate `describe_tool` call. This is the small-model safety net for
+// lazy_tool_manifest -- the model gets the same JSON shape `describe_tool`
+// would have returned, delivered proactively.
+//
 // Usage at the top of execute():
-//   if (auto err = reject_unknown_keys(call, {"path", "offset", "length"}))
+//   if (auto err = reject_unknown_keys(call, {"path", "offset", "length"}, this))
 //       return *err;
 //
 // Note: tool dispatcher already lifts wrappers (`arguments`, `parameters`,
 // `args`, `input`) so they never reach this helper.
 std::optional<ToolResult> reject_unknown_keys(
     const ToolCall& call,
-    std::initializer_list<const char*> allowed);
+    std::initializer_list<const char*> allowed,
+    const ITool* tool = nullptr);
+
+// Render the canonical schema for an error response. Returns a JSON-formatted
+// string in the same shape `describe_tool` produces (description +
+// parameters). Used by `reject_unknown_keys` / `missing_required_arg` /
+// `error_with_schema` to append schema to error messages so the model can
+// self-correct on the next round without a separate fetch.
+std::string render_tool_schema(const ITool& tool);
+
+// Build an error_result with `message` followed by the tool's schema. Use
+// this for arg-shape errors discovered after `reject_unknown_keys` -- e.g.
+// type mismatches, empty arrays, mutually-exclusive args. Semantic errors
+// (file not found, search returned zero results) should keep using bare
+// `error_result(msg)` since the schema doesn't help diagnose them.
+ToolResult error_with_schema(const std::string& message, const ITool& tool);
+
+// Canonical "missing required argument" error. Wraps the standard message
+// plus the schema in one call. `arg_name` is the canonical name as it
+// appears in `tool.params()` -- legacy aliases should be mentioned in
+// `detail` if you want to nudge the model toward the new name.
+ToolResult missing_required_arg(const ITool& tool,
+                                std::string_view arg_name,
+                                std::string_view detail = "");
 
 // Resolve the effective approval policy for `tool_name`, given the tool's
 // built-in default and the per-workspace override map.

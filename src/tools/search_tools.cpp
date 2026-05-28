@@ -64,14 +64,15 @@ ToolResult SearchTextTool::execute(const ToolCall& call, IWorkspaceServices& ws,
                                     const std::atomic<bool>* /*cancel_flag*/)
 {
     if (auto err = tools::reject_unknown_keys(call,
-            {"query", "max_results"}))
+            {"query", "max_results"}, this))
         return *err;
 
     std::string query = call.args.value("query", "");
     int max_results = call.args.value("max_results", 8);
 
     if (query.empty())
-        return error_result("Error: 'query' parameter is required");
+        return tools::missing_required_arg(*this, "query",
+            "the search phrase or keywords to match (FTS5)");
 
     auto* idx = ws.index();
     if (!idx)
@@ -114,7 +115,7 @@ ToolResult SearchSymbolsTool::execute(const ToolCall& call, IWorkspaceServices& 
                                        const std::atomic<bool>* /*cancel_flag*/)
 {
     if (auto err = tools::reject_unknown_keys(call,
-            {"name", "kind", "language", "max_results"}))
+            {"name", "kind", "language", "max_results"}, this))
         return *err;
 
     std::string name_query = call.args.value("name", "");
@@ -124,7 +125,8 @@ ToolResult SearchSymbolsTool::execute(const ToolCall& call, IWorkspaceServices& 
     if (max_results <= 0) max_results = 50;
 
     if (name_query.empty())
-        return error_result("Error: 'name' parameter is required");
+        return tools::missing_required_arg(*this, "name",
+            "the symbol identifier (function / class / struct / method name)");
 
     auto* idx = ws.index();
     if (!idx)
@@ -256,7 +258,7 @@ ToolResult SearchSemanticTool::execute(const ToolCall& call, IWorkspaceServices&
                                         const std::atomic<bool>* /*cancel_flag*/)
 {
     if (auto err = tools::reject_unknown_keys(call,
-            {"query", "max_results"}))
+            {"query", "max_results"}, this))
         return *err;
 
     auto* emb = ws.embedder();
@@ -269,7 +271,8 @@ ToolResult SearchSemanticTool::execute(const ToolCall& call, IWorkspaceServices&
 
     std::string query = call.args.value("query", "");
     if (query.empty())
-        return error_result("Error: 'query' parameter is required");
+        return tools::missing_required_arg(*this, "query",
+            "the natural-language description of what to find (vector similarity)");
 
     int max_results = call.args.value("max_results", 5);
 
@@ -369,12 +372,13 @@ ToolResult SearchRegexTool::execute(const ToolCall& call, IWorkspaceServices& ws
                                      const std::atomic<bool>* /*cancel_flag*/)
 {
     if (auto err = tools::reject_unknown_keys(call,
-            {"query", "path_glob", "case_sensitive", "max_results"}))
+            {"query", "path_glob", "case_sensitive", "max_results"}, this))
         return *err;
 
     std::string pattern = call.args.value("query", "");
     if (pattern.empty())
-        return error_result("Error: 'query' parameter is required");
+        return tools::missing_required_arg(*this, "query",
+            "the ECMAScript regex pattern to match per line");
 
     std::string path_glob    = call.args.value("path_glob", "");
     bool        case_sens    = call.args.value("case_sensitive", true);
@@ -618,7 +622,7 @@ ToolResult SearchAstTool::execute(const ToolCall& call, IWorkspaceServices& ws,
                                    const std::atomic<bool>* /*cancel_flag*/)
 {
     if (auto err = tools::reject_unknown_keys(call,
-            {"language", "query", "path_glob", "capture", "max_results"}))
+            {"language", "query", "path_glob", "capture", "max_results"}, this))
         return *err;
 
     std::string language       = call.args.value("language", "");
@@ -629,9 +633,11 @@ ToolResult SearchAstTool::execute(const ToolCall& call, IWorkspaceServices& ws,
     if (max_results <= 0) max_results = 50;
 
     if (language.empty())
-        return error_result("Error: 'language' parameter is required");
+        return tools::missing_required_arg(*this, "language",
+            "one of c / cpp / python / javascript / typescript / go / rust / java / csharp / ruby / php / bash / json / yaml / markdown / swift / kotlin");
     if (query_src.empty())
-        return error_result("Error: 'query' parameter is required");
+        return tools::missing_required_arg(*this, "query",
+            "the Tree-sitter S-expression query for the chosen language");
 
     auto* idx = ws.index();
     if (!idx) return error_result("Error: workspace index not available");

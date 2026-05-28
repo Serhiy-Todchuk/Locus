@@ -52,7 +52,7 @@ ToolResult ProposePlanTool::execute(const ToolCall& call, IWorkspaceServices& /*
                                      const std::atomic<bool>* /*cancel_flag*/)
 {
     if (auto err = tools::reject_unknown_keys(call,
-            {"title", "summary", "steps"}))
+            {"title", "summary", "steps"}, this))
         return *err;
 
     json out;
@@ -139,7 +139,7 @@ ToolResult MarkStepDoneTool::execute(const ToolCall& call, IWorkspaceServices& /
                                       const std::atomic<bool>* /*cancel_flag*/)
 {
     if (auto err = tools::reject_unknown_keys(call,
-            {"step", "status", "notes"}))
+            {"step", "status", "notes"}, this))
         return *err;
 
     if (!call.args.contains("step")) {

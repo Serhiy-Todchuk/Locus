@@ -223,7 +223,7 @@ ToolResult ListDirectoryTool::execute(const ToolCall& call, IWorkspaceServices& 
                                       const std::atomic<bool>* /*cancel_flag*/)
 {
     if (auto err = tools::reject_unknown_keys(call,
-            {"path", "depth", "max_entries"}))
+            {"path", "depth", "max_entries"}, this))
         return *err;
 
     std::string path = call.args.value("path", "");
@@ -343,13 +343,14 @@ std::string GetFileOutlineTool::preview(const ToolCall& call) const
 ToolResult GetFileOutlineTool::execute(const ToolCall& call, IWorkspaceServices& ws,
                                         const std::atomic<bool>* /*cancel_flag*/)
 {
-    if (auto err = tools::reject_unknown_keys(call, {"path"}))
+    if (auto err = tools::reject_unknown_keys(call, {"path"}, this))
         return *err;
 
     std::string path = call.args.value("path", "");
 
     if (path.empty())
-        return error_result("Error: 'path' parameter is required");
+        return tools::missing_required_arg(*this, "path",
+            "the workspace-relative path to outline");
 
     auto* idx = ws.index();
     if (!idx)
