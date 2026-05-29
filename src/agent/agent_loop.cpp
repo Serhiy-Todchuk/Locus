@@ -65,7 +65,7 @@ AgentLoop::AgentLoop(ILLMClient& llm,
                      FrontendRegistry& frontends,
                      std::atomic<bool>& cancel_flag,
                      MetricsAggregator* metrics)
-    : llm_(llm)
+    : llm_(&llm)
     , tools_(tools)
     , services_(services)
     , activity_(activity)
@@ -508,7 +508,7 @@ AgentStepResult AgentLoop::run_step(const ConversationHistory& history,
         });
     }
 
-    llm_.stream_completion(outgoing, tool_schemas, cbs);
+    llm_->stream_completion(outgoing, tool_schemas, cbs);
 
     // Stop the timer thread before reading post-stream state.
     if (watchdog_timer.joinable()) {

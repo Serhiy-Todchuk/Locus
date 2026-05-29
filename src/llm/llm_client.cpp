@@ -285,7 +285,7 @@ ModelInfo LMStudioClient::query_model_info()
 {
     // Try LM Studio proprietary API first -- it includes loaded_context_length.
     {
-        std::string url = config_.base_url + "/api/v0/models";
+        std::string url = join_api_url(config_.base_url, "/api/v0/models");
         spdlog::trace("LLM GET {}", url);
 
         cpr::Response response = cpr::Get(
@@ -323,7 +323,7 @@ ModelInfo LMStudioClient::query_model_info()
 
     // Fallback: standard OpenAI-compatible /v1/models.
     {
-        std::string url = config_.base_url + "/v1/models";
+        std::string url = join_api_url(config_.base_url, "/v1/models");
         spdlog::trace("LLM GET {}", url);
 
         cpr::Response response = cpr::Get(

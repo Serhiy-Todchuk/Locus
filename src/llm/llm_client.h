@@ -3,6 +3,7 @@
 #include <nlohmann/json.hpp>
 
 #include <functional>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -178,6 +179,14 @@ struct LLMConfig {
     // (compatible with LM Studio / llama.cpp / vLLM; ignored by servers that
     // don't honour the field).
     GrammarMode grammar_mode = GrammarMode::Off;
+
+    // S6.16 -- endpoint-profile auth. `api_key` (when non-empty) becomes an
+    // `Authorization: Bearer <key>` header; empty = no Authorization header
+    // (local LM Studio / Ollama). `extra_headers` are appended verbatim to
+    // the request header block (e.g. OpenRouter's HTTP-Referer / X-Title).
+    // The key is never logged at any level -- see OpenAiTransport.
+    std::string api_key;
+    std::map<std::string, std::string> extra_headers;
 };
 
 // ---- Model info (from /v1/models) -------------------------------------------
@@ -258,6 +267,24 @@ public:
     // Returns the first loaded model, or empty ModelInfo on failure.
     virtual ModelInfo query_model_info() = 0;
 };
+
+// S6.16 -- join an OpenAI-compatible base_url with an API path, tolerating a
+// base_url that already ends in "/v1". LM Studio's base is host-only
+// ("http://127.0.0.1:1234") so the caller appends "/v1/chat/completions";
+// hosted providers (NVIDIA / Ollama / OpenRouter) document their base WITH the
+// "/v1" suffix ("https://integrate.api.nvidia.com/v1"). Without this the path
+// doubles to ".../v1/v1/chat/completions" and 404s. `path` is expected to lead
+// with "/v1/" (e.g. "/v1/chat/completions", "/v1/models"); a base already
+// ending in "/v1" gets the leading "/v1" trimmed from the join. Trailing
+// slashes on base are normalised away.
+inline std::string join_api_url(std::string base, const std::string& path)
+{
+    while (!base.empty() && base.back() == '/') base.pop_back();
+    if (path.rfind("/v1/", 0) == 0 && base.size() >= 3 &&
+        base.compare(base.size() - 3, 3, "/v1") == 0)
+        return base + path.substr(3);   // base(".../v1") + "/chat/completions"
+    return base + path;
+}
 
 // Factory: creates a LMStudioClient (OpenAI-compatible) with the given config.
 std::unique_ptr<ILLMClient> create_llm_client(LLMConfig config);

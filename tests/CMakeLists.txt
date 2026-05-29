@@ -66,6 +66,7 @@ add_executable(locus_tests
     test_short_descriptions.cpp
     test_chunker_s618.cpp
     test_compaction_sentinel.cpp
+    test_endpoint_profile.cpp
     retrieval_eval/metrics.cpp
     support/shared_embedder.cpp
 )

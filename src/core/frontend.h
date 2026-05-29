@@ -238,6 +238,15 @@ public:
     virtual void on_permission_preset_changed(
         tools::PermissionPreset /*effective*/,
         bool /*from_runtime*/) {}
+
+    // S6.16 -- the active LLM endpoint changed (hot-swap completed on the
+    // agent thread). `profile_name` is the now-active profile; `model` is the
+    // resolved model id (server-detected or the profile default); `context_limit`
+    // is the resolved window. Frontends repaint the chat-footer endpoint chip +
+    // tooltip. Default no-op so CLI / test frontends compile clean.
+    virtual void on_endpoint_changed(const std::string& /*profile_name*/,
+                                     const std::string& /*model*/,
+                                     int /*context_limit*/) {}
 };
 
 // -- ILocusCore ---------------------------------------------------------------
@@ -342,6 +351,13 @@ public:
     virtual void clear_runtime_permission_preset() {}
     virtual std::optional<tools::PermissionPreset>
         runtime_permission_preset() const { return std::nullopt; }
+
+    // S6.16 -- request an endpoint hot-swap to the named profile. Queued onto
+    // the agent thread; applied at the next between-turns seam (deferred if a
+    // turn is in flight). History is preserved; the next user message lands on
+    // the new endpoint. Missing-profile requests warn and no-op. Default no-op
+    // so non-core frontends compile clean.
+    virtual void request_endpoint_switch(const std::string& /*profile_name*/) {}
 };
 
 } // namespace locus

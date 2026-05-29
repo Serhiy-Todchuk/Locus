@@ -97,6 +97,12 @@ bool LLMContext::would_breach_reserve(int incoming_estimate) const
     return (incoming_estimate + reserve > limit);
 }
 
+void LLMContext::set_llm_config(LLMConfig cfg)
+{
+    llm_config_ = std::move(cfg);
+    update_reserve();
+}
+
 void LLMContext::update_reserve()
 {
     auto* ws = services_.workspace();

@@ -35,6 +35,7 @@ add_executable(locus_integration_tests
     test_int_edit_file_shorthand.cpp
     test_int_read_file_alias_rejection.cpp
     test_int_s618_compaction.cpp
+    test_int_endpoint_switch.cpp
 )
 
 target_include_directories(locus_integration_tests PRIVATE

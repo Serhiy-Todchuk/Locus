@@ -6,6 +6,8 @@
 #include "history_archive.h"
 #include "quality_monitor.h"
 #include "index/index_query.h"
+#include "llm/endpoint_profile.h"
+#include "llm/model_presets.h"
 #include "llm/token_counter.h"
 #include "../tools/tool_registry.h"
 #include "../core/memory_store.h"
@@ -38,7 +40,15 @@ AgentCore::AgentCore(ILLMClient& llm,
     , tools_(tools)
     , services_(services)
     , sessions_(sessions_dir)
+    , active_llm_config_(llm_config)
 {
+    // S6.16 -- record the profile name the session resolved to so the
+    // chat-footer chip + active_endpoint_name() report the live binding even
+    // before the first hot-swap. Empty when no per-workspace override is set
+    // and the global store hasn't been consulted by this core (LocusSession
+    // owns the resolution); the frontend falls back to the store's active.
+    if (auto* w = services_.workspace())
+        active_endpoint_name_ = w->config().llm.active_endpoint;
     // S4.R -- pre-render the always-in-context memory slot before the prompt
     // is assembled. Captured at session start so the resulting prompt stays
     // byte-stable across the session (S4.F KV-cache invariant).
@@ -407,6 +417,7 @@ void AgentCore::agent_thread_func()
                        || pending_plan_approve_.load(std::memory_order_acquire)
                        || pending_plan_reject_.load(std::memory_order_acquire)
                        || !pending_delete_ids_.empty()
+                       || has_pending_endpoint_switch_
                        || !running_.load();
             });
 
@@ -428,6 +439,7 @@ void AgentCore::agent_thread_func()
             apply_pending_mode_change();
             apply_pending_plan_decision();
             apply_pending_deletes();
+            apply_pending_endpoint_switch();
         }
 
         if (!have_message)
@@ -773,6 +785,141 @@ void AgentCore::request_commit_now()
     spdlog::info("AgentCore: commit-now requested (manual)");
 }
 
+// -- Endpoint hot-swap (S6.16) ------------------------------------------------
+
+void AgentCore::request_endpoint_switch(const std::string& profile_name)
+{
+    {
+        std::lock_guard lock(queue_mutex_);
+        pending_endpoint_switch_     = profile_name;
+        has_pending_endpoint_switch_ = true;
+    }
+    if (busy_.load())
+        spdlog::info("AgentCore: endpoint switch to '{}' deferred until turn "
+                     "complete", profile_name);
+    else
+        spdlog::info("AgentCore: endpoint switch to '{}' requested", profile_name);
+    queue_cv_.notify_one();
+}
+
+std::string AgentCore::active_endpoint_name() const
+{
+    std::lock_guard lock(queue_mutex_);
+    return active_endpoint_name_;
+}
+
+std::string AgentCore::active_base_url() const
+{
+    std::lock_guard lock(queue_mutex_);
+    return active_llm_config_.base_url;
+}
+
+void AgentCore::apply_pending_endpoint_switch()
+{
+    std::string want;
+    {
+        std::lock_guard lock(queue_mutex_);
+        if (!has_pending_endpoint_switch_) return;
+        has_pending_endpoint_switch_ = false;
+        want = std::move(pending_endpoint_switch_);
+        pending_endpoint_switch_.clear();
+    }
+    if (want.empty()) return;
+
+    EndpointProfileStore store;
+    store.load();
+    const EndpointProfile* prof = store.find(want);
+    if (!prof) {
+        spdlog::warn("AgentCore: endpoint switch to '{}' ignored -- profile not "
+                     "found in store", want);
+        activity_->emit(ActivityKind::warning,
+                        "Endpoint switch ignored",
+                        "Profile '" + want + "' not found in endpoints.json");
+        return;
+    }
+
+    // Build the new config from the current one (preserves samplers / max_tokens
+    // / timeout / temperature) and overlay the profile's endpoint identity.
+    // Unlike the startup resolution, an explicit switch makes the profile win
+    // unconditionally -- the user picked it.
+    LLMConfig cfg = active_llm_config_;
+    apply_endpoint_profile(cfg, *prof, /*force=*/true);
+
+    std::unique_ptr<ILLMClient> client = create_llm_client(cfg);
+    if (!client) {
+        spdlog::error("AgentCore: failed to build client for endpoint '{}'",
+                      prof->name);
+        return;
+    }
+
+    // Probe the new server for model / context window. Best-effort: a hosted
+    // endpoint that doesn't expose /v1/models keeps the profile defaults.
+    ModelInfo info = client->query_model_info();
+    if (cfg.model.empty() && !info.id.empty())
+        cfg.model = info.id;
+    if (cfg.context_limit <= 0 && info.context_length > 0)
+        cfg.context_limit = info.context_length;
+    if (cfg.context_limit <= 0)
+        cfg.context_limit = 8192;
+
+    // Re-fire preset auto-detect on the resolved model id (mirrors
+    // LocusSession startup) so a switch to a different model family picks up
+    // its sampler defaults. Only when the workspace opted in.
+    if (auto* w = services_.workspace()) {
+        const auto& wc = w->config();
+        if (wc.llm.auto_detect_preset && !cfg.model.empty()) {
+            const ModelPreset* preset = nullptr;
+            if (!wc.llm.preset_name.empty() && wc.llm.preset_name != "auto")
+                preset = find_preset(wc.llm.preset_name);
+            if (!preset)
+                preset = find_preset_for_model(cfg.model);
+            if (preset) {
+                cfg.temperature    = preset->temperature;
+                cfg.max_tokens     = preset->max_tokens;
+                cfg.tool_format    = preset->tool_format;
+                cfg.top_p          = preset->top_p;
+                cfg.top_k          = preset->top_k;
+                cfg.min_p          = preset->min_p;
+                cfg.repeat_penalty = preset->repeat_penalty;
+                cfg.grammar_mode   = preset->grammar_mode;
+                // Rebuild the client so the new tool_format-driven decoder
+                // takes effect.
+                client = create_llm_client(cfg);
+                spdlog::info("AgentCore: re-applied preset '{}' for model '{}' "
+                             "after endpoint switch", preset->name, cfg.model);
+            }
+        }
+    }
+
+    // Commit: own the new client, reseat the loop, refresh ctx config + meter.
+    owned_llm_ = std::move(client);
+    loop_->set_llm(*owned_llm_);
+    ctx_->set_llm_config(cfg);
+    {
+        std::lock_guard lock(queue_mutex_);
+        active_llm_config_    = cfg;
+        active_endpoint_name_ = prof->name;
+    }
+
+    spdlog::info("AgentCore: endpoint switched to '{}' ({}, model='{}', "
+                 "context={})",
+                 prof->name, cfg.base_url, cfg.model, cfg.context_limit);
+
+    activity_->emit(ActivityKind::system_prompt,
+                    "Endpoint switched to '" + prof->name + "'",
+                    cfg.base_url + (cfg.api_key.empty() ? "" : " (auth)") +
+                    " model=" + (cfg.model.empty() ? "(server default)" : cfg.model));
+
+    const std::string name  = prof->name;
+    const std::string model = cfg.model;
+    const int         limit = cfg.context_limit;
+    frontends_.broadcast([&](IFrontend& fe) {
+        fe.on_endpoint_changed(name, model, limit);
+        fe.on_context_meter(ctx_->current_tokens(), limit,
+                            0, 0, ctx_->reserve_tokens(), 0);
+    });
+}
+
 // -- inject_nudge (S6.10 Task B) ----------------------------------------------
 
 bool AgentCore::inject_nudge(std::string body, const std::string& reason_tag)
@@ -1068,7 +1215,7 @@ void AgentCore::apply_pending_compaction()
         int before_tokens = ctx_->history().estimate_tokens();
         auto result = CompactionPipeline::run(
             ctx_->history(), pipeline_sel, pipeline_target,
-            &llm_, ctx_->llm_config());
+            active_llm(), ctx_->llm_config());
 
         // S6.18 Task B.2 -- when the cascade ran with drop_oldest_turns
         // enabled and still couldn't reach target, fall back to hard-trim:

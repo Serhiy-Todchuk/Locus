@@ -9,6 +9,19 @@
 
 namespace locus {
 
+std::vector<std::pair<std::string, std::string>>
+build_request_headers(const LLMConfig& config)
+{
+    std::vector<std::pair<std::string, std::string>> h;
+    h.emplace_back("Content-Type", "application/json");
+    h.emplace_back("Accept",       "text/event-stream");
+    if (!config.api_key.empty())
+        h.emplace_back("Authorization", "Bearer " + config.api_key);
+    for (const auto& [k, v] : config.extra_headers)
+        h.emplace_back(k, v);
+    return h;
+}
+
 OpenAiTransport::OpenAiTransport(const LLMConfig& config)
     : config_(config)
 {
@@ -21,7 +34,7 @@ void OpenAiTransport::post_chat(const std::string& body, const Callbacks& cbs)
 
 void OpenAiTransport::do_post(const std::string& body, const Callbacks& cbs, bool is_retry)
 {
-    std::string url = config_.base_url + "/v1/chat/completions";
+    std::string url = join_api_url(config_.base_url, "/v1/chat/completions");
 
     spdlog::trace("LLM POST {}", url);
 
@@ -112,12 +125,16 @@ void OpenAiTransport::do_post(const std::string& body, const Callbacks& cbs, boo
     const long stall_seconds =
         std::max<long>(1, static_cast<long>(config_.timeout_ms) / 1000);
 
+    // S6.16 -- header block from config (Bearer auth + extra_headers). The
+    // API key flows into the Authorization value but is never logged: the
+    // only trace line above prints the URL, not the headers.
+    cpr::Header headers;
+    for (auto& [k, v] : build_request_headers(config_))
+        headers[k] = v;
+
     cpr::Response response = cpr::Post(
         cpr::Url{url},
-        cpr::Header{
-            {"Content-Type", "application/json"},
-            {"Accept",       "text/event-stream"}
-        },
+        headers,
         cpr::Body{body},
         cpr::ConnectTimeout{10000},
         cpr::LowSpeed{1, stall_seconds},

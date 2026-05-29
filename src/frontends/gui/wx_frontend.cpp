@@ -33,6 +33,7 @@ wxDEFINE_EVENT(EVT_AGENT_PRESET_CHANGED,      wxThreadEvent);
 wxDEFINE_EVENT(EVT_AGENT_ROUND_PROGRESS,      wxThreadEvent);
 wxDEFINE_EVENT(EVT_AGENT_WATCHDOG_TRIPPED,    wxThreadEvent);
 wxDEFINE_EVENT(EVT_AGENT_WATCHDOG_CLEARED,    wxThreadEvent);
+wxDEFINE_EVENT(EVT_AGENT_ENDPOINT_CHANGED,    wxThreadEvent);
 
 WxFrontend::WxFrontend(wxEvtHandler* handler, int tab_id)
     : handler_(handler), tab_id_(tab_id)
@@ -299,6 +300,15 @@ void WxFrontend::on_reasoning_watchdog_tripped(const std::string& trigger,
 void WxFrontend::on_reasoning_watchdog_cleared()
 {
     auto* evt = new_evt(EVT_AGENT_WATCHDOG_CLEARED, tab_id_);
+    wxQueueEvent(handler_, evt);
+}
+
+void WxFrontend::on_endpoint_changed(const std::string& profile_name,
+                                     const std::string& model,
+                                     int context_limit)
+{
+    auto* evt = new_evt(EVT_AGENT_ENDPOINT_CHANGED, tab_id_);
+    evt->SetPayload(EndpointChangedPayload{profile_name, model, context_limit});
     wxQueueEvent(handler_, evt);
 }
 

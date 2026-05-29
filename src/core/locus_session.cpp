@@ -5,6 +5,7 @@
 #include "index/embedding_worker.h"
 #include "index/index_query.h"
 #include "index/indexer.h"
+#include "llm/endpoint_profile.h"
 #include "llm/model_presets.h"
 #include "mcp/mcp_manager.h"
 #include "tools/tools.h"
@@ -76,6 +77,64 @@ void LocusSession::load_shared_resources(const std::filesystem::path& ws_path,
 
     // 2. LLM config / client.
     merge_workspace_defaults(llm_config_, workspace_->config());
+
+    // S6.16 -- resolve the active endpoint profile from the global store and
+    // layer it under the legacy / caller fields (see apply_endpoint_profile).
+    // active_endpoint == "" follows the store's global `active`.
+    {
+        auto& wc = workspace_->config();
+        EndpointProfileStore store;
+        bool store_existed = store.load();  // global path; seeds builtins if absent
+
+        // Task G migration -- first ever run on this machine (no endpoints.json)
+        // AND the workspace carries a non-default legacy `llm.endpoint`: record
+        // it as a "Migrated (<workspace>)" profile + pin this workspace to it so
+        // the user's pre-S6.16 setup is visible in Settings > Endpoints.
+        if (!store_existed
+            && wc.llm.active_endpoint.empty()
+            && !wc.llm.endpoint.empty()
+            && wc.llm.endpoint != "http://127.0.0.1:1234")
+        {
+            EndpointProfile mig;
+            mig.name        = "Migrated (" + workspace_->root().filename().string() + ")";
+            mig.base_url    = wc.llm.endpoint;
+            mig.default_model = wc.llm.model;
+            mig.tool_format = wc.llm.tool_format.empty() ? "auto" : wc.llm.tool_format;
+            if (store.add(mig)) {
+                wc.llm.active_endpoint = mig.name;
+                try { workspace_->save_config(); }
+                catch (const std::exception& e) {
+                    spdlog::warn("Could not persist migrated endpoint name: {}", e.what());
+                }
+                spdlog::info("Migrated legacy endpoint '{}' to profile '{}'",
+                             mig.base_url, mig.name);
+            }
+        }
+
+        // First run: persist the seeded (+ possibly migrated) store so
+        // endpoints.json exists for the Settings panel + future runs.
+        if (!store_existed) {
+            auto err = store.save();
+            if (!err.empty())
+                spdlog::warn("Could not write endpoints.json: {}", err);
+        }
+
+        std::string want = wc.llm.active_endpoint.empty()
+                           ? store.active() : wc.llm.active_endpoint;
+        const EndpointProfile* prof = store.find(want);
+        if (!prof && !store.list().empty()) {
+            spdlog::warn("endpoint profile '{}' not found in store; falling "
+                         "back to '{}'", want, store.list().front().name);
+            prof = &store.list().front();
+        }
+        if (prof) {
+            apply_endpoint_profile(llm_config_, *prof, /*force=*/false);
+            spdlog::info("Endpoint profile '{}' -> {}{}",
+                         prof->name, llm_config_.base_url,
+                         prof->api_key.empty() ? "" : " (auth)");
+        }
+    }
+
     if (llm_config_.base_url.empty())
         llm_config_.base_url = "http://127.0.0.1:1234";
 

@@ -4,8 +4,19 @@
 
 #include <functional>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace locus {
+
+// S6.16 -- builds the request header list from config: always Content-Type +
+// Accept; appends `Authorization: Bearer <api_key>` when the key is non-empty;
+// then merges every `extra_headers` entry verbatim. Extracted as a free
+// function so it can be unit-tested without a live cpr::Post. The API key is
+// returned verbatim in the Authorization value but is never logged by the
+// transport. Returns an ordered list of {name, value} pairs.
+std::vector<std::pair<std::string, std::string>>
+build_request_headers(const LLMConfig& config);
 
 // Wraps cpr POST /v1/chat/completions + SSE parsing. Knows nothing
 // about JSON: hands each `data:` payload to the on_data callback as a

@@ -10,6 +10,9 @@
 #include "tool_approval_dialog.h"
 #include "activity_panel.h"
 #include "file_tree_panel.h"
+#include "wx_frontend.h"
+#include "endpoint_tooltip.h"
+#include "../../llm/endpoint_profile.h"
 
 #include "../../agent/activity_log.h"
 #include "../../agent/agent_mode.h"
@@ -225,6 +228,27 @@ void AgentEventRouter::on_agent_watchdog_cleared(wxThreadEvent& evt)
     if (auto* ui = frame_.find_tab_ui(evt.GetId())) {
         if (ui->chat) ui->chat->set_commit_now_visible(false);
     }
+}
+
+void AgentEventRouter::on_agent_endpoint_changed(wxThreadEvent& evt)
+{
+    auto payload = evt.GetPayload<EndpointChangedPayload>();
+    if (auto* ui = frame_.find_tab_ui(evt.GetId()); ui && ui->chat) {
+        ui->chat->set_active_endpoint(payload.name);
+        // Refresh tooltip from the store so the masked key + url match the
+        // now-active profile.
+        EndpointProfileStore store;
+        store.load();
+        if (const auto* prof = store.find(payload.name))
+            ui->chat->set_endpoint_tooltip(gui::endpoint_chip_tooltip(*prof));
+    }
+    frame_.SetStatusText(
+        wxString::Format("Endpoint: %s (%s)",
+                         wxString::FromUTF8(payload.name),
+                         payload.model.empty()
+                             ? wxString("server default")
+                             : wxString::FromUTF8(payload.model)),
+        0);
 }
 
 void AgentEventRouter::on_agent_session_reset(wxThreadEvent& evt)

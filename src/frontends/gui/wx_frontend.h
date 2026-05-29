@@ -47,6 +47,14 @@ wxDECLARE_EVENT(EVT_AGENT_ROUND_PROGRESS,      wxThreadEvent);
 // _CLEARED carries no payload.
 wxDECLARE_EVENT(EVT_AGENT_WATCHDOG_TRIPPED,    wxThreadEvent);
 wxDECLARE_EVENT(EVT_AGENT_WATCHDOG_CLEARED,    wxThreadEvent);
+// S6.16 -- endpoint hot-swap completed. Payload carries the full triple.
+wxDECLARE_EVENT(EVT_AGENT_ENDPOINT_CHANGED,    wxThreadEvent);
+
+struct EndpointChangedPayload {
+    std::string name;
+    std::string model;
+    int         context_limit = 0;
+};
 
 // Thread bridge: IFrontend callbacks (fired on the agent thread) are
 // marshalled to the wxWidgets main thread via wxQueueEvent + wxThreadEvent.
@@ -115,6 +123,10 @@ public:
     void on_reasoning_watchdog_tripped(const std::string& trigger,
                                         int value) override;
     void on_reasoning_watchdog_cleared() override;
+    // S6.16
+    void on_endpoint_changed(const std::string& profile_name,
+                             const std::string& model,
+                             int context_limit) override;
 
 private:
     wxEvtHandler* handler_;

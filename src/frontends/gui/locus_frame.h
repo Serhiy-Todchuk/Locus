@@ -144,7 +144,7 @@ private:
 
     // Compaction / settings dialogs.
     void show_compaction_dialog();
-    void show_settings_dialog();
+    void show_settings_dialog(const char* select_tab = nullptr);
     void refresh_index_stats();
 
     // Window lifecycle.
