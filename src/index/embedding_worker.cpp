@@ -93,11 +93,16 @@ void EmbeddingWorker::thread_func()
         "SELECT content FROM chunks WHERE id = ?1");
     // S6.18 Task A.1 -- prepare the INSERT lazily so a workspace that opens
     // semantic search but never embeds doesn't materialise the 4 MiB-per-table
-    // vec0 bucket. S6.18 Task A.5 -- INSERT OR REPLACE handles the rare
-    // rowid-reuse race where `chunks.id` (INTEGER PRIMARY KEY without
-    // AUTOINCREMENT) is recycled by SQLite after a fast file-rewrite, and a
-    // new chunk_vectors row would otherwise collide with a stale embedding.
+    // vec0 bucket. Rowid-reuse race: `chunks.id` (INTEGER PRIMARY KEY without
+    // AUTOINCREMENT) is recycled by SQLite after a fast file-rewrite, so a new
+    // chunk can land on a chunk_id that still has a stale predecessor row in
+    // chunk_vectors. `INSERT OR REPLACE` does NOT fix this on a vec0 virtual
+    // table -- sqlite-vec's xUpdate doesn't honour the REPLACE conflict action,
+    // so the insert raises SQLITE_CONSTRAINT and the stale vector survives.
+    // The reliable fix is an explicit DELETE of the colliding chunk_id before
+    // the INSERT (S6.18 Task A.5 follow-up, 2026-05-29).
     sqlite3_stmt* stmt_insert = nullptr;
+    sqlite3_stmt* stmt_delete = nullptr;
 
     while (running_.load()) {
         int64_t chunk_id = -1;
@@ -148,15 +153,21 @@ void EmbeddingWorker::thread_func()
         }
 
         // Write vector to chunk_vectors. S6.18 Task A.1: ensure the table
-        // exists and lazily prepare the INSERT on first use. S6.18 Task A.5:
-        // OR REPLACE so a recycled chunk_id always carries the current
-        // chunk's embedding, not a stale one from a freed predecessor.
+        // exists and lazily prepare the statements on first use. Delete any
+        // colliding row first (vec0 ignores OR REPLACE), then INSERT, so a
+        // recycled chunk_id always carries the current chunk's embedding, not
+        // a stale one from a freed predecessor.
         if (!stmt_insert) {
             db_.ensure_chunk_vectors_table();
+            stmt_delete = db_.prepare(
+                "DELETE FROM chunk_vectors WHERE chunk_id = ?1");
             stmt_insert = db_.prepare(
-                "INSERT OR REPLACE INTO chunk_vectors "
-                "(chunk_id, embedding) VALUES (?1, ?2)");
+                "INSERT INTO chunk_vectors (chunk_id, embedding) VALUES (?1, ?2)");
         }
+        sqlite3_reset(stmt_delete);
+        sqlite3_bind_int64(stmt_delete, 1, chunk_id);
+        sqlite3_step(stmt_delete);   // no-op when the id isn't present
+
         sqlite3_reset(stmt_insert);
         sqlite3_bind_int64(stmt_insert, 1, chunk_id);
         sqlite3_bind_blob(stmt_insert, 2,
@@ -165,9 +176,9 @@ void EmbeddingWorker::thread_func()
                           SQLITE_TRANSIENT);
         rc = sqlite3_step(stmt_insert);
         if (rc != SQLITE_DONE) {
-            // With OR REPLACE the UNIQUE-constraint silent-drop path is
-            // closed; remaining errors are real (out-of-disk, locked DB,
-            // sqlite-vec extension misconfig). Keep warn for visibility.
+            // The delete-then-insert closes the rowid-reuse collision; any
+            // remaining error is real (out-of-disk, locked DB, sqlite-vec
+            // extension misconfig). Keep warn for visibility.
             spdlog::warn("Failed to insert vector for chunk {}: {}",
                          chunk_id, sqlite3_errmsg(db_.handle()));
         }
@@ -230,6 +241,7 @@ void EmbeddingWorker::thread_func()
     }
 
     sqlite3_finalize(stmt_read);
+    if (stmt_delete) sqlite3_finalize(stmt_delete);
     if (stmt_insert) sqlite3_finalize(stmt_insert);
 }
 

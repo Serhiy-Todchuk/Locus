@@ -330,8 +330,12 @@ void MemoryStore::ensure_memory_vector_statements()
     if (!vectors_db_->memory_vectors_present()) return;
 
     if (!stmt_vec_insert_) {
+        // Plain INSERT: vec0 ignores the OR REPLACE conflict action, so an
+        // update to an existing memory's embedding must DELETE the colliding
+        // memory_rowid first (see vec_upsert) -- otherwise the re-embed is
+        // silently dropped and the stale vector survives.
         stmt_vec_insert_ = vectors_db_->prepare(
-            "INSERT OR REPLACE INTO memory_vectors(memory_rowid, embedding) "
+            "INSERT INTO memory_vectors(memory_rowid, embedding) "
             "VALUES (?1, ?2)");
     }
     if (!stmt_vec_delete_) {
@@ -527,6 +531,15 @@ bool MemoryStore::vec_embed_and_store(const std::string& id, const std::string& 
             return false;
         }
         rowid = sqlite3_last_insert_rowid(vectors_db_->handle());
+    }
+
+    // Drop any existing vector for this rowid before inserting (vec0 ignores
+    // OR REPLACE). No-op for a fresh rowid; required when re-embedding an
+    // edited memory whose rowid is reused.
+    if (stmt_vec_delete_) {
+        sqlite3_reset(stmt_vec_delete_);
+        sqlite3_bind_int64(stmt_vec_delete_, 1, rowid);
+        sqlite3_step(stmt_vec_delete_);
     }
 
     sqlite3_reset(stmt_vec_insert_);
