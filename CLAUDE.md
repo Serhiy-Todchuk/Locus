@@ -479,6 +479,7 @@ Core is a static lib (`locus_core`). Both `locus` (exe) and `locus_tests` link i
 4. **Operating transparency** -- User sees tool calls, LLM/context state and other operations - nothing executes without user seeing it, everything is transparent
 5. **Context window is precious** -- always summarize tool results before injection
 6. **Instant UI feedback** -- streaming responses, no blocking main thread ever
+7. **Workspace trusted, external ingress untrusted** -- the trust boundary is authorship/curation, NOT file location. Workspace files are content the user wrote or curated and are never injection-scanned. Web / ZIM / MCP output is third-party text the user did not review (a ZIM dump is untrusted even though it sits in the folder -- the user chose the source, not the 6M articles); it is scanned + origin-stamped on ingress (S6.0) and the taint travels into the index. The scanner is a visibility tripwire; the approval gate is the actual control. Don't start scanning workspace files, and don't let any new external ingress bypass the scan.
 
 ---
 

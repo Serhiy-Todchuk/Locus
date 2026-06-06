@@ -8,7 +8,7 @@
 
 ## Stages
 
-- [ ] **S6.0** -- Prompt-Injection Scanner (5-category: instruction override, role impersonation, exfiltration, encoding evasion, social eng) -- lands before S6.1 so untrusted HTML pulled by web RAG is vetted on ingress. Stage doc TBD.
+- [ ] **[S6.0](S6.0-prompt-injection-scanner.md)** -- Prompt-Injection Scanner (5-category: instruction override, role impersonation, exfiltration, encoding evasion, social eng) -- lands before S6.1 so untrusted HTML pulled by web RAG is vetted on ingress.
 - [ ] **[S6.1](S6.1-web-retrieval.md)** -- Web Retrieval (RAG)
 - [ ] **[S6.2](S6.2-zim-reader.md)** -- ZIM Reader (Wikipedia / Kiwix)
 - [ ] **[S6.3](S6.3-crow-frontend.md)** -- CrowServer Frontend
