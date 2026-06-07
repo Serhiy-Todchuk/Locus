@@ -375,8 +375,11 @@ void Indexer::index_file(const fs::path& rel_path)
     if (ec) return;
 
     auto ftime = fs::last_write_time(abs_path, ec);
-    // Convert to unix timestamp
-    auto sctp = std::chrono::clock_cast<std::chrono::system_clock>(ftime);
+    // Convert to unix timestamp. libc++ (macOS) lacks std::chrono::clock_cast,
+    // so use the portable file_clock -> system_clock offset conversion (sub-second
+    // drift between the two now() reads is irrelevant at seconds resolution).
+    auto sctp = std::chrono::time_point_cast<std::chrono::system_clock::duration>(
+        ftime - fs::file_time_type::clock::now() + std::chrono::system_clock::now());
     int64_t mtime = std::chrono::duration_cast<std::chrono::seconds>(
         sctp.time_since_epoch()).count();
 

@@ -8,6 +8,10 @@
 
 namespace locus {
 
+WatcherPump::WatcherPump(FileWatcher& watcher, Indexer& indexer)
+    : WatcherPump(watcher, indexer, Params{})
+{}
+
 WatcherPump::WatcherPump(FileWatcher& watcher, Indexer& indexer, Params params)
     : watcher_(watcher), indexer_(indexer), params_(params)
 {}

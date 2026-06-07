@@ -32,7 +32,11 @@ public:
         std::chrono::milliseconds hard_cap{20000};
     };
 
-    WatcherPump(FileWatcher& watcher, Indexer& indexer, Params params = {});
+    // Two ctors instead of a `Params params = {}` default argument: clang
+    // rejects an in-class default arg that needs a nested struct's member
+    // initializers (the `= {}` form) before the enclosing class is complete.
+    WatcherPump(FileWatcher& watcher, Indexer& indexer);
+    WatcherPump(FileWatcher& watcher, Indexer& indexer, Params params);
     ~WatcherPump();
 
     WatcherPump(const WatcherPump&) = delete;
