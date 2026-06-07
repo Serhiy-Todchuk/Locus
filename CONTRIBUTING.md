@@ -117,6 +117,54 @@ For Debug, swap `build/release` -> `build/debug` and `--config Release` -> `--co
   vcpkg layout. If you swap vcpkg versions and hit a `MTd/MT` linker error, re-configure
   the affected build dir from scratch.
 
+## Building on macOS (Apple Silicon)
+
+macOS support is arm64-only. The core builds the same; the shell / MCP /
+autostart / notification surfaces that are Windows-only return a clean
+`[platform: macos]` error (see [Platform Support](README.md#platform-support)).
+
+**Prerequisites**
+
+- **Xcode** or the Command Line Tools (`xcode-select --install`) -- clang + the macOS SDK.
+- **Homebrew** host build tools:
+  ```
+  brew install cmake ninja pkg-config autoconf automake
+  ```
+- **vcpkg** at `~/vcpkg` (substitute your own path / `$VCPKG_ROOT`):
+  ```
+  git clone https://github.com/microsoft/vcpkg.git ~/vcpkg
+  ~/vcpkg/bootstrap-vcpkg.sh -disableMetrics
+  ```
+
+Unlike the Windows multi-config build, macOS uses a **single-config Ninja**
+tree: one `build/release` dir whose configuration is fixed at configure time
+via `-DCMAKE_BUILD_TYPE`. The first configure pulls every dependency through
+vcpkg in `arm64-osx` mode (wxWidgets + llama.cpp-with-Metal are the slow ones)
+-- plan for **30-90 minutes**. Subsequent builds reuse the cache.
+
+**Configure + build**
+
+```
+cmake -B build/release -G Ninja \
+  -DCMAKE_TOOLCHAIN_FILE=$HOME/vcpkg/scripts/buildsystems/vcpkg.cmake \
+  -DVCPKG_TARGET_TRIPLET=arm64-osx \
+  -DCMAKE_BUILD_TYPE=Release
+
+cmake --build build/release                      # all default targets
+cmake --build build/release --target locus       # CLI only
+cmake --build build/release --target locus_gui   # GUI only
+```
+
+No `--config` flag (single-config). Binaries land directly in `build/release/`
+(`locus`, `locus_gui`) -- no `Release/` subdir, no `.exe` suffix; the unit-test
+exe is under `build/release/tests/`. `libpdfium.dylib` is auto-copied next to
+each app binary by a `POST_BUILD` step and the binary's rpath is set to
+`@executable_path` so it loads.
+
+**Models**: use the bash downloaders instead of the PowerShell ones --
+`./models/download.sh` (multilingual bge-m3 set) or `./models/download-small.sh`
+(small English profile).
+
 ## Run
 
 ### CLI
