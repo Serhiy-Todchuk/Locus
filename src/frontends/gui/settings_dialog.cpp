@@ -9,6 +9,7 @@
 #include "settings/notifications_settings_panel.h"
 #include "settings/sessions_settings_panel.h"
 #include "settings/agent_settings_panel.h"
+#include "settings/endpoints_settings_panel.h"
 #include "settings/tool_approvals_settings_panel.h"
 #include "../../core/global_config.h"
 #include "../../core/global_paths.h"
@@ -19,7 +20,8 @@
 namespace locus {
 
 SettingsDialog::SettingsDialog(wxWindow* parent, WorkspaceConfig& config,
-                               IToolRegistry& tools, McpManager* mcp)
+                               IToolRegistry& tools, McpManager* mcp,
+                               const char* select_tab)
     : wxDialog(parent, wxID_ANY, "Settings",
                wxDefaultPosition, wxSize(620, 760),
                wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER)
@@ -41,6 +43,7 @@ SettingsDialog::SettingsDialog(wxWindow* parent, WorkspaceConfig& config,
     notifications_panel_ = new NotificationsSettingsPanel(notebook, config);
     sessions_panel_      = new SessionsSettingsPanel(notebook, config);
     agent_panel_         = new AgentSettingsPanel(notebook, config);
+    endpoints_panel_     = new EndpointsSettingsPanel(notebook, config);
 
     llm_panel_->SetName(ui_names::kSettingsTabLlm);
     index_panel_->SetName(ui_names::kSettingsTabIndex);
@@ -50,6 +53,7 @@ SettingsDialog::SettingsDialog(wxWindow* parent, WorkspaceConfig& config,
     notifications_panel_->SetName(ui_names::kSettingsTabNotifications);
     sessions_panel_->SetName(ui_names::kSettingsTabSessions);
     agent_panel_->SetName(ui_names::kSettingsTabAgent);
+    endpoints_panel_->SetName(ui_names::kSettingsTabEndpoints);
     gui::apply_locus_accessible_name(llm_panel_);
     gui::apply_locus_accessible_name(index_panel_);
     gui::apply_locus_accessible_name(capabilities_panel_);
@@ -58,8 +62,10 @@ SettingsDialog::SettingsDialog(wxWindow* parent, WorkspaceConfig& config,
     gui::apply_locus_accessible_name(notifications_panel_);
     gui::apply_locus_accessible_name(sessions_panel_);
     gui::apply_locus_accessible_name(agent_panel_);
+    gui::apply_locus_accessible_name(endpoints_panel_);
 
     notebook->AddPage(llm_panel_,           "LLM");
+    notebook->AddPage(endpoints_panel_,     "Endpoints");
     notebook->AddPage(index_panel_,         "Index");
     notebook->AddPage(agent_panel_,         "Agent");
     notebook->AddPage(capabilities_panel_,  "Capabilities");
@@ -67,6 +73,16 @@ SettingsDialog::SettingsDialog(wxWindow* parent, WorkspaceConfig& config,
     notebook->AddPage(mcp_panel_,           "MCP Servers");
     notebook->AddPage(notifications_panel_, "Notifications");
     notebook->AddPage(sessions_panel_,      "Sessions");
+
+    // S6.16 -- jump straight to a named tab (chat-footer "Edit endpoints...").
+    if (select_tab) {
+        for (size_t i = 0; i < notebook->GetPageCount(); ++i) {
+            if (notebook->GetPage(i)->GetName() == select_tab) {
+                notebook->SetSelection(i);
+                break;
+            }
+        }
+    }
 
     auto* main_sizer = new wxBoxSizer(wxVERTICAL);
     main_sizer->Add(notebook, 1, wxEXPAND | wxALL, 8);
@@ -104,7 +120,8 @@ void SettingsDialog::on_ok(wxCommandEvent& evt)
         !mcp_panel_->validate(err)           ||
         !notifications_panel_->validate(err) ||
         !sessions_panel_->validate(err)      ||
-        !agent_panel_->validate(err))
+        !agent_panel_->validate(err)         ||
+        !endpoints_panel_->validate(err))
     {
         wxMessageBox(err, "Settings", wxOK | wxICON_ERROR, this);
         return;
@@ -124,6 +141,7 @@ void SettingsDialog::on_ok(wxCommandEvent& evt)
     notifications_panel_->commit_to_config(new_cfg);
     sessions_panel_->commit_to_config(new_cfg);
     agent_panel_->commit_to_config(new_cfg);
+    endpoints_panel_->commit_to_config(new_cfg);   // persists the global store
 
     // Cross-tab reconciliation: the Capabilities tab's semantic toggle is the
     // canonical authority. When the two differ, capabilities wins and we force
@@ -164,8 +182,11 @@ void SettingsDialog::on_ok(wxCommandEvent& evt)
         new_cfg.capabilities.memory_bank          != baseline.capabilities.memory_bank          ||
         new_cfg.capabilities.web_retrieval        != baseline.capabilities.web_retrieval);
 
+    endpoints_changed_ = endpoints_panel_->dirty()
+            || (new_cfg.llm.active_endpoint != baseline.llm.active_endpoint);
+
     changed_ = llm_changed_ || index_changed_ || semantic_changed_
-            || approvals_changed || capabilities_changed_;
+            || approvals_changed || capabilities_changed_ || endpoints_changed_;
 
     if (changed_) {
         // Keep the legacy mirror in sync with the canonical capabilities bool.

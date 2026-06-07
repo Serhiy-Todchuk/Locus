@@ -196,6 +196,16 @@ public:
     // clean. Paired with on_turn_complete: the chip is hidden then.
     virtual void on_round_progress(int /*round*/, int /*max_rounds*/) {}
 
+    // S6.20 -- transient LLM-transport retry / waiting notice. Fired when the
+    // endpoint returns a transient failure (429 / 5xx / empty body / stall) and
+    // the transport is backing off before a retry. `status` is a short
+    // human-readable string (e.g. "HTTP 429 (rate limited) -- retrying 2/5 in
+    // 8s"). Frontends surface it in the chat-footer status line so a
+    // multi-minute backoff on a flaky hosted endpoint isn't a silent hang; it
+    // is naturally superseded by the next token / round / turn-complete event.
+    // Default no-op so CLI / test stubs stay clean.
+    virtual void on_llm_retry(const std::string& /*status*/) {}
+
     // S6.13 -- reasoning watchdog tripped on the current LLM round.
     // `trigger` is "chars" or "seconds"; `value` is the count that crossed
     // the threshold (combined reasoning+text chars for "chars"; elapsed
@@ -238,6 +248,15 @@ public:
     virtual void on_permission_preset_changed(
         tools::PermissionPreset /*effective*/,
         bool /*from_runtime*/) {}
+
+    // S6.16 -- the active LLM endpoint changed (hot-swap completed on the
+    // agent thread). `profile_name` is the now-active profile; `model` is the
+    // resolved model id (server-detected or the profile default); `context_limit`
+    // is the resolved window. Frontends repaint the chat-footer endpoint chip +
+    // tooltip. Default no-op so CLI / test frontends compile clean.
+    virtual void on_endpoint_changed(const std::string& /*profile_name*/,
+                                     const std::string& /*model*/,
+                                     int /*context_limit*/) {}
 };
 
 // -- ILocusCore ---------------------------------------------------------------
@@ -342,6 +361,13 @@ public:
     virtual void clear_runtime_permission_preset() {}
     virtual std::optional<tools::PermissionPreset>
         runtime_permission_preset() const { return std::nullopt; }
+
+    // S6.16 -- request an endpoint hot-swap to the named profile. Queued onto
+    // the agent thread; applied at the next between-turns seam (deferred if a
+    // turn is in flight). History is preserved; the next user message lands on
+    // the new endpoint. Missing-profile requests warn and no-op. Default no-op
+    // so non-core frontends compile clean.
+    virtual void request_endpoint_switch(const std::string& /*profile_name*/) {}
 };
 
 } // namespace locus

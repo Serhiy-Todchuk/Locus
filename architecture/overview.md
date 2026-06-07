@@ -278,6 +278,29 @@ context are preserved by the default passes.
 
 ---
 
+## Trust Boundary
+
+Locus draws its trust boundary by **authorship and curation, not by file location**.
+
+- **Trusted: workspace content.** The files in the opened folder are content the user
+  wrote or deliberately curated (their code, docs, cloned repos). They are read and acted
+  on as-is and are never run through the prompt-injection scanner. The user vouches for the
+  workspace by choosing to open it; the precondition is "only point Locus at folders you trust."
+- **Untrusted: external ingress.** Any text authored by a third party that the agent surfaces
+  without the user having reviewed it -- web pages (S6.1), offline knowledge bases such as
+  Wikipedia / ZIM (S6.2), and MCP tool output (S4.G) -- crosses the boundary on the way in.
+  The discriminator is "did the user author or review this specific text," which is why a
+  Wikipedia / ZIM dump is untrusted even though the file physically sits in the workspace: the
+  user chose the *source*, not the *content* of six million public-authored articles.
+
+External ingress is scanned and origin-stamped on entry (S6.0); the taint travels into the
+index so the untrusted framing re-surfaces at the search hit, not just at fetch time. The
+scanner is a visibility tripwire, not an enforcement boundary -- the hard control remains the
+approval gate, which every mutating / egress tool call passes regardless of where its inputs
+came from.
+
+---
+
 ## Build Sequence
 
 1. **CLI prototype (C++20)** -- implemented.

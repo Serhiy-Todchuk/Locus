@@ -77,6 +77,8 @@ WorkspaceConfig workspace_config_from_json(const json& j)
             cfg.llm.auto_detect_preset = llm["auto_detect_preset"].get<bool>();
         if (llm.contains("preset_name"))
             cfg.llm.preset_name = llm["preset_name"].get<std::string>();
+        if (llm.contains("active_endpoint"))
+            cfg.llm.active_endpoint = llm["active_endpoint"].get<std::string>();
     }
 
     if (j.contains("agent")) {
@@ -338,7 +340,8 @@ json workspace_config_to_json(const WorkspaceConfig& cfg)
             {"presence_penalty",  cfg.llm.presence_penalty},
             {"grammar_mode",      cfg.llm.grammar_mode},
             {"auto_detect_preset", cfg.llm.auto_detect_preset},
-            {"preset_name",       cfg.llm.preset_name}
+            {"preset_name",       cfg.llm.preset_name},
+            {"active_endpoint",   cfg.llm.active_endpoint}
         }},
         {"agent", {
             {"tool_manifest_warn_tokens", cfg.agent.tool_manifest_warn_tokens},

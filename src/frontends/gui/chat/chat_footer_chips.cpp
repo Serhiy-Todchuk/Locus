@@ -122,6 +122,21 @@ bool ChatFooterChips::hide_round_progress()
     return true;
 }
 
+bool ChatFooterChips::set_transient_status(const wxString& status)
+{
+    // Reuse the round-chip area. The next round's set_round_progress (or
+    // hide_round_progress on turn complete) naturally overwrites this.
+    if (!round_chip_) return false;
+    round_chip_->SetLabel(status);
+    round_chip_->SetToolTip(
+        "The LLM endpoint returned a transient failure (rate-limit, server "
+        "error, or empty response) and Locus is backing off before retrying. "
+        "This clears automatically when the stream resumes.");
+    const bool was_hidden = !round_chip_->IsShown();
+    round_chip_->Show();
+    return was_hidden;
+}
+
 bool ChatFooterChips::set_compacted_count(int count, int no_op_count,
                                           const wxString& archive_dir)
 {

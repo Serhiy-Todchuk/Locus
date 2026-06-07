@@ -1,8 +1,11 @@
 #include "agent_turn.h"
 
 #include "agent_core.h"
+#include "build_error_detector.h"
 #include "compaction_pipeline.h"
 #include "quality_monitor.h"
+#include "tools/shared.h"
+#include "tools/tool.h"
 #include "../core/workspace.h"
 
 #include <spdlog/spdlog.h>
@@ -294,6 +297,7 @@ AgentTurnRunner::Outcome AgentTurnRunner::run()
             }
         }
 
+        std::string round_tool_output;   // accumulates this round's tool results
         for (auto& call : step.tool_calls) {
             if (core_.cancel_requested_.load()) {
                 spdlog::info("AgentCore: skipping remaining tool calls (cancelled)");
@@ -301,10 +305,13 @@ AgentTurnRunner::Outcome AgentTurnRunner::run()
             }
             std::string captured_content;
             bool        captured_success = true;
+            note_write_call(call);
             core_.dispatcher_->dispatch(call, [&](ChatMessage m) {
                 captured_content = m.content;
                 core_.ctx_->add_message(std::move(m));
             });
+            if (!round_tool_output.empty()) round_tool_output += '\n';
+            round_tool_output += captured_content;
             core_.observe_plan_tool_result(call, captured_content, captured_success);
         }
 
@@ -312,6 +319,15 @@ AgentTurnRunner::Outcome AgentTurnRunner::run()
             std::lock_guard lock(core_.plan_mutex_);
             if (core_.plan_awaiting_decision_)
                 break;
+        }
+
+        // S6.20 -- stuck-on-the-same-build-error detector. Runs on this round's
+        // aggregated tool output (run_command build results land here). Fires a
+        // nudge on the Kth identical error signature, aborts if it persists.
+        {
+            bool should_break = false;
+            check_stuck_error(round_tool_output, should_break);
+            if (should_break) break;
         }
     }
 
@@ -329,6 +345,118 @@ AgentTurnRunner::Outcome AgentTurnRunner::run()
     }
 
     return out;
+}
+
+void AgentTurnRunner::check_stuck_error(const std::string& tool_output,
+                                        bool& out_break)
+{
+    // Honour the same workspace switch the other quality detectors use -- this
+    // is a quality-monitor-class behaviour.
+    if (auto* ws = core_.services_.workspace()) {
+        if (!ws->config().agent.quality_monitor_enabled) return;
+    }
+
+    std::string sig = extract_error_signature(tool_output);
+    if (sig.empty()) {
+        // A round with no build error breaks the streak -- the model made
+        // progress (or didn't build this round). Reset so an unrelated error
+        // later doesn't inherit a stale count.
+        last_error_sig_.clear();
+        same_error_streak_ = 0;
+        stuck_nudge_fired_ = false;
+        return;
+    }
+
+    if (sig == last_error_sig_) {
+        ++same_error_streak_;
+    } else {
+        last_error_sig_   = sig;
+        same_error_streak_ = 1;
+        stuck_nudge_fired_ = false;
+    }
+
+    // A build error just landed. If the model got here by overwriting a large
+    // file wholesale, nudge it toward targeted edits ONCE -- this often heads
+    // off the streak before it needs the harder stuck-error nudge/abort.
+    maybe_hint_large_overwrite();
+
+    if (same_error_streak_ < k_stuck_error_streak) return;
+
+    // One-line preview of the repeating error for the log + activity.
+    std::string preview = sig.substr(0, sig.find('\n'));
+
+    if (!stuck_nudge_fired_) {
+        // First time we cross the streak: nudge the model to change approach.
+        std::string nudge =
+            "[Build loop] You have hit the SAME build error " +
+            std::to_string(same_error_streak_) + " rounds in a row:\n  " +
+            preview + "\n"
+            "Rewriting the whole file is not fixing it. STOP and change approach: "
+            "read the exact failing line(s) with read_file, then make ONE minimal, "
+            "targeted edit_file change that addresses this specific error -- do not "
+            "rewrite unrelated code. If you are unsure what is wrong, say so briefly "
+            "instead of guessing again.";
+        spdlog::warn("AgentCore: stuck on repeating build error ({}x): {}",
+                     same_error_streak_, preview);
+        if (!core_.inject_nudge(nudge, "stuck_build_error")) {
+            // Nudge cap already exhausted by other detectors -> abort now.
+            core_.frontends_.broadcast([](IFrontend& fe) {
+                fe.on_error("Agent appears stuck on a repeating build error "
+                            "(correction cap reached). Stopping.");
+            });
+            out_break = true;
+            return;
+        }
+        stuck_nudge_fired_ = true;
+        return;  // give the nudge a round to take effect
+    }
+
+    // We already nudged for this signature and it STILL recurs -> abort.
+    spdlog::warn("AgentCore: still stuck on the same build error after a nudge "
+                 "({}x): {}; aborting turn", same_error_streak_, preview);
+    core_.frontends_.broadcast([&preview](IFrontend& fe) {
+        fe.on_error("Agent appears stuck on a repeating build error -- the same "
+                    "compile error recurred after a steering hint:\n  " + preview +
+                    "\nStopping. Try a tighter prompt that points at the exact "
+                    "fix, or fix that error manually.");
+    });
+    out_break = true;
+}
+
+void AgentTurnRunner::note_write_call(const ToolCall& call)
+{
+    // Only a write_file that OVERWRITES a large existing file is the thrash
+    // signature. A plain create (overwrite=false) or a small file is fine.
+    if (call.tool_name != "write_file") return;
+    if (!tools::coerce_bool(call.args, "overwrite", false)) return;
+    auto it = call.args.find("content");
+    if (it == call.args.end() || !it->is_string()) return;
+    if (it->get<std::string>().size() < k_large_overwrite_bytes) return;
+    pending_large_overwrite_ = true;
+}
+
+void AgentTurnRunner::maybe_hint_large_overwrite()
+{
+    if (!pending_large_overwrite_) return;
+    pending_large_overwrite_ = false;       // consume: only react to the next build
+    if (large_overwrite_hinted_) return;    // once per turn
+
+    if (auto* ws = core_.services_.workspace()) {
+        if (!ws->config().agent.quality_monitor_enabled) return;
+    }
+
+    std::string hint =
+        "[Edit strategy] You rewrote a large file wholesale and the build still "
+        "fails. Rewriting the entire file each round re-introduces errors and "
+        "wastes the context budget. Prefer edit_file with a small, targeted "
+        "old_string/new_string change that fixes ONLY the reported error, instead "
+        "of another full write_file overwrite.";
+    if (core_.inject_nudge(hint, "large_overwrite")) {
+        large_overwrite_hinted_ = true;
+        spdlog::info("AgentCore: hinted edit_file over large write_file overwrite");
+    }
+    // If inject_nudge returned false (cap exhausted) we just skip the hint --
+    // the stuck-error path will handle the abort.
 }
 
 } // namespace locus

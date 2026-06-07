@@ -144,6 +144,10 @@ public:
     // renders just "round N".
     void set_round_progress(int round, int max_rounds);
 
+    // S6.20 -- transient LLM-transport retry/backoff notice in the footer
+    // status area. Superseded by the next round-progress / turn-complete event.
+    void set_transient_status(const wxString& status);
+
     // S6.13 follow-up -- show / hide the Commit-now button. Called from
     // WxFrontend::on_reasoning_watchdog_tripped (show) and
     // on_reasoning_watchdog_cleared / on_turn_complete (hide). Idempotent.
@@ -189,6 +193,25 @@ public:
         std::function<void(std::optional<tools::PermissionPreset>)>;
     void set_on_permission_preset_pick(PermissionPresetPickFn cb) {
         on_permission_preset_pick_ = std::move(cb);
+    }
+
+    // S6.16 -- active LLM endpoint picker in the chat footer. `set_endpoints`
+    // populates the choice from the EndpointProfileStore (one row per profile
+    // name) + a trailing "Edit endpoints..." sentinel; `active` selects the
+    // current row. `set_active_endpoint` is the no-op-if-same updater driven by
+    // the on_endpoint_changed event. `set_endpoint_tooltip` shows base_url +
+    // masked key. on_endpoint_pick fires with a profile name when the user
+    // picks a normal row; on_open_endpoint_settings fires when they pick the
+    // sentinel (the selection reverts to the active row).
+    void set_endpoints(const std::vector<std::string>& names,
+                       const std::string& active);
+    void set_active_endpoint(const std::string& name);
+    void set_endpoint_tooltip(const wxString& tip);
+    void set_on_endpoint_pick(std::function<void(const std::string&)> cb) {
+        on_endpoint_pick_ = std::move(cb);
+    }
+    void set_on_open_endpoint_settings(std::function<void()> cb) {
+        on_open_endpoint_settings_ = std::move(cb);
     }
 
     // S5.G -- collapsed system-prompt bubble at the top of the chat. Renders
@@ -335,6 +358,15 @@ private:
     tools::PermissionPreset preset_effective_   = tools::PermissionPreset::ask_before_edits;
     bool                   preset_is_runtime_  = false;
     PermissionPresetPickFn on_permission_preset_pick_;
+
+    // S6.16 -- endpoint picker. endpoint_names_ mirrors the non-sentinel rows
+    // so the selection handler can map index -> name and snap back to the
+    // active row when the sentinel is chosen.
+    wxChoice*                                endpoint_choice_ = nullptr;
+    std::vector<std::string>                 endpoint_names_;
+    std::string                              endpoint_active_;
+    std::function<void(const std::string&)>  on_endpoint_pick_;
+    std::function<void()>                    on_open_endpoint_settings_;
 
     // S5.Z task 2 find-in-chat bar.  Hidden by default; toggled via the
     // View > Find in Conversation menu item (Ctrl+F) or the footer Find

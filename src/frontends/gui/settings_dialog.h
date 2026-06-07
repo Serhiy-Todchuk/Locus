@@ -17,6 +17,7 @@ class McpSettingsPanel;
 class NotificationsSettingsPanel;
 class SessionsSettingsPanel;
 class AgentSettingsPanel;
+class EndpointsSettingsPanel;
 
 // Modal dialog for editing workspace + LLM settings.
 // Thin shell: owns a wxNotebook and one per-tab ISettingsPanel. On OK, calls
@@ -28,7 +29,8 @@ class AgentSettingsPanel;
 class SettingsDialog : public wxDialog {
 public:
     SettingsDialog(wxWindow* parent, WorkspaceConfig& config, IToolRegistry& tools,
-                   McpManager* mcp = nullptr);
+                   McpManager* mcp = nullptr,
+                   const char* select_tab = nullptr);
 
     // True if user clicked OK and values changed.
     bool config_changed()       const { return changed_; }
@@ -38,6 +40,10 @@ public:
     bool index_changed()        const { return index_changed_; }
     bool semantic_changed()     const { return semantic_changed_; }
     bool capabilities_changed() const { return capabilities_changed_; }
+    // S6.16 -- the global endpoints store was mutated (add/edit/remove/active).
+    // Distinct from llm_changed_ (workspace LLM fields); the caller re-broadcasts
+    // the active endpoint to open chat tabs.
+    bool endpoints_changed()    const { return endpoints_changed_; }
 
 private:
     void on_ok(wxCommandEvent& evt);
@@ -60,12 +66,14 @@ private:
     NotificationsSettingsPanel* notifications_panel_ = nullptr;
     SessionsSettingsPanel*      sessions_panel_      = nullptr;
     AgentSettingsPanel*         agent_panel_         = nullptr;
+    EndpointsSettingsPanel*     endpoints_panel_     = nullptr;
 
     bool changed_              = false;
     bool llm_changed_          = false;
     bool index_changed_        = false;
     bool semantic_changed_     = false;
     bool capabilities_changed_ = false;
+    bool endpoints_changed_    = false;
 };
 
 } // namespace locus

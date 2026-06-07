@@ -157,6 +157,7 @@ ChatPanel::ChatPanel(wxWindow* parent,
     mode_row->AddStretchSpacer();
     mode_row->Add(find_btn_,         0, wxALIGN_CENTER_VERTICAL);
     mode_row->AddStretchSpacer();
+    mode_row->Add(endpoint_choice_,  0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
     mode_row->Add(preset_choice_,    0, wxALIGN_CENTER_VERTICAL);
 
     // Footer bar. Order: ctx_label (flex) -- round_chip -- compacted_btn --
@@ -419,6 +420,29 @@ void ChatPanel::create_footer()
         }
 
         if (on_permission_preset_pick_) on_permission_preset_pick_(picked);
+    });
+
+    // S6.16 -- active LLM endpoint picker. Populated lazily by set_endpoints();
+    // starts with just the sentinel so the widget exists for layout + UIA.
+    endpoint_choice_ = new wxChoice(this, wxID_ANY);
+    endpoint_choice_->SetName(ui_names::kChatEndpointChoice);
+    gui::apply_locus_accessible_name(endpoint_choice_);
+    endpoint_choice_->SetToolTip("Active LLM endpoint for this tab. "
+                                 "Switching applies on your next message.");
+    endpoint_choice_->Bind(wxEVT_CHOICE, [this](wxCommandEvent&) {
+        int sel = endpoint_choice_->GetSelection();
+        if (sel < 0) return;
+        // Last row is the "Edit endpoints..." sentinel.
+        if (sel >= static_cast<int>(endpoint_names_.size())) {
+            // Revert to the active row, then open Settings.
+            set_active_endpoint(endpoint_active_);
+            if (on_open_endpoint_settings_) on_open_endpoint_settings_();
+            return;
+        }
+        const std::string& picked = endpoint_names_[sel];
+        if (picked == endpoint_active_) return;   // no-op re-pick
+        endpoint_active_ = picked;
+        if (on_endpoint_pick_) on_endpoint_pick_(picked);
     });
 
     refresh_action_btn();
@@ -855,6 +879,11 @@ void ChatPanel::set_round_progress(int round, int max_rounds)
     if (footer_chips_->set_round_progress(round, max_rounds)) Layout();
 }
 
+void ChatPanel::set_transient_status(const wxString& status)
+{
+    if (footer_chips_->set_transient_status(status)) Layout();
+}
+
 void ChatPanel::set_commit_now_visible(bool visible)
 {
     if (!commit_btn_) return;
@@ -1105,6 +1134,48 @@ void ChatPanel::on_permission_preset_changed(tools::PermissionPreset effective,
         preset_choice_->Refresh();
     }
     Layout();
+}
+
+// ---------------------------------------------------------------------------
+// S6.16 -- endpoint picker
+// ---------------------------------------------------------------------------
+
+void ChatPanel::set_endpoints(const std::vector<std::string>& names,
+                              const std::string& active)
+{
+    if (!endpoint_choice_) return;
+    endpoint_names_ = names;
+    endpoint_active_ = active;
+
+    endpoint_choice_->Clear();
+    for (const auto& n : names)
+        endpoint_choice_->Append(wxString::FromUTF8(n));
+    endpoint_choice_->Append("Edit endpoints...");   // trailing sentinel
+
+    set_active_endpoint(active);
+    Layout();
+}
+
+void ChatPanel::set_active_endpoint(const std::string& name)
+{
+    if (!endpoint_choice_) return;
+    endpoint_active_ = name;
+    for (size_t i = 0; i < endpoint_names_.size(); ++i) {
+        if (endpoint_names_[i] == name) {
+            endpoint_choice_->SetSelection(static_cast<int>(i));
+            return;
+        }
+    }
+    // Active profile not in the list (e.g. follow-global before populate);
+    // leave selection unchanged rather than landing on the sentinel.
+    if (endpoint_choice_->GetSelection() == wxNOT_FOUND
+        && !endpoint_names_.empty())
+        endpoint_choice_->SetSelection(0);
+}
+
+void ChatPanel::set_endpoint_tooltip(const wxString& tip)
+{
+    if (endpoint_choice_) endpoint_choice_->SetToolTip(tip);
 }
 
 // ---------------------------------------------------------------------------

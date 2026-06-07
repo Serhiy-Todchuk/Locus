@@ -75,6 +75,13 @@ public:
     IWorkspaceServices& services() { return services_; }
     const LLMConfig&   llm_config() const { return llm_config_; }
 
+    // S6.16 -- replace the LLM config after an endpoint hot-swap. Only the
+    // runtime-relevant fields the meter + budget read are honoured here
+    // (context_limit drives the reserve); the system prompt stays byte-stable
+    // for the rest of the session by design. Recomputes the reserve. Must run
+    // on the agent thread (same discipline as the other mutators).
+    void set_llm_config(LLMConfig cfg);
+
     // Best-effort current token count (server-reported when present, else
     // heuristic).
     int current_tokens() const;

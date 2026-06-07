@@ -347,6 +347,7 @@ add_library(locus_core STATIC
     src/llm/json_repair.cpp
     src/llm/tool_call_grammar.cpp
     src/llm/llm_client.cpp
+    src/llm/endpoint_profile.cpp
     src/llm/openai_transport.cpp
     src/llm/xml_tool_call_extractor.cpp
     src/llm/stream_decoders/openai_decoder.cpp
@@ -388,6 +389,7 @@ add_library(locus_core STATIC
     src/agent/tool_dispatcher.cpp
     src/agent/agent_loop.cpp
     src/agent/agent_turn.cpp
+    src/agent/build_error_detector.cpp
     src/agent/slash_commands.cpp
     src/agent/prompt_templates.cpp
     src/agent/agent_core.cpp
@@ -514,6 +516,7 @@ add_executable(locus_gui WIN32
     src/frontends/gui/settings/notifications_settings_panel.cpp
     src/frontends/gui/settings/sessions_settings_panel.cpp
     src/frontends/gui/settings/agent_settings_panel.cpp
+    src/frontends/gui/settings/endpoints_settings_panel.cpp
     src/frontends/gui/notification_sounds.cpp
     src/frontends/gui/markdown.cpp
     src/frontends/gui/autostart.cpp

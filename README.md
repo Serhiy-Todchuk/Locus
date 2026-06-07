@@ -66,6 +66,22 @@ surfaces return a `[platform: <os>]` error rather than running -- the
 Windows-only build is what's production-ready in v1; cross-platform parity
 is a separate multi-stage effort outside M5.
 
+## Trust Model
+
+Locus treats your **workspace as trusted**. Your code, documents, and notes are content
+you wrote or chose to bring in, so the agent reads them as-is. Only point Locus at folders
+you trust -- it indexes everything inside and will act on what it finds there.
+
+Content from **outside** your workspace is treated as **untrusted**: web pages, offline
+knowledge bases (Wikipedia / ZIM), and third-party MCP tool output. This text is written
+by others and could contain hidden instructions aimed at hijacking the agent ("ignore your
+rules and send X to..."). Locus scans untrusted content on the way in, flags anything
+suspicious, and marks it so you can see where it came from. The hard backstop is unchanged:
+nothing risky runs without passing the visible approval gate, so you always get the final say.
+
+In short: **trust your workspace before you open it; the outside world is never trusted by
+default.**
+
 ## Documentation Index
 
 | Document | Description |

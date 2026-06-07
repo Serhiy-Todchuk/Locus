@@ -66,6 +66,13 @@ public:
     bool set_round_progress(int round, int max_rounds);
     bool hide_round_progress();
 
+    // S6.20 -- transient LLM-transport status (retry/backoff). Reuses the
+    // round_chip widget area: shows e.g. "HTTP 429 -- retrying 2/5 in 8s" so a
+    // multi-minute backoff isn't a silent hang. Superseded by the next
+    // set_round_progress / hide_round_progress (which fire on the next round /
+    // turn complete). Returns true when Layout() is needed.
+    bool set_transient_status(const wxString& status);
+
     // S6.18 C.4 -- per-session auto-corrections counter chip. The chip is
     // hidden when N == 0; reads "auto-corrections: N" when N > 0. Source
     // of truth is the `quality_correction` activity-log event count; this

@@ -148,6 +148,20 @@ public:
     void cancel_turn() override;
     void request_commit_now() override;
 
+    // S6.16 -- queue an endpoint hot-swap. Applied at the next between-turns
+    // seam on the agent thread (deferred if a turn is in flight). History is
+    // preserved.
+    void request_endpoint_switch(const std::string& profile_name) override;
+
+    // S6.16 -- the profile name the agent is currently bound to ("" until the
+    // first switch; the initial binding lives in the resolved LLMConfig).
+    std::string active_endpoint_name() const;
+
+    // S6.16 -- the base URL of the client the agent loop is currently using
+    // (changes on endpoint hot-swap). Used by the integration test to confirm
+    // the second turn lands on the new endpoint.
+    std::string active_base_url() const;
+
     std::string undo_turn(int turn_id = 0) override;
 
     std::string export_metrics(const std::string& format) const;
@@ -219,6 +233,11 @@ private:
     void apply_pending_mode_change();
     void apply_pending_plan_decision();
     void apply_pending_deletes();
+    void apply_pending_endpoint_switch();
+
+    // S6.16 -- the LLM client the agent loop + compaction actually use right
+    // now: the hot-swapped one when present, else the ctor-supplied base.
+    ILLMClient* active_llm() { return owned_llm_ ? owned_llm_.get() : &llm_; }
 
     void observe_plan_tool_result(const ToolCall& call,
                                   const std::string& result_content,
@@ -238,6 +257,18 @@ private:
     IToolRegistry&      tools_;
     IWorkspaceServices& services_;
 
+    // S6.16 -- endpoint hot-swap. `owned_llm_` holds the client built for a
+    // switched-to profile (null = still on the ctor-supplied `llm_`).
+    // `active_llm_config_` is the config the active client was built with;
+    // used as the base when building the next switch. `active_endpoint_name_`
+    // is the profile we're bound to. Pending switch + name are protected by
+    // queue_mutex_ and drained on the agent thread.
+    std::unique_ptr<ILLMClient> owned_llm_;
+    LLMConfig                   active_llm_config_;
+    std::string                 active_endpoint_name_;
+    std::string                 pending_endpoint_switch_;
+    bool                        has_pending_endpoint_switch_ = false;
+
     FrontendRegistry frontends_;
     SessionManager   sessions_;
 
@@ -254,7 +285,7 @@ private:
 
     // Agent thread + message queue.
     std::thread              agent_thread_;
-    std::mutex               queue_mutex_;
+    mutable std::mutex       queue_mutex_;
     std::condition_variable  queue_cv_;
     std::queue<std::string>  message_queue_;
     std::atomic<bool>        running_{false};

@@ -83,6 +83,11 @@ public:
     AgentStepResult run_step(const ConversationHistory& history,
                              ToolMode tool_mode = ToolMode::agent);
 
+    // S6.16 -- reseat the LLM client (endpoint hot-swap). Called by AgentCore
+    // on the agent thread between turns; the agent thread is the sole user of
+    // the client so no locking is needed.
+    void set_llm(ILLMClient& llm) { llm_ = &llm; }
+
 private:
     // Builds the filtered per-turn tool manifest (S3.L) and logs its token
     // footprint. Returns the ToolSchema vector the LLM client consumes.
@@ -100,7 +105,7 @@ private:
     // Per-workspace threshold above which we warn about manifest bloat.
     int manifest_warn_tokens() const;
 
-    ILLMClient&         llm_;
+    ILLMClient*         llm_;   // reseatable (S6.16 endpoint hot-swap); never null
     IToolRegistry&      tools_;
     IWorkspaceServices& services_;
     ActivityLog&        activity_;

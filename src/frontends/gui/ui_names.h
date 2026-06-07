@@ -41,6 +41,9 @@ inline constexpr const char* kChatCompactedChip  = "locus.chat.compacted_chip";
 // shown only while the agent is busy, hidden on turn complete.
 inline constexpr const char* kChatRoundChip      = "locus.chat.round_chip";
 inline constexpr const char* kChatPresetChoice   = "locus.chat.preset_choice";
+// S6.16 -- active LLM endpoint picker; sentinel "Edit endpoints..." row opens
+// Settings > Endpoints.
+inline constexpr const char* kChatEndpointChoice = "locus.chat.endpoint_choice";
 inline constexpr const char* kChatSlashPopup     = "locus.chat.slash_popup";
 inline constexpr const char* kChatMentionPopup   = "locus.chat.mention_popup";
 
@@ -92,6 +95,7 @@ inline constexpr const char* kSettingsTabCapabilities = "locus.settings.tab.capa
 inline constexpr const char* kSettingsTabNotifications = "locus.settings.tab.notifications";
 inline constexpr const char* kSettingsTabSessions     = "locus.settings.tab.sessions";
 inline constexpr const char* kSettingsTabAgent        = "locus.settings.tab.agent";
+inline constexpr const char* kSettingsTabEndpoints    = "locus.settings.tab.endpoints";
 // S6.18 C.1 / C.2 -- Settings > Agent tab named chooser widgets.
 inline constexpr const char* kSettingsCompactionAggressiveness =
     "locus.settings.compaction.aggressiveness";
@@ -126,6 +130,22 @@ inline constexpr const char* kSettingsApprovalsTruncateLines =
     "locus.settings.approvals.run_command_truncate_lines";
 // Per-tool dropdowns are named "locus.settings.approvals.choice.<tool_name>"
 // composed at construction; not a constant here.
+
+// Settings -> Endpoints tab (S6.16).
+inline constexpr const char* kSettingsEndpointsList        = "locus.settings.endpoints.list";
+inline constexpr const char* kSettingsEndpointsAddBtn      = "locus.settings.endpoints.add_btn";
+inline constexpr const char* kSettingsEndpointsEditBtn     = "locus.settings.endpoints.edit_btn";
+inline constexpr const char* kSettingsEndpointsRemoveBtn   = "locus.settings.endpoints.remove_btn";
+inline constexpr const char* kSettingsEndpointsSetActiveBtn = "locus.settings.endpoints.set_active_btn";
+// Add / Edit modal sub-controls.
+inline constexpr const char* kSettingsEndpointsEditDialog       = "locus.settings.endpoints.edit.dialog";
+inline constexpr const char* kSettingsEndpointsEditName         = "locus.settings.endpoints.edit.name";
+inline constexpr const char* kSettingsEndpointsEditBaseUrl      = "locus.settings.endpoints.edit.base_url";
+inline constexpr const char* kSettingsEndpointsEditApiKey       = "locus.settings.endpoints.edit.api_key";
+inline constexpr const char* kSettingsEndpointsEditModel        = "locus.settings.endpoints.edit.model";
+inline constexpr const char* kSettingsEndpointsEditToolFormat   = "locus.settings.endpoints.edit.tool_format";
+inline constexpr const char* kSettingsEndpointsEditContextLimit = "locus.settings.endpoints.edit.context_limit";
+inline constexpr const char* kSettingsEndpointsEditShowKey      = "locus.settings.endpoints.edit.show_key";
 
 // Settings -> MCP tab.
 inline constexpr const char* kSettingsMcpList         = "locus.settings.mcp.list";

@@ -7,9 +7,11 @@
 #include "manage_sessions_dialog.h"
 #include "new_tab_button_tab_art.h"
 #include "notification_sounds.h"
+#include "endpoint_tooltip.h"
 #include "ui_names.h"
 #include "ui_state.h"
 
+#include "../../llm/endpoint_profile.h"
 #include "../../core/locus_tab.h"
 #include "../../core/watcher_pump.h"
 #include "../../core/workspace_ui_state.h"
@@ -290,8 +292,10 @@ LocusFrame::LocusFrame(LocusSession& session)
     Bind(EVT_AGENT_HISTORY_MSG_DELETED,&AgentEventRouter::on_agent_history_msg_deleted,r);
     Bind(EVT_AGENT_PRESET_CHANGED,     &AgentEventRouter::on_agent_preset_changed,     r);
     Bind(EVT_AGENT_ROUND_PROGRESS,     &AgentEventRouter::on_agent_round_progress,     r);
+    Bind(EVT_AGENT_LLM_RETRY,          &AgentEventRouter::on_agent_llm_retry,          r);
     Bind(EVT_AGENT_WATCHDOG_TRIPPED,   &AgentEventRouter::on_agent_watchdog_tripped,   r);
     Bind(EVT_AGENT_WATCHDOG_CLEARED,   &AgentEventRouter::on_agent_watchdog_cleared,   r);
+    Bind(EVT_AGENT_ENDPOINT_CHANGED,   &AgentEventRouter::on_agent_endpoint_changed,   r);
 
     // Notebook events.
     if (notebook_) {
@@ -510,6 +514,27 @@ void LocusFrame::configure_chat_panel(ChatPanel* chat, LocusTab& tab)
             if (picked) agent_ptr->set_runtime_permission_preset(*picked);
             else        agent_ptr->clear_runtime_permission_preset();
         });
+
+    // S6.16 -- populate the endpoint picker from the global store + wire the
+    // pick / sentinel callbacks.
+    {
+        EndpointProfileStore store;
+        store.load();
+        std::vector<std::string> names;
+        for (const auto& p : store.list())
+            if (!p.name.empty()) names.push_back(p.name);
+        std::string active = agent_ptr->active_endpoint_name();
+        if (active.empty()) active = store.active();
+        chat->set_endpoints(names, active);
+        if (const auto* prof = store.find(active))
+            chat->set_endpoint_tooltip(gui::endpoint_chip_tooltip(*prof));
+    }
+    chat->set_on_endpoint_pick([agent_ptr](const std::string& name) {
+        agent_ptr->request_endpoint_switch(name);
+    });
+    chat->set_on_open_endpoint_settings([this]() {
+        show_settings_dialog(ui_names::kSettingsTabEndpoints);
+    });
     // S6.13 follow-up -- Commit-now click cancels the in-flight LLM stream
     // and injects a "Stop reasoning, commit to a tool call now" steering
     // message via the existing request_commit_now() core API.
@@ -1133,13 +1158,33 @@ void LocusFrame::show_compaction_dialog()
     }
 }
 
-void LocusFrame::show_settings_dialog()
+void LocusFrame::show_settings_dialog(const char* select_tab)
 {
     SettingsDialog dlg(this, workspace_.config(),
-                        session_.active_tab().agent().tools(), mcp_);
+                        session_.active_tab().agent().tools(), mcp_, select_tab);
     if (dlg.ShowModal() == wxID_OK && dlg.config_changed()) {
         workspace_.save_config();
         SetStatusText("Settings saved", 0);
+
+        // S6.16 -- the global endpoints store changed: re-populate every tab's
+        // chat-footer picker and hot-swap each tab to the now-active profile.
+        if (dlg.endpoints_changed()) {
+            EndpointProfileStore store;
+            store.load();
+            std::vector<std::string> names;
+            for (const auto& p : store.list())
+                if (!p.name.empty()) names.push_back(p.name);
+            const std::string active = store.active();
+            for (auto& [tid, ui] : tabs_ui_) {
+                if (ui.chat) {
+                    ui.chat->set_endpoints(names, active);
+                    if (const auto* prof = store.find(active))
+                        ui.chat->set_endpoint_tooltip(gui::endpoint_chip_tooltip(*prof));
+                }
+            }
+            for (int i = 0; i < session_.tab_count(); ++i)
+                session_.tab(i).agent().request_endpoint_switch(active);
+        }
 
         // S5.S -- the saved approval map is the new baseline. Clear every
         // tab's runtime preset override (the chat-footer combobox) so the

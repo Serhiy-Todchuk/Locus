@@ -51,7 +51,7 @@ ToolResult RunCommandTool::execute(const ToolCall& call, IWorkspaceServices& ws,
     // suites, and one-shot scripts complete without the agent having to
     // override the cap; truly long-running things (servers, watchers) still
     // belong on `run_command_bg`.
-    int timeout_ms = call.args.value("timeout_ms", 1800000);
+    int timeout_ms = static_cast<int>(tools::coerce_int(call.args, "timeout_ms", 1800000));
 
     if (command.empty())
         return tools::missing_required_arg(*this, "command",
@@ -497,7 +497,7 @@ bool ReadProcessOutputTool::available(IWorkspaceServices& ws) const
 
 std::string ReadProcessOutputTool::preview(const ToolCall& call) const
 {
-    int pid = call.args.value("process_id", 0);
+    int pid = static_cast<int>(tools::coerce_int(call.args, "process_id", 0));
     return "Read output of process " + std::to_string(pid);
 }
 
@@ -517,11 +517,11 @@ ToolResult ReadProcessOutputTool::execute(const ToolCall& call, IWorkspaceServic
     if (!call.args.contains("process_id"))
         return tools::missing_required_arg(*this, "process_id",
             "the integer id of a background process previously spawned via run_command_bg");
-    int id = call.args.value("process_id", 0);
+    int id = static_cast<int>(tools::coerce_int(call.args, "process_id", 0));
 
     std::optional<std::size_t> since;
-    if (call.args.contains("since_offset") && call.args["since_offset"].is_number_integer()) {
-        long long v = call.args["since_offset"].get<long long>();
+    if (call.args.contains("since_offset") && !call.args["since_offset"].is_null()) {
+        long long v = tools::coerce_int(call.args, "since_offset", 0);
         if (v < 0) v = 0;
         since = static_cast<std::size_t>(v);
     }
@@ -574,7 +574,7 @@ bool StopProcessTool::available(IWorkspaceServices& ws) const
 
 std::string StopProcessTool::preview(const ToolCall& call) const
 {
-    int pid = call.args.value("process_id", 0);
+    int pid = static_cast<int>(tools::coerce_int(call.args, "process_id", 0));
     return "Stop process " + std::to_string(pid);
 }
 
@@ -590,7 +590,7 @@ ToolResult StopProcessTool::execute(const ToolCall& call, IWorkspaceServices& ws
     if (!call.args.contains("process_id"))
         return tools::missing_required_arg(*this, "process_id",
             "the integer id of the background process to terminate");
-    int id = call.args.value("process_id", 0);
+    int id = static_cast<int>(tools::coerce_int(call.args, "process_id", 0));
 
     if (!reg->stop(id))
         return error_result("Error: unknown process_id " + std::to_string(id));

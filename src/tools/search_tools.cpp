@@ -108,7 +108,7 @@ ToolResult SearchTextTool::execute(const ToolCall& call, IWorkspaceServices& ws,
         return *err;
 
     std::string query = call.args.value("query", "");
-    int max_results = call.args.value("max_results", 8);
+    int max_results = static_cast<int>(tools::coerce_int(call.args, "max_results", 8));
 
     if (query.empty())
         return tools::missing_required_arg(*this, "query",
@@ -161,7 +161,7 @@ ToolResult SearchSymbolsTool::execute(const ToolCall& call, IWorkspaceServices& 
     std::string name_query = call.args.value("name", "");
     std::string kind     = call.args.value("kind", "");
     std::string language = call.args.value("language", "");
-    int         max_results = call.args.value("max_results", 50);
+    int         max_results = static_cast<int>(tools::coerce_int(call.args, "max_results", 50));
     if (max_results <= 0) max_results = 50;
 
     if (name_query.empty())
@@ -314,7 +314,7 @@ ToolResult SearchSemanticTool::execute(const ToolCall& call, IWorkspaceServices&
         return tools::missing_required_arg(*this, "query",
             "the natural-language description of what to find (vector similarity)");
 
-    int max_results = call.args.value("max_results", 5);
+    int max_results = static_cast<int>(tools::coerce_int(call.args, "max_results", 5));
 
     auto embedding = emb->embed_query(query);
 
@@ -421,8 +421,8 @@ ToolResult SearchRegexTool::execute(const ToolCall& call, IWorkspaceServices& ws
             "the ECMAScript regex pattern to match per line");
 
     std::string path_glob    = call.args.value("path_glob", "");
-    bool        case_sens    = call.args.value("case_sensitive", true);
-    int         max_results  = call.args.value("max_results", 50);
+    bool        case_sens    = tools::coerce_bool(call.args, "case_sensitive", true);
+    int         max_results  = static_cast<int>(tools::coerce_int(call.args, "max_results", 50));
     if (max_results <= 0) max_results = 50;
 
     // Split comma- or pipe-separated patterns so the model can pass
@@ -679,7 +679,7 @@ ToolResult SearchAstTool::execute(const ToolCall& call, IWorkspaceServices& ws,
     std::string query_src      = call.args.value("query", "");
     std::string path_glob      = call.args.value("path_glob", "");
     std::string capture_filter = call.args.value("capture", "");
-    int         max_results    = call.args.value("max_results", 50);
+    int         max_results    = static_cast<int>(tools::coerce_int(call.args, "max_results", 50));
     if (max_results <= 0) max_results = 50;
 
     std::vector<std::string> path_globs = split_path_glob(path_glob);

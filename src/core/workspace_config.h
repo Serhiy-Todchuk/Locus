@@ -127,6 +127,16 @@ struct WorkspaceConfig {
         // Stored in `.locus/config.json` so a workspace re-open uses the chosen
         // value without forcing a re-detect.
         std::string preset_name = "";
+
+        // S6.16 -- per-workspace endpoint-profile override. Empty = follow the
+        // global store's `active` profile (the common case). A non-empty value
+        // pins this workspace to a named profile in
+        // <global_dir>/endpoints.json regardless of what other workspaces use.
+        // Resolved in LocusSession::load_shared_resources. The legacy flat
+        // `endpoint` / `model` / `tool_format` fields above still win as
+        // per-workspace overrides on top of the resolved profile (one-way
+        // ratchet so the legacy fields can be dropped cleanly in a future stage).
+        std::string active_endpoint = "";
     };
 
     // S4.L per-turn auto-commit. When `auto_commit` is true AND the workspace

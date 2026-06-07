@@ -305,3 +305,210 @@ TEST_CASE("edit_file end-to-end: missing file_path returns schema in error",
     REQUIRE_THAT(r.content, ContainsSubstring("edits_array"));
     fs::remove_all(tmp);
 }
+
+// -- coerce_bool: type-tolerant boolean tool-arg read -----------------------
+//
+// Regression for the agentic DX12 session (2026-06-06): qwen3-coder-480b
+// emitted `"overwrite":"True"` (Python-style string bool) on a write_file
+// call. WriteFileTool::preview ran `call.args.value("overwrite", false)` on
+// the UI thread during the tool-pending broadcast; nlohmann throws type_error
+// on a string->bool conversion, the throw escaped the UI-thread call site,
+// and locus_gui.exe fail-fasted (0xc0000409). coerce_bool never throws.
+
+TEST_CASE("coerce_bool accepts real bool, string forms, ints; never throws",
+          "[tool_arg_validation][coerce_bool]")
+{
+    using locus::tools::coerce_bool;
+
+    // Real JSON bool passes through.
+    REQUIRE(coerce_bool(nlohmann::json{{"k", true}},  "k", false) == true);
+    REQUIRE(coerce_bool(nlohmann::json{{"k", false}}, "k", true)  == false);
+
+    // The crash case: Python-style capitalized string booleans.
+    REQUIRE(coerce_bool(nlohmann::json{{"k", "True"}},  "k", false) == true);
+    REQUIRE(coerce_bool(nlohmann::json{{"k", "False"}}, "k", true)  == false);
+
+    // Lowercase + numeric-string + yes/no/on/off.
+    REQUIRE(coerce_bool(nlohmann::json{{"k", "true"}},  "k", false) == true);
+    REQUIRE(coerce_bool(nlohmann::json{{"k", "1"}},     "k", false) == true);
+    REQUIRE(coerce_bool(nlohmann::json{{"k", "yes"}},   "k", false) == true);
+    REQUIRE(coerce_bool(nlohmann::json{{"k", "on"}},    "k", false) == true);
+    REQUIRE(coerce_bool(nlohmann::json{{"k", "0"}},     "k", true)  == false);
+    REQUIRE(coerce_bool(nlohmann::json{{"k", "off"}},   "k", true)  == false);
+
+    // Integer / float forms.
+    REQUIRE(coerce_bool(nlohmann::json{{"k", 1}},   "k", false) == true);
+    REQUIRE(coerce_bool(nlohmann::json{{"k", 0}},   "k", true)  == false);
+    REQUIRE(coerce_bool(nlohmann::json{{"k", 2.5}}, "k", false) == true);
+
+    // Missing key / null / unparseable -> fallback (and no throw).
+    REQUIRE(coerce_bool(nlohmann::json::object(),       "k", true)  == true);
+    REQUIRE(coerce_bool(nlohmann::json{{"k", nullptr}}, "k", true)  == true);
+    REQUIRE(coerce_bool(nlohmann::json{{"k", "maybe"}}, "k", false) == false);
+    REQUIRE(coerce_bool(nlohmann::json{{"k",
+        nlohmann::json::array({1, 2})}}, "k", true) == true);
+}
+
+TEST_CASE("write_file: string 'True' overwrite does not throw in preview or execute",
+          "[tool_arg_validation][coerce_bool]")
+{
+    auto tmp = make_tmp();
+    locus::test::FakeWorkspaceServices ws{tmp};
+    locus::WriteFileTool tool;
+
+    // Pre-existing file so the overwrite flag is actually load-bearing.
+    write_file(tmp, "main.cpp", "old\n");
+
+    locus::ToolCall call{"c1", "write_file",
+        {{"path", "main.cpp"}, {"content", "new content\n"},
+         {"overwrite", "True"}}};
+
+    // preview() is the UI-thread path that crashed -- must not throw.
+    std::string prev;
+    REQUIRE_NOTHROW(prev = tool.preview(call));
+    REQUIRE_THAT(prev, ContainsSubstring("overwrite"));
+
+    // execute() must honour the string-bool and overwrite, not error out.
+    locus::ToolResult r;
+    REQUIRE_NOTHROW(r = tool.execute(call, ws));
+    REQUIRE(r.success);
+
+    std::string got;
+    {
+        std::ifstream in(tmp / "main.cpp", std::ios::binary);
+        got.assign((std::istreambuf_iterator<char>(in)), {});
+    }
+    REQUIRE_THAT(got, ContainsSubstring("new content"));
+
+    fs::remove_all(tmp);
+}
+
+// -- coerce_json_array: tolerant array tool-arg read ------------------------
+//
+// Regression for the agentic DX12 session (2026-06-06): qwen3-coder-480b
+// emitted `"edits":"[{...}]"` -- the edits array double-encoded as a JSON
+// STRING. EditFileTool::preview ran `call.args.value("edits", json::array())`
+// on the agent thread; nlohmann throws type_error (default array vs stored
+// string) and the process fail-fasted (0xc0000409). coerce_json_array never
+// throws and unwraps the stringified array.
+
+TEST_CASE("coerce_json_array unwraps real array, JSON-string array; never throws",
+          "[tool_arg_validation][coerce_json_array]")
+{
+    using locus::tools::coerce_json_array;
+
+    // Real array passes through.
+    auto real = nlohmann::json{{"edits", nlohmann::json::array({
+        nlohmann::json{{"old_string", "a"}, {"new_string", "b"}}})}};
+    auto r1 = coerce_json_array(real, "edits");
+    REQUIRE(r1.is_array());
+    REQUIRE(r1.size() == 1);
+    REQUIRE(r1[0]["old_string"] == "a");
+
+    // The crash case: array double-encoded as a JSON string.
+    auto str = nlohmann::json{{"edits",
+        "[{\"old_string\":\"x\",\"new_string\":\"y\"}]"}};
+    auto r2 = coerce_json_array(str, "edits");
+    REQUIRE(r2.is_array());
+    REQUIRE(r2.size() == 1);
+    REQUIRE(r2[0]["new_string"] == "y");
+
+    // Missing / null / non-array-string -> empty array, no throw.
+    REQUIRE(coerce_json_array(nlohmann::json::object(), "edits").empty());
+    REQUIRE(coerce_json_array(nlohmann::json{{"edits", nullptr}}, "edits").empty());
+    REQUIRE(coerce_json_array(nlohmann::json{{"edits", "not json"}}, "edits").empty());
+    REQUIRE(coerce_json_array(nlohmann::json{{"edits", 42}}, "edits").empty());
+    // A string that parses to a NON-array (object) -> empty array.
+    REQUIRE(coerce_json_array(nlohmann::json{{"edits", "{\"a\":1}"}}, "edits").empty());
+}
+
+// -- coerce_int: tolerant integer tool-arg read -----------------------------
+//
+// Regression for the agentic DX12 session (2026-06-06): qwen3-coder-480b sent
+// read_file with offset/length as STRINGS. `json::value<int>` threw type_error;
+// execute()'s catch-all turned it into an "internal error" result, the model
+// re-sent the same call, and the QualityMonitor repeated-tool-call cap aborted
+// the turn after 2 nudges. coerce_int never throws and parses the string.
+
+TEST_CASE("coerce_int accepts int, float, numeric string; never throws",
+          "[tool_arg_validation][coerce_int]")
+{
+    using locus::tools::coerce_int;
+
+    REQUIRE(coerce_int(nlohmann::json{{"n", 42}},     "n", 7) == 42);
+    REQUIRE(coerce_int(nlohmann::json{{"n", 42.9}},   "n", 7) == 42);   // truncates
+    REQUIRE(coerce_int(nlohmann::json{{"n", "100"}},  "n", 7) == 100);  // the crash case
+    REQUIRE(coerce_int(nlohmann::json{{"n", " 100 "}},"n", 7) == 100);
+    REQUIRE(coerce_int(nlohmann::json{{"n", "-5"}},   "n", 7) == -5);
+    REQUIRE(coerce_int(nlohmann::json{{"n", "100px"}},"n", 7) == 100);  // trailing junk
+    REQUIRE(coerce_int(nlohmann::json{{"n", true}},   "n", 7) == 1);
+
+    // Missing / null / non-numeric -> fallback, no throw.
+    REQUIRE(coerce_int(nlohmann::json::object(),        "n", 7) == 7);
+    REQUIRE(coerce_int(nlohmann::json{{"n", nullptr}},  "n", 7) == 7);
+    REQUIRE(coerce_int(nlohmann::json{{"n", "abc"}},    "n", 7) == 7);
+    REQUIRE(coerce_int(nlohmann::json{{"n",
+        nlohmann::json::array({1})}}, "n", 7) == 7);
+}
+
+TEST_CASE("read_file: string offset/length do not throw and apply",
+          "[tool_arg_validation][coerce_int]")
+{
+    auto tmp = make_tmp();
+    write_file(tmp, "f.txt", "l1\nl2\nl3\nl4\nl5\n");
+    locus::test::FakeWorkspaceServices ws{tmp};
+    locus::ReadFileTool tool;
+
+    // offset + length sent as STRINGS (the failure shape).
+    locus::ToolCall call{"c1", "read_file",
+        {{"path", "f.txt"}, {"offset", "2"}, {"length", "2"}}};
+
+    REQUIRE_NOTHROW(tool.preview(call));
+    locus::ToolResult r;
+    REQUIRE_NOTHROW(r = tool.execute(call, ws));
+    REQUIRE(r.success);
+    REQUIRE_THAT(r.content, ContainsSubstring("l2"));
+    REQUIRE_THAT(r.content, ContainsSubstring("l3"));
+
+    fs::remove_all(tmp);
+}
+
+TEST_CASE("edit_file: stringified edits array applies and preview does not throw",
+          "[tool_arg_validation][coerce_json_array]")
+{
+    auto tmp = make_tmp();
+    write_file(tmp, "code.cpp", "int x = 1;\n");
+    locus::test::FakeWorkspaceServices ws{tmp};
+
+    // edit_file requires the file to have been read first -- run read_file so
+    // the ReadTracker is primed with the exact canonical path execute() checks.
+    {
+        locus::ReadFileTool reader;
+        locus::ToolCall rc{"r", "read_file", {{"path", "code.cpp"}}};
+        REQUIRE(reader.execute(rc, ws).success);
+    }
+
+    locus::EditFileTool tool;
+    // The model double-encoded the edits array as a string.
+    locus::ToolCall call{"c1", "edit_file",
+        {{"file_path", "code.cpp"},
+         {"edits", "[{\"old_string\":\"int x = 1;\",\"new_string\":\"int x = 2;\"}]"}}};
+
+    // preview() is the UI-thread crash path -- must not throw.
+    REQUIRE_NOTHROW(tool.preview(call));
+
+    // execute() must unwrap the string and actually apply the edit.
+    locus::ToolResult r;
+    REQUIRE_NOTHROW(r = tool.execute(call, ws));
+    REQUIRE(r.success);
+
+    std::string got;
+    {
+        std::ifstream in(tmp / "code.cpp", std::ios::binary);
+        got.assign((std::istreambuf_iterator<char>(in)), {});
+    }
+    REQUIRE_THAT(got, ContainsSubstring("int x = 2;"));
+
+    locus::tools::ReadTracker::instance().clear();
+    fs::remove_all(tmp);
+}

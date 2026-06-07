@@ -65,7 +65,7 @@ AgentLoop::AgentLoop(ILLMClient& llm,
                      FrontendRegistry& frontends,
                      std::atomic<bool>& cancel_flag,
                      MetricsAggregator* metrics)
-    : llm_(llm)
+    : llm_(&llm)
     , tools_(tools)
     , services_(services)
     , activity_(activity)
@@ -416,6 +416,12 @@ AgentStepResult AgentLoop::run_step(const ConversationHistory& history,
         frontends_.broadcast([&](IFrontend& fe) { fe.on_error(err); });
         activity_.emit(ActivityKind::error, "LLM error", err);
     };
+    cbs.on_status = [&](const std::string& status) {
+        // S6.20 -- transient-retry / waiting notice from the transport. Surface
+        // it in the footer status line so a multi-minute backoff isn't silent.
+        frontends_.broadcast([&](IFrontend& fe) { fe.on_llm_retry(status); });
+        activity_.emit(ActivityKind::llm_response, "LLM " + status, status);
+    };
     cbs.on_usage = [&](const CompletionUsage& u) {
         budget_.set_server_total(u.total_tokens);
         budget_.set_server_split(u.prompt_tokens, u.completion_tokens);
@@ -508,7 +514,7 @@ AgentStepResult AgentLoop::run_step(const ConversationHistory& history,
         });
     }
 
-    llm_.stream_completion(outgoing, tool_schemas, cbs);
+    llm_->stream_completion(outgoing, tool_schemas, cbs);
 
     // Stop the timer thread before reading post-stream state.
     if (watchdog_timer.joinable()) {
