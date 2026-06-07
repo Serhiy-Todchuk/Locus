@@ -25,8 +25,16 @@ if(NOT EXISTS "${PY_SCRIPT}")
     message(FATAL_ERROR "S5.P lint: Python script not found at ${PY_SCRIPT}")
 endif()
 
+# python3 on macOS/Linux; python on Windows (the python.org installer ships
+# python.exe, not always python3.exe). Try python3 first so modern macOS --
+# which has no bare `python` -- still finds an interpreter.
+find_program(LOCUS_PYTHON NAMES python3 python)
+if(NOT LOCUS_PYTHON)
+    message(FATAL_ERROR "S5.P lint: no python3/python interpreter found on PATH")
+endif()
+
 execute_process(
-    COMMAND python "${PY_SCRIPT}" "${SOURCE_DIR}" "${ALLOWLIST}"
+    COMMAND "${LOCUS_PYTHON}" "${PY_SCRIPT}" "${SOURCE_DIR}" "${ALLOWLIST}"
     RESULT_VARIABLE py_result
     OUTPUT_VARIABLE py_output
     ERROR_VARIABLE  py_error

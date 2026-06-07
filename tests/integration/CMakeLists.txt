@@ -64,10 +64,10 @@ target_compile_definitions(locus_integration_tests PRIVATE
 )
 add_dependencies(locus_integration_tests locus_mock_mcp_server)
 
-# pdfium.dll has to sit next to the exe at runtime (same as locus_tests).
+# The PDFium runtime lib has to sit next to the exe at runtime (same as locus_tests).
 add_custom_command(TARGET locus_integration_tests POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${PDFIUM_DLL}" "$<TARGET_FILE_DIR:locus_integration_tests>"
+            "${PDFIUM_RUNTIME_LIB}" "$<TARGET_FILE_DIR:locus_integration_tests>"
 )
 
 # Deliberately NOT calling catch_discover_tests() -- this target is manual-only.

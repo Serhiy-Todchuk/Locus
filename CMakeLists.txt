@@ -180,23 +180,49 @@ FetchContent_Declare(tree-sitter-kotlin
 )
 
 # PDFium prebuilt binaries (BSD-3-Clause).  Not in vcpkg mainline; pulled
-# from bblanchon/pdfium-binaries as a pinned release.  Ships as a DLL +
-# import lib + headers.  The DLL is copied next to locus.exe at build time.
+# from bblanchon/pdfium-binaries as a pinned release.  The runtime library is
+# copied next to the executable at build time.  Same chromium/6996 tag across
+# platforms so PDF extraction behavior stays identical (S6.9: macOS arm64-only).
+if(APPLE)
+    set(PDFIUM_URL  "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium%2F6996/pdfium-mac-arm64.tgz")
+    set(PDFIUM_HASH "SHA256=1b103d5ebfd8f7b5720ca9ba76888e7efaa80678a49c8f3da3b0ac64ba5c90fb")
+elseif(WIN32)
+    set(PDFIUM_URL  "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium%2F6996/pdfium-win-x64.tgz")
+    set(PDFIUM_HASH "SHA256=83e714c302ceacccf403826d5cb57ea39b77f393d83b8d5781283012774a9378")
+endif()
 FetchContent_Declare(pdfium
-    URL       https://github.com/bblanchon/pdfium-binaries/releases/download/chromium%2F6996/pdfium-win-x64.tgz
-    URL_HASH  SHA256=83e714c302ceacccf403826d5cb57ea39b77f393d83b8d5781283012774a9378
+    URL       ${PDFIUM_URL}
+    URL_HASH  ${PDFIUM_HASH}
     SOURCE_SUBDIR ${TS_NO_CMAKE}
 )
 FetchContent_MakeAvailable(pdfium)
 
-# PDFium imported target -- headers, import lib, DLL path.
+# PDFium imported target -- headers + platform runtime library.
 add_library(pdfium SHARED IMPORTED)
-set_target_properties(pdfium PROPERTIES
-    IMPORTED_LOCATION             "${pdfium_SOURCE_DIR}/bin/pdfium.dll"
-    IMPORTED_IMPLIB               "${pdfium_SOURCE_DIR}/lib/pdfium.dll.lib"
-    INTERFACE_INCLUDE_DIRECTORIES "${pdfium_SOURCE_DIR}/include"
-)
-set(PDFIUM_DLL "${pdfium_SOURCE_DIR}/bin/pdfium.dll" CACHE INTERNAL "")
+if(APPLE)
+    # macOS ships a single libpdfium.dylib (no separate import lib). bblanchon's
+    # build records a CWD-relative install name ("./libpdfium.dylib") the loader
+    # can't resolve from an arbitrary working dir -- rewrite it to @rpath so the
+    # executable's @executable_path rpath (set below) finds the copy POST_BUILD
+    # drops next to the binary. Re-sign ad-hoc after: arm64 rejects a dylib whose
+    # signature install_name_tool just invalidated.
+    execute_process(COMMAND install_name_tool -id @rpath/libpdfium.dylib
+                            "${pdfium_SOURCE_DIR}/lib/libpdfium.dylib")
+    execute_process(COMMAND codesign --force --sign -
+                            "${pdfium_SOURCE_DIR}/lib/libpdfium.dylib")
+    set_target_properties(pdfium PROPERTIES
+        IMPORTED_LOCATION             "${pdfium_SOURCE_DIR}/lib/libpdfium.dylib"
+        INTERFACE_INCLUDE_DIRECTORIES "${pdfium_SOURCE_DIR}/include"
+    )
+    set(PDFIUM_RUNTIME_LIB "${pdfium_SOURCE_DIR}/lib/libpdfium.dylib" CACHE INTERNAL "")
+elseif(WIN32)
+    set_target_properties(pdfium PROPERTIES
+        IMPORTED_LOCATION             "${pdfium_SOURCE_DIR}/bin/pdfium.dll"
+        IMPORTED_IMPLIB               "${pdfium_SOURCE_DIR}/lib/pdfium.dll.lib"
+        INTERFACE_INCLUDE_DIRECTORIES "${pdfium_SOURCE_DIR}/include"
+    )
+    set(PDFIUM_RUNTIME_LIB "${pdfium_SOURCE_DIR}/bin/pdfium.dll" CACHE INTERNAL "")
+endif()
 
 FetchContent_MakeAvailable(
     tree-sitter-c
@@ -454,16 +480,19 @@ target_link_libraries(locus PRIVATE
     locus_core
 )
 
-# Copy pdfium.dll next to locus.exe so it loads at runtime.
+# Copy the PDFium runtime library next to the locus binary so it loads at runtime.
 add_custom_command(TARGET locus POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${PDFIUM_DLL}" "$<TARGET_FILE_DIR:locus>"
+            "${PDFIUM_RUNTIME_LIB}" "$<TARGET_FILE_DIR:locus>"
 )
 
 # -- GUI executable (wxWidgets) ------------------------------------------------
 
 find_package(wxWidgets CONFIG REQUIRED COMPONENTS core base aui stc webview)
-find_package(unofficial-webview2 CONFIG REQUIRED)
+if(WIN32)
+    # Edge WebView2 backend for wxWebView. macOS/Linux wxWebView use system WebKit.
+    find_package(unofficial-webview2 CONFIG REQUIRED)
+endif()
 find_package(md4c CONFIG REQUIRED)
 
 set(LOCUS_GUI_WINDOWS_RESOURCES)
@@ -528,14 +557,14 @@ add_executable(locus_gui WIN32
 target_link_libraries(locus_gui PRIVATE
     locus_core
     wx::core wx::base wx::aui wx::stc wx::webview
-    unofficial::webview2::webview2
+    $<$<PLATFORM_ID:Windows>:unofficial::webview2::webview2>
     md4c::md4c-html
     $<$<PLATFORM_ID:Windows>:winmm>
 )
 
 add_custom_command(TARGET locus_gui POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${PDFIUM_DLL}" "$<TARGET_FILE_DIR:locus_gui>"
+            "${PDFIUM_RUNTIME_LIB}" "$<TARGET_FILE_DIR:locus_gui>"
 )
 
 # Copy bundled Prism (syntax highlighter for chat code blocks) next to
@@ -550,6 +579,17 @@ add_custom_command(TARGET locus_gui POST_BUILD
             "${CMAKE_SOURCE_DIR}/third_party/prism/prism-tomorrow.min.css"
             "$<TARGET_FILE_DIR:locus_gui>/resources/prism/"
 )
+
+# -- macOS runtime library search path -----------------------------------------
+# Unbundled dev layout: the loader finds libpdfium.dylib (and any future bundled
+# dylib) via the copy POST_BUILD drops next to the executable. Stage C's .app
+# bundle switches this to @executable_path/../Frameworks.
+if(APPLE)
+    set_target_properties(locus locus_gui PROPERTIES
+        BUILD_RPATH   "@executable_path"
+        INSTALL_RPATH "@executable_path"
+    )
+endif()
 
 # -- Tests ---------------------------------------------------------------------
 

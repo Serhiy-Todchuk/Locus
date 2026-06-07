@@ -81,7 +81,7 @@ target_link_libraries(locus_tests PRIVATE
 
 add_custom_command(TARGET locus_tests POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${PDFIUM_DLL}" "$<TARGET_FILE_DIR:locus_tests>"
+            "${PDFIUM_RUNTIME_LIB}" "$<TARGET_FILE_DIR:locus_tests>"
 )
 
 # -- Mock MCP server (S4.G) ---------------------------------------------------
