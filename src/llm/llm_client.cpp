@@ -594,6 +594,10 @@ void LMStudioClient::do_stream_completion(
         if (callbacks.on_error)
             callbacks.on_error(err);
     };
+    tcbs.on_status = [&](const std::string& status) {
+        if (callbacks.on_status)
+            callbacks.on_status(status);
+    };
     tcbs.should_cancel = callbacks.on_should_cancel;
 
     transport_.post_chat(body.dump(), tcbs);

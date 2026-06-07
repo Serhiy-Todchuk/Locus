@@ -879,6 +879,11 @@ void ChatPanel::set_round_progress(int round, int max_rounds)
     if (footer_chips_->set_round_progress(round, max_rounds)) Layout();
 }
 
+void ChatPanel::set_transient_status(const wxString& status)
+{
+    if (footer_chips_->set_transient_status(status)) Layout();
+}
+
 void ChatPanel::set_commit_now_visible(bool visible)
 {
     if (!commit_btn_) return;

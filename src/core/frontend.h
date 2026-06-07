@@ -196,6 +196,16 @@ public:
     // clean. Paired with on_turn_complete: the chip is hidden then.
     virtual void on_round_progress(int /*round*/, int /*max_rounds*/) {}
 
+    // S6.20 -- transient LLM-transport retry / waiting notice. Fired when the
+    // endpoint returns a transient failure (429 / 5xx / empty body / stall) and
+    // the transport is backing off before a retry. `status` is a short
+    // human-readable string (e.g. "HTTP 429 (rate limited) -- retrying 2/5 in
+    // 8s"). Frontends surface it in the chat-footer status line so a
+    // multi-minute backoff on a flaky hosted endpoint isn't a silent hang; it
+    // is naturally superseded by the next token / round / turn-complete event.
+    // Default no-op so CLI / test stubs stay clean.
+    virtual void on_llm_retry(const std::string& /*status*/) {}
+
     // S6.13 -- reasoning watchdog tripped on the current LLM round.
     // `trigger` is "chars" or "seconds"; `value` is the count that crossed
     // the threshold (combined reasoning+text chars for "chars"; elapsed

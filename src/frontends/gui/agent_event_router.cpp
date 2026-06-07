@@ -211,6 +211,13 @@ void AgentEventRouter::on_agent_round_progress(wxThreadEvent& evt)
     }
 }
 
+void AgentEventRouter::on_agent_llm_retry(wxThreadEvent& evt)
+{
+    if (auto* ui = frame_.find_tab_ui(evt.GetId())) {
+        if (ui->chat) ui->chat->set_transient_status(evt.GetString());
+    }
+}
+
 void AgentEventRouter::on_agent_watchdog_tripped(wxThreadEvent& evt)
 {
     if (auto* ui = frame_.find_tab_ui(evt.GetId())) {

@@ -389,6 +389,7 @@ add_library(locus_core STATIC
     src/agent/tool_dispatcher.cpp
     src/agent/agent_loop.cpp
     src/agent/agent_turn.cpp
+    src/agent/build_error_detector.cpp
     src/agent/slash_commands.cpp
     src/agent/prompt_templates.cpp
     src/agent/agent_core.cpp

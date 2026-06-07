@@ -68,6 +68,9 @@ public:
         std::function<bool(const std::string& sse_data)> on_data;
         // Transport / HTTP / connect / stall error.
         std::function<void(const std::string& err)> on_error;
+        // S6.20 -- fired before a transient-failure retry backoff with a short
+        // status string (e.g. "rate limited -- retrying 2/5 in 8s"). Optional.
+        std::function<void(const std::string& status)> on_status;
         // Polled by the cpr write callback before each chunk is parsed. If
         // it returns true the HTTP transfer aborts immediately and post_chat
         // returns *without* firing on_error -- the caller is expected to

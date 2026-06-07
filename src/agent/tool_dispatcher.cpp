@@ -455,10 +455,19 @@ void ToolDispatcher::dispatch(const ToolCall& call, const AppendFn& append_resul
         spdlog::error("ToolDispatcher: tool '{}' threw: {}",
                       call.tool_name, ex.what());
         result.success = false;
+        // S6.20 -- make the error self-correcting. nlohmann type_error what()
+        // is informative ("type must be number, but is string") but doesn't
+        // tell the model WHICH arg or its expected shape. Append the canonical
+        // schema so the model fixes the arg type on the next round instead of
+        // re-sending the same mistyped call (which trips the repeated-call cap).
         result.content = std::string("[tool '") + call.tool_name +
-                         "' failed with an internal error: " + ex.what() +
-                         ". Try a different argument shape or a different tool.]";
-        result.display = result.content;
+                         "' failed: " + ex.what() +
+                         ". This usually means an argument has the wrong type "
+                         "(e.g. a string where a number/array/bool is expected). "
+                         "Fix the argument types and retry.]\n\n" +
+                         tools::render_tool_schema(*tool);
+        result.display = std::string("[tool '") + call.tool_name +
+                         "' failed: " + ex.what() + "]";
     } catch (...) {
         spdlog::error("ToolDispatcher: tool '{}' threw an unknown exception",
                       call.tool_name);

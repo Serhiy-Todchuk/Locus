@@ -42,6 +42,9 @@ wxDECLARE_EVENT(EVT_AGENT_HISTORY_MSG_DELETED, wxThreadEvent);
 wxDECLARE_EVENT(EVT_AGENT_PRESET_CHANGED,      wxThreadEvent);
 // Agentic Tetris findings #5 round-progress chip update.
 wxDECLARE_EVENT(EVT_AGENT_ROUND_PROGRESS,      wxThreadEvent);
+// S6.20 -- transient LLM-transport retry/backoff notice. Carries the status
+// string via SetString.
+wxDECLARE_EVENT(EVT_AGENT_LLM_RETRY,           wxThreadEvent);
 // S6.13 follow-up -- reasoning watchdog tripped / cleared.
 // _TRIPPED carries (trigger string, value int) via SetString + SetInt.
 // _CLEARED carries no payload.
@@ -119,6 +122,8 @@ public:
                                        bool from_runtime) override;
     // Agentic Tetris findings #5
     void on_round_progress(int round, int max_rounds) override;
+    // S6.20 -- transient LLM-transport retry/backoff notice.
+    void on_llm_retry(const std::string& status) override;
     // S6.13 follow-up -- reasoning watchdog GUI bridge.
     void on_reasoning_watchdog_tripped(const std::string& trigger,
                                         int value) override;

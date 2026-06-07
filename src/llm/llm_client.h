@@ -232,6 +232,15 @@ struct StreamCallbacks {
     OnError     on_error;
     OnUsage     on_usage;
 
+    // S6.20 -- transient-failure status notice. Fired when the transport is
+    // about to retry a transient failure (429 / 5xx / empty-200 / stall) after
+    // a backoff. `message` is a short human-readable status (e.g.
+    // "rate limited -- retrying 2/5 in 8s"). Frontends surface it in the chat
+    // footer status line so a multi-minute backoff isn't silent. Cleared when
+    // the stream resumes (the next on_token / on_complete / on_error). Empty
+    // = ignored. Default-empty so existing callers are unaffected.
+    std::function<void(const std::string& message)> on_status;
+
     // Polled inside the streaming hot path. Return true to request an
     // immediate abort of the HTTP transfer -- the transport returns without
     // an error callback, the partial accumulated text is preserved, and

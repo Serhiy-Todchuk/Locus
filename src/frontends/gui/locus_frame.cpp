@@ -292,6 +292,7 @@ LocusFrame::LocusFrame(LocusSession& session)
     Bind(EVT_AGENT_HISTORY_MSG_DELETED,&AgentEventRouter::on_agent_history_msg_deleted,r);
     Bind(EVT_AGENT_PRESET_CHANGED,     &AgentEventRouter::on_agent_preset_changed,     r);
     Bind(EVT_AGENT_ROUND_PROGRESS,     &AgentEventRouter::on_agent_round_progress,     r);
+    Bind(EVT_AGENT_LLM_RETRY,          &AgentEventRouter::on_agent_llm_retry,          r);
     Bind(EVT_AGENT_WATCHDOG_TRIPPED,   &AgentEventRouter::on_agent_watchdog_tripped,   r);
     Bind(EVT_AGENT_WATCHDOG_CLEARED,   &AgentEventRouter::on_agent_watchdog_cleared,   r);
     Bind(EVT_AGENT_ENDPOINT_CHANGED,   &AgentEventRouter::on_agent_endpoint_changed,   r);

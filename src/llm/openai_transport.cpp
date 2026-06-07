@@ -265,6 +265,13 @@ void OpenAiTransport::do_post(const std::string& body, const Callbacks& cbs, int
             "{} ms backoff. Received {} chunks / {} bytes this attempt.",
             rd.reason, attempt + 1, k_max_attempts, rd.backoff_ms,
             chunks, total_bytes);
+        if (cbs.on_status) {
+            long secs = (rd.backoff_ms + 999) / 1000;
+            cbs.on_status(rd.reason + " -- retrying " +
+                          std::to_string(attempt + 2) + "/" +
+                          std::to_string(k_max_attempts) + " in " +
+                          std::to_string(secs) + "s");
+        }
         std::this_thread::sleep_for(std::chrono::milliseconds(rd.backoff_ms));
         // Re-check cancellation after the backoff -- the user may have hit Stop
         // while we waited.

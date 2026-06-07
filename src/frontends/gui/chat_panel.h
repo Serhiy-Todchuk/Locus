@@ -144,6 +144,10 @@ public:
     // renders just "round N".
     void set_round_progress(int round, int max_rounds);
 
+    // S6.20 -- transient LLM-transport retry/backoff notice in the footer
+    // status area. Superseded by the next round-progress / turn-complete event.
+    void set_transient_status(const wxString& status);
+
     // S6.13 follow-up -- show / hide the Commit-now button. Called from
     // WxFrontend::on_reasoning_watchdog_tripped (show) and
     // on_reasoning_watchdog_cleared / on_turn_complete (hide). Idempotent.
