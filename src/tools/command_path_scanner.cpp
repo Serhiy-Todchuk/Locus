@@ -175,9 +175,17 @@ std::vector<std::string> scan_outside_workspace_paths(
             candidate = fs::weakly_canonical(t, ec);
             if (ec) candidate = t;
         } else {
-            // Parent-relative path -- canonicalize against root.
-            candidate = fs::weakly_canonical(root / t, ec);
-            if (ec) candidate = root / t;
+            // Parent-relative path -- canonicalize against root. Normalize '\'
+            // to '/' first: off-Windows, std::filesystem::path treats '\' as an
+            // ordinary filename char, so "..\..\x" would resolve to one odd
+            // filename *inside* root instead of escaping it. This scanner is a
+            // cross-platform tripwire -- a Windows-style parent traversal in a
+            // command string is suspicious on any host. The reported token (tok)
+            // keeps its original spelling; only the resolution is normalized.
+            std::string norm = t;
+            std::replace(norm.begin(), norm.end(), '\\', '/');
+            candidate = fs::weakly_canonical(root / norm, ec);
+            if (ec) candidate = root / norm;
         }
 
         if (!is_under(candidate, root)) {
