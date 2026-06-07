@@ -15,7 +15,7 @@
 // The NVIDIA key is read from the env var LOCUS_NVIDIA_API_KEY -- the test
 // SKIPs (via WARN + early return) when it is absent so the repo never carries
 // a secret and CI without a key doesn't fail. To run the live verification:
-//   set LOCUS_NVIDIA_API_KEY=nvapi-...   (PowerShell: $env:LOCUS_NVIDIA_API_KEY)
+//   set LOCUS_NVIDIA_API_KEY=<your-key>   (PowerShell: $env:LOCUS_NVIDIA_API_KEY)
 //   locus_integration_tests.exe "[s6.16]"
 
 #include "harness_fixture.h"
@@ -81,7 +81,7 @@ TEST_CASE("Endpoint hot-swap: local -> NVIDIA between turns preserves history",
     const char* key = std::getenv("LOCUS_NVIDIA_API_KEY");
     if (!key || !*key) {
         WARN("LOCUS_NVIDIA_API_KEY not set -- skipping the live NVIDIA "
-             "endpoint-switch test. Set it to an nvapi-... key to run.");
+             "endpoint-switch test. Set it to your NVIDIA API key to run.");
         return;
     }
 
