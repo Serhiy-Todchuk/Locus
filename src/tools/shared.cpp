@@ -1,6 +1,7 @@
 #include "tools/shared.h"
 
 #include "core/workspace_services.h"
+#include "llm/json_repair.h"
 
 #include <algorithm>
 #include <array>
@@ -74,11 +75,27 @@ nlohmann::json coerce_json_array(const nlohmann::json& args, const char* key)
         return *it;
     if (it->is_string()) {
         // The model double-encoded the array as a JSON string. Parse it.
-        auto parsed = nlohmann::json::parse(it->get<std::string>(),
+        const std::string raw = it->get<std::string>();
+        auto parsed = nlohmann::json::parse(raw,
                                             /*cb=*/nullptr,
                                             /*allow_exceptions=*/false);
         if (parsed.is_array())
             return parsed;
+        // Small / hosted models sometimes emit a Python-dict-style body inside
+        // that string (single-quoted keys: "[{'description': ...}]") which is
+        // not valid JSON and fails the strict parse above. Run it through the
+        // same json-repair pre-pass the tool-call parser uses (single-quote ->
+        // double-quote, trailing-comma fixups, etc.) and retry. Mirrors the
+        // S6.19 robustness contract for edit_file's `edits` arg. repair_for_parse
+        // returns text guaranteed to parse, but it may parse to a non-array
+        // (e.g. an object) -- so we still gate on is_array().
+        if (auto repaired = locus::repair_for_parse(raw)) {
+            auto reparsed = nlohmann::json::parse(repaired->fixed,
+                                                  /*cb=*/nullptr,
+                                                  /*allow_exceptions=*/false);
+            if (reparsed.is_array())
+                return reparsed;
+        }
     }
     return nlohmann::json::array();
 }

@@ -422,6 +422,26 @@ TEST_CASE("coerce_json_array unwraps real array, JSON-string array; never throws
     REQUIRE(coerce_json_array(nlohmann::json{{"edits", "{\"a\":1}"}}, "edits").empty());
 }
 
+// Observed in the wild (plan_mode UIA run, gemma-4-12b-qat): the model
+// double-encoded `steps` as a string AND used Python-dict single quotes, so
+// strict JSON parse failed and propose_plan rejected the call. coerce_json_array
+// now routes a failed strict parse through repair_for_parse, so the single-
+// quoted body recovers instead of dropping.
+TEST_CASE("coerce_json_array repairs Python-dict-style single-quoted string array",
+          "[tool_arg_validation][coerce_json_array]")
+{
+    using locus::tools::coerce_json_array;
+
+    auto pyish = nlohmann::json{{"steps",
+        "[{'description': 'Create hello.py', 'tools_needed': ['write_file']}, "
+        "{'description': 'Run it', 'tools_needed': ['run_command']}]"}};
+    auto r = coerce_json_array(pyish, "steps");
+    REQUIRE(r.is_array());
+    REQUIRE(r.size() == 2);
+    REQUIRE(r[0]["description"] == "Create hello.py");
+    REQUIRE(r[1]["tools_needed"][0] == "run_command");
+}
+
 // -- coerce_int: tolerant integer tool-arg read -----------------------------
 //
 // Regression for the agentic DX12 session (2026-06-06): qwen3-coder-480b sent

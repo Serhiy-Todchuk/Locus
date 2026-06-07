@@ -25,7 +25,15 @@ struct PromptResult {
     std::string                     tokens;
     std::vector<ObservedToolCall>   tool_calls;
     std::vector<ObservedToolResult> tool_results;
+    // Genuine agent/transport/stream errors. max_tokens truncation notices are
+    // NOT included here -- they are a model-verbosity / output-budget artifact
+    // (a more verbose model than the calibrated Gemma 4 E4B floor can blow the
+    // harness's 2048-token default on a chatty turn), routed to
+    // `truncation_notices` instead so `REQUIRE(r.errors.empty())` in the 21
+    // feature tests stays robust across model sizes. The dedicated
+    // `[max_tokens]` test drives its own client and asserts truncation there.
     std::vector<std::string>        errors;
+    std::vector<std::string>        truncation_notices;
     bool                            timed_out = false;
 
     bool tool_called(std::string_view name) const;

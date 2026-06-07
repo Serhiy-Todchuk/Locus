@@ -1,8 +1,11 @@
 {
   "name": "plan_mode",
-  "description": "End-to-end plan flow: switch to Plan, ask the LLM to propose a plan, wait for the plan bubble (Approve & execute / Reject Hyperlinks), click Approve & execute, wait for the agent to run all three steps, verify hello.py landed on disk. Requires LM Studio reachable at http://127.0.0.1:1234 with a tool-calling-capable model. Note: small models occasionally drop into 'malformed tool call' on propose_plan; if this script flakes, look at .locus/locus.log in the temp workspace for the LLM dropped-call warning -- that's the model, not the harness.",
+  "description": "End-to-end plan flow: switch to Plan, ask the LLM to propose a plan, wait for the plan bubble (Approve & execute / Reject Hyperlinks), click Approve & execute, wait for the agent to run all three steps, verify hello.py landed on disk. Requires LM Studio reachable at http://127.0.0.1:1234 with a tool-calling-capable model. Pins LOCUS_GLOBAL_DIR to a fresh tmp dir so the active endpoint is the seeded default (LM Studio local) rather than whatever the developer's global endpoints.json last selected -- without this the GUI may inherit a hosted endpoint (e.g. NVIDIA Build) left active by the integration suite's endpoint-switch test and stall on a free-tier queue. Note: small models occasionally drop into 'malformed tool call' on propose_plan; if this script flakes, look at .locus/locus.log in the temp workspace for the LLM dropped-call warning -- that's the model, not the harness.",
   "setup": {
-    "workspace": "tmp"
+    "workspace": "tmp",
+    "env": {
+      "LOCUS_GLOBAL_DIR": "{workspace}/global"
+    }
   },
   "steps": [
     { "op": "launch" },

@@ -36,9 +36,10 @@ json error_payload(const std::string& msg)
 std::string ProposePlanTool::preview(const ToolCall& call) const
 {
     std::string title = call.args.value("title", std::string{});
-    int n_steps = 0;
-    if (call.args.contains("steps") && call.args["steps"].is_array())
-        n_steps = static_cast<int>(call.args["steps"].size());
+    // Count via the same tolerant coercer execute() uses so a string-encoded
+    // `steps` arg still shows the right count in the approval preview.
+    int n_steps = static_cast<int>(
+        tools::coerce_json_array(call.args, "steps").size());
 
     std::string out = "Plan";
     if (!title.empty()) out += ": " + head(title, 60);
@@ -60,11 +61,18 @@ ToolResult ProposePlanTool::execute(const ToolCall& call, IWorkspaceServices& /*
     out["title"]   = call.args.value("title", std::string{});
     out["summary"] = call.args.value("summary", std::string{});
 
-    if (!call.args.contains("steps") || !call.args["steps"].is_array()) {
+    // Resolve `steps` tolerantly: a real array, or a JSON-string-encoded array
+    // (incl. Python-dict-style single-quoted bodies small models emit) that the
+    // S6.19 coercer unwraps + repairs. coerce_json_array returns an empty array
+    // for an unusable shape, which the empty-check below rejects with a clear
+    // message.
+    json steps_in = tools::coerce_json_array(call.args, "steps");
+    if (steps_in.empty()) {
         ToolResult r;
         r.success = false;
         r.content = error_payload(
-            "propose_plan: 'steps' parameter is required and must be an array")
+            "propose_plan: 'steps' parameter is required and must be a non-empty "
+            "array of {description, tools_needed?} objects")
                         .dump();
         r.display = "propose_plan: missing 'steps'";
         return r;
@@ -72,7 +80,7 @@ ToolResult ProposePlanTool::execute(const ToolCall& call, IWorkspaceServices& /*
 
     json steps = json::array();
     int idx = 0;
-    for (auto& s : call.args["steps"]) {
+    for (auto& s : steps_in) {
         ++idx;
         if (!s.is_object()) {
             ToolResult r;

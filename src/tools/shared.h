@@ -106,6 +106,9 @@ bool coerce_bool(const nlohmann::json& args, const char* key, bool fallback);
 //   - key absent / null            -> empty array
 //   - value already an array       -> returned as-is
 //   - value is a string that JSON-parses to an array -> the parsed array
+//   - value is a string that fails strict JSON parse but repairs to an array
+//       (Python-dict single quotes, trailing commas, ...) via repair_for_parse
+//       -> the repaired array
 //   - anything else                -> empty array
 // Returns the parsed/array value. Pass the first present key; callers that
 // accept aliases call it once per alias and take the first non-empty result.

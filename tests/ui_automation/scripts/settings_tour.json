@@ -34,28 +34,28 @@
 
     {
       "op": "select_tab",
-      "args": { "parent_aid": "locus.settings.notebook", "index": 1 }
+      "args": { "parent_aid": "locus.settings.notebook", "index": 2 }
     },
     { "op": "sleep", "args": { "ms": 300 } },
     { "op": "screenshot", "args": { "name": "tab_index" } },
 
     {
       "op": "select_tab",
-      "args": { "parent_aid": "locus.settings.notebook", "index": 2 }
+      "args": { "parent_aid": "locus.settings.notebook", "index": 4 }
     },
     { "op": "sleep", "args": { "ms": 300 } },
     { "op": "screenshot", "args": { "name": "tab_capabilities" } },
 
     {
       "op": "select_tab",
-      "args": { "parent_aid": "locus.settings.notebook", "index": 3 }
+      "args": { "parent_aid": "locus.settings.notebook", "index": 5 }
     },
     { "op": "sleep", "args": { "ms": 300 } },
     { "op": "screenshot", "args": { "name": "tab_approvals" } },
 
     {
       "op": "select_tab",
-      "args": { "parent_aid": "locus.settings.notebook", "index": 4 }
+      "args": { "parent_aid": "locus.settings.notebook", "index": 6 }
     },
     { "op": "sleep", "args": { "ms": 300 } },
     { "op": "screenshot", "args": { "name": "tab_mcp" } },

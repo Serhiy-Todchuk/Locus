@@ -234,6 +234,14 @@ Design notes:
    ```
 4. Assert on **observable behavior** (tool invoked, file on disk, index
    updated) -- not on exact LLM prose. Local models are non-deterministic.
+   `REQUIRE(r.errors.empty())` is the standard "no agent/transport error
+   fired" guard. Note that `r.errors` does NOT include `max_tokens` truncation
+   notices -- those are split into `r.truncation_notices` because a more
+   verbose model than the calibrated Gemma 4 E4B floor can blow the harness's
+   2048-token default on a chatty turn, which is a model/budget artifact, not a
+   feature failure. If a case genuinely wants to assert truncation, follow
+   `test_int_max_tokens.cpp` (it drives its own constrained client, not the
+   shared harness) rather than reaching into `r.truncation_notices`.
 5. Where prompt wording matters for the LLM to choose the right tool, spell
    it out: "Use the search_text tool..." beats "search for...". Small
    models especially respond to explicit tool naming. Avoid chaining two
@@ -248,6 +256,7 @@ Design notes:
 | Fixture throws *"LM Studio not reachable at ..."* | Server not running, wrong port, or `/v1/models` returns empty. |
 | Fixture throws *"workspace already held by another process"* | Close `locus.exe` / `locus_gui.exe` for this repo first (WorkspaceLock). |
 | Most assertions `tool_called(...)` fail | Loaded model doesn't support tool/function calling. Load one that does. |
+| A case fails `REQUIRE(finished)` / `REQUIRE(r.errors.empty())` with a `max_tokens limit reached` line in the log | A model more verbose than the Gemma 4 E4B floor blew the harness's 2048-token default. Truncation notices are routed to `r.truncation_notices` (not `r.errors`), so this only bites cases that assert `finished` mid-generation. Usually a flake on an over-spec model; re-run, or load a leaner model. |
 | `[fs]` edit section fails with *"'old_string' not found"* | LLM capitalised the word differently than the prompt prescribed. The prompt spells the exact casing -- extend it if your model drifts. |
 | `[outline]` DOCX shows 0 entries | Expected -- the Apache POI SampleDoc.docx has no explicit `HeadingN` styles. The test asserts the tool ran, not a specific heading. |
 | `[fs]` / `[file_change_awareness]` fail with no notes.md / s4t_external.txt in the index | The harness should be flipping `respect_gitignore=false` (see Design notes above). If you've tweaked harness ctor or moved tmp_dir somewhere else, verify the flip still runs before any test prompts. The repo's `.gitignore` excludes `tests/integration_tmp/`. |

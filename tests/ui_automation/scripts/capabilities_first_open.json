@@ -64,7 +64,7 @@
     },
     {
       "op": "select_tab",
-      "args": { "parent_aid": "locus.settings.notebook", "index": 2 }
+      "args": { "parent_aid": "locus.settings.notebook", "index": 4 }
     },
     { "op": "sleep", "args": { "ms": 400 } },
     { "op": "screenshot", "args": { "name": "04_capabilities_tab" } },

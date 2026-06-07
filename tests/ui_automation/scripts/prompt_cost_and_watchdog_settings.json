@@ -22,7 +22,7 @@
     },
     {
       "op": "select_tab",
-      "args": { "parent_aid": "locus.settings.notebook", "index": 4 }
+      "args": { "parent_aid": "locus.settings.notebook", "index": 5 }
     },
     { "op": "sleep", "args": { "ms": 400 } },
     { "op": "screenshot", "args": { "name": "tab_approvals_open" } },
