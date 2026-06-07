@@ -14,6 +14,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <thread>
 
 using namespace locus;
@@ -450,4 +451,43 @@ TEST_CASE("classify_retry: 429 gets a higher backoff floor than other transients
     auto empty = locus::classify_retry(kOK, 200, 0, false, 0, 5, -1, 1000, 60000);
     CHECK(rl.backoff_ms >= 8000);
     CHECK(rl.backoff_ms > empty.backoff_ms);
+}
+
+// -- cancel_requested: shared abort predicate ------------------------------
+//
+// The transport aborts a stream from two places: the cpr write callback
+// (per chunk) and the cpr progress callback (libcurl's ~1Hz timer, fires
+// regardless of byte flow). Both route through cancel_requested(). The
+// progress-callback path is the one that makes a SILENT reasoning stream
+// abortable -- before it, a model that emitted nothing for minutes could not
+// be cancelled by Stop or the reasoning watchdog until LowSpeed finally bit
+// at llm.timeout_ms (up to 30 min later).
+TEST_CASE("cancel_requested: null-safe, returns the source's verdict", "[cancel]")
+{
+    // No cancel source wired -> never abort (an empty std::function must not
+    // be invoked; doing so would throw bad_function_call).
+    std::function<bool()> none;
+    CHECK_FALSE(locus::cancel_requested(none));
+
+    // Source says "do not cancel".
+    std::function<bool()> keep_going = [] { return false; };
+    CHECK_FALSE(locus::cancel_requested(keep_going));
+
+    // Source says "cancel".
+    std::function<bool()> stop_now = [] { return true; };
+    CHECK(locus::cancel_requested(stop_now));
+}
+
+TEST_CASE("cancel_requested: observes a flag flipped mid-stream", "[cancel]")
+{
+    // Models the real wedge: the cancel flag flips to true while the stream
+    // is silent (watchdog auto-nudge / Stop). The progress callback, which
+    // calls cancel_requested on libcurl's timer, must observe the flip even
+    // though no chunk -- and thus no write-callback poll -- ever arrived.
+    bool cancel_flag = false;
+    std::function<bool()> src = [&] { return cancel_flag; };
+
+    CHECK_FALSE(locus::cancel_requested(src));   // before the flip: keep streaming
+    cancel_flag = true;                          // watchdog trips during silence
+    CHECK(locus::cancel_requested(src));         // progress-timer poll catches it
 }

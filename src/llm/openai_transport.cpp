@@ -11,6 +11,11 @@
 
 namespace locus {
 
+bool cancel_requested(const std::function<bool()>& should_cancel)
+{
+    return static_cast<bool>(should_cancel) && should_cancel();
+}
+
 RetryDecision classify_retry(int       cpr_error_code,
                              long      http_status,
                              uint64_t  chunks_received,
@@ -138,7 +143,7 @@ void OpenAiTransport::do_post(const std::string& body, const Callbacks& cbs, int
 
     cpr::WriteCallback write_cb{[&](std::string_view data,
                                     intptr_t /*userdata*/) -> bool {
-        if (cbs.should_cancel && cbs.should_cancel()) {
+        if (cancel_requested(cbs.should_cancel)) {
             // Returning false makes libcurl abort the transfer with
             // CURLE_WRITE_ERROR; OpenAiTransport::do_post detects that
             // below via cbs.should_cancel() and treats it as clean exit.
@@ -190,6 +195,24 @@ void OpenAiTransport::do_post(const std::string& body, const Callbacks& cbs, int
     const long stall_seconds =
         std::max<long>(1, static_cast<long>(config_.timeout_ms) / 1000);
 
+    // Cancellation poll that does NOT depend on data arriving. The
+    // WriteCallback's should_cancel check only fires when libcurl hands us a
+    // chunk -- useless when a reasoning model goes silent for minutes (no
+    // chunks => the cancel flag is never read => Stop / the reasoning watchdog
+    // can't abort the stream until LowSpeed finally bites at timeout_ms, up to
+    // 30 min later). libcurl invokes the progress callback on its own timer
+    // (~Hz cadence) regardless of byte flow, so returning false here aborts a
+    // silent stream within ~1s of the cancel flag flipping. Surfaces as
+    // CURLE_ABORTED_BY_CALLBACK, which the cancelled-exit path below treats as
+    // a clean user cancel exactly like the WriteCallback-false case.
+    cpr::ProgressCallback progress_cb{
+        [&](cpr::cpr_pf_arg_t /*dlTotal*/, cpr::cpr_pf_arg_t /*dlNow*/,
+            cpr::cpr_pf_arg_t /*ulTotal*/, cpr::cpr_pf_arg_t /*ulNow*/,
+            intptr_t /*userdata*/) -> bool {
+            // Return false to abort the transfer (CURLE_ABORTED_BY_CALLBACK).
+            return !cancel_requested(cbs.should_cancel);
+        }};
+
     // S6.16 -- header block from config (Bearer auth + extra_headers). The
     // API key flows into the Authorization value but is never logged: the
     // only trace line above prints the URL, not the headers.
@@ -203,6 +226,7 @@ void OpenAiTransport::do_post(const std::string& body, const Callbacks& cbs, int
         cpr::Body{body},
         cpr::ConnectTimeout{10000},
         cpr::LowSpeed{1, stall_seconds},
+        std::move(progress_cb),
         std::move(write_cb)
     );
 
@@ -223,11 +247,12 @@ void OpenAiTransport::do_post(const std::string& body, const Callbacks& cbs, int
     }
 
     // User-requested cancellation -- treat any transport error (libcurl
-    // surfaces it as a write error when the WriteCallback returns false) as
-    // a clean exit. Skips the stall-retry path and suppresses on_error so
-    // the chat doesn't show "Turn cancelled" twice (once here, once from
-    // AgentCore).
-    const bool cancelled = cbs.should_cancel && cbs.should_cancel();
+    // surfaces it as a write error when the WriteCallback returns false, or
+    // CURLE_ABORTED_BY_CALLBACK when the progress callback returns false on a
+    // silent stream) as a clean exit. Skips the stall-retry path and
+    // suppresses on_error so the chat doesn't show "Turn cancelled" twice
+    // (once here, once from AgentCore).
+    const bool cancelled = cancel_requested(cbs.should_cancel);
     if (cancelled) {
         spdlog::info("LLM stream aborted by user cancellation");
         return;
@@ -275,7 +300,7 @@ void OpenAiTransport::do_post(const std::string& body, const Callbacks& cbs, int
         std::this_thread::sleep_for(std::chrono::milliseconds(rd.backoff_ms));
         // Re-check cancellation after the backoff -- the user may have hit Stop
         // while we waited.
-        if (cbs.should_cancel && cbs.should_cancel()) {
+        if (cancel_requested(cbs.should_cancel)) {
             spdlog::info("LLM retry aborted by user cancellation during backoff");
             return;
         }

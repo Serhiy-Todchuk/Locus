@@ -53,6 +53,16 @@ RetryDecision classify_retry(int          cpr_error_code,   // cpr::ErrorCode as
                              long long    base_backoff_ms = 2000,
                              long long    max_backoff_ms   = 20000);
 
+// Cancellation predicate shared by the transport's two abort paths (the cpr
+// write callback, polled per chunk; and the cpr progress callback, polled on
+// libcurl's own ~1Hz timer regardless of byte flow). Returns true iff a
+// cancel has been requested. A null / empty `should_cancel` means "no cancel
+// source wired" -> never abort. Pure + null-safe so the contract is
+// unit-testable without a live cpr::Post. The progress-callback path is what
+// makes a SILENT reasoning stream abortable -- the write callback alone can't,
+// because libcurl only invokes it when bytes arrive.
+bool cancel_requested(const std::function<bool()>& should_cancel);
+
 // Wraps cpr POST /v1/chat/completions + SSE parsing. Knows nothing
 // about JSON: hands each `data:` payload to the on_data callback as a
 // raw string, swallows the [DONE] sentinel, and handles HTTP / connect
