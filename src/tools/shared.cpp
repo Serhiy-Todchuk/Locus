@@ -18,6 +18,71 @@ namespace locus::tools {
 
 namespace fs = std::filesystem;
 
+bool coerce_bool(const nlohmann::json& args, const char* key, bool fallback)
+{
+    auto it = args.find(key);
+    if (it == args.end() || it->is_null())
+        return fallback;
+    const nlohmann::json& v = *it;
+    if (v.is_boolean())
+        return v.get<bool>();
+    if (v.is_number_integer())
+        return v.get<long long>() != 0;
+    if (v.is_number_float())
+        return v.get<double>() != 0.0;
+    if (v.is_string()) {
+        std::string s = v.get<std::string>();
+        std::transform(s.begin(), s.end(), s.begin(),
+                       [](unsigned char c) { return (char)std::tolower(c); });
+        if (s == "true" || s == "1" || s == "yes" || s == "on")
+            return true;
+        if (s == "false" || s == "0" || s == "no" || s == "off" || s.empty())
+            return false;
+    }
+    return fallback;
+}
+
+long long coerce_int(const nlohmann::json& args, const char* key, long long fallback)
+{
+    auto it = args.find(key);
+    if (it == args.end() || it->is_null())
+        return fallback;
+    const nlohmann::json& v = *it;
+    if (v.is_number_integer())  return v.get<long long>();
+    if (v.is_number_unsigned()) return static_cast<long long>(v.get<unsigned long long>());
+    if (v.is_number_float())    return static_cast<long long>(v.get<double>());
+    if (v.is_boolean())         return v.get<bool>() ? 1 : 0;
+    if (v.is_string()) {
+        const std::string& s = v.get<std::string>();
+        try {
+            size_t pos = 0;
+            long long n = std::stoll(s, &pos);
+            // Accept "100", "100.5" (stoll stops at '.'), " 100 " -> tolerate
+            // trailing junk so a model's "100px"-style slip still parses.
+            if (pos > 0) return n;
+        } catch (...) { /* not a number -> fallback */ }
+    }
+    return fallback;
+}
+
+nlohmann::json coerce_json_array(const nlohmann::json& args, const char* key)
+{
+    auto it = args.find(key);
+    if (it == args.end() || it->is_null())
+        return nlohmann::json::array();
+    if (it->is_array())
+        return *it;
+    if (it->is_string()) {
+        // The model double-encoded the array as a JSON string. Parse it.
+        auto parsed = nlohmann::json::parse(it->get<std::string>(),
+                                            /*cb=*/nullptr,
+                                            /*allow_exceptions=*/false);
+        if (parsed.is_array())
+            return parsed;
+    }
+    return nlohmann::json::array();
+}
+
 namespace {
 
 // Case-insensitive on Windows, case-sensitive elsewhere. Matches NTFS default

@@ -96,7 +96,7 @@ std::string AddMemoryTool::preview(const ToolCall& call) const
         auto tags = parse_tag_arg(call.args["tags"]);
         if (!tags.empty()) out += "  tags=" + std::to_string(tags.size());
     }
-    if (call.args.value("pinned", false)) out += "  [pinned]";
+    if (tools::coerce_bool(call.args, "pinned", false)) out += "  [pinned]";
     return out;
 }
 
@@ -120,9 +120,7 @@ ToolResult AddMemoryTool::execute(const ToolCall& call, IWorkspaceServices& ws,
     std::vector<std::string> tags;
     if (call.args.contains("tags")) tags = parse_tag_arg(call.args["tags"]);
 
-    bool pinned = false;
-    if (call.args.contains("pinned") && call.args["pinned"].is_boolean())
-        pinned = call.args["pinned"].get<bool>();
+    bool pinned = tools::coerce_bool(call.args, "pinned", false);
 
     std::string source = "agent";
     if (call.args.contains("source") && call.args["source"].is_string()) {

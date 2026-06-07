@@ -6,8 +6,73 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdint>
+#include <thread>
 
 namespace locus {
+
+RetryDecision classify_retry(int       cpr_error_code,
+                             long      http_status,
+                             uint64_t  chunks_received,
+                             bool      cancelled,
+                             int       attempt,
+                             int       max_attempts,
+                             long long retry_after_ms,
+                             long long base_backoff_ms,
+                             long long max_backoff_ms)
+{
+    RetryDecision d;
+
+    // Never retry a user-cancelled call, and never exceed the attempt budget.
+    if (cancelled) return d;
+    if (attempt + 1 >= max_attempts) return d;
+
+    const bool transport_ok =
+        cpr_error_code == static_cast<int>(cpr::ErrorCode::OK);
+    const bool timed_out =
+        cpr_error_code == static_cast<int>(cpr::ErrorCode::OPERATION_TIMEDOUT);
+
+    bool transient     = false;
+    bool is_rate_limit = false;
+    if (timed_out) {
+        d.reason  = "stream stalled / timed out";
+        transient = true;
+    } else if (transport_ok && http_status == 429) {
+        d.reason      = "HTTP 429 (rate limited)";
+        transient     = true;
+        is_rate_limit = true;
+    } else if (transport_ok && http_status >= 500 && http_status < 600) {
+        d.reason  = "HTTP " + std::to_string(http_status) + " (server error)";
+        transient = true;
+    } else if (transport_ok && http_status == 200 && chunks_received == 0) {
+        d.reason  = "empty response (HTTP 200, zero chunks)";
+        transient = true;
+    }
+    // Deterministic failures (connect refused, 4xx other than 429, auth) are
+    // NOT retried -- a retry would just reproduce them.
+
+    if (!transient) return d;
+
+    // Exponential backoff off base, capped. Parenthesise std::min to dodge the
+    // windows.h min() macro.
+    //
+    // Rate-limit (429) windows on free hosted tiers (NVIDIA Build, OpenRouter
+    // free) last much longer than a server hiccup or an empty-body drop -- 3
+    // quick 2s/4s retries observed exhausting against a sustained 429 window in
+    // the 2026-06-06 session. So 429s without a Retry-After get a higher floor
+    // so the backoff actually outlasts a typical rate-limit window.
+    long long effective_base =
+        is_rate_limit ? (std::max)(base_backoff_ms, 8000LL) : base_backoff_ms;
+    long long backoff = effective_base;
+    for (int i = 0; i < attempt; ++i)
+        backoff = (std::min)(max_backoff_ms, backoff * 2);
+    if (retry_after_ms > backoff)
+        backoff = (std::min)(retry_after_ms, max_backoff_ms * 3);  // honour 429 hint
+
+    d.retry      = true;
+    d.backoff_ms = backoff;
+    return d;
+}
 
 std::vector<std::pair<std::string, std::string>>
 build_request_headers(const LLMConfig& config)
@@ -29,10 +94,10 @@ OpenAiTransport::OpenAiTransport(const LLMConfig& config)
 
 void OpenAiTransport::post_chat(const std::string& body, const Callbacks& cbs)
 {
-    do_post(body, cbs, false);
+    do_post(body, cbs, 0);
 }
 
-void OpenAiTransport::do_post(const std::string& body, const Callbacks& cbs, bool is_retry)
+void OpenAiTransport::do_post(const std::string& body, const Callbacks& cbs, int attempt)
 {
     std::string url = join_api_url(config_.base_url, "/v1/chat/completions");
 
@@ -162,35 +227,70 @@ void OpenAiTransport::do_post(const std::string& body, const Callbacks& cbs, boo
     // a clean exit. Skips the stall-retry path and suppresses on_error so
     // the chat doesn't show "Turn cancelled" twice (once here, once from
     // AgentCore).
-    if (cbs.should_cancel && cbs.should_cancel()) {
+    const bool cancelled = cbs.should_cancel && cbs.should_cancel();
+    if (cancelled) {
         spdlog::info("LLM stream aborted by user cancellation");
         return;
     }
 
-    // Transport-level errors.
+    // Parse a Retry-After header (seconds, or an HTTP-date we ignore) so a
+    // 429 backoff honours the server's stated cooldown floor.
+    long long retry_after_ms = -1;
+    {
+        auto it = response.header.find("Retry-After");
+        if (it == response.header.end()) it = response.header.find("retry-after");
+        if (it != response.header.end()) {
+            try {
+                long secs = std::stol(it->second);
+                if (secs > 0) retry_after_ms = static_cast<long long>(secs) * 1000;
+            } catch (...) { /* HTTP-date form -- ignore, fall back to backoff */ }
+        }
+    }
+
+    // Unified transient-failure retry: timeout, 429, 5xx, and empty-200 all
+    // route through the same pure decision. Hosted free-tier endpoints hit all
+    // four; before this, each killed the whole agent turn with no retry.
+    RetryDecision rd = classify_retry(
+        static_cast<int>(response.error.code),
+        response.status_code,
+        chunks,
+        cancelled,
+        attempt,
+        k_max_attempts,
+        retry_after_ms);
+
+    if (rd.retry) {
+        spdlog::warn(
+            "LLM request transient failure ({}); attempt {}/{}, retrying after "
+            "{} ms backoff. Received {} chunks / {} bytes this attempt.",
+            rd.reason, attempt + 1, k_max_attempts, rd.backoff_ms,
+            chunks, total_bytes);
+        std::this_thread::sleep_for(std::chrono::milliseconds(rd.backoff_ms));
+        // Re-check cancellation after the backoff -- the user may have hit Stop
+        // while we waited.
+        if (cbs.should_cancel && cbs.should_cancel()) {
+            spdlog::info("LLM retry aborted by user cancellation during backoff");
+            return;
+        }
+        do_post(body, cbs, attempt + 1);
+        return;
+    }
+
+    // Transport-level errors (non-retryable, or retries exhausted).
     if (response.error.code != cpr::ErrorCode::OK) {
         std::string err_msg;
         if (response.error.code == cpr::ErrorCode::COULDNT_CONNECT) {
             err_msg = "Cannot connect to LLM server at " + config_.base_url +
                       " - is LM Studio running?";
         } else if (response.error.code == cpr::ErrorCode::OPERATION_TIMEDOUT) {
-            if (!is_retry) {
-                spdlog::warn(
-                    "LLM stream stalled (no data for {}s, received {} chunks / {} bytes "
-                    "before stall), retrying once. If this keeps happening on a slow "
-                    "local model, raise llm.timeout_ms in .locus/config.json (Settings -> "
-                    "LLM -> Stream stall timeout).",
-                    stall_seconds, chunks, total_bytes);
-                do_post(body, cbs, true);
-                return;
-            }
             // Build a user-visible error that names the observed progress AND
             // points at the fix. The chat-bubble surfaces this verbatim, so
             // every word is part of the UX.
-            err_msg = "LLM stream stalled after retry (no data for " +
+            err_msg = "LLM stream stalled after " + std::to_string(attempt + 1) +
+                      " attempt(s) (no data for " +
                       std::to_string(stall_seconds) + "s). " +
                       "Received " + std::to_string(chunks) + " chunks / " +
-                      std::to_string(total_bytes) + " bytes during the retry attempt"
+                      std::to_string(total_bytes) + " bytes during the last attempt"
                       + (first_chunk_seen
                             ? "; the model started responding but then went silent."
                             : "; the model never sent a first byte.") +
@@ -206,10 +306,13 @@ void OpenAiTransport::do_post(const std::string& body, const Callbacks& cbs, boo
         return;
     }
 
-    // HTTP status.
+    // HTTP status (non-retryable, or retries exhausted).
     if (response.status_code != 200) {
         std::string err_msg = "LLM server returned HTTP " +
                               std::to_string(response.status_code);
+        if (response.status_code == 429)
+            err_msg += " (rate limited) after " +
+                       std::to_string(attempt + 1) + " attempt(s)";
         if (!response.text.empty())
             err_msg += ": " + response.text.substr(0, 500);
 

@@ -8,6 +8,8 @@
 #include "tools/tools.h"
 #include "support/fake_workspace_services.h"
 
+#include <cpr/cpr.h>
+
 #include <chrono>
 #include <cstdlib>
 #include <filesystem>
@@ -370,4 +372,82 @@ TEST_CASE("AgentCore: endpoint hot-swap reseats client + broadcasts", "[s6.16]")
     }
 
     core.stop();
+}
+
+// -- classify_retry: transient-failure retry policy ------------------------
+//
+// Regression for the agentic DX12 session (2026-06-06): the NVIDIA free tier
+// intermittently returned HTTP 429, HTTP 200 with an empty body, or stalled
+// out -- each killed the whole agent turn with no retry. classify_retry is
+// the pure decision the transport uses to retry those transiently.
+
+namespace {
+const int kOK   = static_cast<int>(cpr::ErrorCode::OK);
+const int kTOUT = static_cast<int>(cpr::ErrorCode::OPERATION_TIMEDOUT);
+const int kCONN = static_cast<int>(cpr::ErrorCode::COULDNT_CONNECT);
+}
+
+TEST_CASE("classify_retry: transient failures retry within budget", "[s6.16][retry]")
+{
+    // HTTP 429 -> retry.
+    auto r429 = locus::classify_retry(kOK, 429, 0, false, 0, 3, -1);
+    CHECK(r429.retry);
+    CHECK(r429.backoff_ms > 0);
+
+    // Empty 200 (zero chunks) -> retry.
+    auto rempty = locus::classify_retry(kOK, 200, 0, false, 0, 3, -1);
+    CHECK(rempty.retry);
+
+    // 5xx -> retry.
+    CHECK(locus::classify_retry(kOK, 503, 0, false, 0, 3, -1).retry);
+
+    // Stream stall / timeout -> retry.
+    CHECK(locus::classify_retry(kTOUT, 0, 5, false, 0, 3, -1).retry);
+}
+
+TEST_CASE("classify_retry: deterministic failures do NOT retry", "[s6.16][retry]")
+{
+    // A normal 200 WITH data is success -- no retry.
+    CHECK_FALSE(locus::classify_retry(kOK, 200, 12, false, 0, 3, -1).retry);
+    // 4xx other than 429 is the client's fault -- no retry.
+    CHECK_FALSE(locus::classify_retry(kOK, 400, 0, false, 0, 3, -1).retry);
+    CHECK_FALSE(locus::classify_retry(kOK, 401, 0, false, 0, 3, -1).retry);
+    // Connection refused is deterministic for the session -- no retry.
+    CHECK_FALSE(locus::classify_retry(kCONN, 0, 0, false, 0, 3, -1).retry);
+    // User cancelled -- never retry even on an otherwise-transient failure.
+    CHECK_FALSE(locus::classify_retry(kOK, 429, 0, true, 0, 3, -1).retry);
+}
+
+TEST_CASE("classify_retry: budget exhaustion stops retrying", "[s6.16][retry]")
+{
+    // attempt 0,1 of max 3 retry; attempt 2 (the 3rd) does not.
+    CHECK(locus::classify_retry(kOK, 429, 0, false, 0, 3, -1).retry);
+    CHECK(locus::classify_retry(kOK, 429, 0, false, 1, 3, -1).retry);
+    CHECK_FALSE(locus::classify_retry(kOK, 429, 0, false, 2, 3, -1).retry);
+}
+
+TEST_CASE("classify_retry: backoff grows and honours Retry-After", "[s6.16][retry]")
+{
+    // Non-429 transient (empty-200) uses the plain exponential base.
+    auto a0 = locus::classify_retry(kOK, 200, 0, false, 0, 6, -1, 1000, 60000);
+    auto a1 = locus::classify_retry(kOK, 200, 0, false, 1, 6, -1, 1000, 60000);
+    auto a2 = locus::classify_retry(kOK, 200, 0, false, 2, 6, -1, 1000, 60000);
+    CHECK(a0.backoff_ms == 1000);
+    CHECK(a1.backoff_ms == 2000);
+    CHECK(a2.backoff_ms == 4000);
+
+    // Retry-After (10s) raises the floor above the exponential base.
+    auto ra = locus::classify_retry(kOK, 200, 0, false, 0, 6, 10000, 1000, 60000);
+    CHECK(ra.backoff_ms >= 10000);
+}
+
+TEST_CASE("classify_retry: 429 gets a higher backoff floor than other transients",
+          "[s6.16][retry]")
+{
+    // A bare 429 (no Retry-After) starts well above the generic base so a
+    // sustained rate-limit window actually clears before retries exhaust.
+    auto rl = locus::classify_retry(kOK, 429, 0, false, 0, 5, -1, 1000, 60000);
+    auto empty = locus::classify_retry(kOK, 200, 0, false, 0, 5, -1, 1000, 60000);
+    CHECK(rl.backoff_ms >= 8000);
+    CHECK(rl.backoff_ms > empty.backoff_ms);
 }

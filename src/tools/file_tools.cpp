@@ -125,8 +125,8 @@ ToolResult render_line_window(const std::string& rel_path,
 std::string ReadFileTool::preview(const ToolCall& call) const
 {
     std::string path = call.args.value("path", "");
-    int offset = call.args.value("offset", 1);
-    int length = call.args.value("length", 100);
+    int offset = static_cast<int>(tools::coerce_int(call.args, "offset", 1));
+    int length = static_cast<int>(tools::coerce_int(call.args, "length", 100));
     return "Read " + path + " lines " + std::to_string(offset) + "-" +
            std::to_string(offset + length - 1);
 }
@@ -138,8 +138,8 @@ ToolResult ReadFileTool::execute(const ToolCall& call, IWorkspaceServices& ws,
         return *err;
 
     std::string rel_path = call.args.value("path", "");
-    int offset = call.args.value("offset", 1);
-    int length = call.args.value("length", 100);
+    int offset = static_cast<int>(tools::coerce_int(call.args, "offset", 1));
+    int length = static_cast<int>(tools::coerce_int(call.args, "length", 100));
 
     if (rel_path.empty())
         return tools::missing_required_arg(*this, "path",
@@ -216,7 +216,7 @@ std::string WriteFileTool::preview(const ToolCall& call) const
     // overwrite based on the real file state.
     std::string path = call.args.value("path", "");
     size_t new_len   = call.args.value("content", "").size();
-    bool overwrite   = call.args.value("overwrite", false);
+    bool overwrite   = tools::coerce_bool(call.args, "overwrite", false);
 
     std::string head = overwrite ? "Write (overwrite allowed): "
                                  : "Create new: ";
@@ -232,7 +232,7 @@ ToolResult WriteFileTool::execute(const ToolCall& call, IWorkspaceServices& ws,
 
     std::string rel_path = call.args.value("path", "");
     std::string content  = call.args.value("content", "");
-    bool overwrite       = call.args.value("overwrite", false);
+    bool overwrite       = tools::coerce_bool(call.args, "overwrite", false);
 
     if (rel_path.empty())
         return tools::missing_required_arg(*this, "path",
@@ -386,9 +386,11 @@ std::string EditFileTool::preview(const ToolCall& call) const
     // continue to render.
     std::string path = call.args.value("file_path", "");
     if (path.empty()) path = call.args.value("path", "");
-    nlohmann::json edits = call.args.value("edits_array", nlohmann::json::array());
+    // Tolerant: accepts a real array OR a JSON-string-encoded array (a common
+    // small-model mistake). Never throws -- this runs on the UI thread.
+    nlohmann::json edits = tools::coerce_json_array(call.args, "edits_array");
     if (edits.empty())
-        edits = call.args.value("edits", nlohmann::json::array());
+        edits = tools::coerce_json_array(call.args, "edits");
     std::ostringstream ss;
     ss << "Edit " << path;
     if (edits.size() != 1)
@@ -430,18 +432,15 @@ ToolResult EditFileTool::execute(const ToolCall& call, IWorkspaceServices& ws,
     // S6.17 Task E -- single-edit shorthand. Accept top-level old_string +
     // new_string (+ optional replace_all) as a synonym for edits_array=[{...}]
     // so small models that miss the array shape still land their edit.
-    auto edits_present = [&]() -> const nlohmann::json* {
-        if (call.args.contains("edits_array") &&
-            call.args["edits_array"].is_array())
-            return &call.args["edits_array"];
-        if (call.args.contains("edits") && call.args["edits"].is_array())
-            return &call.args["edits"];
-        return nullptr;
-    };
+    // coerce_json_array also unwraps a JSON-string-encoded array (a common
+    // hosted-model mistake) so `"edits":"[{...}]"` lands instead of erroring.
+    nlohmann::json from_array = tools::coerce_json_array(call.args, "edits_array");
+    if (from_array.empty())
+        from_array = tools::coerce_json_array(call.args, "edits");
 
     nlohmann::json effective_edits;
-    if (auto* arr = edits_present()) {
-        effective_edits = *arr;
+    if (!from_array.empty()) {
+        effective_edits = std::move(from_array);
     } else if (call.args.contains("old_string")
             && call.args.contains("new_string")) {
         nlohmann::json single = nlohmann::json::object();
@@ -490,7 +489,7 @@ ToolResult EditFileTool::execute(const ToolCall& call, IWorkspaceServices& ws,
         const auto& e = edits[i];
         std::string old_s = e.value("old_string", "");
         std::string new_s = e.value("new_string", "");
-        bool all          = e.value("replace_all", false);
+        bool all          = tools::coerce_bool(e, "replace_all", false);
 
         // S6.10 Task G -- screen each new_string body before applying.
         if (auto blocked = check_truncation(ws, new_s, rel_path, "edit_file"))

@@ -250,7 +250,7 @@ std::string ListDirectoryTool::preview(const ToolCall& call) const
 {
     std::string path = call.args.value("path", "");
     if (path.empty() || path == ".") path = "(workspace root)";
-    int depth = call.args.value("depth", 0);
+    int depth = static_cast<int>(tools::coerce_int(call.args, "depth", 0));
     std::string out = "list_directory: " + path;
     if (depth > 0) out += "  depth=" + std::to_string(depth);
     return out;
@@ -264,8 +264,8 @@ ToolResult ListDirectoryTool::execute(const ToolCall& call, IWorkspaceServices& 
         return *err;
 
     std::string path = call.args.value("path", "");
-    int depth = call.args.value("depth", 0);
-    int max_entries = call.args.value("max_entries", 200);
+    int depth = static_cast<int>(tools::coerce_int(call.args, "depth", 0));
+    int max_entries = static_cast<int>(tools::coerce_int(call.args, "max_entries", 200));
     if (max_entries <= 0) max_entries = 200;
     if (depth < 0) depth = 0;
 

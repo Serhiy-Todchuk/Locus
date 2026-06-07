@@ -84,6 +84,47 @@ ToolApprovalPolicy resolve_approval_policy(
     const std::unordered_map<std::string, ToolApprovalPolicy>& overrides);
 
 
+// Type-tolerant boolean read from an LLM-supplied tool-arg object. Small /
+// hosted models routinely emit booleans as the WRONG JSON type -- the string
+// "true" / "True" / "1", or the integer 1 / 0 -- instead of a JSON bool.
+// nlohmann's `json::value<bool>(key, default)` and `.get<bool>()` THROW a
+// type_error on any non-bool value; when that throw lands on a UI-thread call
+// site (e.g. WriteFileTool::preview during the tool-pending broadcast) there is
+// no catch and the process fail-fasts (0xc0000409). This helper never throws:
+// it accepts a real JSON bool, the numbers 0/1, and the strings
+// true/false/1/0/yes/no/on/off (case-insensitive); anything else -> `fallback`.
+// Use it at EVERY tool-arg boolean site reachable from model output.
+bool coerce_bool(const nlohmann::json& args, const char* key, bool fallback);
+
+// Type-tolerant array read from an LLM-supplied tool-arg object. Same failure
+// mode as coerce_bool, one level up: small / hosted models routinely emit an
+// array arg as a STRING containing the JSON array text -- e.g.
+// `"edits":"[{\"old_string\":...}]"` instead of `"edits":[{...}]`. Reading it
+// with `json::value(key, json::array())` THROWS type_error (default is array,
+// stored is string), and on the UI-thread preview() path that throw fail-fasts
+// the process (0xc0000409). This helper never throws:
+//   - key absent / null            -> empty array
+//   - value already an array       -> returned as-is
+//   - value is a string that JSON-parses to an array -> the parsed array
+//   - anything else                -> empty array
+// Returns the parsed/array value. Pass the first present key; callers that
+// accept aliases call it once per alias and take the first non-empty result.
+nlohmann::json coerce_json_array(const nlohmann::json& args, const char* key);
+
+// Type-tolerant integer read from an LLM-supplied tool-arg object. Same class
+// as coerce_bool / coerce_json_array: models frequently emit a number as a
+// STRING ("100") or as a float (100.0). `json::value<int>(key, default)` and
+// `.get<int>()` THROW type_error on a string. In execute() that throw is caught
+// by the dispatcher and surfaces as a confusing "internal error" tool result
+// (wastes a round; the model can't tell it just mistyped the arg); in preview()
+// it would crash. This helper never throws:
+//   - key absent / null         -> fallback
+//   - integer                   -> the value (clamped to long long range)
+//   - float                     -> truncated to integer
+//   - string parseable as a number (leading int, optional sign) -> that number
+//   - anything else             -> fallback
+long long coerce_int(const nlohmann::json& args, const char* key, long long fallback);
+
 // Resolve a relative path safely within the workspace root.
 // Returns empty path if the resolved path escapes the workspace.
 std::filesystem::path resolve_path(IWorkspaceServices& ws, const std::string& rel);

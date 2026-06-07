@@ -315,7 +315,26 @@ void ToolDispatcher::dispatch(const ToolCall& call, const AppendFn& append_resul
     // block). The approval panel (GUI) checks the policy itself and skips
     // popping for auto-approved calls -- see locus_frame.cpp.
     {
-        std::string preview = tool->preview(call);
+        // preview() runs on the agent thread and parses model-supplied args.
+        // A malformed arg TYPE (e.g. a string where a bool/array is expected)
+        // can make a tool's preview throw a json type_error; individual tools
+        // are hardened with coerce_bool / coerce_json_array, but this catch-all
+        // is the backstop so NO preview exception can escape the agent thread
+        // and fail-fast the whole process (the 0xc0000409 crash class from the
+        // 2026-06-06 agentic DX12 session). Execute() already has its own
+        // catch-all below; this gives preview() the same guarantee.
+        std::string preview;
+        try {
+            preview = tool->preview(call);
+        } catch (const std::exception& ex) {
+            spdlog::warn("ToolDispatcher: preview() for '{}' threw ({}); "
+                         "using fallback preview", call.tool_name, ex.what());
+            preview = call.tool_name + " (preview unavailable -- malformed args)";
+        } catch (...) {
+            spdlog::warn("ToolDispatcher: preview() for '{}' threw a non-"
+                         "std exception; using fallback preview", call.tool_name);
+            preview = call.tool_name + " (preview unavailable)";
+        }
         bool needs_approval = (policy != ToolApprovalPolicy::auto_approve);
         frontends_.broadcast([&](IFrontend& fe) {
             fe.on_tool_call_pending(call, preview, needs_approval,
