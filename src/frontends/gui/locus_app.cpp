@@ -42,8 +42,10 @@ static _CrtMemState s_startup_mem_state{};
 static bool         s_startup_checkpoint_taken = false;
 #endif
 
-// wxWidgets macro: defines WinMain and creates the LocusApp instance.
-wxIMPLEMENT_APP(LocusApp);
+// App factory + wxGetApp() stay in `namespace locus` so the many in-namespace
+// wxGetApp() call sites (locus_frame.cpp et al.) resolve. The entry point
+// (main / WinMain) is emitted separately at GLOBAL scope at the end of this file.
+wxIMPLEMENT_APP_NO_MAIN(LocusApp);
 
 // S5.A -- if the folder has no .locus/config.json yet, pop the Workspace
 // Capabilities modal so the user can pick which buckets to enable before the
@@ -183,8 +185,11 @@ bool LocusApp::OnInit()
     }
 #endif
 
-    // Follow OS light/dark theme (Windows 10+).
+    // Follow OS light/dark theme (Windows 10+; macOS/Linux follow the system
+    // theme automatically via the native toolkit, so no call is needed there).
+#ifdef _WIN32
     MSWEnableDarkMode();
+#endif
 
     // UTF-8 support.
 #ifdef _WIN32
@@ -451,3 +456,11 @@ void LocusApp::init_logging(const std::filesystem::path& locus_dir)
 }
 
 } // namespace locus
+
+// wxWidgets program entry point at GLOBAL scope. wxIMPLEMENT_WXWIN_MAIN emits the
+// real entry symbol (main on macOS/Linux, WinMain on Windows) and calls wxEntry,
+// which constructs the app via the factory registered by wxIMPLEMENT_APP_NO_MAIN
+// inside namespace locus above. They are split because a `main` nested in
+// `namespace locus` is not the `::main` the C runtime starts -- the generic
+// non-Windows main has no extern-"C"/global guard the wx MSW WinMain macro has.
+wxIMPLEMENT_WXWIN_MAIN
