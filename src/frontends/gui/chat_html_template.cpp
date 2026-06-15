@@ -861,6 +861,20 @@ function setPlanDecided(msgId, label) {
 <script>)html";
     html += read_prism_asset("prism.min.js");
     html += R"html(</script>
+<script>
+// Signal C++ that every function above is now defined. wxEVT_WEBVIEW_LOADED is
+// not a reliable readiness gate cross-backend (it fires before this inline
+// script on WKWebView/macOS), so the C++ side flushes its queued RunScript
+// calls only after intercepting this navigation. Idempotent on the C++ side,
+// so firing it alongside a redundant LOADED event on WebView2 is harmless.
+(function() {
+    function signalReady() { window.location.href = 'locus://ready'; }
+    if (document.readyState === 'loading')
+        document.addEventListener('DOMContentLoaded', signalReady);
+    else
+        signalReady();
+})();
+</script>
 </body></html>)html";
 
     return html;
