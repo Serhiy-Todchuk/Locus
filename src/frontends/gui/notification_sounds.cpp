@@ -4,6 +4,9 @@
 #  define WIN32_LEAN_AND_MEAN
 #  include <windows.h>
 #  include <mmsystem.h>
+#elif defined(__APPLE__)
+#  include <AudioToolbox/AudioToolbox.h>
+#  include <CoreFoundation/CoreFoundation.h>
 #endif
 
 namespace locus::notification_sounds {
@@ -32,6 +35,37 @@ const wchar_t* alias_for(Kind kind)
     }
     return L"SystemDefault";
 }
+#elif defined(__APPLE__)
+const char* sound_file_for(Kind kind)
+{
+    switch (kind) {
+        case Kind::tool_approval: return "/System/Library/Sounds/Tink.aiff";
+        case Kind::ask_user:      return "/System/Library/Sounds/Glass.aiff";
+        case Kind::turn_complete: return "/System/Library/Sounds/Pop.aiff";
+        case Kind::compaction:    return "/System/Library/Sounds/Sosumi.aiff";
+    }
+    return "/System/Library/Sounds/Tink.aiff";
+}
+
+// Lazily register the four built-in sounds as SystemSoundIDs and cache them
+// for the app's lifetime (AudioServices wants the ID disposed eventually, but
+// four IDs living until exit is fine -- they map to small built-in clips).
+SystemSoundID system_sound_id(Kind kind)
+{
+    static SystemSoundID ids[4] = {0, 0, 0, 0};
+    int idx = static_cast<int>(kind);
+    if (idx < 0 || idx > 3) idx = 0;
+    if (ids[idx] == 0) {
+        CFStringRef path = CFStringCreateWithCString(
+            kCFAllocatorDefault, sound_file_for(kind), kCFStringEncodingUTF8);
+        CFURLRef url = CFURLCreateWithFileSystemPath(
+            kCFAllocatorDefault, path, kCFURLPOSIXPathStyle, false);
+        AudioServicesCreateSystemSoundID(url, &ids[idx]);
+        CFRelease(url);
+        CFRelease(path);
+    }
+    return ids[idx];
+}
 #endif
 
 } // namespace
@@ -54,6 +88,15 @@ void play(Kind kind, const WorkspaceConfig& cfg, const wxFrame* frame)
 
     ::PlaySoundW(alias_for(kind), nullptr,
                  SND_ALIAS | SND_ASYNC | SND_NODEFAULT);
+#elif defined(__APPLE__)
+    // App-level "active" is the right granularity on macOS (mirrors
+    // NSApplication.isActive); a modal we own keeps the app active too.
+    (void)frame;
+    if (n.only_when_unfocused && wxTheApp && wxTheApp->IsActive())
+        return;
+
+    SystemSoundID sid = system_sound_id(kind);
+    if (sid != 0) AudioServicesPlaySystemSound(sid);  // non-blocking
 #else
     (void)frame;
 #endif

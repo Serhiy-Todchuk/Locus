@@ -10,6 +10,19 @@
 using namespace locus::integration;
 using namespace std::chrono_literals;
 
+// run_command_bg shells via `cmd /c` (Windows) or `/bin/sh -c` (macOS, S6.9
+// Stage B), so the command lines are per-platform. `kLongRunToken` is the
+// substring the registry-side kill assertion matches against e.command.
+#ifdef _WIN32
+constexpr const char* kBgEcho       = "cmd /c echo unique-bg-marker-7421";
+constexpr const char* kBgLongRun    = "cmd /c ping -n 30 -w 1000 127.0.0.1";
+constexpr const char* kLongRunToken = "ping";
+#else
+constexpr const char* kBgEcho       = "echo unique-bg-marker-7421";
+constexpr const char* kBgLongRun    = "sleep 30";
+constexpr const char* kLongRunToken = "sleep";
+#endif
+
 // S4.I -- background command tools. These use the LLM to chain run_command_bg
 // -> read_process_output / list_processes / stop_process in a single turn.
 // Small models (Gemma 4 E4B) tend to call them sequentially within one
@@ -21,8 +34,8 @@ TEST_CASE("agent starts a background process and reads its output",
     auto& h = harness();
 
     PromptResult r = h.prompt(
-        "Use the run_command_bg tool to start the shell command "
-        "`cmd /c echo unique-bg-marker-7421`. The tool will return a "
+        std::string("Use the run_command_bg tool to start the shell command "
+        "`") + kBgEcho + "`. The tool will return a "
         "process_id. Wait a moment, then use the read_process_output tool "
         "with that process_id to read what the command printed. Tell me "
         "exactly what was printed.");
@@ -71,8 +84,8 @@ TEST_CASE("agent stops a long-running background process",
     auto& h = harness();
 
     PromptResult r = h.prompt(
-        "Use the run_command_bg tool to start the shell command "
-        "`cmd /c ping -n 30 -w 1000 127.0.0.1` in the background. It returns "
+        std::string("Use the run_command_bg tool to start the shell command "
+        "`") + kBgLongRun + "` in the background. It returns "
         "a process_id. Then immediately use the stop_process tool with that "
         "process_id to terminate it.");
 
@@ -93,7 +106,7 @@ TEST_CASE("agent stops a long-running background process",
     while (std::chrono::steady_clock::now() < deadline) {
         auto entries = reg->list();
         for (const auto& e : entries) {
-            if (e.command.find("ping") != std::string::npos &&
+            if (e.command.find(kLongRunToken) != std::string::npos &&
                 e.status == locus::BackgroundProcess::Status::killed) {
                 any_killed = true;
                 break;

@@ -15,9 +15,24 @@ namespace fs = std::filesystem;
 using Catch::Matchers::ContainsSubstring;
 using namespace std::chrono_literals;
 
-#ifdef _WIN32
+#if defined(_WIN32) || defined(__APPLE__)
 
 namespace {
+
+// Per-platform command strings. The shell differs (cmd /c vs /bin/sh -c) so
+// the loop / sleep / read-stdin idioms are spelled per OS; the simple `echo`
+// forms work verbatim on both.
+#ifdef _WIN32
+constexpr const char* kCmdManyLines   = "for /L %i in (1,1,200) do @echo line_%i";
+constexpr const char* kCmdLongRunning = "ping -n 60 -w 1000 127.0.0.1";
+constexpr const char* kCmdReadsStdin  = "more";
+constexpr const char* kCmdSleep30     = "ping -n 30 127.0.0.1";
+#else
+constexpr const char* kCmdManyLines   = "for i in $(seq 1 200); do echo line_$i; done";
+constexpr const char* kCmdLongRunning = "sleep 60";
+constexpr const char* kCmdReadsStdin  = "cat";
+constexpr const char* kCmdSleep30     = "sleep 30";
+#endif
 
 // Service shim that exposes a real ProcessRegistry to the bg tools.
 class WsWithProcs : public locus::IWorkspaceServices {
@@ -109,7 +124,7 @@ TEST_CASE("ProcessRegistry: ring buffer drops bytes on overflow", "[s4.i]")
 {
     // 64-byte cap: anything past that is reported as dropped.
     locus::ProcessRegistry reg(tmp_root(), 64);
-    int id = reg.spawn("for /L %i in (1,1,200) do @echo line_%i");
+    int id = reg.spawn(kCmdManyLines);
 
     REQUIRE(wait_for([&] {
         auto e = reg.list();
@@ -129,7 +144,7 @@ TEST_CASE("ProcessRegistry: ring buffer drops bytes on overflow", "[s4.i]")
 TEST_CASE("ProcessRegistry: stop terminates a long-running process", "[s4.i]")
 {
     locus::ProcessRegistry reg(tmp_root(), 64 * 1024);
-    int id = reg.spawn("ping -n 60 -w 1000 127.0.0.1");
+    int id = reg.spawn(kCmdLongRunning);
 
     // Give the OS a beat to spawn before we kill it.
     std::this_thread::sleep_for(200ms);
@@ -149,7 +164,7 @@ TEST_CASE("ProcessRegistry: dtor terminates surviving processes", "[s4.i]")
     int id = 0;
     {
         locus::ProcessRegistry reg(tmp_root(), 64 * 1024);
-        id = reg.spawn("ping -n 60 -w 1000 127.0.0.1");
+        id = reg.spawn(kCmdLongRunning);
         REQUIRE(id > 0);
         // Drop without explicitly stopping -- dtor must not hang.
     }
@@ -239,7 +254,7 @@ TEST_CASE("ProcessRegistry: write_stdin succeeds for a running bg process", "[s5
     locus::ProcessRegistry reg(tmp_root(), 64 * 1024);
     // `more` reads from stdin and writes to stdout, exiting on EOF -- long
     // enough lived that we can write to its stdin pipe.
-    int id = reg.spawn("more");
+    int id = reg.spawn(kCmdReadsStdin);
     REQUIRE(id > 0);
 
     REQUIRE(reg.write_stdin(id, std::string("hello\n")));
@@ -283,7 +298,7 @@ TEST_CASE("RunCommandTool: observes cancel flag mid-execution", "[s5.z]")
 
     std::atomic<bool> cancel{false};
     locus::ToolCall call{"c1", "run_command",
-                         {{"command", "ping -n 30 127.0.0.1"},
+                         {{"command", kCmdSleep30},
                           {"timeout_ms", 60000}}};
 
     auto t0 = std::chrono::steady_clock::now();
@@ -303,8 +318,40 @@ TEST_CASE("RunCommandTool: observes cancel flag mid-execution", "[s5.z]")
 
     REQUIRE_FALSE(r.success);
     REQUIRE_THAT(r.content, ContainsSubstring("[cancelled by user]"));
-    // ping -n 30 would take ~29s. Cancel should fire well inside 5s.
+    // The command would sleep ~30s. Cancel should fire well inside 5s.
     REQUIRE(elapsed < std::chrono::seconds(5));
 }
 
-#endif // _WIN32
+#if defined(__APPLE__)
+// S6.9 Stage B -- prove stop() kills the whole child GROUP, not just the
+// `sh -c` leader. The leader backgrounds a subshell and exits immediately;
+// that subshell inherits the stdout pipe write end and keeps emitting. Only a
+// killpg reaches it -- if we killed just the leader, the subshell would leak,
+// keep the pipe open (reader never sees EOF), and remove()'s join would hang.
+TEST_CASE("ProcessRegistry: stop kills the whole child group (killpg)", "[s6.9][macos]")
+{
+    locus::ProcessRegistry reg(tmp_root(), 1024 * 1024);
+    int id = reg.spawn("(while true; do echo tick; sleep 0.05; done) &");
+
+    // Let the backgrounded subshell produce output (proves it is alive).
+    std::this_thread::sleep_for(300ms);
+    auto before = reg.read_output(id, std::size_t{0});
+    REQUIRE(before.has_value());
+    REQUIRE(before->next_offset > 0);
+
+    REQUIRE(reg.stop(id));
+
+    // After the group kill the writer is dead -- the byte count must freeze.
+    std::this_thread::sleep_for(400ms);
+    auto a = reg.read_output(id, std::size_t{0})->next_offset;
+    std::this_thread::sleep_for(400ms);
+    auto b = reg.read_output(id, std::size_t{0})->next_offset;
+    REQUIRE(a == b);
+
+    // remove() runs terminate()+join(); it only returns if the reader thread
+    // observed pipe EOF, which requires the subshell (the writer) to be dead.
+    REQUIRE(reg.remove(id));
+}
+#endif // __APPLE__
+
+#endif // _WIN32 || __APPLE__

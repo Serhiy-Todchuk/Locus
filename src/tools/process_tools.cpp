@@ -22,11 +22,37 @@
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
+#else
+#include <cerrno>
+#include <csignal>
+#include <cstring>
+#include <spawn.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#if defined(__APPLE__)
+#include <crt_externs.h>
+#endif
 #endif
 
 namespace locus {
 
 using tools::error_result;
+
+#ifndef _WIN32
+namespace {
+// macOS hides `environ` from a regular executable's globals; the supported
+// accessor is _NSGetEnviron(). On other POSIX hosts the extern works.
+inline char** locus_environ()
+{
+#if defined(__APPLE__)
+    return *_NSGetEnviron();
+#else
+    extern char** environ;
+    return environ;
+#endif
+}
+} // namespace
+#endif
 
 std::string RunCommandTool::preview(const ToolCall& call) const
 {
@@ -403,23 +429,189 @@ ToolResult RunCommandTool::execute(const ToolCall& call, IWorkspaceServices& ws,
     return {exit_code == 0 && !timed_out && !cancelled, result, result};
 }
 
-#else
+#else // POSIX (macOS)
 
-ToolResult RunCommandTool::execute(const ToolCall& /*call*/, IWorkspaceServices& /*ws*/,
-                                    const std::atomic<bool>* /*cancel_flag*/)
+namespace {
+
+// SIGTERM the process group, give it a brief grace, then SIGKILL anything
+// still alive. pgid == the child pid (the child is its own group leader).
+// Always reaps `pid` so we never leave a zombie. Mirrors the Win32 path's
+// TerminateJobObject + WaitForSingleObject(2000) escalation.
+void kill_group_and_reap(pid_t pid, pid_t pgid, int& wstatus)
 {
-    // S5.Z task 5 -- prefix with the OS name so the activity-log line makes
-    // it unambiguous *why* the call failed (Windows-only at v1; macOS / Linux
-    // shell-out is a separate multi-week effort outside M5).
-#if defined(__APPLE__)
-    const char* os = "macos";
-#elif defined(__linux__)
-    const char* os = "linux";
-#else
-    const char* os = "unknown";
-#endif
-    return error_result(std::string("[platform: ") + os +
-                        "] run_command is Windows-only in this build");
+    ::killpg(pgid, SIGTERM);
+    for (int i = 0; i < 40; ++i) {  // ~2s grace at 50ms steps
+        pid_t w = ::waitpid(pid, &wstatus, WNOHANG);
+        if (w == pid) return;
+        if (w < 0 && errno != EINTR) return;
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+    ::killpg(pgid, SIGKILL);
+    while (::waitpid(pid, &wstatus, 0) < 0 && errno == EINTR) {}
+}
+
+} // namespace
+
+ToolResult RunCommandTool::execute(const ToolCall& call, IWorkspaceServices& ws,
+                                    const std::atomic<bool>* cancel_flag)
+{
+    if (auto err = tools::reject_unknown_keys(call,
+            {"command", "timeout_ms",
+             "output_filter_mode", "output_filter_pattern",
+             "output_filter_lines", "output_filter_context",
+             "output_filter_case_sensitive"}, this))
+        return *err;
+
+    std::string command = call.args.value("command", "");
+    int timeout_ms = static_cast<int>(tools::coerce_int(call.args, "timeout_ms", 1800000));
+
+    if (command.empty())
+        return tools::missing_required_arg(*this, "command",
+            "the shell command line to execute");
+
+    spdlog::trace("run_command: '{}'", command);
+
+    ProcessSinkBroker* sink = ws.process_sink();
+    if (sink) sink->emit_sync_started(command);
+
+    // stdout+stderr pipe. stdin is inherited from the parent (matches the
+    // Win32 path handing the child GetStdHandle(STD_INPUT_HANDLE)).
+    int out_pipe[2] = {-1, -1};
+    if (::pipe(out_pipe) != 0)
+        return error_result("Error: failed to create pipe");
+
+    posix_spawn_file_actions_t fa;
+    posix_spawn_file_actions_init(&fa);
+    // _np spelling for back-compat (non-_np only exists on macOS 26+).
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    posix_spawn_file_actions_addchdir_np(&fa, ws.root().string().c_str());
+#pragma clang diagnostic pop
+    posix_spawn_file_actions_adddup2(&fa, out_pipe[1], STDOUT_FILENO);
+    posix_spawn_file_actions_adddup2(&fa, out_pipe[1], STDERR_FILENO);
+    posix_spawn_file_actions_addclose(&fa, out_pipe[0]);
+    posix_spawn_file_actions_addclose(&fa, out_pipe[1]);
+
+    posix_spawnattr_t attr;
+    posix_spawnattr_init(&attr);
+    // Own process group so a timeout / cancel can kill the whole subtree.
+    posix_spawnattr_setflags(&attr, POSIX_SPAWN_SETPGROUP);
+    posix_spawnattr_setpgroup(&attr, 0);
+
+    char* const argv[] = {
+        const_cast<char*>("/bin/sh"),
+        const_cast<char*>("-c"),
+        const_cast<char*>(command.c_str()),
+        nullptr,
+    };
+
+    pid_t pid = -1;
+    int rc = posix_spawn(&pid, "/bin/sh", &fa, &attr, argv, locus_environ());
+    posix_spawn_file_actions_destroy(&fa);
+    posix_spawnattr_destroy(&attr);
+    ::close(out_pipe[1]);  // parent never writes
+
+    if (rc != 0) {
+        ::close(out_pipe[0]);
+        if (sink) sink->emit_sync_exited(1, false);
+        return error_result(std::string("Error: failed to spawn process (") +
+                            std::strerror(rc) + ")");
+    }
+    const pid_t pgid = pid;
+
+    // Drain stdout+stderr on a reader thread so the terminal panel sees chunks
+    // live and the pipe never back-pressures the child.
+    std::string output;
+    std::mutex  output_mu;
+    std::thread reader([&]{
+        char buf[4096];
+        for (;;) {
+            ssize_t n = ::read(out_pipe[0], buf, sizeof(buf));
+            if (n > 0) {
+                if (sink) sink->emit_sync_chunk(buf, static_cast<size_t>(n));
+                std::lock_guard l(output_mu);
+                output.append(buf, static_cast<size_t>(n));
+            } else if (n == 0) {
+                break;
+            } else {
+                if (errno == EINTR) continue;
+                break;
+            }
+        }
+    });
+
+    // Polled waitpid so the dispatcher's cancel flag + the timeout are both
+    // observed within k_poll_ms.
+    constexpr auto k_poll = std::chrono::milliseconds(50);
+    const auto start = std::chrono::steady_clock::now();
+    int  wstatus   = 0;
+    bool cancelled = false;
+    bool timed_out = false;
+    for (;;) {
+        pid_t w = ::waitpid(pid, &wstatus, WNOHANG);
+        if (w == pid) break;               // exited
+        if (w < 0) {
+            if (errno == EINTR) continue;
+            break;                          // unexpected; treat as done
+        }
+        // w == 0: still running.
+        if (cancel_flag && cancel_flag->load()) {
+            kill_group_and_reap(pid, pgid, wstatus);
+            cancelled = true;
+            break;
+        }
+        if (timeout_ms > 0) {
+            auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - start).count();
+            if (elapsed >= timeout_ms) {
+                kill_group_and_reap(pid, pgid, wstatus);
+                timed_out = true;
+                break;
+            }
+        }
+        std::this_thread::sleep_for(k_poll);
+    }
+
+    // The child (and its group, on kill) has exited -> every write end of the
+    // pipe is closed -> the reader sees EOF and joins.
+    reader.join();
+    ::close(out_pipe[0]);
+
+    int exit_code = 0;
+    if (WIFEXITED(wstatus))        exit_code = WEXITSTATUS(wstatus);
+    else if (WIFSIGNALED(wstatus)) exit_code = 128 + WTERMSIG(wstatus);
+    if (timed_out && exit_code == 0) exit_code = 1;
+
+    constexpr size_t max_output = 1 * 1024 * 1024;
+    if (output.size() > max_output) {
+        output.resize(max_output);
+        output += "\n[... raw output exceeded 1 MB; remainder discarded ...]";
+    }
+
+    spdlog::trace("run_command: exit={} output={} bytes{}\n--- raw ---\n{}\n--- end raw ---",
+                  exit_code, output.size(),
+                  timed_out ? " (timed out)" : "", output);
+
+    OutputFilterSpec spec;
+    std::string parse_err;
+    if (!parse_output_filter_args(call.args, spec, parse_err)) {
+        if (sink) sink->emit_sync_exited(exit_code, timed_out);
+        return error_result("Error: " + parse_err);
+    }
+    int default_lines = 50;
+    if (auto* wsp = ws.workspace())
+        default_lines = wsp->config().agent.run_command_truncate_lines;
+    std::string filtered = apply_output_filter(output, spec, default_lines);
+
+    std::ostringstream content;
+    if (cancelled)      content << "[cancelled by user]\n";
+    else if (timed_out) content << "[TIMEOUT after " << timeout_ms << "ms]\n";
+    content << "[exit code: " << exit_code << "]\n";
+    content << filtered;
+
+    std::string result = content.str();
+    if (sink) sink->emit_sync_exited(exit_code, timed_out);
+    return {exit_code == 0 && !timed_out && !cancelled, result, result};
 }
 
 #endif

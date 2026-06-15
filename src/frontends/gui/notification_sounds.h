@@ -6,15 +6,16 @@
 
 namespace locus {
 
-// Per-event sound alerts for moments that need the user's attention. Backed
-// by the Windows PlaySound API with SystemX aliases so the actual waveforms
-// are whatever the user has configured in Control Panel -> Sounds.
+// Per-event sound alerts for moments that need the user's attention.
 //
-// Map (each is a distinct OS alias so the user can tell them apart):
-//   tool_approval -> SystemExclamation
-//   ask_user      -> SystemQuestion
-//   turn_complete -> SystemAsterisk
-//   compaction    -> SystemHand
+// Windows: PlaySound with SystemX aliases (waveforms follow the user's
+//   Control Panel -> Sounds settings):
+//     tool_approval -> SystemExclamation   ask_user   -> SystemQuestion
+//     turn_complete -> SystemAsterisk       compaction -> SystemHand
+// macOS: AudioServices on the built-in /System/Library/Sounds/*.aiff
+//   (C API, non-blocking, no Objective-C):
+//     tool_approval -> Tink   ask_user   -> Glass
+//     turn_complete -> Pop    compaction -> Sosumi
 namespace notification_sounds {
 
 enum class Kind {

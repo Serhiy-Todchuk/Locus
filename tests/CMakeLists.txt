@@ -110,4 +110,10 @@ add_subdirectory(integration)
 add_subdirectory(retrieval_eval)
 
 # Manual-only UI Automation test driver (locus_ui_tests, S5.L).
-add_subdirectory(ui_automation)
+# Windows-only for now: the driver is built on the Win32 UI Automation client
+# (uiautomationcore) + WIC screenshots + winsock. The macOS AXUIElementRef port
+# is S6.9 Stage C; until it lands, skip the target off-Windows so the rest of
+# the suite builds.
+if(WIN32)
+    add_subdirectory(ui_automation)
+endif()

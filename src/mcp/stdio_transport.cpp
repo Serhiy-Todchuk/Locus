@@ -10,6 +10,21 @@
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
+#else
+#include <cerrno>
+#include <csignal>
+#include <fcntl.h>
+#include <map>
+#include <spawn.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#if defined(__APPLE__)
+#include <crt_externs.h>
+#define LOCUS_ENVIRON (*_NSGetEnviron())
+#else
+extern char** environ;
+#define LOCUS_ENVIRON environ
+#endif
 #endif
 
 namespace locus {
@@ -29,6 +44,9 @@ StdioTransport::~StdioTransport()
     if (stdout_r_) { CloseHandle(static_cast<HANDLE>(stdout_r_)); stdout_r_ = nullptr; }
     if (process_)  { CloseHandle(static_cast<HANDLE>(process_));  process_  = nullptr; }
     if (job_)      { CloseHandle(static_cast<HANDLE>(job_));      job_      = nullptr; }
+#else
+    if (stdin_w_  >= 0) { ::close(stdin_w_);  stdin_w_  = -1; }
+    if (stdout_r_ >= 0) { ::close(stdout_r_); stdout_r_ = -1; }
 #endif
 }
 
@@ -428,17 +446,208 @@ void StdioTransport::reader_loop()
     }
 }
 
-#else // !_WIN32
+#else // !_WIN32  (macOS / POSIX)
 
-void StdioTransport::spawn(const std::string&, const std::vector<std::string>&,
-                            const std::map<std::string, std::string>&,
-                            const fs::path&)
+namespace {
+
+// Merge the parent environment with the caller's overrides (overrides win).
+// POSIX env is case-sensitive, so -- unlike the Win32 block -- keys are kept
+// verbatim. Returns "KEY=VALUE" strings; the caller builds the char* vector.
+std::vector<std::string>
+build_env(const std::map<std::string, std::string>& overrides)
 {
-    throw std::runtime_error("MCP stdio transport not implemented on this platform");
+    std::map<std::string, std::string> merged;
+    for (char** e = LOCUS_ENVIRON; e && *e; ++e) {
+        std::string entry(*e);
+        auto eq = entry.find('=');
+        if (eq == std::string::npos || eq == 0) continue;
+        merged[entry.substr(0, eq)] = entry.substr(eq + 1);
+    }
+    for (auto& [k, v] : overrides) merged[k] = v;
+
+    std::vector<std::string> out;
+    out.reserve(merged.size());
+    for (auto& [k, v] : merged) out.push_back(k + "=" + v);
+    return out;
 }
-bool StdioTransport::send_line(const std::string&) { return false; }
-void StdioTransport::terminate() { running_ = false; terminated_by_us_ = true; }
-void StdioTransport::reader_loop() {}
+
+} // namespace
+
+void StdioTransport::spawn(const std::string& command,
+                            const std::vector<std::string>& args,
+                            const std::map<std::string, std::string>& env_overrides,
+                            const fs::path& cwd)
+{
+    int in_pipe[2]  = {-1, -1};   // parent writes [1] -> child stdin [0]
+    int out_pipe[2] = {-1, -1};   // child stdout [1] -> parent reads [0]
+    if (::pipe(in_pipe) != 0)
+        throw std::runtime_error("pipe (stdin) failed");
+    if (::pipe(out_pipe) != 0) {
+        ::close(in_pipe[0]); ::close(in_pipe[1]);
+        throw std::runtime_error("pipe (stdout) failed");
+    }
+
+    posix_spawn_file_actions_t fa;
+    posix_spawn_file_actions_init(&fa);
+    if (!cwd.empty()) {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+        posix_spawn_file_actions_addchdir_np(&fa, cwd.string().c_str());
+#pragma clang diagnostic pop
+    }
+    posix_spawn_file_actions_adddup2(&fa, in_pipe[0],  STDIN_FILENO);
+    posix_spawn_file_actions_adddup2(&fa, out_pipe[1], STDOUT_FILENO);
+    // stderr is intentionally NOT redirected -- the child inherits ours so the
+    // server's diagnostics surface in our terminal / log (matches Win32).
+    posix_spawn_file_actions_addclose(&fa, in_pipe[0]);
+    posix_spawn_file_actions_addclose(&fa, in_pipe[1]);
+    posix_spawn_file_actions_addclose(&fa, out_pipe[0]);
+    posix_spawn_file_actions_addclose(&fa, out_pipe[1]);
+
+    posix_spawnattr_t attr;
+    posix_spawnattr_init(&attr);
+    // Own process group so terminate() can killpg the whole server subtree.
+    posix_spawnattr_setflags(&attr, POSIX_SPAWN_SETPGROUP);
+    posix_spawnattr_setpgroup(&attr, 0);
+
+    std::vector<char*> argv;
+    argv.push_back(const_cast<char*>(command.c_str()));
+    for (auto& a : args) argv.push_back(const_cast<char*>(a.c_str()));
+    argv.push_back(nullptr);
+
+    std::vector<std::string> env_storage = build_env(env_overrides);
+    std::vector<char*> envp;
+    envp.reserve(env_storage.size() + 1);
+    for (auto& e : env_storage) envp.push_back(e.data());
+    envp.push_back(nullptr);
+
+    pid_t pid = -1;
+    // posix_spawnp walks PATH, so a bare "npx" / "node" resolves the same way
+    // a shell would -- the POSIX analogue of the Win32 SearchPath/PATHEXT dance.
+    int rc = posix_spawnp(&pid, command.c_str(), &fa, &attr, argv.data(), envp.data());
+    posix_spawn_file_actions_destroy(&fa);
+    posix_spawnattr_destroy(&attr);
+
+    ::close(in_pipe[0]);   // child read end
+    ::close(out_pipe[1]);  // child write end
+
+    if (rc != 0) {
+        ::close(in_pipe[1]);
+        ::close(out_pipe[0]);
+        throw std::runtime_error("posix_spawnp failed for '" + command + "': " +
+                                 std::strerror(rc));
+    }
+
+    ::fcntl(in_pipe[1],  F_SETFD, FD_CLOEXEC);
+    ::fcntl(out_pipe[0], F_SETFD, FD_CLOEXEC);
+
+    pid_      = pid;
+    pgid_     = pid;
+    stdin_w_  = in_pipe[1];
+    stdout_r_ = out_pipe[0];
+
+    running_  = true;
+    reader_   = std::thread(&StdioTransport::reader_loop, this);
+
+    spdlog::info("StdioTransport: spawned PID {} cmd: {}", pid, command);
+}
+
+bool StdioTransport::send_line(const std::string& json_line)
+{
+    if (!running_.load()) return false;
+
+    std::string buf;
+    buf.reserve(json_line.size() + 1);
+    buf.append(json_line);
+    if (buf.empty() || buf.back() != '\n') buf.push_back('\n');
+
+    std::lock_guard l(write_mu_);
+    if (stdin_w_ < 0) return false;
+
+    std::size_t off = 0;
+    while (off < buf.size()) {
+        ssize_t w = ::write(stdin_w_, buf.data() + off, buf.size() - off);
+        if (w < 0) {
+            if (errno == EINTR) continue;
+            spdlog::warn("StdioTransport: write failed, child likely exited");
+            return false;
+        }
+        off += static_cast<std::size_t>(w);
+    }
+    return true;
+}
+
+void StdioTransport::terminate()
+{
+    if (!running_.exchange(false)) return;
+    terminated_by_us_.store(true);
+
+    // Close our stdin write end first -- a well-behaved MCP server exits on
+    // stdin EOF, which is the polite shutdown. killpg is the backstop for a
+    // server that doesn't (the whole group, so forked helpers go too).
+    {
+        std::lock_guard l(write_mu_);
+        if (stdin_w_ >= 0) { ::close(stdin_w_); stdin_w_ = -1; }
+    }
+    if (pgid_ > 0) ::killpg(pgid_, SIGTERM);
+}
+
+void StdioTransport::reader_loop()
+{
+    if (stdout_r_ < 0) {
+        running_ = false;
+        if (closed_cb_) closed_cb_(0, false);
+        return;
+    }
+
+    std::string carry;
+    char buf[4096];
+    for (;;) {
+        ssize_t n = ::read(stdout_r_, buf, sizeof(buf));
+        if (n <= 0) {
+            if (n < 0 && errno == EINTR) continue;
+            break;  // EOF (child exited / pipe closed) or hard error
+        }
+        carry.append(buf, static_cast<std::size_t>(n));
+
+        std::size_t start = 0;
+        while (true) {
+            std::size_t nl = carry.find('\n', start);
+            if (nl == std::string::npos) break;
+            std::size_t end = nl;
+            if (end > start && carry[end - 1] == '\r') --end;  // CRLF servers
+            if (end > start && msg_cb_) {
+                try { msg_cb_(carry.substr(start, end - start)); }
+                catch (const std::exception& e) {
+                    spdlog::warn("StdioTransport: message handler threw: {}", e.what());
+                }
+            }
+            start = nl + 1;
+        }
+        if (start > 0) carry.erase(0, start);
+    }
+
+    running_ = false;
+
+    // Reap so we get the exit status and leave no zombie. SIGKILL the group as
+    // a final backstop in case terminate() sent SIGTERM but a helper lingered.
+    int  exit_code = 0;
+    bool have_exit = false;
+    if (pid_ > 0) {
+        if (terminated_by_us_.load() && pgid_ > 0) ::killpg(pgid_, SIGKILL);
+        int wstatus = 0;
+        while (::waitpid(pid_, &wstatus, 0) < 0 && errno == EINTR) {}
+        if (WIFEXITED(wstatus))        { exit_code = WEXITSTATUS(wstatus);    have_exit = true; }
+        else if (WIFSIGNALED(wstatus)) { exit_code = 128 + WTERMSIG(wstatus); have_exit = true; }
+    }
+
+    if (closed_cb_) {
+        try { closed_cb_(exit_code, have_exit); }
+        catch (const std::exception& e) {
+            spdlog::warn("StdioTransport: closed handler threw: {}", e.what());
+        }
+    }
+}
 
 #endif
 

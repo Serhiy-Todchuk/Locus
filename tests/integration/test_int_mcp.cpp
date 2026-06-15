@@ -105,7 +105,10 @@ bool wait_for_turn_done(HarnessFrontend& fe, std::chrono::milliseconds timeout)
 
 } // namespace
 
-#ifdef _WIN32
+// Runs wherever StdioTransport can spawn a child: Windows (Job Object) and
+// macOS (posix_spawn + process group, S6.9 Stage B). The body is platform-
+// agnostic -- it only writes an mcp.json and drives the agent loop.
+#if defined(_WIN32) || defined(__APPLE__)
 
 TEST_CASE("MCP echo tool round-trips via the agent loop",
           "[integration][llm][mcp]")
@@ -218,4 +221,4 @@ TEST_CASE("MCP echo tool round-trips via the agent loop",
     Cleanup _c{root};
 }
 
-#endif // _WIN32
+#endif // _WIN32 || __APPLE__

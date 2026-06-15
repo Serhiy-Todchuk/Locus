@@ -161,6 +161,16 @@ exe is under `build/release/tests/`. `libpdfium.dylib` is auto-copied next to
 each app binary by a `POST_BUILD` step and the binary's rpath is set to
 `@executable_path` so it loads.
 
+No `--config` flag (single-config). The default build produces a flat,
+directly-runnable `build/release/locus_gui`.
+
+**Distributable `.app` bundle** (optional): add `-DLOCUS_MACOS_BUNDLE=ON` at
+configure time to build `build/release/locus_gui.app` instead -- `libpdfium.dylib`
+moves into `Contents/Frameworks` (rpath `@executable_path/../Frameworks`), with
+Info.plist + `Locus.icns`. Unsigned by default (run via right-click -> Open);
+pass `-DLOCUS_CODESIGN_IDENTITY="Developer ID Application: ..."` to sign. The
+flat layout (option OFF, the default) is what you want for day-to-day dev.
+
 **Models**: use the bash downloaders instead of the PowerShell ones --
 `./models/download.sh` (multilingual bge-m3 set) or `./models/download-small.sh`
 (small English profile).
