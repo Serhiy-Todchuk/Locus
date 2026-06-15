@@ -13,6 +13,15 @@
 
 namespace locus {
 
+#if defined(__APPLE__)
+// Implemented in recent_workspaces_mac.mm. Registers `path` with the system
+// recent-documents list so the workspace appears in the Dock icon's right-click
+// menu and the app's "Open Recent". Additive to our own JSON list below; must
+// be called on the main thread (NSDocumentController requirement -- add() runs
+// on the UI thread at workspace open, so that holds).
+void note_recent_document_macos(const std::string& path);
+#endif
+
 // Manages a list of recently opened workspace paths.
 // Stored as a JSON array in ~/.locus/recent_workspaces.json (S5.M).
 class RecentWorkspaces {
@@ -92,6 +101,11 @@ public:
             entries.resize(k_max_entries);
 
         save(entries);
+
+#if defined(__APPLE__)
+        // Mirror into the macOS system recent-documents list (Dock menu).
+        note_recent_document_macos(normalized);
+#endif
     }
 
     // Returns the most recently used workspace path, or empty string.

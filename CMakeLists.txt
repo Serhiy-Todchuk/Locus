@@ -5,6 +5,11 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# macOS distribution: build locus_gui as a Locus.app bundle (S6.9 Stage C).
+# OFF by default so the everyday dev build still produces a flat, directly
+# runnable build/release/locus_gui. Turn ON for a distributable .app.
+option(LOCUS_MACOS_BUNDLE "Build locus_gui as a macOS .app bundle" OFF)
+
 # Match static CRT used by vcpkg x64-windows-static triplet
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
@@ -180,23 +185,49 @@ FetchContent_Declare(tree-sitter-kotlin
 )
 
 # PDFium prebuilt binaries (BSD-3-Clause).  Not in vcpkg mainline; pulled
-# from bblanchon/pdfium-binaries as a pinned release.  Ships as a DLL +
-# import lib + headers.  The DLL is copied next to locus.exe at build time.
+# from bblanchon/pdfium-binaries as a pinned release.  The runtime library is
+# copied next to the executable at build time.  Same chromium/6996 tag across
+# platforms so PDF extraction behavior stays identical (S6.9: macOS arm64-only).
+if(APPLE)
+    set(PDFIUM_URL  "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium%2F6996/pdfium-mac-arm64.tgz")
+    set(PDFIUM_HASH "SHA256=1b103d5ebfd8f7b5720ca9ba76888e7efaa80678a49c8f3da3b0ac64ba5c90fb")
+elseif(WIN32)
+    set(PDFIUM_URL  "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium%2F6996/pdfium-win-x64.tgz")
+    set(PDFIUM_HASH "SHA256=83e714c302ceacccf403826d5cb57ea39b77f393d83b8d5781283012774a9378")
+endif()
 FetchContent_Declare(pdfium
-    URL       https://github.com/bblanchon/pdfium-binaries/releases/download/chromium%2F6996/pdfium-win-x64.tgz
-    URL_HASH  SHA256=83e714c302ceacccf403826d5cb57ea39b77f393d83b8d5781283012774a9378
+    URL       ${PDFIUM_URL}
+    URL_HASH  ${PDFIUM_HASH}
     SOURCE_SUBDIR ${TS_NO_CMAKE}
 )
 FetchContent_MakeAvailable(pdfium)
 
-# PDFium imported target -- headers, import lib, DLL path.
+# PDFium imported target -- headers + platform runtime library.
 add_library(pdfium SHARED IMPORTED)
-set_target_properties(pdfium PROPERTIES
-    IMPORTED_LOCATION             "${pdfium_SOURCE_DIR}/bin/pdfium.dll"
-    IMPORTED_IMPLIB               "${pdfium_SOURCE_DIR}/lib/pdfium.dll.lib"
-    INTERFACE_INCLUDE_DIRECTORIES "${pdfium_SOURCE_DIR}/include"
-)
-set(PDFIUM_DLL "${pdfium_SOURCE_DIR}/bin/pdfium.dll" CACHE INTERNAL "")
+if(APPLE)
+    # macOS ships a single libpdfium.dylib (no separate import lib). bblanchon's
+    # build records a CWD-relative install name ("./libpdfium.dylib") the loader
+    # can't resolve from an arbitrary working dir -- rewrite it to @rpath so the
+    # executable's @executable_path rpath (set below) finds the copy POST_BUILD
+    # drops next to the binary. Re-sign ad-hoc after: arm64 rejects a dylib whose
+    # signature install_name_tool just invalidated.
+    execute_process(COMMAND install_name_tool -id @rpath/libpdfium.dylib
+                            "${pdfium_SOURCE_DIR}/lib/libpdfium.dylib")
+    execute_process(COMMAND codesign --force --sign -
+                            "${pdfium_SOURCE_DIR}/lib/libpdfium.dylib")
+    set_target_properties(pdfium PROPERTIES
+        IMPORTED_LOCATION             "${pdfium_SOURCE_DIR}/lib/libpdfium.dylib"
+        INTERFACE_INCLUDE_DIRECTORIES "${pdfium_SOURCE_DIR}/include"
+    )
+    set(PDFIUM_RUNTIME_LIB "${pdfium_SOURCE_DIR}/lib/libpdfium.dylib" CACHE INTERNAL "")
+elseif(WIN32)
+    set_target_properties(pdfium PROPERTIES
+        IMPORTED_LOCATION             "${pdfium_SOURCE_DIR}/bin/pdfium.dll"
+        IMPORTED_IMPLIB               "${pdfium_SOURCE_DIR}/lib/pdfium.dll.lib"
+        INTERFACE_INCLUDE_DIRECTORIES "${pdfium_SOURCE_DIR}/include"
+    )
+    set(PDFIUM_RUNTIME_LIB "${pdfium_SOURCE_DIR}/bin/pdfium.dll" CACHE INTERNAL "")
+endif()
 
 FetchContent_MakeAvailable(
     tree-sitter-c
@@ -454,16 +485,19 @@ target_link_libraries(locus PRIVATE
     locus_core
 )
 
-# Copy pdfium.dll next to locus.exe so it loads at runtime.
+# Copy the PDFium runtime library next to the locus binary so it loads at runtime.
 add_custom_command(TARGET locus POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${PDFIUM_DLL}" "$<TARGET_FILE_DIR:locus>"
+            "${PDFIUM_RUNTIME_LIB}" "$<TARGET_FILE_DIR:locus>"
 )
 
 # -- GUI executable (wxWidgets) ------------------------------------------------
 
 find_package(wxWidgets CONFIG REQUIRED COMPONENTS core base aui stc webview)
-find_package(unofficial-webview2 CONFIG REQUIRED)
+if(WIN32)
+    # Edge WebView2 backend for wxWebView. macOS/Linux wxWebView use system WebKit.
+    find_package(unofficial-webview2 CONFIG REQUIRED)
+endif()
 find_package(md4c CONFIG REQUIRED)
 
 set(LOCUS_GUI_WINDOWS_RESOURCES)
@@ -523,24 +557,45 @@ add_executable(locus_gui WIN32
     src/frontends/gui/terminal_panel.cpp
     src/frontends/gui/capabilities_dialog.cpp
     src/frontends/gui/new_tab_button_tab_art.cpp
+    # macOS-only Objective-C++ shim: system recent-documents (Dock menu).
+    $<$<PLATFORM_ID:Darwin>:src/frontends/gui/recent_workspaces_mac.mm>
 )
 
 target_link_libraries(locus_gui PRIVATE
     locus_core
     wx::core wx::base wx::aui wx::stc wx::webview
-    unofficial::webview2::webview2
+    $<$<PLATFORM_ID:Windows>:unofficial::webview2::webview2>
     md4c::md4c-html
     $<$<PLATFORM_ID:Windows>:winmm>
 )
 
-add_custom_command(TARGET locus_gui POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${PDFIUM_DLL}" "$<TARGET_FILE_DIR:locus_gui>"
-)
+# macOS GUI frameworks: AudioToolbox (notification_sounds AudioServices) +
+# AppKit (recent-docs via NSDocumentController). find_library yields absolute
+# framework paths -- the "-framework X" string form gets mangled by CMake's
+# link-line tokenizer in a genex.
+if(APPLE)
+    find_library(AUDIOTOOLBOX_FRAMEWORK AudioToolbox REQUIRED)
+    find_library(APPKIT_FRAMEWORK       AppKit       REQUIRED)
+    target_link_libraries(locus_gui PRIVATE
+        ${AUDIOTOOLBOX_FRAMEWORK}
+        ${APPKIT_FRAMEWORK}
+    )
+endif()
+
+# Unbundled layout: dylib next to the executable. In .app-bundle mode the
+# bundle block below puts it in Contents/Frameworks instead, so skip this.
+if(NOT (APPLE AND LOCUS_MACOS_BUNDLE))
+    add_custom_command(TARGET locus_gui POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${PDFIUM_RUNTIME_LIB}" "$<TARGET_FILE_DIR:locus_gui>"
+    )
+endif()
 
 # Copy bundled Prism (syntax highlighter for chat code blocks) next to
 # locus_gui.exe so the chat WebView loads it via file:// at runtime - no
-# CDN dependency.  Refresh via third_party/prism/build-bundle.ps1.
+# CDN dependency. read_prism_asset() resolves <exe_dir>/resources/prism, which
+# is Contents/MacOS/resources/prism inside a bundle -- so this works as-is for
+# both layouts. Refresh via third_party/prism/build-bundle.ps1.
 add_custom_command(TARGET locus_gui POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory
             "$<TARGET_FILE_DIR:locus_gui>/resources/prism"
@@ -550,6 +605,78 @@ add_custom_command(TARGET locus_gui POST_BUILD
             "${CMAKE_SOURCE_DIR}/third_party/prism/prism-tomorrow.min.css"
             "$<TARGET_FILE_DIR:locus_gui>/resources/prism/"
 )
+
+# -- macOS app bundle + runtime library search path ----------------------------
+if(APPLE)
+    # The CLI always uses the flat layout (dylib next to the binary).
+    set_target_properties(locus PROPERTIES
+        BUILD_RPATH   "@executable_path"
+        INSTALL_RPATH "@executable_path"
+    )
+
+    if(LOCUS_MACOS_BUNDLE)
+        # Locus.app/Contents/{MacOS/locus_gui, Frameworks/libpdfium.dylib,
+        # Resources/{Locus.icns, prism/}, Info.plist}. The CLI `locus` stays a
+        # sibling binary (embedding it + a /usr/local/bin symlink is the open
+        # question in roadmap/M6/S6.9; out of scope for personal-use builds).
+        set(LOCUS_VERSION "${PROJECT_VERSION}")
+        configure_file(
+            "${CMAKE_SOURCE_DIR}/cmake/macos/Info.plist.in"
+            "${CMAKE_CURRENT_BINARY_DIR}/Locus-Info.plist" @ONLY)
+
+        set_target_properties(locus_gui PROPERTIES
+            MACOSX_BUNDLE ON
+            MACOSX_BUNDLE_BUNDLE_NAME "Locus"
+            MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_BINARY_DIR}/Locus-Info.plist"
+            # Search MacOS/ (prism is not a dylib, but keep symmetry) and the
+            # conventional Frameworks/ dir where libpdfium.dylib lands.
+            BUILD_RPATH   "@executable_path;@executable_path/../Frameworks"
+            INSTALL_RPATH "@executable_path;@executable_path/../Frameworks"
+        )
+
+        # App icon -> Contents/Resources/Locus.icns (matches CFBundleIconFile).
+        add_custom_command(TARGET locus_gui POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${CMAKE_SOURCE_DIR}/assets/icons/macos/Locus.icns"
+                    "$<TARGET_BUNDLE_CONTENT_DIR:locus_gui>/Resources/Locus.icns"
+            VERBATIM)
+
+        # PDFium -> Contents/Frameworks (install name is already
+        # @rpath/libpdfium.dylib, rewritten + re-signed at configure time).
+        add_custom_command(TARGET locus_gui POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory
+                    "$<TARGET_BUNDLE_CONTENT_DIR:locus_gui>/Frameworks"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${PDFIUM_RUNTIME_LIB}"
+                    "$<TARGET_BUNDLE_CONTENT_DIR:locus_gui>/Frameworks/"
+            VERBATIM)
+
+        # Code signing + notarization hooks. With no identity supplied the
+        # bundle is left ad-hoc/unsigned (dev runs it via right-click -> Open);
+        # set -DLOCUS_CODESIGN_IDENTITY="Developer ID Application: ..." to sign.
+        # LOCUS_NOTARIZE_TEAM_ID is accepted for a future notarytool step but
+        # not invoked here (notarization is interactive + account-gated).
+        if(LOCUS_CODESIGN_IDENTITY)
+            add_custom_command(TARGET locus_gui POST_BUILD
+                COMMAND codesign --force --deep --timestamp
+                        --options runtime
+                        --sign "${LOCUS_CODESIGN_IDENTITY}"
+                        "$<TARGET_BUNDLE_DIR:locus_gui>"
+                COMMENT "codesign Locus.app (${LOCUS_CODESIGN_IDENTITY})"
+                VERBATIM)
+        else()
+            message(STATUS
+                "LOCUS_MACOS_BUNDLE: no LOCUS_CODESIGN_IDENTITY -- Locus.app "
+                "will be unsigned (run via right-click -> Open).")
+        endif()
+    else()
+        # Unbundled dev layout: dylib sits next to locus_gui.
+        set_target_properties(locus_gui PROPERTIES
+            BUILD_RPATH   "@executable_path"
+            INSTALL_RPATH "@executable_path"
+        )
+    endif()
+endif()
 
 # -- Tests ---------------------------------------------------------------------
 

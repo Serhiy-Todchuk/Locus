@@ -232,20 +232,31 @@ void ChatPanel::create_webview()
 
     webview_->Bind(wxEVT_WEBVIEW_NAVIGATING, &ChatPanel::on_webview_navigating, this);
 
+    // wxEVT_WEBVIEW_LOADED fires after the inline document script on WebView2
+    // (Windows) but BEFORE it on WKWebView (macOS), so it is only a reliable
+    // readiness signal on Windows. The page also navigates to `locus://ready`
+    // once its functions are defined (see chat_html_template.cpp); on macOS
+    // that is the signal that actually lands first. Both routes funnel through
+    // mark_page_ready(), which is idempotent.
     webview_->Bind(wxEVT_WEBVIEW_LOADED, [this](wxWebViewEvent&) {
-        if (page_ready_) return;
-        page_ready_ = true;
-        in_run_script_ = true;
-        size_t n = 0;
-        while (!pending_scripts_.empty()) {
-            wxString next = pending_scripts_.front();
-            pending_scripts_.erase(pending_scripts_.begin());
-            webview_->RunScript(next);
-            ++n;
-        }
-        in_run_script_ = false;
-        spdlog::info("WebView page loaded, flushed {} queued scripts", n);
+        mark_page_ready();
     });
+}
+
+void ChatPanel::mark_page_ready()
+{
+    if (page_ready_ || !webview_) return;
+    page_ready_ = true;
+    in_run_script_ = true;
+    size_t n = 0;
+    while (!pending_scripts_.empty()) {
+        wxString next = pending_scripts_.front();
+        pending_scripts_.erase(pending_scripts_.begin());
+        webview_->RunScript(next);
+        ++n;
+    }
+    in_run_script_ = false;
+    spdlog::info("WebView page ready, flushed {} queued scripts", n);
 }
 
 void ChatPanel::create_input()
@@ -1681,6 +1692,17 @@ wxString ChatPanel::user_text_to_html(const wxString& s)
 void ChatPanel::on_webview_navigating(wxWebViewEvent& evt)
 {
     wxString url = evt.GetURL();
+
+    // The page signals "my inline script has defined every function" by
+    // navigating here once. On WKWebView this is the readiness signal that
+    // lands before any RunScript could fail with an undefined-function error.
+    // Handle it before the page_ready_ guard below (page_ready_ is still false
+    // at this point on the macOS path).
+    if (url.StartsWith("locus://ready")) {
+        evt.Veto();
+        mark_page_ready();
+        return;
+    }
 
     if (!page_ready_) return;
     if (url.StartsWith("javascript:")) return;

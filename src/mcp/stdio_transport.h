@@ -73,6 +73,14 @@ private:
     LocusOsHandle job_      = nullptr;   // KILL_ON_JOB_CLOSE so the child dies with us
     LocusOsHandle stdin_w_  = nullptr;   // we write -> child stdin
     LocusOsHandle stdout_r_ = nullptr;   // child stdout -> we read
+#else
+    // POSIX (macOS). pgid_ == pid_ -- the child is its own process-group
+    // leader (POSIX_SPAWN_SETPGROUP) so killpg(pgid_, ...) reaches a server
+    // that forks helpers. -1 == not spawned / already closed.
+    int           pid_      = -1;
+    int           pgid_     = -1;
+    int           stdin_w_  = -1;        // we write -> child stdin
+    int           stdout_r_ = -1;        // child stdout -> we read
 #endif
     std::mutex   write_mu_;              // serialises send_line()
     std::thread  reader_;

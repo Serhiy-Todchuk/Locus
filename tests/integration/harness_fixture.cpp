@@ -329,6 +329,16 @@ IntegrationHarness::IntegrationHarness()
     workspace_->config().agent.lazy_tool_manifest    = true;
     workspace_->config().agent.system_prompt_profile = "full";
 
+    // The [bg] tests need the background-process tool family available. That
+    // capability defaults OFF and is otherwise read from the opened workspace's
+    // own .locus/config.json -- which is per-machine (gitignored), so a fresh
+    // checkout (e.g. the macOS port box) has it off and the bg tests would fail
+    // with "run_command_bg disabled by capability gate" through no fault of the
+    // code. Force it on here so the suite is deterministic regardless of the
+    // dev's personal config. Cheap under lazy_tool_manifest (the 4 bg tools add
+    // only their names to the per-turn manifest, not full schemas).
+    workspace_->config().capabilities.background_processes = true;
+
     const auto& st = workspace_->indexer().stats();
     spdlog::info("Integration harness: index ready -- {} files, {} symbols, {} headings",
                  st.files_total, st.symbols_total, st.headings_total);

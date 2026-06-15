@@ -11,6 +11,21 @@
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
+#else
+#include <cerrno>
+#include <csignal>
+#include <cstring>
+#include <fcntl.h>
+#include <spawn.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#if defined(__APPLE__)
+#include <crt_externs.h>
+#define LOCUS_ENVIRON (*_NSGetEnviron())
+#else
+extern char** environ;
+#define LOCUS_ENVIRON environ
+#endif
 #endif
 
 namespace locus {
@@ -83,6 +98,23 @@ void BackgroundProcess::join()
         CloseHandle(static_cast<HANDLE>(job_));
         job_ = nullptr;
     }
+#else
+    // Close the stdin pipe so a child still reading sees EOF; mirror the
+    // Windows ordering (under the mutex, before joining the reader).
+    {
+        std::lock_guard l(mu_);
+        if (stdin_fd_ >= 0) {
+            ::close(stdin_fd_);
+            stdin_fd_ = -1;
+        }
+    }
+    if (reader_.joinable()) reader_.join();
+    if (read_fd_ >= 0) {
+        ::close(read_fd_);
+        read_fd_ = -1;
+    }
+    // pid_ was already reaped by the reader thread's waitpid; nothing else to
+    // release (no OS handle object on POSIX).
 #endif
 }
 
@@ -181,6 +213,19 @@ void BackgroundProcess::terminate()
     if (job_handle) {
         TerminateJobObject(job_handle, 1);
     }
+#else
+    int pgid = -1;
+    {
+        std::lock_guard l(mu_);
+        if (status_ != Status::running) return;
+        status_ = Status::killed;
+        pgid = pgid_;
+    }
+    // SIGTERM the whole process group (the `sh -c` leader + every child it
+    // forked share pgid_). The reader thread observes the resulting pipe EOF
+    // and reaps via waitpid. killpg on an already-dead group returns ESRCH,
+    // which is harmless here.
+    if (pgid > 0) ::killpg(pgid, SIGTERM);
 #endif
 }
 
@@ -201,8 +246,22 @@ bool BackgroundProcess::write_stdin(std::string_view data)
     }
     return true;
 #else
-    (void)data;
-    return false;
+    if (data.empty()) return true;
+    std::lock_guard l(mu_);
+    if (status_ != Status::running) return false;
+    if (stdin_fd_ < 0) return false;
+    std::size_t total = 0;
+    while (total < data.size()) {
+        ssize_t w = ::write(stdin_fd_, data.data() + total, data.size() - total);
+        if (w < 0) {
+            if (errno == EINTR) continue;
+            spdlog::warn("BackgroundProcess::write_stdin: write failed id={} err={}",
+                         id_, std::strerror(errno));
+            return false;
+        }
+        total += static_cast<std::size_t>(w);
+    }
+    return true;
 #endif
 }
 
@@ -331,7 +390,121 @@ void BackgroundProcess::reader_loop()
 
 #else // !_WIN32
 
-void BackgroundProcess::reader_loop() {}
+void BackgroundProcess::spawn_posix(const fs::path& cwd)
+{
+    // stdout+stderr pipe (child writes [1], parent reads [0]) and a stdin pipe
+    // (child reads [0], parent writes [1]).
+    int out_pipe[2] = {-1, -1};
+    int in_pipe[2]  = {-1, -1};
+    if (::pipe(out_pipe) != 0)
+        throw std::runtime_error("pipe (stdout) failed");
+    if (::pipe(in_pipe) != 0) {
+        ::close(out_pipe[0]);
+        ::close(out_pipe[1]);
+        throw std::runtime_error("pipe (stdin) failed");
+    }
+
+    posix_spawn_file_actions_t fa;
+    posix_spawn_file_actions_init(&fa);
+    // Run in the workspace root. The _np spelling works from macOS 10.15;
+    // the non-_np form only arrived in macOS 26, so keep _np for back-compat
+    // and silence its deprecation note.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    posix_spawn_file_actions_addchdir_np(&fa, cwd.string().c_str());
+#pragma clang diagnostic pop
+    posix_spawn_file_actions_adddup2(&fa, in_pipe[0],  STDIN_FILENO);
+    posix_spawn_file_actions_adddup2(&fa, out_pipe[1], STDOUT_FILENO);
+    posix_spawn_file_actions_adddup2(&fa, out_pipe[1], STDERR_FILENO);
+    // Close every inherited pipe fd in the child after the dup2s.
+    posix_spawn_file_actions_addclose(&fa, in_pipe[0]);
+    posix_spawn_file_actions_addclose(&fa, in_pipe[1]);
+    posix_spawn_file_actions_addclose(&fa, out_pipe[0]);
+    posix_spawn_file_actions_addclose(&fa, out_pipe[1]);
+
+    posix_spawnattr_t attr;
+    posix_spawnattr_init(&attr);
+    // Make the child its own process-group leader so killpg(pid, ...) kills the
+    // whole `sh -c 'foo && bar'` subtree -- the macOS analogue of the Win32
+    // KILL_ON_JOB_CLOSE job object.
+    posix_spawnattr_setflags(&attr, POSIX_SPAWN_SETPGROUP);
+    posix_spawnattr_setpgroup(&attr, 0);
+
+    std::string cmd = command_;
+    char* const argv[] = {
+        const_cast<char*>("/bin/sh"),
+        const_cast<char*>("-c"),
+        const_cast<char*>(cmd.c_str()),
+        nullptr,
+    };
+
+    pid_t pid = -1;
+    int rc = posix_spawn(&pid, "/bin/sh", &fa, &attr, argv, LOCUS_ENVIRON);
+    posix_spawn_file_actions_destroy(&fa);
+    posix_spawnattr_destroy(&attr);
+
+    // Parent closes the child ends regardless of outcome.
+    ::close(in_pipe[0]);
+    ::close(out_pipe[1]);
+
+    if (rc != 0) {
+        ::close(in_pipe[1]);
+        ::close(out_pipe[0]);
+        throw std::runtime_error(std::string("posix_spawn failed: ") + std::strerror(rc));
+    }
+
+    // Parent-side stdin write end is non-inheritable so a later spawn can't
+    // leak it (mirrors the Win32 SetHandleInformation(stdin_write, ..., 0)).
+    ::fcntl(in_pipe[1], F_SETFD, FD_CLOEXEC);
+    ::fcntl(out_pipe[0], F_SETFD, FD_CLOEXEC);
+
+    pid_      = pid;
+    pgid_     = pid;  // we made the child its own group leader
+    read_fd_  = out_pipe[0];
+    stdin_fd_ = in_pipe[1];
+
+    reader_running_ = true;
+    reader_ = std::thread(&BackgroundProcess::reader_loop, this);
+}
+
+void BackgroundProcess::reader_loop()
+{
+    char buf[4096];
+    for (;;) {
+        ssize_t n = ::read(read_fd_, buf, sizeof(buf));
+        if (n > 0) {
+            std::lock_guard l(mu_);
+            append_locked(buf, static_cast<std::size_t>(n));
+        } else if (n == 0) {
+            break;                       // EOF: all write ends closed
+        } else {
+            if (errno == EINTR) continue;
+            break;                       // read error
+        }
+    }
+
+    // Pipe drained -- the child and its group have exited (or were killed).
+    // Reap to get the exit status and avoid a zombie.
+    int    final_code = 0;
+    bool   was_killed = false;
+    if (pid_ > 0) {
+        int wstatus = 0;
+        while (::waitpid(pid_, &wstatus, 0) < 0 && errno == EINTR) {}
+        int code = 0;
+        if (WIFEXITED(wstatus))        code = WEXITSTATUS(wstatus);
+        else if (WIFSIGNALED(wstatus)) code = 128 + WTERMSIG(wstatus);
+
+        std::lock_guard l(mu_);
+        exit_code_ = code;
+        if (status_ == Status::running)
+            status_ = Status::exited;
+        final_code = exit_code_;
+        was_killed = (status_ == Status::killed);
+    }
+    reader_running_ = false;
+
+    if (sink_broker_) sink_broker_->emit_bg_exited(id_, final_code, was_killed);
+}
 
 #endif
 
@@ -362,7 +535,6 @@ ProcessRegistry::~ProcessRegistry()
 
 int ProcessRegistry::spawn(const std::string& command)
 {
-#ifdef _WIN32
     int id;
     std::unique_ptr<BackgroundProcess> proc;
     {
@@ -371,8 +543,12 @@ int ProcessRegistry::spawn(const std::string& command)
         proc.reset(new BackgroundProcess(id, command, buffer_cap_, broker_ptr_));
     }
 
-    // spawn_win32 throws on failure; do not insert a half-constructed entry.
+    // spawn_* throws on failure; do not insert a half-constructed entry.
+#ifdef _WIN32
     proc->spawn_win32(root_);
+#else
+    proc->spawn_posix(root_);
+#endif
 
     {
         std::lock_guard l(mu_);
@@ -385,21 +561,6 @@ int ProcessRegistry::spawn(const std::string& command)
     // queries `list()` sees the row.
     if (broker_ptr_) broker_ptr_->emit_bg_started(id, command);
     return id;
-#else
-    (void)command;
-    // S5.Z task 5 -- name the OS in the error so a non-Windows caller can
-    // tell apart "the workspace has no registry" from "this build can't
-    // launch shell processes at all".
-#if defined(__APPLE__)
-    const char* os = "macos";
-#elif defined(__linux__)
-    const char* os = "linux";
-#else
-    const char* os = "unknown";
-#endif
-    throw std::runtime_error(std::string("[platform: ") + os +
-        "] background commands are Windows-only in this build");
-#endif
 }
 
 std::optional<BackgroundProcess::ReadResult>

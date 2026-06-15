@@ -81,7 +81,7 @@ TEST_CASE("EndpointProfileStore: save + reload round-trip", "[s6.16]")
     EndpointProfile custom;
     custom.name = "My NVIDIA";
     custom.base_url = "https://integrate.api.nvidia.com/v1";
-    custom.api_key = "nvapi-secret-key";
+    custom.api_key = "test-key-secret-key";
     custom.default_model = "qwen/qwen3-coder-480b-a35b-instruct";
     custom.tool_format = "openai";
     custom.extra_headers = {{"X-Title", "Locus"}};
@@ -94,7 +94,7 @@ TEST_CASE("EndpointProfileStore: save + reload round-trip", "[s6.16]")
     CHECK(reloaded.active() == "My NVIDIA");
     const auto* got = reloaded.find("My NVIDIA");
     REQUIRE(got != nullptr);
-    CHECK(got->api_key == "nvapi-secret-key");
+    CHECK(got->api_key == "test-key-secret-key");
     CHECK(got->default_model == "qwen/qwen3-coder-480b-a35b-instruct");
     CHECK(got->tool_format == "openai");
     REQUIRE(got->extra_headers.count("X-Title") == 1);
@@ -142,13 +142,13 @@ TEST_CASE("EndpointProfileStore: update preserves builtin flag", "[s6.16]")
     EndpointProfile edit;
     edit.name = "NVIDIA Build (hosted)";
     edit.base_url = "https://integrate.api.nvidia.com/v1";
-    edit.api_key = "nvapi-edited";
+    edit.api_key = "test-key-edited";
     edit.builtin = false;                         // user tries to clear -- ignored
     REQUIRE(store.update(edit));
 
     const auto* got = store.find("NVIDIA Build (hosted)");
     REQUIRE(got != nullptr);
-    CHECK(got->api_key == "nvapi-edited");
+    CHECK(got->api_key == "test-key-edited");
     CHECK(got->builtin);                          // still builtin
 }
 
@@ -174,7 +174,7 @@ TEST_CASE("build_request_headers: no auth when key empty", "[s6.16]")
 TEST_CASE("build_request_headers: Bearer prefix + extra headers merged", "[s6.16]")
 {
     LLMConfig cfg;
-    cfg.api_key = "nvapi-xyz";
+    cfg.api_key = "test-key-xyz";
     cfg.extra_headers = {{"HTTP-Referer", "https://locus.local"},
                          {"X-Title", "Locus"}};
     auto h = build_request_headers(cfg);
@@ -185,7 +185,7 @@ TEST_CASE("build_request_headers: Bearer prefix + extra headers merged", "[s6.16
         if (k == "HTTP-Referer")  referer = v;
         if (k == "X-Title")       title = v;
     }
-    CHECK(auth == "Bearer nvapi-xyz");
+    CHECK(auth == "Bearer test-key-xyz");
     CHECK(referer == "https://locus.local");
     CHECK(title == "Locus");
 }
@@ -216,7 +216,7 @@ TEST_CASE("apply_endpoint_profile: startup fills only unset sentinels", "[s6.16]
 {
     EndpointProfile p;
     p.base_url = "https://integrate.api.nvidia.com/v1";
-    p.api_key = "nvapi-k";
+    p.api_key = "test-key-k";
     p.default_model = "qwen/qwen3-coder-480b-a35b-instruct";
     p.default_context_limit = 40000;
     p.tool_format = "openai";
@@ -225,7 +225,7 @@ TEST_CASE("apply_endpoint_profile: startup fills only unset sentinels", "[s6.16]
         LLMConfig cfg;   // base_url at the hardcoded default
         apply_endpoint_profile(cfg, p, /*force=*/false);
         CHECK(cfg.base_url == "https://integrate.api.nvidia.com/v1");
-        CHECK(cfg.api_key == "nvapi-k");
+        CHECK(cfg.api_key == "test-key-k");
         CHECK(cfg.model == "qwen/qwen3-coder-480b-a35b-instruct");
         CHECK(cfg.context_limit == 40000);
         CHECK(cfg.tool_format == ToolFormat::OpenAi);
@@ -238,7 +238,7 @@ TEST_CASE("apply_endpoint_profile: startup fills only unset sentinels", "[s6.16]
         apply_endpoint_profile(cfg, p, /*force=*/false);
         CHECK(cfg.base_url == "http://192.168.1.50:1234");  // legacy wins
         CHECK(cfg.model == "local-model");                  // legacy wins
-        CHECK(cfg.api_key == "nvapi-k");                    // no legacy equiv
+        CHECK(cfg.api_key == "test-key-k");                    // no legacy equiv
     }
 }
 

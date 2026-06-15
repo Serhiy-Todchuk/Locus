@@ -4,14 +4,31 @@
 
 using namespace locus::integration;
 
+// run_command shells out via `cmd /c` on Windows and `/bin/sh -c` on macOS
+// (S6.9 Stage B), so the command line embedded in each prompt is per-platform.
+// The assertions below check the *output*, which is identical across shells.
+#ifdef _WIN32
+constexpr const char* kEchoCmd  = "cmd /c echo hello-locus-integration";
+constexpr const char* kLoop300  = "cmd /c for /L %i in (1,1,300) do @echo line %i";
+constexpr const char* kErrorMix =
+    "cmd /c (echo line 1 & echo ERROR foo & echo line 3 & echo line 4 & "
+    "echo ERROR bar & echo line 6 & echo line 7 & echo line 8 & "
+    "echo ERROR baz & echo line 10)";
+#else
+constexpr const char* kEchoCmd  = "echo hello-locus-integration";
+constexpr const char* kLoop300  = "for i in $(seq 1 300); do echo line $i; done";
+constexpr const char* kErrorMix =
+    "printf 'line 1\\nERROR foo\\nline 3\\nline 4\\nERROR bar\\nline 6\\n"
+    "line 7\\nline 8\\nERROR baz\\nline 10\\n'";
+#endif
+
 TEST_CASE("agent runs a shell command", "[integration][llm][shell]")
 {
     auto& h = harness();
 
     PromptResult r = h.prompt(
-        "Use the run_command tool to execute the shell command "
-        "`cmd /c echo hello-locus-integration` and tell me exactly what it "
-        "printed.");
+        std::string("Use the run_command tool to execute the shell command "
+        "`") + kEchoCmd + "` and tell me exactly what it printed.");
 
     REQUIRE_FALSE(r.timed_out);
     REQUIRE(r.errors.empty());
@@ -33,8 +50,8 @@ TEST_CASE("run_command result is smart-truncated by default",
     auto& h = harness();
 
     PromptResult r = h.prompt(
-        "Use the run_command tool to execute the shell command "
-        "`cmd /c for /L %i in (1,1,300) do @echo line %i` and report back. "
+        std::string("Use the run_command tool to execute the shell command "
+        "`") + kLoop300 + "` and report back. "
         "I just want you to run the tool and then describe what you got.");
 
     REQUIRE_FALSE(r.timed_out);
@@ -68,11 +85,9 @@ TEST_CASE("run_command honours output_filter_mode=regex",
     // word "ERROR" so a `regex` filter for that word must come back as a
     // small summary block.
     PromptResult r = h.prompt(
-        "Call the run_command tool exactly once with these arguments: "
+        std::string("Call the run_command tool exactly once with these arguments: "
         "command set to "
-        "`cmd /c (echo line 1 & echo ERROR foo & echo line 3 & echo line 4 & "
-        "echo ERROR bar & echo line 6 & echo line 7 & echo line 8 & "
-        "echo ERROR baz & echo line 10)`, and the following filter "
+        "`") + kErrorMix + "`, and the following filter "
         "parameters: output_filter_mode set to \"regex\", "
         "output_filter_pattern set to \"ERROR\", output_filter_lines set "
         "to 10. Run it now, do not paraphrase the params -- pass them "

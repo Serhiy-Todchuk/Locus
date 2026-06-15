@@ -225,7 +225,7 @@ void OpenAiTransport::do_post(const std::string& body, const Callbacks& cbs, int
         headers,
         cpr::Body{body},
         cpr::ConnectTimeout{10000},
-        cpr::LowSpeed{1, stall_seconds},
+        cpr::LowSpeed{1, static_cast<std::int32_t>(stall_seconds)},
         std::move(progress_cb),
         std::move(write_cb)
     );

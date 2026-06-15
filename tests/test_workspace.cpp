@@ -4,8 +4,10 @@
 #include "core/database.h"
 #include "core/file_watcher.h"
 
+#include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <thread>
 
 namespace fs = std::filesystem;
 

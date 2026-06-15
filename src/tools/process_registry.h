@@ -84,6 +84,10 @@ private:
     // Spawn under the given working directory. Throws std::runtime_error on
     // failure. Caller already holds the registry mutex.
     void spawn_win32(const fs::path& cwd);
+#else
+    // POSIX spawn (macOS): posix_spawn + pipes + setpgid so the whole child
+    // tree can be killed via killpg. Throws std::runtime_error on failure.
+    void spawn_posix(const fs::path& cwd);
 #endif
 
     void reader_loop();
@@ -109,8 +113,16 @@ private:
     LocusOsHandle      job_         = nullptr;
     LocusOsHandle      read_pipe_   = nullptr;
     LocusOsHandle      stdin_write_ = nullptr;
-    std::thread        reader_;
+#else
+    // POSIX (macOS). pgid_ == pid_ -- the child is its own process-group
+    // leader (POSIX_SPAWN_SETPGROUP), so killpg(pgid_, ...) reaches the whole
+    // `sh -c` subtree. -1 means "not spawned / already reaped".
+    int                pid_         = -1;
+    int                pgid_        = -1;
+    int                read_fd_     = -1;  // parent end of the stdout+stderr pipe
+    int                stdin_fd_    = -1;  // parent end of the child's stdin pipe
 #endif
+    std::thread        reader_;
     std::atomic<bool>  reader_running_{false};
 };
 

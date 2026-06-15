@@ -18,6 +18,11 @@
         },
         "md4c",
         "llama-cpp",
+        {
+            "name": "ggml",
+            "features": ["metal"],
+            "platform": "osx"
+        },
         "miniz",
         "pugixml",
         "dtl"

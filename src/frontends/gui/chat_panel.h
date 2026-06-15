@@ -296,6 +296,14 @@ private:
 
     void run_script(const wxString& js);
 
+    // Flip page_ready_ and flush any scripts queued before the WebView's
+    // inline document script finished defining its functions. Idempotent --
+    // both the wxEVT_WEBVIEW_LOADED handler (fires after inline script on
+    // WebView2) and the page-emitted `locus://ready` navigation (the reliable
+    // signal on WKWebView, where LOADED fires *before* the inline script) call
+    // it; whichever lands first wins and the other is a no-op.
+    void mark_page_ready();
+
     static wxString user_text_to_html(const wxString& s);
 
     void on_flush_timer(wxTimerEvent& evt);
