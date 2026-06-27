@@ -158,6 +158,11 @@ that adds `-D_USE_STD_VECTOR_ALGORITHMS=0` to work around missing SIMD intrinsic
 This flag must be set both in the triplet (for vcpkg deps) and in `CMakeLists.txt`
 (for project code).
 
+**Version control.** **Never create a branch unless I explicitly ask.** Commit on the
+current branch -- including when that branch is `main` -- and do not switch or create
+branches on your own. Commit and push only when asked. End commit messages with the
+`Co-Authored-By` line.
+
 ---
 
 ## Build & Test Commands
