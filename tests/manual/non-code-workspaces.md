@@ -15,9 +15,11 @@ S5.N's acceptance bar is **8 of the 10 acceptance prompts return useful,
 sourced answers** without manually pasting file contents -- the three tests
 below collectively run all 10.
 
-**Pre-S6.2 caveat.** WS2 here is the pre-extracted form of a small ZIM,
-not native libzim access. [S6.2](../../roadmap/M6/S6.2-zim-reader.md) is
-the long-term path; S5.N proves the workflow on what we already have.
+**Note.** WS2 here is the pre-extracted flat-folder form of a small ZIM.
+Native in-app `.zim` reading shipped in
+[S6.2](../../roadmap/M6/S6.2-zim-reader.md) (open a `.zim` directly; see
+[zim-reader.md](zim-reader.md)). This plan keeps the pre-extracted corpus to
+prove the generic document-folder workflow, separate from the ZIM reader.
 
 ---
 
@@ -172,10 +174,12 @@ a regression guard for non-code corpora, reactivate.
 
 ## Honest gaps (do not file as bugs)
 
-- **WS2 is pre-extracted, not live ZIM.** Native `zim::Archive` access,
-  full ~21M-article scale, and namespace browsing all land with
-  [S6.2](../../roadmap/M6/S6.2-zim-reader.md). The current path proves
-  the indexing + retrieval workflow on a smaller flat-folder corpus.
+- **WS2 here is the pre-extracted flat-folder form, on purpose.** Native
+  in-app `.zim` reading shipped in [S6.2](../../roadmap/M6/S6.2-zim-reader.md)
+  -- to test that, open a `.zim` directly per
+  [zim-reader.md](zim-reader.md). This S5.N plan deliberately keeps the
+  pre-extracted corpus so it exercises the generic HTML-folder indexing +
+  retrieval path (the workflow proof), independent of the ZIM reader.
 - **WS3 size is intentionally tiny** (~10-20 MB). It exists to exercise
   every extractor path on one machine quickly, not to be representative
   of a real document hoard. Swap in your own folder if you want scale.

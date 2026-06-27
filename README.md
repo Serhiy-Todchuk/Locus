@@ -30,7 +30,8 @@ VRAM, and models that need clear tools instead of giant pasted prompts.
   undone -- the goal is that you *understand* what's happening under the hood.
 - **It understands more than code.** Search across repositories, PDFs, DOCX, XLSX,
   Markdown, HTML, and JSON/YAML, including offline document libraries and
-  extracted knowledge-base dumps (native ZIM reading is planned).
+  native ZIM archives -- open a Wikipedia / Kiwix `.zim` directly as a
+  read-only workspace and search/read its articles.
 - **You tune the behavior, not every step.** Settings shape how the agent works --
   permission presets (from auto-run-everything to ask-before-edits), capability
   toggles, prompt-cost and compaction profiles, model and sampler presets.
@@ -50,7 +51,7 @@ VRAM, and models that need clear tools instead of giant pasted prompts.
 | M3 -- Refactoring | Complete | split agent/index/tools/GUI structure, threading docs, ADRs |
 | M4 -- Agent Quality | Complete | diff editing, undo, plan mode, MCP, memory, git, retrieval quality |
 | M5 -- Polish, UX & Performance | Complete | UI automation, terminal panel, capability toggles, global settings, inline diffs, LLMContext refactor, compaction v2, chat/activity restructure, multi-tab, memory bank UI, permission presets, non-code workspace proof |
-| M6 -- Connected & Misc | In progress | **Done:** macOS port, small-model robustness, lazy tool manifest, system-prompt profiles, reasoning watchdog, session-restore parity, endpoint profiles (multi-LLM + hosted), compaction fixes + tool-arg robustness, index storage hygiene, tool-arg coercion + transient-endpoint retry, agent convergence aids. **Planned:** remote access, VS Code shim, web frontend, web RAG, ZIM reader |
+| M6 -- Connected & Misc | In progress | **Done:** prompt-injection scanner + taint propagation, ZIM reader (native Wikipedia/Kiwix), macOS port, small-model robustness, lazy tool manifest, system-prompt profiles, reasoning watchdog, session-restore parity, endpoint profiles (multi-LLM + hosted), compaction fixes + tool-arg robustness, index storage hygiene, tool-arg coercion + transient-endpoint retry, agent convergence aids. **Planned:** remote access, VS Code shim, web frontend, web RAG |
 
 The large body of M6 small-LLM coding work (S6.10-S6.21) is cataloged in
 **[CODING_AGENT.md](CODING_AGENT.md)** -- see the [Coding Agent](#coding-agent) section below.
@@ -225,11 +226,11 @@ locus_gui.exe D:\Projects\LocusTestWorkspaces\WS3_Documents
 ```
 
 Then ask: **"Which RFC defines HTTP/3?"** -- the agent runs semantic
-retrieval, opens `rfcs/rfc9114.pdf`, and answers with a citation. The
-matching offline-knowledge-base demo (`build_ws2.ps1`) extracts a Simple
-English Wikipedia subset from a Kiwix `.zim` snapshot into flat HTML that
-Locus indexes today (native in-app `.zim` reading is the planned S6.2
-feature). See [test-workspaces.md](test-workspaces.md) and
+retrieval, opens `rfcs/rfc9114.pdf`, and answers with a citation. For an
+offline knowledge base, point Locus straight at a Kiwix `.zim` snapshot
+(`locus_gui.exe wikipedia_en_simple.zim`) -- it opens read-only, indexes the
+articles, and the agent searches + reads them like any other workspace
+(S6.2). See [test-workspaces.md](test-workspaces.md) and
 [tests/manual/non-code-workspaces.md](tests/manual/non-code-workspaces.md)
 for the full walkthrough.
 
