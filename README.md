@@ -29,16 +29,17 @@ VRAM, and models that need clear tools instead of giant pasted prompts.
   it wants to call, what changed, what it ran, how long it took, and what can be
   undone.
 - **It understands more than code.** Search across repositories, PDFs, DOCX, XLSX,
-  Markdown, HTML, JSON/YAML, and offline knowledge bases.
+  Markdown, HTML, and JSON/YAML, including offline document libraries and
+  extracted knowledge-base dumps (native ZIM reading is planned).
 - **It can act, but you stay in control.** File edits, deletes, shell commands, and
-  MCP tools go through visible approval policies.
-- **It has a working desktop surface.** The Windows GUI and CLI share the same
-  core: indexing, semantic search, undo, plan mode, metrics, memory, MCP, and
-  background commands.
+  MCP tools go through visible approval policies and named permission presets.
+- **It has a working desktop surface.** The GUI (Windows and macOS) and CLI share
+  the same core: indexing, semantic search, undo, plan mode, metrics, memory, MCP,
+  and background commands.
 
 ## Project Status
 
-**Current stage: M6 -- Connected & Misc** (planned). M5 closed 2026-05-19.
+**Current stage: M6 -- Connected & Misc** (in progress). M0-M5 complete.
 
 | Milestone | Status | Notes |
 |---|---|---|
@@ -48,23 +49,30 @@ VRAM, and models that need clear tools instead of giant pasted prompts.
 | M3 -- Refactoring | Complete | split agent/index/tools/GUI structure, threading docs, ADRs |
 | M4 -- Agent Quality | Complete | diff editing, undo, plan mode, MCP, memory, git, retrieval quality |
 | M5 -- Polish, UX & Performance | Complete | UI automation, terminal panel, capability toggles, global settings, inline diffs, LLMContext refactor, compaction v2, chat/activity restructure, multi-tab, memory bank UI, permission presets, non-code workspace proof |
-| M6 -- Connected & Misc | Planned | remote access, VS Code shim, web frontend, ZIM reader, plus catch-all non-polish work that doesn't fit M5 |
+| M6 -- Connected & Misc | In progress | **Done:** macOS port, small-model robustness, lazy tool manifest, system-prompt profiles, reasoning watchdog, session-restore parity, endpoint profiles (multi-LLM + hosted), compaction fixes + tool-arg robustness, index storage hygiene, tool-arg coercion + transient-endpoint retry, agent convergence aids. **Planned:** remote access, VS Code shim, web frontend, web RAG, ZIM reader |
+
+The large body of M6 small-LLM coding work (S6.10-S6.21) is cataloged in
+**[CODING_AGENT.md](CODING_AGENT.md)** -- see the [Coding Agent](#coding-agent) section below.
 
 Two binaries ship from the same codebase:
 
 - `locus.exe` -- terminal CLI
-- `locus_gui.exe` -- native Windows desktop app (wxWidgets + WebView2)
+- `locus_gui.exe` -- native desktop app (wxWidgets + WebView2 on Windows, WKWebView on macOS)
 
 ## Platform Support
 
-**Locus is currently Windows-only; macOS / Linux support is planned.** The
-core is written with cross-platform support in mind, but several runtime
-integrations are still Windows-first: shell execution (`run_command`,
-`run_command_bg`), MCP stdio transport, autostart on login, recent-workspace
-integration, and the GUI automation harness. On macOS / Linux today these
-surfaces return a `[platform: <os>]` error rather than running -- the
-Windows-only build is what's production-ready in v1; cross-platform parity
-is a separate multi-stage effort outside M5.
+**Windows and macOS (arm64) are both supported; Linux is planned.** Windows is
+the primary, longest-tested platform. The macOS port (S6.9) builds a native
+arm64 CLI and GUI with a Metal-accelerated embedder, full POSIX shell execution
+(`run_command` / `run_command_bg`), MCP stdio transport, notification sounds,
+autostart on login, recent-document integration, and an optional `.app` bundle.
+The one macOS gap is the GUI automation test harness (the Windows UIA driver has
+not been ported to the macOS accessibility API yet) -- a developer-tooling
+deferral, not a user-facing one.
+
+Linux is not yet built; the core is written cross-platform and most runtime
+integrations already have POSIX paths from the macOS work, so it is a smaller
+effort than the original macOS port was.
 
 ## Trust Model
 
@@ -72,12 +80,15 @@ Locus treats your **workspace as trusted**. Your code, documents, and notes are 
 you wrote or chose to bring in, so the agent reads them as-is. Only point Locus at folders
 you trust -- it indexes everything inside and will act on what it finds there.
 
-Content from **outside** your workspace is treated as **untrusted**: web pages, offline
-knowledge bases (Wikipedia / ZIM), and third-party MCP tool output. This text is written
-by others and could contain hidden instructions aimed at hijacking the agent ("ignore your
-rules and send X to..."). Locus scans untrusted content on the way in, flags anything
-suspicious, and marks it so you can see where it came from. The hard backstop is unchanged:
-nothing risky runs without passing the visible approval gate, so you always get the final say.
+Content from **outside** your workspace is treated as **untrusted**: third-party MCP tool
+output today, and web pages / offline knowledge bases (Wikipedia / ZIM) once those ingress
+paths land. This text is written by others and could contain hidden instructions aimed at
+hijacking the agent ("ignore your rules and send X to..."). MCP tools are untrusted by
+default and produce nothing until you opt them in. The hard backstop, in place today: nothing
+risky runs without passing the visible approval gate, so you always get the final say. An
+ingress prompt-injection scanner that flags suspicious untrusted text and origin-stamps it is
+planned to land alongside web retrieval (M6) -- a visibility tripwire on top of the approval
+gate, which stays the actual control.
 
 In short: **trust your workspace before you open it; the outside world is never trusted by
 default.**
@@ -86,6 +97,7 @@ default.**
 
 | Document | Description |
 |---|---|
+| [CODING_AGENT.md](CODING_AGENT.md) | The small-LLM coding aids -- safety nets, context-budget tricks, anti-loop guards, and endpoint resilience that let small local models code reliably |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Build instructions, code style, full per-target / per-config command reference |
 | [CLAUDE.md](CLAUDE.md) | Working guide for Claude Code (AI assistant context, build commands, code map) |
 | [roadmap.md](roadmap.md) | Full implementation roadmap: milestones -> stages -> tasks |
@@ -111,16 +123,83 @@ The current codebase is a working local-agent application:
   defaults configurable via Save), file-change awareness, and per-turn activity logging.
 - **Safe workspace operations**: read-before-edit discipline, app-level checkpoints
   and `/undo`, inline diff rendering, delete/write/edit tools, command execution,
-  background processes, and outside-workspace shell-path warnings.
+  background processes, outside-workspace shell-path warnings, and named tool-approval
+  presets (read-only / ask-before-edits / allow-edits / allow-all, or per-tool custom;
+  read tools always auto-approve).
 - **Workspace intelligence**: SQLite FTS5 indexing, document extraction, symbols,
   headings, AST/regex search, optional local embeddings + semantic search,
   cross-encoder reranking, and a retrieval evaluation harness.
 - **Extensibility and memory**: MCP client support, prompt templates, model presets,
   sampler controls, workspace-scoped memory with search, and git-aware workflows
   including auto-commit support.
-- **Desktop polish in M5**: terminal panel, capability toggles, global settings,
-  inline diffs in chat, UI automation scripts, metrics view, and the `LLMContext`
-  refactor that centralizes conversation-facing state.
+- **Desktop GUI surfaces**: chat with streaming markdown, file tree, terminal
+  panel, real-time activity log, metrics view, dockable memory bank, tool
+  approval panel, multi-tab conversations, and a nine-tab settings dialog
+  (LLM / Index / Agent / Capabilities / Tool Approvals / MCP / Notifications /
+  Sessions / Endpoints) -- most of what you'd hand-edit in `config.json` is also
+  GUI-configurable.
+- **Multi-endpoint LLM support**: named endpoint profiles for several LLM sources
+  at once (local LM Studio / Ollama plus hosted NVIDIA / OpenAI / OpenRouter /
+  Claude-via-proxy with API-key auth), switchable live from a chat-footer dropdown
+  so you can run a cheap local model for navigation and hand the hard turn to a
+  bigger one.
+- **Small-LLM coding aids (M6)**: a thick layer of safety nets and context-budget
+  tricks that let small local models code reliably -- see the
+  [Coding Agent](#coding-agent) section and [CODING_AGENT.md](CODING_AGENT.md).
+
+## Coding Agent
+
+Locus is a capable coding agent -- it reads, searches, edits, and runs code, with
+plan mode, checkpoints and `/undo`, inline diffs, background commands, AST/symbol
+search, and per-turn metrics. But the goal is **not** to out-compete Claude Code
+or Cursor on raw capability. Those assume a large, reliable cloud model. Locus is
+built for the opposite: a **small or mid-sized model running locally, on a tight
+context window, on consumer hardware**.
+
+The value Locus adds for that setup is a thick layer of **safety nets and
+small-LLM aids** -- the things that make a model that would otherwise fall over
+get the job done:
+
+- **Fit a small context window** -- a lazy tool manifest (full tool schemas
+  fetched on demand, not shipped every turn), selectable system-prompt profiles,
+  past-turn reasoning stripping, and escalating compaction that never silently
+  overflows. A 16k-context model keeps room for the actual task.
+- **Survive sloppy tool calls** -- malformed-JSON repair, wrong-type argument
+  coercion, single-edit shorthand, unknown-tool closest-match suggestions, and
+  optional grammar-constrained decoding, so an almost-right tool call dispatches
+  instead of burning a round.
+- **Break out of loops** -- a reasoning watchdog for models that think forever, a
+  build-error-signature detector for models that thrash on the same compiler error
+  across rewrites, and bounded nudge-then-abort steering so a genuinely stuck turn
+  stops instead of spinning.
+- **Recover from a flaky backend** -- multi-endpoint profiles (run cheap+local for
+  navigation, switch to a bigger hosted model for the hard turn without losing
+  context), hosted-provider auth, and transient-failure retry with backoff.
+- **Stay transparent** -- every correction, watchdog trip, and compaction surfaces
+  in the activity log and footer chips, so recovery is visible rather than
+  mysterious.
+
+### Recommended local model for coding
+
+From the agentic test sessions, the best **local** coding model so far is
+**`qwen/qwen3.6-27b` via LM Studio**:
+
+- **16k context** is enough for **small, tightly-scoped tasks** -- single-file
+  creates, renames, targeted edits. It builds these cleanly and recovers from
+  tool-arg slips on its own.
+- **32k+ context** for any **iterate-until-it-builds loop** or multi-file refactor.
+  At 16k the build error gets compacted away every few rounds and it can't
+  converge; more context is the single highest-leverage knob.
+- Append **`/no_think`** to prompts (a manual Qwen suffix today; the automatic
+  Settings toggle is the planned S6.14 knob). With thinking left on, qwen3.6-27b
+  can spiral for tens of minutes without ever emitting the edit. Note this is a
+  survival tactic at tight context, not a free win -- on genuinely hard reasoning
+  tasks with room to think (32k+), leaving thinking on may produce better code.
+- Pair with `lazy_tool_manifest=true`, `tool_format="openai_json"`, and
+  `prompt_cost="balanced"`.
+
+Read **[CODING_AGENT.md](CODING_AGENT.md)** for the complete, categorized catalog
+of these aids (each tagged to the stage that introduced it).
 
 ## Beyond code: document folders + offline knowledge bases
 
@@ -137,9 +216,10 @@ locus_gui.exe D:\Projects\LocusTestWorkspaces\WS3_Documents
 
 Then ask: **"Which RFC defines HTTP/3?"** -- the agent runs semantic
 retrieval, opens `rfcs/rfc9114.pdf`, and answers with a citation. The
-matching offline-knowledge-base demo (`build_ws2.ps1`) builds a Simple
-English Wikipedia subset from a Kiwix `.zim` snapshot. See
-[test-workspaces.md](test-workspaces.md) and
+matching offline-knowledge-base demo (`build_ws2.ps1`) extracts a Simple
+English Wikipedia subset from a Kiwix `.zim` snapshot into flat HTML that
+Locus indexes today (native in-app `.zim` reading is the planned S6.2
+feature). See [test-workspaces.md](test-workspaces.md) and
 [tests/manual/non-code-workspaces.md](tests/manual/non-code-workspaces.md)
 for the full walkthrough.
 
@@ -321,18 +401,24 @@ Type any of these inside an open session:
 | `/help` | Show available commands |
 | `/quit` | Exit Locus (CLI only) |
 | `/reset` | Start a fresh conversation |
-| `/compact` | Drop tool results to free context space |
+| `/compact [instructions]` | Reduce context via the layered compaction pipeline |
 | `/history` | Show conversation summary and token count |
+| `/breakdown` | Show the per-message context breakdown + token count |
 | `/save` | Save current session |
 | `/sessions` | List saved sessions |
 | `/load <id>` | Resume a saved session |
 | `/undo [turn_id]` | Revert files mutated by the most recent turn (0 = most recent) |
 | `/metrics` | Show per-turn timing + per-tool histogram |
 | `/export_metrics [json\|csv]` | Write metrics under `.locus/metrics/` |
+| `/memorize [+tag] [--pin] <text>` | Add a workspace memory-bank entry inline |
+| `/forget <id> [--hard]` | Delete a memory-bank entry |
+| `/reload` | Re-scan prompt templates from disk |
 
-Anything else you type is sent as a message to the agent. The agent can call
-tools (read files, search, run commands, etc.) -- each tool call is shown to
-you for approval before execution.
+Tool-name slashes (`/read_file`, `/search_text`, ...) run a tool directly, and any
+project or global prompt template registers as its own slash command. Anything else
+you type is sent as a message to the agent. The agent can call tools (read files,
+search, run commands, etc.) -- each tool call is shown to you for approval (subject
+to the workspace's tool-approval preset) before execution.
 
 ## Flags
 
