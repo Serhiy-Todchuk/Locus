@@ -160,8 +160,7 @@ This flag must be set both in the triplet (for vcpkg deps) and in `CMakeLists.tx
 
 **Version control.** **Never create a branch unless I explicitly ask.** Commit on the
 current branch -- including when that branch is `main` -- and do not switch or create
-branches on your own. Commit and push only when asked. End commit messages with the
-`Co-Authored-By` line.
+branches on your own. Commit and push only when asked..
 
 ---
 

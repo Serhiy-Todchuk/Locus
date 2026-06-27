@@ -104,13 +104,13 @@ This claim needs constant proof through test workspaces and demos, not just phil
 
 Most tools hide the AI's process and ask you to trust the result. Locus optimizes for
 "the user understands what's happening and shapes how it works." The aim is comprehension
-and tunability, not babysitting -- you are not meant to approve every step by hand.
+and tunability.
 
 - Everything the agent does is observable: tool calls, the system prompt and context
   breakdown, diffs, activity, and metrics are surfaced rather than hidden.
 - You tune behavior in settings: permission presets (auto-run-everything through
   ask-before-edits), capability toggles, prompt-cost and compaction profiles, and
-  per-model presets. Approving individual tool calls is one configurable mode, not the default obligation.
+  per-model presets.
 - Context compaction is visible and directable.
 - LOCUS.md lets the user permanently shape behavior for a workspace.
 

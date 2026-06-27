@@ -26,16 +26,14 @@ VRAM, and models that need clear tools instead of giant pasted prompts.
   context budgeting, compaction, and lean tool manifests so smaller models spend less
   time guessing and more time using the right context.
 - **Transparent by default.** You can see what context the agent is using, what tools
-  it wants to call, what changed, what it ran, how long it took, and what can be
-  undone -- the goal is that you *understand* what's happening under the hood, not
-  that you babysit it.
+  it calls, what changed, what it ran, how long it took, and what can be
+  undone -- the goal is that you *understand* what's happening under the hood.
 - **It understands more than code.** Search across repositories, PDFs, DOCX, XLSX,
   Markdown, HTML, and JSON/YAML, including offline document libraries and
   extracted knowledge-base dumps (native ZIM reading is planned).
 - **You tune the behavior, not every step.** Settings shape how the agent works --
   permission presets (from auto-run-everything to ask-before-edits), capability
-  toggles, prompt-cost and compaction profiles, model and sampler presets. Approving
-  individual tool calls is one option you can dial up or off, not a requirement.
+  toggles, prompt-cost and compaction profiles, model and sampler presets.
 - **It has a working desktop surface.** The GUI (Windows and macOS) and CLI share
   the same core: indexing, semantic search, undo, plan mode, metrics, memory, MCP,
   and background commands.
