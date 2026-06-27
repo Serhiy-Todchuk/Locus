@@ -1,6 +1,9 @@
 #include "mcp/mcp_tool.h"
 
+#include "core/workspace.h"
 #include "core/workspace_services.h"
+#include "security/injection_policy.h"
+#include "security/injection_scanner.h"
 
 #include <spdlog/spdlog.h>
 
@@ -119,7 +122,7 @@ std::string flatten_content(const nlohmann::json& result)
 
 } // namespace
 
-ToolResult McpTool::execute(const ToolCall& call, IWorkspaceServices& /*ws*/,
+ToolResult McpTool::execute(const ToolCall& call, IWorkspaceServices& ws,
                              const std::atomic<bool>* cancel_flag)
 {
     if (!client_ || client_->status() != McpClient::Status::ready) {
@@ -147,6 +150,36 @@ ToolResult McpTool::execute(const ToolCall& call, IWorkspaceServices& /*ws*/,
     bool is_error = result.is_object() && result.value("isError", false);
     std::string body = flatten_content(result);
 
+    // S6.0 -- MCP tool results are UNTRUSTED external ingress (the server is
+    // third-party text the user did not review). Scan + wrap before the body
+    // reaches the LLM. The scanner is a transparency tripwire, not a boundary
+    // (the approval gate is); MCP tools default to `ask` so the user already
+    // sees the call. On findings we fence the body with a per-call nonce + an
+    // in-band untrusted note, and surface a banner via the activity log.
+    std::string injection_banner;
+    {
+        security::SecurityConfig sec;
+        if (auto* w = ws.workspace()) {
+            const auto& s = w->config().security;
+            sec.injection_scan   = s.injection_scan;
+            sec.scan_zim         = s.scan_zim;
+            sec.block_confidence = s.block_confidence;
+            sec.max_scan_kb      = s.max_scan_kb;
+        }
+        if (sec.injection_scan && !body.empty()) {
+            security::ScannerConfig scfg;
+            scfg.max_scan_bytes = static_cast<std::size_t>(sec.max_scan_kb) * 1024;
+            security::ScanResult scan = security::scan_for_injection(body, scfg);
+            security::IngressDecision dec =
+                security::apply_injection_policy(body, scan, sec);
+            if (dec.action != security::IngressAction::Pass) {
+                injection_banner = dec.banner;
+                spdlog::warn("McpTool[{}]: injection scan -- {}",
+                             namespaced_, dec.banner);
+            }
+        }
+    }
+
     // Cap the per-call result body. Logged at warn level so the user sees
     // it in the activity panel; tag the suffix so the LLM understands the
     // tail is missing and avoids parroting partial content as authoritative.
@@ -167,6 +200,13 @@ ToolResult McpTool::execute(const ToolCall& call, IWorkspaceServices& /*ws*/,
     if (is_error) {
         r.content = "Error from MCP server: " + body;
         r.display = r.content;
+    }
+    if (!injection_banner.empty()) {
+        // Emit a distinct activity event so the Details panel logs the scan.
+        r.activity_tag     = "injection_scan";
+        r.activity_summary = injection_banner;
+        r.activity_detail  = "Untrusted MCP result from '" + server_name_ +
+                             "' was wrapped. " + injection_banner;
     }
     return r;
 }

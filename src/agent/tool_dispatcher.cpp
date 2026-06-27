@@ -567,6 +567,8 @@ void ToolDispatcher::dispatch(const ToolCall& call, const AppendFn& append_resul
             kind = ActivityKind::truncation_blocked;
         else if (result.activity_tag == "quality_correction")
             kind = ActivityKind::quality_correction;
+        else if (result.activity_tag == "injection_scan")
+            kind = ActivityKind::injection_scan;
         activity_.emit(kind,
                        result.activity_summary.empty()
                            ? std::string{"Tool flagged: "} + result.activity_tag

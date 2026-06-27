@@ -103,28 +103,35 @@ void Database::create_main_schema()
             is_binary   INTEGER DEFAULT 0,
             language    TEXT,
             indexed_at  INTEGER,
-            line_count  INTEGER
+            line_count  INTEGER,
+            origin          TEXT DEFAULT '',
+            injection_flags INTEGER DEFAULT 0
         )
     )");
 
-    // Idempotent migration for workspaces created before line_count landed.
-    // No project-wide migration framework -- the column-exists probe + a
-    // conditional ALTER keeps the path safe on both fresh and aged DBs.
+    // Idempotent migration for workspaces created before later columns landed.
+    // No project-wide migration framework -- a column-exists probe + a
+    // conditional ALTER per column keeps the path safe on both fresh and aged
+    // DBs. `line_count` (M5), then `origin` + `injection_flags` (S6.0 Task D --
+    // untrusted-ingress taint: origin = "" for trusted workspace files, "zim" /
+    // "web" / "mcp" for external ingress; injection_flags = bitmask of the
+    // InjectionCategory values that fired at ingress, 0 = clean).
     {
         sqlite3_stmt* probe = nullptr;
         sqlite3_prepare_v2(db_, "PRAGMA table_info(files)", -1, &probe, nullptr);
-        bool has_line_count = false;
+        bool has_line_count = false, has_origin = false, has_flags = false;
         while (probe && sqlite3_step(probe) == SQLITE_ROW) {
-            const unsigned char* name = sqlite3_column_text(probe, 1);
-            if (name && std::string(reinterpret_cast<const char*>(name)) == "line_count") {
-                has_line_count = true;
-                break;
-            }
+            const unsigned char* nm = sqlite3_column_text(probe, 1);
+            if (!nm) continue;
+            std::string name(reinterpret_cast<const char*>(nm));
+            if (name == "line_count")           has_line_count = true;
+            else if (name == "origin")          has_origin = true;
+            else if (name == "injection_flags") has_flags = true;
         }
         if (probe) sqlite3_finalize(probe);
-        if (!has_line_count) {
-            exec("ALTER TABLE files ADD COLUMN line_count INTEGER");
-        }
+        if (!has_line_count) exec("ALTER TABLE files ADD COLUMN line_count INTEGER");
+        if (!has_origin)     exec("ALTER TABLE files ADD COLUMN origin TEXT DEFAULT ''");
+        if (!has_flags)      exec("ALTER TABLE files ADD COLUMN injection_flags INTEGER DEFAULT 0");
     }
 
     // FTS5 full-text search over file contents

@@ -101,7 +101,7 @@ IndexQuery::IndexQuery(Database& main_db, Database* vectors_db)
     stmt_search_text_ = main_db_.prepare(R"(
         SELECT f.path, bm25(files_fts) AS rank,
                snippet(files_fts, 1, '', '', '...', 24),
-               f.abs_path
+               f.abs_path, f.origin, f.injection_flags
         FROM files_fts
         JOIN files f ON f.path = files_fts.path
         WHERE files_fts MATCH ?1
@@ -257,6 +257,9 @@ std::vector<SearchResult> IndexQuery::search_text(const std::string& query,
         r.score = sqlite3_column_double(stmt_search_text_, 1);
         r.snippet = col_text(stmt_search_text_, 2);
         r.line = 0;
+        r.origin = col_text(stmt_search_text_, 4);
+        r.injection_flags = static_cast<uint32_t>(
+            sqlite3_column_int64(stmt_search_text_, 5));
 
         // Best-effort line recovery: search for the first query term in
         // the raw file. Works for code-like files (raw == extracted) and
@@ -267,7 +270,11 @@ std::vector<SearchResult> IndexQuery::search_text(const std::string& query,
         // so files where the term is genuinely absent from raw bytes
         // (extractor produced text that doesn't appear in source, e.g.
         // PDFium decoding hex-encoded strings) stay clean.
-        if (!first_term.empty()) {
+        // Line recovery reads the raw file from disk -- only meaningful for
+        // trusted workspace files. Virtual-origin rows (ZIM articles, web
+        // pages) have a pseudo abs_path that isn't on disk, so skip them and
+        // leave line==0 (the formatter omits the :line suffix then).
+        if (!first_term.empty() && r.origin.empty()) {
             std::string abs_path = col_text(stmt_search_text_, 3);
             if (!abs_path.empty()) {
                 std::ifstream f(abs_path, std::ios::binary);

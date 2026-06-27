@@ -410,6 +410,8 @@ add_library(locus_core STATIC
     src/mcp/mcp_client.cpp
     src/mcp/mcp_tool.cpp
     src/mcp/mcp_manager.cpp
+    src/security/injection_scanner.cpp
+    src/security/injection_policy.cpp
     src/agent/conversation.cpp
     src/agent/system_prompt.cpp
     src/agent/system_prompt_assembly.cpp

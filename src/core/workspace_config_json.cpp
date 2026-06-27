@@ -284,6 +284,18 @@ WorkspaceConfig workspace_config_from_json(const json& j)
                 n["only_when_unfocused"].get<bool>();
     }
 
+    if (j.contains("security") && j["security"].is_object()) {
+        auto& s = j["security"];
+        if (s.contains("injection_scan"))
+            cfg.security.injection_scan = s["injection_scan"].get<bool>();
+        if (s.contains("scan_zim"))
+            cfg.security.scan_zim = s["scan_zim"].get<bool>();
+        if (s.contains("block_confidence"))
+            cfg.security.block_confidence = s["block_confidence"].get<float>();
+        if (s.contains("max_scan_kb"))
+            cfg.security.max_scan_kb = s["max_scan_kb"].get<int>();
+    }
+
     if (j.contains("tool_approvals") && j["tool_approvals"].is_object()) {
         for (auto it = j["tool_approvals"].begin();
              it != j["tool_approvals"].end(); ++it) {
@@ -427,6 +439,12 @@ json workspace_config_to_json(const WorkspaceConfig& cfg)
             {"sound_on_turn_complete", cfg.notifications.sound_on_turn_complete},
             {"sound_on_compaction",    cfg.notifications.sound_on_compaction},
             {"only_when_unfocused",    cfg.notifications.only_when_unfocused}
+        }},
+        {"security", {
+            {"injection_scan",   cfg.security.injection_scan},
+            {"scan_zim",         cfg.security.scan_zim},
+            {"block_confidence", cfg.security.block_confidence},
+            {"max_scan_kb",      cfg.security.max_scan_kb}
         }}
     };
 }

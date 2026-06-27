@@ -249,6 +249,26 @@ struct WebConfig {
 - API keys stored in `.locus/config.json` (workspace-local, gitignored)
 - Fetched content is local-only -- never sent anywhere except back to the local LLM
 
+### Prompt-injection scanning + taint propagation (S6.0)
+
+Fetched web content is UNTRUSTED external ingress. Before extraction output
+enters a `ToolResult` or the index, run it through `scan_for_injection` +
+`apply_injection_policy` ([src/security/](../src/security/)) -- the same hook
+MCP results use. The decision (Pass / Wrap / Escalate) wraps suspicious bodies
+in a per-call-nonce fence and escalates high-confidence exfiltration to `ask`.
+The scanner is a transparency tripwire, not a boundary -- the approval gate is
+the real control; see [roadmap/M6/S6.0-prompt-injection-scanner.md](../roadmap/M6/S6.0-prompt-injection-scanner.md).
+
+Taint must travel into the index, because a poisoned snippet acts at the
+SEARCH HIT (three turns later), not at fetch. The web tables MUST carry
+`origin TEXT` (e.g. `"web"`) and `injection_flags INTEGER` (bitmask of the
+`InjectionCategory` values that fired at ingress, 0 = clean) from day one --
+`web_fts` rows inherit the parent page's flags. The search read path stamps an
+origin marker (and re-wraps when `injection_flags != 0`) onto surfaced snippets
+via `security::render_tainted_snippet`. S6.0 already added these columns to the
+`files` table + the `SearchResult` read path; S6.1's `web_pages` / `web_fts`
+`CREATE TABLE` must include them too (no later migration).
+
 ---
 
 ## Open Questions

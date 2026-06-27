@@ -498,6 +498,24 @@ struct WorkspaceConfig {
         bool web_retrieval        = false;
     };
 
+    // S6.0 -- prompt-injection scanner + taint policy over UNTRUSTED external
+    // ingress (web / ZIM / MCP). Workspace files are trusted and never scanned.
+    // The scanner is a transparency tripwire, not a security boundary (the
+    // approval gate is) -- see roadmap/M6/S6.0-prompt-injection-scanner.md.
+    struct Security {
+        // Scan web + MCP ingress for injection patterns on the way in.
+        bool injection_scan = true;
+        // Opt-in keyword scan over ZIM/Wikipedia content (S6.2). Off by default:
+        // encyclopedia text is overwhelmingly benign and a multi-GB scan is not
+        // worth it. The ZIM ORIGIN STAMP is unconditional regardless of this.
+        bool scan_zim = false;
+        // Findings at/above this confidence escalate the tool's approval to
+        // `ask` (and Exfiltration escalates regardless of confidence).
+        float block_confidence = 0.85f;
+        // Cap on bytes inspected per ingress (head + tail windowing past it).
+        int max_scan_kb = 256;
+    };
+
     // Per-workspace tool approval overrides: tool_name -> policy.
     // Absent entries fall back to the tool's default (ITool::approval_policy()).
     // Kept at top level so the JSON shape ("tool_approvals" map at root) and
@@ -514,6 +532,7 @@ struct WorkspaceConfig {
     Sessions      sessions;
     Notifications notifications;
     Capabilities  capabilities;
+    Security      security;
 };
 
 // S6.17 Task H -- apply the `agent.prompt_cost` preset (if non-empty) onto

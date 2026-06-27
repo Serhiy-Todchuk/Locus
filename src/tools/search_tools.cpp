@@ -8,6 +8,7 @@
 #include "index/tree_sitter_registry.h"
 #include "../index/reranker.h"
 #include "../core/workspace.h"
+#include "security/injection_policy.h"
 
 #include <spdlog/spdlog.h>
 #include <tree_sitter/api.h>
@@ -41,6 +42,16 @@ bool has_code_aware(IWorkspaceServices& ws)
 {
     if (auto* w = ws.workspace()) return w->config().capabilities.code_aware_search;
     return true;
+}
+
+// Friendly display label for a taint origin. ZIM articles are sourced from a
+// Kiwix/Wikipedia snapshot, so the marker reads "[wikipedia, untrusted]" per
+// the S6.2 spec rather than the bare storage tag "zim". Other origins surface
+// their raw tag.
+std::string zim_display_origin(const std::string& origin)
+{
+    if (origin == "zim") return "wikipedia";
+    return "";  // empty -> render_tainted_snippet uses the raw origin
 }
 
 // Split path_glob on `,` / `|` separators so a model can pass
@@ -129,8 +140,16 @@ ToolResult SearchTextTool::execute(const ToolCall& call, IWorkspaceServices& ws,
         content << "  " << r.path;
         if (r.line > 0) content << ":" << r.line;
         content << " (score " << r.score << ")\n";
-        if (!r.snippet.empty())
-            content << "    " << r.snippet << "\n";
+        if (!r.snippet.empty()) {
+            // S6.0 Task D -- snippets from untrusted-origin rows (ZIM / web /
+            // mcp) get an origin marker, and a fresh nonce wrap when the row
+            // was injection-flagged at ingress, so the untrusted framing
+            // reaches the model at the moment it reads the text. Trusted
+            // workspace rows (empty origin) pass through unchanged.
+            std::string rendered = security::render_tainted_snippet(
+                r.snippet, r.origin, r.injection_flags, zim_display_origin(r.origin));
+            content << "    " << rendered << "\n";
+        }
     }
 
     std::string result = content.str();

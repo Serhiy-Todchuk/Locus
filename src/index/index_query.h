@@ -21,6 +21,14 @@ struct SearchResult {
     int line = 0;           // first matching line (0 if unknown)
     std::string snippet;    // context around match
     double score = 0.0;     // BM25 rank (lower = better match in SQLite FTS5)
+
+    // S6.0 Task D -- untrusted-ingress taint. Empty origin = trusted workspace
+    // file (the common case). "zim" / "web" / "mcp" mark external ingress the
+    // user never reviewed; injection_flags is the bitmask of InjectionCategory
+    // values that fired at ingress (0 = clean). The search tools stamp an
+    // origin marker (and re-wrap when flagged) onto the surfaced snippet.
+    std::string origin;
+    uint32_t    injection_flags = 0;
 };
 
 struct SymbolResult {
