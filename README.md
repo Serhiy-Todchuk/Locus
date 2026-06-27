@@ -156,6 +156,15 @@ or Cursor on raw capability. Those assume a large, reliable cloud model. Locus i
 built for the opposite: a **small or mid-sized model running locally, on a tight
 context window, on consumer hardware**.
 
+Be realistic about the scope that follows from that. Locus is strongest at
+**scoped, supervised coding** -- targeted edits, single-file work, searching and
+explaining a codebase, and short build/fix loops -- and at navigating a workspace.
+It is **not yet a hands-off "build me an app" agent**: long autonomous
+build-until-it-works loops on large, multi-file changes are gated by what small
+local models can currently converge on, not by Locus. The safety nets below push
+that ceiling as high as the model allows and keep you in the loop when it's
+reached.
+
 The value Locus adds for that setup is a thick layer of **safety nets and
 small-LLM aids** -- the things that make a model that would otherwise fall over
 get the job done:
