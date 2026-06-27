@@ -248,7 +248,7 @@ void walk_dir(const fs::path&     abs_dir,
 
 std::string ListDirectoryTool::preview(const ToolCall& call) const
 {
-    std::string path = call.args.value("path", "");
+    std::string path = tools::coerce_string(call.args, "path");
     if (path.empty() || path == ".") path = "(workspace root)";
     int depth = static_cast<int>(tools::coerce_int(call.args, "depth", 0));
     std::string out = "list_directory: " + path;
@@ -263,7 +263,7 @@ ToolResult ListDirectoryTool::execute(const ToolCall& call, IWorkspaceServices& 
             {"path", "depth", "max_entries"}, this))
         return *err;
 
-    std::string path = call.args.value("path", "");
+    std::string path = tools::coerce_string(call.args, "path");
     int depth = static_cast<int>(tools::coerce_int(call.args, "depth", 0));
     int max_entries = static_cast<int>(tools::coerce_int(call.args, "max_entries", 200));
     if (max_entries <= 0) max_entries = 200;
@@ -407,7 +407,7 @@ bool GetFileOutlineTool::available(IWorkspaceServices& ws) const
 
 std::string GetFileOutlineTool::preview(const ToolCall& call) const
 {
-    return "get_file_outline: " + call.args.value("path", "");
+    return "get_file_outline: " + tools::coerce_string(call.args, "path");
 }
 
 ToolResult GetFileOutlineTool::execute(const ToolCall& call, IWorkspaceServices& ws,
@@ -416,7 +416,7 @@ ToolResult GetFileOutlineTool::execute(const ToolCall& call, IWorkspaceServices&
     if (auto err = tools::reject_unknown_keys(call, {"path"}, this))
         return *err;
 
-    std::string path = call.args.value("path", "");
+    std::string path = tools::coerce_string(call.args, "path");
 
     if (path.empty())
         return tools::missing_required_arg(*this, "path",

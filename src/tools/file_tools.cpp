@@ -124,7 +124,7 @@ ToolResult render_line_window(const std::string& rel_path,
 
 std::string ReadFileTool::preview(const ToolCall& call) const
 {
-    std::string path = call.args.value("path", "");
+    std::string path = tools::coerce_string(call.args, "path");
     int offset = static_cast<int>(tools::coerce_int(call.args, "offset", 1));
     int length = static_cast<int>(tools::coerce_int(call.args, "length", 100));
     return "Read " + path + " lines " + std::to_string(offset) + "-" +
@@ -137,7 +137,7 @@ ToolResult ReadFileTool::execute(const ToolCall& call, IWorkspaceServices& ws,
     if (auto err = tools::reject_unknown_keys(call, {"path", "offset", "length"}, this))
         return *err;
 
-    std::string rel_path = call.args.value("path", "");
+    std::string rel_path = tools::coerce_string(call.args, "path");
     int offset = static_cast<int>(tools::coerce_int(call.args, "offset", 1));
     int length = static_cast<int>(tools::coerce_int(call.args, "length", 100));
 
@@ -230,8 +230,8 @@ std::string WriteFileTool::preview(const ToolCall& call) const
     // No workspace access from inside preview() -- surface the intent as the
     // LLM declared it. The execute path is what actually enforces create-vs-
     // overwrite based on the real file state.
-    std::string path = call.args.value("path", "");
-    size_t new_len   = call.args.value("content", "").size();
+    std::string path = tools::coerce_string(call.args, "path");
+    size_t new_len   = tools::coerce_string(call.args, "content").size();
     bool overwrite   = tools::coerce_bool(call.args, "overwrite", false);
 
     std::string head = overwrite ? "Write (overwrite allowed): "
@@ -246,8 +246,8 @@ ToolResult WriteFileTool::execute(const ToolCall& call, IWorkspaceServices& ws,
             {"path", "content", "overwrite"}, this))
         return *err;
 
-    std::string rel_path = call.args.value("path", "");
-    std::string content  = call.args.value("content", "");
+    std::string rel_path = tools::coerce_string(call.args, "path");
+    std::string content  = tools::coerce_string(call.args, "content");
     bool overwrite       = tools::coerce_bool(call.args, "overwrite", false);
 
     if (rel_path.empty())
@@ -408,8 +408,8 @@ std::string EditFileTool::preview(const ToolCall& call) const
     // lazy_tool_manifest and uniform compound-name signatures parse better).
     // Legacy `path` / `edits` stay accepted so unit tests + saved sessions
     // continue to render.
-    std::string path = call.args.value("file_path", "");
-    if (path.empty()) path = call.args.value("path", "");
+    std::string path = tools::coerce_string(call.args, "file_path");
+    if (path.empty()) path = tools::coerce_string(call.args, "path");
     // Tolerant: accepts a real array OR a JSON-string-encoded array (a common
     // small-model mistake). Never throws -- this runs on the UI thread.
     nlohmann::json edits = tools::coerce_json_array(call.args, "edits_array");
@@ -447,8 +447,8 @@ ToolResult EditFileTool::execute(const ToolCall& call, IWorkspaceServices& ws,
              "old_string", "new_string", "replace_all"}, this))
         return *err;
 
-    std::string rel_path = call.args.value("file_path", "");
-    if (rel_path.empty()) rel_path = call.args.value("path", "");
+    std::string rel_path = tools::coerce_string(call.args, "file_path");
+    if (rel_path.empty()) rel_path = tools::coerce_string(call.args, "path");
     if (rel_path.empty())
         return tools::missing_required_arg(*this, "file_path",
             "the workspace-relative path to the file to edit");
@@ -553,7 +553,7 @@ ToolResult EditFileTool::execute(const ToolCall& call, IWorkspaceServices& ws,
 
 std::string DeleteFileTool::preview(const ToolCall& call) const
 {
-    std::string path = call.args.value("path", "");
+    std::string path = tools::coerce_string(call.args, "path");
     return "WARNING: Permanently delete " + path;
 }
 
@@ -563,7 +563,7 @@ ToolResult DeleteFileTool::execute(const ToolCall& call, IWorkspaceServices& ws,
     if (auto err = tools::reject_unknown_keys(call, {"path"}, this))
         return *err;
 
-    std::string rel_path = call.args.value("path", "");
+    std::string rel_path = tools::coerce_string(call.args, "path");
 
     if (rel_path.empty())
         return tools::missing_required_arg(*this, "path",

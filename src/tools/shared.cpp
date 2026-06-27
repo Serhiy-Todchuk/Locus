@@ -66,6 +66,23 @@ long long coerce_int(const nlohmann::json& args, const char* key, long long fall
     return fallback;
 }
 
+std::string coerce_string(const nlohmann::json& args, const char* key,
+                          const std::string& fallback)
+{
+    auto it = args.find(key);
+    if (it == args.end() || it->is_null())
+        return fallback;
+    const nlohmann::json& v = *it;
+    if (v.is_string())  return v.get<std::string>();
+    // A model that sent a number / bool for a string arg still gets a usable
+    // text form rather than a silently dropped value.
+    if (v.is_number_integer())  return std::to_string(v.get<long long>());
+    if (v.is_number_unsigned()) return std::to_string(v.get<unsigned long long>());
+    if (v.is_number_float())    return std::to_string(v.get<double>());
+    if (v.is_boolean())         return v.get<bool>() ? "true" : "false";
+    return fallback;
+}
+
 nlohmann::json coerce_json_array(const nlohmann::json& args, const char* key)
 {
     auto it = args.find(key);

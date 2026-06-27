@@ -128,6 +128,24 @@ nlohmann::json coerce_json_array(const nlohmann::json& args, const char* key);
 //   - anything else             -> fallback
 long long coerce_int(const nlohmann::json& args, const char* key, long long fallback);
 
+// Type-tolerant string read from an LLM-supplied tool-arg object. Same class as
+// the coercers above: `json::value<std::string>(key, default)` THROWS
+// type_error.302 when the key is PRESENT but null (the default only applies when
+// the key is absent), and small / hosted models routinely emit
+// `"capture": null` / `"path_glob": null` for optional string args. That throw
+// surfaces as a confusing "internal error" tool result (search_ast hit exactly
+// this on a gemma-4-e4b integration run, 2026-06-27) -- or crashes on a
+// preview() path. This helper never throws:
+//   - key absent / null   -> fallback
+//   - string              -> the value
+//   - number / bool       -> its JSON text form (so a model that sent 3 for a
+//                            string arg still gets a usable "3" rather than a
+//                            dropped arg)
+//   - anything else        -> fallback
+// Use it at EVERY optional tool-arg string site reachable from model output.
+std::string coerce_string(const nlohmann::json& args, const char* key,
+                          const std::string& fallback = "");
+
 // Resolve a relative path safely within the workspace root.
 // Returns empty path if the resolved path escapes the workspace.
 std::filesystem::path resolve_path(IWorkspaceServices& ws, const std::string& rel);

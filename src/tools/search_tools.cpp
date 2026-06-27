@@ -107,7 +107,7 @@ std::string preview_query(const std::string& q, std::size_t cap = 80)
 
 std::string SearchTextTool::preview(const ToolCall& call) const
 {
-    std::string q = preview_query(call.args.value("query", ""));
+    std::string q = preview_query(tools::coerce_string(call.args, "query"));
     return q.empty() ? std::string("search_text") : ("search_text: " + q);
 }
 
@@ -118,7 +118,7 @@ ToolResult SearchTextTool::execute(const ToolCall& call, IWorkspaceServices& ws,
             {"query", "max_results"}, this))
         return *err;
 
-    std::string query = call.args.value("query", "");
+    std::string query = tools::coerce_string(call.args, "query");
     int max_results = static_cast<int>(tools::coerce_int(call.args, "max_results", 8));
 
     if (query.empty())
@@ -166,7 +166,7 @@ bool SearchSymbolsTool::available(IWorkspaceServices& ws) const
 
 std::string SearchSymbolsTool::preview(const ToolCall& call) const
 {
-    std::string q = preview_query(call.args.value("name", ""));
+    std::string q = preview_query(tools::coerce_string(call.args, "name"));
     return q.empty() ? std::string("search_symbols") : ("search_symbols: " + q);
 }
 
@@ -177,9 +177,9 @@ ToolResult SearchSymbolsTool::execute(const ToolCall& call, IWorkspaceServices& 
             {"name", "kind", "language", "max_results"}, this))
         return *err;
 
-    std::string name_query = call.args.value("name", "");
-    std::string kind     = call.args.value("kind", "");
-    std::string language = call.args.value("language", "");
+    std::string name_query = tools::coerce_string(call.args, "name");
+    std::string kind     = tools::coerce_string(call.args, "kind");
+    std::string language = tools::coerce_string(call.args, "language");
     int         max_results = static_cast<int>(tools::coerce_int(call.args, "max_results", 50));
     if (max_results <= 0) max_results = 50;
 
@@ -309,7 +309,7 @@ bool SearchSemanticTool::available(IWorkspaceServices& ws) const
 
 std::string SearchSemanticTool::preview(const ToolCall& call) const
 {
-    std::string q = preview_query(call.args.value("query", ""));
+    std::string q = preview_query(tools::coerce_string(call.args, "query"));
     return q.empty() ? std::string("search_semantic") : ("search_semantic: " + q);
 }
 
@@ -328,7 +328,7 @@ ToolResult SearchSemanticTool::execute(const ToolCall& call, IWorkspaceServices&
     if (!idx)
         return error_result("Error: workspace index not available");
 
-    std::string query = call.args.value("query", "");
+    std::string query = tools::coerce_string(call.args, "query");
     if (query.empty())
         return tools::missing_required_arg(*this, "query",
             "the natural-language description of what to find (vector similarity)");
@@ -420,9 +420,9 @@ std::string extract_regex_snippet(const std::string& content,
 
 std::string SearchRegexTool::preview(const ToolCall& call) const
 {
-    std::string q = preview_query(call.args.value("query", ""));
+    std::string q = preview_query(tools::coerce_string(call.args, "query"));
     std::string out = q.empty() ? std::string("search_regex") : ("search_regex: " + q);
-    std::string glob = call.args.value("path_glob", "");
+    std::string glob = tools::coerce_string(call.args, "path_glob");
     if (!glob.empty()) out += "  in " + glob;
     return out;
 }
@@ -434,12 +434,12 @@ ToolResult SearchRegexTool::execute(const ToolCall& call, IWorkspaceServices& ws
             {"query", "path_glob", "case_sensitive", "max_results"}, this))
         return *err;
 
-    std::string pattern = call.args.value("query", "");
+    std::string pattern = tools::coerce_string(call.args, "query");
     if (pattern.empty())
         return tools::missing_required_arg(*this, "query",
             "the ECMAScript regex pattern to match per line");
 
-    std::string path_glob    = call.args.value("path_glob", "");
+    std::string path_glob    = tools::coerce_string(call.args, "path_glob");
     bool        case_sens    = tools::coerce_bool(call.args, "case_sensitive", true);
     int         max_results  = static_cast<int>(tools::coerce_int(call.args, "max_results", 50));
     if (max_results <= 0) max_results = 50;
@@ -679,8 +679,8 @@ bool SearchAstTool::available(IWorkspaceServices& ws) const
 
 std::string SearchAstTool::preview(const ToolCall& call) const
 {
-    std::string lang = call.args.value("language", "");
-    std::string q = preview_query(call.args.value("query", ""));
+    std::string lang = tools::coerce_string(call.args, "language");
+    std::string q = preview_query(tools::coerce_string(call.args, "query"));
     std::string out = std::string("search_ast");
     if (!lang.empty()) out += " [" + lang + "]";
     if (!q.empty())    out += ": " + q;
@@ -694,10 +694,10 @@ ToolResult SearchAstTool::execute(const ToolCall& call, IWorkspaceServices& ws,
             {"language", "query", "path_glob", "capture", "max_results"}, this))
         return *err;
 
-    std::string language       = call.args.value("language", "");
-    std::string query_src      = call.args.value("query", "");
-    std::string path_glob      = call.args.value("path_glob", "");
-    std::string capture_filter = call.args.value("capture", "");
+    std::string language       = tools::coerce_string(call.args, "language");
+    std::string query_src      = tools::coerce_string(call.args, "query");
+    std::string path_glob      = tools::coerce_string(call.args, "path_glob");
+    std::string capture_filter = tools::coerce_string(call.args, "capture");
     int         max_results    = static_cast<int>(tools::coerce_int(call.args, "max_results", 50));
     if (max_results <= 0) max_results = 50;
 

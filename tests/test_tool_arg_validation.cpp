@@ -493,6 +493,49 @@ TEST_CASE("read_file: string offset/length do not throw and apply",
     fs::remove_all(tmp);
 }
 
+TEST_CASE("coerce_string accepts string, coerces number/bool, null->fallback; never throws",
+          "[tool_arg_validation][coerce_string]")
+{
+    using locus::tools::coerce_string;
+
+    REQUIRE(coerce_string(nlohmann::json{{"s", "hi"}}, "s") == "hi");
+    // The crash case: key PRESENT but null. json::value<string>("s","") THROWS
+    // type_error.302 here; coerce_string returns the fallback instead.
+    REQUIRE(coerce_string(nlohmann::json{{"s", nullptr}}, "s") == "");
+    REQUIRE(coerce_string(nlohmann::json{{"s", nullptr}}, "s", "def") == "def");
+    // Key absent -> fallback.
+    REQUIRE(coerce_string(nlohmann::json::object(), "s", "def") == "def");
+    // Number / bool -> usable text form rather than a dropped arg.
+    REQUIRE(coerce_string(nlohmann::json{{"s", 3}},    "s") == "3");
+    REQUIRE(coerce_string(nlohmann::json{{"s", true}}, "s") == "true");
+    // Array / object -> fallback (no throw).
+    REQUIRE(coerce_string(nlohmann::json{{"s", nlohmann::json::array({1})}}, "s", "fb") == "fb");
+}
+
+TEST_CASE("search_ast: null optional string arg does not throw (the live failure)",
+          "[tool_arg_validation][coerce_string]")
+{
+    auto tmp = make_tmp();
+    write_file(tmp, "a.cpp", "class A : public Base {};\n");
+    locus::test::FakeWorkspaceServices ws{tmp};
+    locus::SearchAstTool tool;
+
+    // The exact shape from the gemma-4-e4b integration run: the model sent a
+    // null for an optional string arg (capture / path_glob). Before coerce_string
+    // this threw json type_error.302 and surfaced as a confusing tool error.
+    locus::ToolCall call{"c1", "search_ast",
+        {{"language", "cpp"}, {"query", "(class_specifier) @c"},
+         {"capture", nullptr}, {"path_glob", nullptr}}};
+
+    REQUIRE_NOTHROW(tool.preview(call));
+    locus::ToolResult r;
+    REQUIRE_NOTHROW(r = tool.execute(call, ws));
+    // We don't assert on match content (AST availability varies in the test
+    // workspace); the point is it does not THROW on the null args.
+
+    fs::remove_all(tmp);
+}
+
 TEST_CASE("edit_file: stringified edits array applies and preview does not throw",
           "[tool_arg_validation][coerce_json_array]")
 {
