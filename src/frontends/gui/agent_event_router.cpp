@@ -218,6 +218,18 @@ void AgentEventRouter::on_agent_llm_retry(wxThreadEvent& evt)
     }
 }
 
+void AgentEventRouter::on_agent_unverified_success(wxThreadEvent& evt)
+{
+    // S6.21 Task 3 -- non-blocking tripwire. Reuse the footer transient-status
+    // line (same surface as the LLM-retry notice); the warning is also in the
+    // Activity panel so it persists past the next token event that supersedes
+    // the footer.
+    if (auto* ui = frame_.find_tab_ui(evt.GetId())) {
+        if (ui->chat)
+            ui->chat->set_transient_status("Unverified: " + evt.GetString());
+    }
+}
+
 void AgentEventRouter::on_agent_watchdog_tripped(wxThreadEvent& evt)
 {
     if (auto* ui = frame_.find_tab_ui(evt.GetId())) {

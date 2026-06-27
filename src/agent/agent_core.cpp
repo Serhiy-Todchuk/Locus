@@ -600,6 +600,10 @@ void AgentCore::process_message(const std::string& content)
     nudges_this_turn_ = 0;
     // S6.17 Task B.1 -- reset per-turn compaction escalation streak.
     compaction_no_op_streak_ = 0;
+    // S6.21 Task 4 -- defensive reset of the hard-trim breadcrumb flag (the
+    // runner consumes it per round, but clearing it at turn start guards
+    // against a flag set by an inter-turn /compact that the runner never read).
+    compaction_hard_trimmed_ = false;
 
     frontends_.broadcast([](IFrontend& fe) { fe.on_turn_start(); });
 
@@ -1248,6 +1252,10 @@ void AgentCore::apply_pending_compaction()
                 now = TokenCounter::estimate(msgs);
             }
             if (hard_trimmed > 0) {
+                // S6.21 Task 4 -- mark the hard-trim so the round loop can
+                // re-inject a build-loop breadcrumb. This is the seam where a
+                // 16k-class local model loses WHICH error it was mid-fixing.
+                compaction_hard_trimmed_ = true;
                 spdlog::warn("CompactionPipeline: saturated, hard-trimmed {} turn(s) "
                              "(target {}, before-hardtrim {}, after-hardtrim {})",
                              hard_trimmed, pipeline_target,

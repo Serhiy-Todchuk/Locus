@@ -405,6 +405,16 @@ AgentStepResult AgentLoop::run_step(const ConversationHistory& history,
         if (!calls.empty())
             tool_call_seen_atomic.store(true, std::memory_order_release);
     };
+    cbs.on_tool_calls_accounting = [&](int delivered, int dropped,
+                                       const std::string& diag) {
+        // S6.21 Task 1 -- surface the malformed-call accounting onto the step
+        // result so AgentTurnRunner can catch an all-dropped round (which
+        // produces no tool result and trips none of the result-keyed
+        // detectors). Fired before on_tool_calls within the same stream.
+        out.delivered_tool_calls = delivered;
+        out.dropped_tool_calls   = dropped;
+        out.dropped_diagnostic   = diag;
+    };
     cbs.on_complete = [&]() {
         spdlog::trace("AgentLoop: LLM step complete, text={} chars, "
                       "reasoning={} chars, tool_calls={}",

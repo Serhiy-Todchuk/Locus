@@ -332,6 +332,15 @@ private:
     // chat-footer chip "compacted: N (M no-op)".
     int compaction_no_op_total_ = 0;
 
+    // S6.21 Task 4 -- set by apply_pending_compaction() when the saturation
+    // hard-trim path actually dropped turn(s) (the seam where small-context
+    // models lose the build-loop thread). AgentTurnRunner reads-and-clears it
+    // right after the compaction call to decide whether to inject the
+    // "[Resuming: last build error ...]" breadcrumb. Agent-thread only (set in
+    // apply_pending_compaction, consumed in the round loop), so a plain bool is
+    // sufficient -- no cross-thread visibility concern.
+    bool compaction_hard_trimmed_ = false;
+
     // Sync-mode completion signal.
     std::mutex               sync_mutex_;
     std::condition_variable  sync_cv_;

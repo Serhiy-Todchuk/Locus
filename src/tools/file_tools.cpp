@@ -346,13 +346,21 @@ std::string apply_single_edit(std::string& buf,
 
     size_t count = count_occurrences(buf, old_s);
     if (count == 0)
+        // S6.21 Task 2 -- self-healing remedy. The not-found loop (small models
+        // re-read and re-guess the anchor forever) is broken by spelling out
+        // the two recoveries in the result body the model actually sees.
         return "Error: 'old_string' not found in " + rel_path +
-               " (exact match required, including whitespace)";
+               " (exact match required, including whitespace). Re-read the file "
+               "with read_file and copy the exact text including indentation; "
+               "for a large change prefer write_file with overwrite=true.";
     if (count > 1 && !replace_all)
+        // S6.21 Task 2 -- self-healing remedy for the ambiguous case. The
+        // remedy already named replace_all; keep it explicit + model-actionable.
         return "Error: 'old_string' matches " + std::to_string(count) +
                " locations in " + rel_path +
-               ". Widen the match with more surrounding context, or set "
-               "replace_all=true to replace every occurrence.";
+               ". Set replace_all=true to replace all " + std::to_string(count) +
+               ", or add more surrounding context to the anchor so it matches "
+               "exactly one location.";
 
     if (replace_all || count == 1) {
         buf = replace_all_occurrences(buf, old_s, new_s);
