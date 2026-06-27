@@ -209,16 +209,24 @@ int main(int argc, char* argv[])
     // Install Ctrl+C handler.
     std::signal(SIGINT, signal_handler);
 
-    // Resolve and validate workspace path.
+    // Resolve and validate workspace path. S6.2 -- a `.zim` archive is a valid
+    // workspace target (read-only Wikipedia/Kiwix mode); Workspace handles the
+    // file-vs-directory branch internally. Accept either a directory or a .zim.
     std::error_code ec;
     fs::path workspace_path = fs::absolute(args.workspace_path, ec);
-    if (ec || !fs::is_directory(workspace_path)) {
-        std::cerr << "Error: not a directory: " << args.workspace_path << "\n";
+    bool is_zim = !ec && fs::is_regular_file(workspace_path, ec) &&
+                  workspace_path.extension() == ".zim";
+    if (ec || (!is_zim && !fs::is_directory(workspace_path))) {
+        std::cerr << "Error: not a directory or .zim file: "
+                  << args.workspace_path << "\n";
         return 1;
     }
 
-    // Ensure .locus/ exists before log init.
-    fs::path locus_dir = workspace_path / ".locus";
+    // Ensure the index dir exists before log init. For a ZIM archive the index
+    // lives in a per-archive sibling dir, matching Workspace's ZIM-mode layout.
+    fs::path locus_dir = is_zim
+        ? (workspace_path.parent_path() / (".locus-zim-" + workspace_path.stem().string()))
+        : (workspace_path / ".locus");
     fs::create_directories(locus_dir, ec);
     if (ec) {
         std::cerr << "Error: cannot create .locus/ directory: " << ec.message() << "\n";

@@ -21,6 +21,9 @@
 #include "index/indexer.h"
 #include "../tools/process_registry.h"
 #include "../index/reranker.h"
+#include "security/injection_policy.h"
+#include "security/injection_scanner.h"
+#include "zim/zim_archive.h"
 
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
@@ -54,14 +57,30 @@ void Workspace::set_embedder_provider(EmbedderProvider p)
 }
 
 Workspace::Workspace(const fs::path& root)
-    : root_(fs::absolute(root))
 {
-    if (!fs::is_directory(root_)) {
-        throw std::runtime_error("Not a directory: " + root_.string());
+    fs::path in = fs::absolute(root);
+    std::error_code ec;
+
+    // S6.2 -- ZIM mode: the path is a .zim archive, not a directory. The
+    // workspace root becomes the archive's parent dir (a real dir we can put
+    // .locus in) and the index DB lives in a per-archive subdir so two ZIMs in
+    // the same folder don't share an index.
+    bool zim = fs::is_regular_file(in, ec) &&
+               in.extension() == ".zim";
+
+    if (zim) {
+        root_ = in.parent_path();
+        // <parent>/.locus-zim-<archive-stem>/ keeps the index next to the .zim
+        // and distinct from any real-folder workspace rooted at the parent.
+        locus_dir_ = root_ / (".locus-zim-" + in.stem().string());
+    } else {
+        root_ = in;
+        if (!fs::is_directory(root_)) {
+            throw std::runtime_error("Not a directory: " + root_.string());
+        }
+        locus_dir_ = root_ / ".locus";
     }
 
-    locus_dir_ = root_ / ".locus";
-    std::error_code ec;
     fs::create_directories(locus_dir_, ec);
     if (ec) {
         throw std::runtime_error("Cannot create .locus/: " + ec.message());
@@ -69,20 +88,34 @@ Workspace::Workspace(const fs::path& root)
 
     // Grab the workspace lock before touching any stateful subsystem -- if
     // another Locus instance owns this folder (or an ancestor of it), we
-    // must fail cleanly before opening databases or starting threads.
-    lock_ = std::make_unique<WorkspaceLock>(root_);
+    // must fail cleanly before opening databases or starting threads. In ZIM
+    // mode the lock is scoped to the per-archive .locus dir so two different
+    // ZIMs under the same parent can be open at once.
+    lock_ = std::make_unique<WorkspaceLock>(zim ? locus_dir_ : root_);
 
     load_config();
     load_locus_md();
+
+    if (zim) {
+        // ZIM mode forces read-only retrieval-only behaviour: no semantic
+        // embedding (multi-GB), no memory bank, no file watcher.
+        config_.index.semantic_search_enabled = false;
+        config_.memory.enabled = false;
+        // Open the archive up front so a bad file fails the ctor cleanly.
+        zim_archive_ = std::make_unique<zim::ZimArchive>(in);
+    }
 
     spdlog::info("Opening main database at {}", (locus_dir_ / "index.db").string());
     main_db_ = std::make_unique<Database>(locus_dir_ / "index.db", DbKind::Main);
     // One-time migration from the pre-split layout.
     main_db_->drop_legacy_semantic_tables();
 
-    spdlog::info("Starting file watcher on {}", root_.string());
-    watcher_ = std::make_unique<FileWatcher>(root_, config_.index.exclude_patterns);
-    watcher_->start();
+    // ZIM mode has no live filesystem to watch -- the archive is immutable.
+    if (!zim) {
+        spdlog::info("Starting file watcher on {}", root_.string());
+        watcher_ = std::make_unique<FileWatcher>(root_, config_.index.exclude_patterns);
+        watcher_->start();
+    }
 
     // Register text extractors for known document formats
     extractors_ = std::make_unique<ExtractorRegistry>();
@@ -114,7 +147,11 @@ Workspace::Workspace(const fs::path& root)
         };
     }
 
-    indexer_->build_initial();
+    if (zim) {
+        build_zim_index();
+    } else {
+        indexer_->build_initial();
+    }
 
     // Start embedding worker after initial index (chunks are queued)
     if (embedding_worker_) {
@@ -126,8 +163,11 @@ Workspace::Workspace(const fs::path& root)
     // Watcher pump: drains the FileWatcher on a background thread and
     // batches events into Indexer::process_events. Replaces the per-frontend
     // pumps that used to live in main.cpp / locus_app.cpp / locus_frame.cpp.
-    watcher_pump_ = std::make_unique<WatcherPump>(*watcher_, *indexer_);
-    watcher_pump_->start();
+    // Skipped in ZIM mode (no watcher).
+    if (watcher_) {
+        watcher_pump_ = std::make_unique<WatcherPump>(*watcher_, *indexer_);
+        watcher_pump_->start();
+    }
 
     // Background-process registry (S4.I). Empty at startup; tools spawn into it.
     processes_ = std::make_unique<ProcessRegistry>(
@@ -168,6 +208,67 @@ Workspace::~Workspace()
         watcher_->stop();
     }
     spdlog::info("Workspace closed: {}", root_.string());
+}
+
+void Workspace::build_zim_index()
+{
+    if (!zim_archive_) return;
+
+    const auto& arts = zim_archive_->articles();
+    const size_t total = arts.size();
+    spdlog::info("ZIM index build: {} article(s) to feed", total);
+
+    const bool scan = config_.security.scan_zim;
+    security::ScannerConfig scfg;
+    scfg.max_scan_bytes = static_cast<std::size_t>(config_.security.max_scan_kb) * 1024;
+
+    // Bulk insert under a single transaction -- thousands of upsert/FTS writes
+    // per ZIM, and an autocommit-per-row would make a 5000-article build crawl.
+    main_db_->exec("BEGIN TRANSACTION");
+    size_t done = 0, indexed = 0;
+    for (const auto& a : arts) {
+        auto html = zim_archive_->read_content(a.entry_index);
+        ++done;
+        if (!html || html->empty()) {
+            if (indexer_ && indexer_->on_progress && (done % 500 == 0 || done == total))
+                indexer_->on_progress(static_cast<int>(done), static_cast<int>(total));
+            continue;
+        }
+
+        // Strip article HTML -> plain text + headings (in-memory, no temp file).
+        ExtractionResult ext = HtmlExtractor::extract_from_string(*html);
+        if (ext.is_binary || ext.text.empty()) continue;
+
+        // S6.0 Task D -- the origin stamp ("zim") is UNCONDITIONAL; the keyword
+        // scan is opt-in (security.scan_zim, default off) because encyclopedia
+        // content is overwhelmingly benign and a multi-GB scan isn't worth it.
+        uint32_t flags = 0;
+        if (scan) {
+            security::ScanResult sr = security::scan_for_injection(ext.text, scfg);
+            flags = sr.flags_bitmask();
+        }
+
+        // Use the title as the virtual path when present (human-readable in
+        // list_directory / read_file); fall back to the archive path.
+        std::string vpath = a.path.empty() ? a.title : a.path;
+
+        indexer_->index_virtual_article(
+            vpath, ext.text, ext.headings, "zim", flags,
+            static_cast<int64_t>(html->size()));
+        ++indexed;
+
+        if (indexer_ && indexer_->on_progress && (done % 500 == 0 || done == total))
+            indexer_->on_progress(static_cast<int>(done), static_cast<int>(total));
+    }
+    main_db_->exec("COMMIT");
+
+    spdlog::info("ZIM index build complete: {}/{} article(s) indexed",
+                 indexed, total);
+    if (indexer_ && indexer_->on_activity) {
+        indexer_->on_activity(
+            "ZIM index built: " + std::to_string(indexed) + " article(s)",
+            "Source: " + zim_archive_->path().filename().string());
+    }
 }
 
 ProcessSinkBroker* Workspace::process_sink()

@@ -19,6 +19,10 @@ struct IndexerStatements {
 
     // main.db
     sqlite3_stmt* upsert_file       = nullptr;
+    // S6.2 -- virtual-article upsert that also sets origin + injection_flags
+    // (the S6.0 taint columns). The regular upsert_file leaves them at their
+    // DEFAULTs; the ZIM bulk-feed needs origin="zim" stamped per row.
+    sqlite3_stmt* upsert_virtual    = nullptr;
     sqlite3_stmt* delete_file       = nullptr;
     sqlite3_stmt* file_id           = nullptr;
     sqlite3_stmt* file_stat         = nullptr;

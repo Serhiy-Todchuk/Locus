@@ -16,6 +16,17 @@ IndexerStatements::IndexerStatements(Database& main_db, Database* vectors_db)
             is_binary=?6, language=?7, indexed_at=?8, line_count=?9
     )");
 
+    // S6.2 -- like upsert_file but with origin (?10) + injection_flags (?11)
+    // for untrusted virtual ingress (ZIM articles). Same conflict target.
+    upsert_virtual = main_db.prepare(R"(
+        INSERT INTO files (path, abs_path, size_bytes, modified_at, ext, is_binary, language, indexed_at, line_count, origin, injection_flags)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+        ON CONFLICT(path) DO UPDATE SET
+            abs_path=?2, size_bytes=?3, modified_at=?4, ext=?5,
+            is_binary=?6, language=?7, indexed_at=?8, line_count=?9,
+            origin=?10, injection_flags=?11
+    )");
+
     delete_file = main_db.prepare("DELETE FROM files WHERE path = ?1");
     file_id     = main_db.prepare("SELECT id FROM files WHERE path = ?1");
     file_stat   = main_db.prepare(
@@ -62,6 +73,7 @@ IndexerStatements::~IndexerStatements()
         if (s) { sqlite3_finalize(s); s = nullptr; }
     };
     fin(upsert_file);
+    fin(upsert_virtual);
     fin(delete_file);
     fin(file_id);
     fin(file_stat);

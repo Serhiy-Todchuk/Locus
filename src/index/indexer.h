@@ -41,6 +41,24 @@ public:
     // Full initial traversal -- indexes every non-excluded file.
     void build_initial();
 
+    // S6.2 -- index a VIRTUAL article (e.g. a ZIM/Wikipedia entry) that has no
+    // file on disk. Content is already extracted to plain text by the caller
+    // (the ZIM reader strips the article HTML), so this skips the
+    // fs::is_regular_file check, the disk stat, and the extractor dispatch that
+    // index_file does. It upserts the files row with the given `origin`
+    // (e.g. "zim") + `injection_flags` (S6.0 taint) and a synthetic abs_path
+    // (a "zim://<path>" pseudo-path so disk reads on the search path are
+    // skipped), then writes FTS content + headings. Symbol extraction and
+    // semantic chunking are intentionally skipped -- articles are prose, not
+    // code, and ZIM is not embedded by default (multi-GB). `byte_size` is the
+    // raw (pre-strip) article size, recorded for display only.
+    void index_virtual_article(const std::string& virtual_path,
+                               const std::string& content,
+                               const std::vector<ExtractedHeading>& headings,
+                               const std::string& origin,
+                               uint32_t injection_flags,
+                               int64_t byte_size);
+
     // Process a batch of file-watcher events (incremental update).
     void process_events(const std::vector<FileEvent>& events);
 

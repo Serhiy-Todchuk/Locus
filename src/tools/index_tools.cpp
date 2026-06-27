@@ -276,6 +276,34 @@ ToolResult ListDirectoryTool::execute(const ToolCall& call, IWorkspaceServices& 
     if (!idx)
         return error_result("Error: workspace index not available");
 
+    // S6.2 -- ZIM mode: there is NO real filesystem to walk. Enumerate article
+    // paths straight from the index (the only source of truth) and present them
+    // as a browseable listing. Directories are the synthetic path prefixes the
+    // index already derives. Origin marker reminds the model these are
+    // untrusted Wikipedia articles.
+    if (auto* zw = ws.workspace(); zw && zw->zim_mode()) {
+        auto rows = idx->list_directory(path, depth > 0 ? depth : 1);
+        std::ostringstream content;
+        std::string display_path = path.empty() ? "." : path;
+        int shown = 0, truncated = 0;
+        std::ostringstream lines;
+        for (const auto& fe : rows) {
+            if (shown >= max_entries) { ++truncated; continue; }
+            lines << "  " << fe.path;
+            if (fe.is_directory) lines << "/";
+            else lines << " [wikipedia, untrusted]";
+            lines << "\n";
+            ++shown;
+        }
+        content << "[" << display_path << "] " << shown
+                << " entries (ZIM archive, read-only)\n" << lines.str();
+        if (truncated > 0)
+            content << "[" << truncated
+                    << " more truncated; use search_text to find articles]\n";
+        std::string result = content.str();
+        return {true, result, result};
+    }
+
     // We need the workspace for exclude patterns + size cap. Without it (e.g.
     // unit-test FakeWorkspaceServices), fall back to no excludes / no size cap.
     Workspace* wsp = ws.workspace();

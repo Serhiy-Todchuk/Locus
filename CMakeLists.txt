@@ -29,6 +29,11 @@ find_package(unofficial-tree-sitter CONFIG REQUIRED)
 find_package(Llama CONFIG REQUIRED)
 find_package(miniz CONFIG REQUIRED)
 find_package(pugixml CONFIG REQUIRED)
+# S6.2 ZIM reader -- per-cluster decompressors. zstd (code 5, modern Wikipedia
+# ZIMs) + liblzma/xz (code 4, older snapshots). Both permissive (BSD / public
+# domain) so they don't compromise Locus's MIT licence the way GPL libzim would.
+find_package(zstd CONFIG REQUIRED)
+find_package(liblzma CONFIG REQUIRED)
 
 # llama-cpp / ggml upstream CMake configs use find_library with a single
 # IMPORTED_LOCATION, which breaks multi-config generators (VS picks the
@@ -412,6 +417,7 @@ add_library(locus_core STATIC
     src/mcp/mcp_manager.cpp
     src/security/injection_scanner.cpp
     src/security/injection_policy.cpp
+    src/zim/zim_archive.cpp
     src/agent/conversation.cpp
     src/agent/system_prompt.cpp
     src/agent/system_prompt_assembly.cpp
@@ -465,6 +471,8 @@ target_link_libraries(locus_core PUBLIC
     pdfium
     miniz::miniz
     pugixml::pugixml
+    zstd::libzstd
+    liblzma::liblzma
 )
 
 # S5.P source-encoding lint -- fail the build if em-dashes or other prohibited

@@ -3,6 +3,9 @@ dist/
 out/
 .vs/
 .locus/
+# S6.2 -- per-archive ZIM index dir (created next to a .zim when opened as a
+# workspace; the test fixture run leaves one beside tests/sample_docs/sample.zim).
+.locus-zim-*/
 *.db
 *.gguf
 *.onnx

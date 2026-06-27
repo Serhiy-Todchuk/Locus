@@ -12,6 +12,8 @@ namespace locus {
 
 namespace fs = std::filesystem;
 
+namespace zim { class ZimArchive; }
+
 class Database;
 class Embedder;
 class EmbeddingWorker;
@@ -32,6 +34,13 @@ class Workspace : public IWorkspaceServices {
 public:
     // Opens a workspace at the given path. Creates .locus/ if absent.
     // Throws std::runtime_error on failure.
+    //
+    // S6.2 -- when `root` points at a `.zim` file (Kiwix / Wikipedia), the
+    // workspace opens in READ-ONLY ZIM mode: articles are virtual "files"
+    // pulled from the archive and bulk-fed into the index (no file watcher, no
+    // filesystem traversal). The index DB lives in a `.locus` dir derived from
+    // the archive name, alongside the .zim. read_file serves stripped article
+    // text via the index; search surfaces `[wikipedia, untrusted]` snippets.
     explicit Workspace(const fs::path& root);
     ~Workspace() override;
 
@@ -50,6 +59,13 @@ public:
 
     // -- Workspace-specific ---------------------------------------------------
     const fs::path& locus_dir() const { return locus_dir_; }
+
+    // S6.2 -- true when this workspace is a read-only ZIM archive view. Tools /
+    // UI can use it to suppress mutating affordances. The open ZimArchive is
+    // kept alive so read_file can pull article HTML on demand (it is the source
+    // of truth for content; the index stores stripped text for search).
+    bool zim_mode() const { return zim_archive_ != nullptr; }
+    zim::ZimArchive* zim_archive() { return zim_archive_.get(); }
 
     const WorkspaceConfig& config() const { return config_; }
     WorkspaceConfig& config() { return config_; }
@@ -86,9 +102,16 @@ public:
 private:
     void load_config();
     void load_locus_md();
+    // S6.2 -- the ZIM-mode ctor body: opens the archive, builds the index DB,
+    // bulk-feeds every article through Indexer::index_virtual_article. Called
+    // from the ctor when `root` is a `.zim` file. `progress` (optional) is
+    // forwarded the (done,total) article counts so the GUI shows build status.
+    void build_zim_index();
 
     fs::path root_;
     fs::path locus_dir_;
+    // S6.2 -- non-null in ZIM mode; kept open for on-demand article reads.
+    std::unique_ptr<zim::ZimArchive> zim_archive_;
     WorkspaceConfig config_;
     std::string locus_md_;
     // Held first, released last -- stops another Locus process from opening

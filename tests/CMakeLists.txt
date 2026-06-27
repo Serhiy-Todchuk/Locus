@@ -70,6 +70,7 @@ add_executable(locus_tests
     test_compaction_sentinel.cpp
     test_endpoint_profile.cpp
     test_injection_scanner.cpp
+    test_zim_archive.cpp
     retrieval_eval/metrics.cpp
     support/shared_embedder.cpp
 )

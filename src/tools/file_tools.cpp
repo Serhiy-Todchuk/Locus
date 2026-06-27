@@ -147,6 +147,22 @@ ToolResult ReadFileTool::execute(const ToolCall& call, IWorkspaceServices& ws,
     if (offset < 1) offset = 1;
     if (length < 1) length = 100;
 
+    // S6.2 -- ZIM mode: articles are virtual (no file on disk). Serve the
+    // stored stripped text from the index for ANY path, skipping resolve_path
+    // (which would reject a non-existent file) and the extension branch below.
+    if (auto* w = ws.workspace(); w && w->zim_mode()) {
+        auto* idx = ws.index();
+        if (!idx)
+            return error_result("Error: ZIM index not available");
+        auto extracted = idx->get_extracted_text(rel_path);
+        if (!extracted)
+            return error_result(
+                "Error: article '" + rel_path + "' not found in this ZIM archive. "
+                "Use list_directory or search_text to find article paths.");
+        return render_line_window(rel_path, *extracted, offset, length,
+                                  "wikipedia article (untrusted)");
+    }
+
     fs::path full = resolve_path(ws, rel_path);
     if (full.empty())
         return error_result("Error: path resolves outside workspace");

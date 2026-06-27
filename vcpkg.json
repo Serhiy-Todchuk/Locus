@@ -25,6 +25,8 @@
         },
         "miniz",
         "pugixml",
-        "dtl"
+        "dtl",
+        "zstd",
+        "liblzma"
     ]
 }

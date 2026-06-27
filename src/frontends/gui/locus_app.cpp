@@ -250,17 +250,25 @@ bool LocusApp::OnInit()
         workspace_path_str = dlg.GetPath().ToStdString();
     }
 
-    // Resolve workspace path.
+    // Resolve workspace path. S6.2 -- a `.zim` archive is a valid target
+    // (read-only Wikipedia/Kiwix mode); Workspace handles the file-vs-dir
+    // branch. Accept a directory or a .zim file.
     std::error_code ec;
     fs::path ws_path = fs::absolute(workspace_path_str, ec);
-    if (ec || !fs::is_directory(ws_path)) {
-        wxMessageBox(wxString::Format("Not a directory: %s", workspace_path_str),
+    bool is_zim = !ec && fs::is_regular_file(ws_path, ec) &&
+                  ws_path.extension() == ".zim";
+    if (ec || (!is_zim && !fs::is_directory(ws_path))) {
+        wxMessageBox(wxString::Format("Not a directory or .zim file: %s",
+                                      workspace_path_str),
                      "Locus", wxOK | wxICON_ERROR);
         return false;
     }
 
-    // Ensure .locus/ and init logging.
-    fs::path locus_dir = ws_path / ".locus";
+    // Ensure the index dir and init logging. ZIM mode uses a per-archive
+    // sibling dir, matching Workspace's layout.
+    fs::path locus_dir = is_zim
+        ? (ws_path.parent_path() / (".locus-zim-" + ws_path.stem().string()))
+        : (ws_path / ".locus");
     fs::create_directories(locus_dir, ec);
     if (ec) {
         wxMessageBox("Cannot create .locus/ directory", "Locus",
@@ -303,8 +311,10 @@ void LocusApp::open_workspace(const std::string& path)
     namespace fs = std::filesystem;
     std::error_code ec;
     fs::path ws_path = fs::absolute(path, ec);
-    if (ec || !fs::is_directory(ws_path)) {
-        wxMessageBox(wxString::Format("Not a directory: %s", path),
+    bool is_zim = !ec && fs::is_regular_file(ws_path, ec) &&
+                  ws_path.extension() == ".zim";
+    if (ec || (!is_zim && !fs::is_directory(ws_path))) {
+        wxMessageBox(wxString::Format("Not a directory or .zim file: %s", path),
                      "Locus", wxOK | wxICON_ERROR);
         return;
     }
@@ -348,8 +358,11 @@ void LocusApp::open_workspace(const std::string& path)
     // the old hand-wired code.
     session_.reset();
 
-    // Set up .locus/ dir and logging for the new workspace.
-    fs::path locus_dir = ws_path / ".locus";
+    // Set up the index dir and logging for the new workspace (ZIM archives use
+    // a per-archive sibling dir, matching Workspace's ZIM-mode layout).
+    fs::path locus_dir = is_zim
+        ? (ws_path.parent_path() / (".locus-zim-" + ws_path.stem().string()))
+        : (ws_path / ".locus");
     fs::create_directories(locus_dir, ec);
     if (ec) {
         wxMessageBox("Cannot create .locus/ directory", "Locus",

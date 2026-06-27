@@ -216,10 +216,14 @@ int Indexer::reconcile_excluded_files()
 int Indexer::reconcile_nonexistent_files()
 {
     std::vector<std::string> to_drop;
-    if (auto* s = main_db_.prepare("SELECT path FROM files"); s) {
+    if (auto* s = main_db_.prepare("SELECT path, origin FROM files"); s) {
         while (sqlite3_step(s) == SQLITE_ROW) {
             auto* p = reinterpret_cast<const char*>(sqlite3_column_text(s, 0));
             if (!p) continue;
+            // S6.2 -- virtual rows (origin != "", e.g. ZIM articles) have no
+            // file on disk by design; never evict them in this stat-sweep.
+            auto* o = reinterpret_cast<const char*>(sqlite3_column_text(s, 1));
+            if (o && o[0] != '\0') continue;
             std::string rel = p;
             std::error_code ec;
             fs::path abs = root_ / fs::path(rel);
@@ -593,6 +597,66 @@ void Indexer::index_file(const fs::path& rel_path)
     }
 
     log_fs()->trace("Indexed: {} (lang={}, {} bytes)", rel_str, language, content.size());
+}
+
+void Indexer::index_virtual_article(const std::string& virtual_path,
+                                    const std::string& content,
+                                    const std::vector<ExtractedHeading>& headings,
+                                    const std::string& origin,
+                                    uint32_t injection_flags,
+                                    int64_t byte_size)
+{
+    std::string rel_str = virtual_path;
+    std::replace(rel_str.begin(), rel_str.end(), '\\', '/');
+    if (rel_str.empty()) return;
+
+    // Line count over the stripped text (same convention as index_file).
+    int64_t line_count = 0;
+    if (!content.empty()) {
+        line_count = 1;
+        for (char c : content) if (c == '\n') ++line_count;
+        if (content.back() == '\n') --line_count;
+    }
+
+    // Synthetic abs_path so the search read path recognises this as a virtual
+    // row and skips the disk line-recovery (IndexQuery::search_text gates on a
+    // non-empty origin, but a pseudo abs_path is also clearer in logs).
+    std::string abs_path = origin + "://" + rel_str;
+    std::string ext = ".html";       // articles are HTML-sourced prose
+    std::string language;            // no code language
+
+    sqlite3_reset(stmts_.upsert_virtual);
+    sqlite3_bind_text (stmts_.upsert_virtual, 1, rel_str.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text (stmts_.upsert_virtual, 2, abs_path.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int64(stmts_.upsert_virtual, 3, byte_size);
+    sqlite3_bind_int64(stmts_.upsert_virtual, 4, 0);             // modified_at (n/a)
+    sqlite3_bind_text (stmts_.upsert_virtual, 5, ext.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int  (stmts_.upsert_virtual, 6, 0);             // is_binary
+    sqlite3_bind_text (stmts_.upsert_virtual, 7, language.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int64(stmts_.upsert_virtual, 8, unix_now());
+    sqlite3_bind_int64(stmts_.upsert_virtual, 9, line_count);
+    sqlite3_bind_text (stmts_.upsert_virtual, 10, origin.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int64(stmts_.upsert_virtual, 11, static_cast<int64_t>(injection_flags));
+    sqlite3_step(stmts_.upsert_virtual);
+
+    ++stats_.files_total;
+
+    sqlite3_reset(stmts_.file_id);
+    sqlite3_bind_text(stmts_.file_id, 1, rel_str.c_str(), -1, SQLITE_TRANSIENT);
+    if (sqlite3_step(stmts_.file_id) != SQLITE_ROW) return;
+    int64_t file_id = sqlite3_column_int64(stmts_.file_id, 0);
+
+    // Idempotent re-feed: clear any prior FTS/headings for this path.
+    delete_fts(rel_str);
+    sqlite3_reset(stmts_.delete_heads);
+    sqlite3_bind_int64(stmts_.delete_heads, 1, file_id);
+    sqlite3_step(stmts_.delete_heads);
+
+    insert_fts(rel_str, content);
+    ++stats_.files_indexed;
+
+    if (!headings.empty()) insert_headings(file_id, headings);
+    // No symbols (prose), no chunks (ZIM not embedded by default).
 }
 
 void Indexer::remove_file(const fs::path& rel_path)

@@ -129,7 +129,11 @@ ExtractionResult HtmlExtractor::extract(const std::filesystem::path& abs_path)
 
     std::string content((std::istreambuf_iterator<char>(f)),
                          std::istreambuf_iterator<char>());
+    return extract_from_string(content);
+}
 
+ExtractionResult HtmlExtractor::extract_from_string(const std::string& content)
+{
     ExtractionResult result;
 
     // Extract <h1>-<h6> headings from raw HTML first (preserves document order
