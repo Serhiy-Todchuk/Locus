@@ -150,7 +150,7 @@ struct Rule {
 };
 
 // InstructionOverride -- the textbook "disregard your real instructions" verb.
-const std::array<Rule, 6> k_instruction_override = {{
+constexpr std::array<Rule, 6> k_instruction_override = {{
     // "ignore (all/any) (previous/prior/above/preceding) instructions/prompts/rules"
     {R"(ignore (all |any |the )?(previous|prior|above|preceding|earlier|foregoing) (instruction|prompt|rule|direction|message)s?)", 0.55f},
     // "disregard the above / system prompt / everything before"
@@ -166,7 +166,7 @@ const std::array<Rule, 6> k_instruction_override = {{
 }};
 
 // RoleImpersonation -- chat-template markers / fake turns appearing in BODY text.
-const std::array<Rule, 7> k_role_impersonation = {{
+constexpr std::array<Rule, 7> k_role_impersonation = {{
     {R"(<\|im_start\|>\s*(system|assistant|user))", 0.70f},  // ChatML
     {R"(<\|im_end\|>)",                              0.45f},
     {R"(\[/?inst\])",                                0.55f},  // Llama [INST]/[/INST]
@@ -178,7 +178,7 @@ const std::array<Rule, 7> k_role_impersonation = {{
 }};
 
 // Exfiltration -- ask for the system prompt, or send data to an external sink.
-const std::array<Rule, 6> k_exfiltration = {{
+constexpr std::array<Rule, 6> k_exfiltration = {{
     {R"((reveal|print|repeat|show|output|display|dump|leak)( me)?( back)? (your |the )?(full |entire |complete )?(system )?(prompt|instruction|rule)s?)", 0.65f},
     {R"((reveal|print|repeat|show|output|tell me)( me)? (your |the )?(initial|original|hidden|secret|above) (prompt|instruction|text|message)s?)", 0.60f},
     // "send/email/post X to <url|email>" -- X is any short object run (data,
@@ -194,7 +194,7 @@ const std::array<Rule, 6> k_exfiltration = {{
 
 // SocialEngineering -- urgency / fake authority. Weak on its own; co-occurrence
 // is what makes these matter.
-const std::array<Rule, 5> k_social_engineering = {{
+constexpr std::array<Rule, 5> k_social_engineering = {{
     {R"((this is |it'?s )(critical|urgent|important|an emergency)[,.]? you (must|need to|have to))", 0.40f},
     {R"(the (user|developer|admin|operator|owner) (has |have )?(authoriz|approv|permitt|allow)(ed|es)?)", 0.45f},
     {R"((developer|debug|god|admin|root|jailbreak) mode (enabled|on|activated|is now))", 0.50f},
@@ -264,6 +264,69 @@ void run_encoding_evasion(ScanResult& out, const Normalised& norm)
     }
 }
 
+// Is this code point a Cyrillic or Greek letter that visually mimics an ASCII
+// Latin letter? We only care about the confusable LETTER ranges -- a homoglyph
+// attack splices one of these into an otherwise-Latin word ("igno?e" with a
+// Cyrillic 'p'/U+0440 for 'r') so the phrase matchers miss it. Whole-word
+// Cyrillic/Greek (a real Russian or Greek word) is NOT flagged because the
+// detector below requires the SAME token to also contain ASCII Latin letters.
+bool is_confusable_letter(uint32_t cp)
+{
+    // Cyrillic block letters (U+0410..U+044F) + Greek letters
+    // (U+0391..U+03A9 upper, U+03B1..U+03C9 lower). These cover the lookalikes
+    // (a e o p c x y / alpha omicron nu rho ...) without dragging in symbols.
+    if (cp >= 0x0410 && cp <= 0x044F) return true;  // Cyrillic A-ya
+    if (cp >= 0x0391 && cp <= 0x03A9) return true;  // Greek upper
+    if (cp >= 0x03B1 && cp <= 0x03C9) return true;  // Greek lower
+    return false;
+}
+
+// EncodingEvasion (homoglyph mix): a single word-like token that contains BOTH
+// an ASCII Latin letter AND a Cyrillic/Greek confusable letter. That mix
+// inside one token is the tell -- legitimate text keeps scripts in separate
+// words. Operates on the ORIGINAL (windowed) text, since normalisation only
+// lowercases ASCII and we need the raw non-ASCII code points. Offsets reported
+// are best-effort byte offsets into that buffer.
+void run_homoglyph_mix(ScanResult& out, std::string_view text)
+{
+    size_t i = 0;
+    while (i < text.size()) {
+        // Walk a "word": a run of letters (ASCII or the confusable ranges),
+        // tracking whether we saw each script. Whitespace / punctuation / ASCII
+        // digits break the token.
+        size_t tok_begin = i;
+        bool saw_latin = false, saw_confusable = false;
+        size_t letters = 0;
+        while (i < text.size()) {
+            size_t bytes = 1;
+            uint32_t cp = next_codepoint(text, i, bytes);
+            bool latin = (cp >= 'A' && cp <= 'Z') || (cp >= 'a' && cp <= 'z');
+            bool conf  = is_confusable_letter(cp);
+            if (!latin && !conf) break;  // token boundary
+            if (latin) saw_latin = true;
+            if (conf)  saw_confusable = true;
+            ++letters;
+            i += bytes;
+        }
+        if (saw_latin && saw_confusable && letters >= 3) {
+            // A mixed-script word of reasonable length -- almost never benign.
+            InjectionFinding f;
+            f.category   = InjectionCategory::EncodingEvasion;
+            f.offset     = tok_begin;
+            f.length     = (i > tok_begin) ? (i - tok_begin) : 1;
+            f.confidence = 0.45f;  // higher than base64: mixed-script words are rarely accidental
+            f.excerpt    = "[homoglyph: mixed Latin/Cyrillic-Greek letters in one word]";
+            out.findings.push_back(std::move(f));
+        }
+        // Advance past the non-letter byte(s) that broke the token.
+        if (i == tok_begin) {
+            size_t bytes = 1;
+            next_codepoint(text, i, bytes);
+            i += bytes;
+        }
+    }
+}
+
 } // namespace
 
 ScanResult scan_for_injection(std::string_view text, const ScannerConfig& cfg)
@@ -312,8 +375,13 @@ ScanResult scan_for_injection(std::string_view text, const ScannerConfig& cfg)
     if (cfg.enable_social_engineering)
         run_rules(out, norm, InjectionCategory::SocialEngineering,
                   k_social_engineering.data(), k_social_engineering.size());
-    if (cfg.enable_encoding_evasion)
+    if (cfg.enable_encoding_evasion) {
         run_encoding_evasion(out, norm);
+        // Homoglyph mix runs over the ORIGINAL (windowed) text, not the
+        // ASCII-lowercased normalised buffer -- it needs the raw Cyrillic/Greek
+        // code points that normalisation passes through verbatim.
+        run_homoglyph_mix(out, to_scan);
+    }
 
     // -- Co-occurrence boost --------------------------------------------------
     // A real attack usually combines categories: an instruction override PLUS
