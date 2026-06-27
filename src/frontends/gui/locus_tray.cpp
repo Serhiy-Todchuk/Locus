@@ -62,19 +62,26 @@ wxMenu* LocusTray::CreatePopupMenu()
 
 void LocusTray::on_left_click(wxTaskBarIconEvent& /*evt*/)
 {
-    if (frame_->IsShown()) {
-        frame_->Raise();
-    } else {
-        frame_->Show(true);
-        frame_->Raise();
-    }
+    restore_frame();
 }
 
 void LocusTray::on_show(wxCommandEvent& /*evt*/)
 {
-    frame_->Show(!frame_->IsShown());
     if (frame_->IsShown())
-        frame_->Raise();
+        frame_->Hide();
+    else
+        restore_frame();
+}
+
+void LocusTray::restore_frame()
+{
+    if (!frame_->IsShown())
+        frame_->Show(true);
+    // De-iconize so a window that was minimized before being hidden comes
+    // back as a normal restored window, not an invisible minimized one.
+    if (frame_->IsIconized())
+        frame_->Iconize(false);
+    frame_->Raise();
 }
 
 void LocusTray::on_quit(wxCommandEvent& /*evt*/)

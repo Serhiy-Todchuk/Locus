@@ -132,6 +132,7 @@ LocusFrame::LocusFrame(LocusSession& session)
         auto* chat = static_cast<ChatPanel*>(notebook_->GetPage(sel));
         if (chat) chat->toggle_find_bar();
     };
+    hooks.on_hide_to_tray = [this]() { hide_to_tray(); };
     hooks.on_toggle_terminal_pane = [this](bool show) {
         if (auto& p = aui_.GetPane("terminal"); p.IsOk()) {
             p.Show(show);
@@ -1306,8 +1307,19 @@ void LocusFrame::on_close(wxCloseEvent& evt)
 
 void LocusFrame::on_iconize(wxIconizeEvent& evt)
 {
-    if (evt.IsIconized()) Hide();
+    // Minimize is plain taskbar behaviour -- the window stays on the taskbar
+    // and restores like any other window. Hiding into the tray is a separate
+    // explicit action (View > Hide to Tray / hide_to_tray()), never a side
+    // effect of the minimize button.
     evt.Skip();
+}
+
+void LocusFrame::hide_to_tray()
+{
+    // Drop any minimized state first so a later tray-restore brings back a
+    // normal (non-iconized) window instead of an invisible minimized one.
+    if (IsIconized()) Iconize(false);
+    Hide();
 }
 
 void LocusFrame::on_aui_pane_close(wxAuiManagerEvent& evt)

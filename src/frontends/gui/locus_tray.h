@@ -24,6 +24,9 @@ private:
     void on_show(wxCommandEvent& evt);
     void on_quit(wxCommandEvent& evt);
 
+    // Bring the main window back from a tray-hidden (and/or minimized) state.
+    void restore_frame();
+
     LocusFrame* frame_;
     State       state_ = State::idle;
 

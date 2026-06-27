@@ -33,6 +33,7 @@ namespace {
         ID_MENU_VIEW_TERMINAL,
         ID_MENU_VIEW_MEMORY_BANK,
         ID_MENU_VIEW_FIND_IN_CHAT,
+        ID_MENU_VIEW_HIDE_TO_TRAY,
         ID_MENU_NEW_TAB,
         ID_MENU_CLOSE_TAB,
         ID_MENU_RENAME_TAB,
@@ -105,6 +106,9 @@ void MenuController::install()
     // S5.Z task 2 -- registers the Ctrl+F accelerator. Not a check item
     // (the find bar's open/closed state is per-chat-tab, not a global flag).
     view_menu->Append(ID_MENU_VIEW_FIND_IN_CHAT, "Find in Conversation\tCtrl+F");
+    view_menu->AppendSeparator();
+    // Hide the window into the tray. Distinct from minimize (plain taskbar).
+    view_menu->Append(ID_MENU_VIEW_HIDE_TO_TRAY, "&Hide to Tray\tCtrl+Shift+H");
     view_files_item_->Check(true);
     view_activity_item_->Check(true);
     view_terminal_item_->Check(false);
@@ -224,6 +228,10 @@ void MenuController::install()
     frame_->Bind(wxEVT_MENU, [this](wxCommandEvent&) {
         if (hooks_.on_toggle_find_in_chat) hooks_.on_toggle_find_in_chat();
     }, ID_MENU_VIEW_FIND_IN_CHAT);
+
+    frame_->Bind(wxEVT_MENU, [this](wxCommandEvent&) {
+        if (hooks_.on_hide_to_tray) hooks_.on_hide_to_tray();
+    }, ID_MENU_VIEW_HIDE_TO_TRAY);
 
     // Saved Sessions per-entry handlers.
     frame_->Bind(wxEVT_MENU, &MenuController::on_session_open,   this,

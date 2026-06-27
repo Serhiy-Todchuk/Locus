@@ -152,6 +152,12 @@ private:
     void on_iconize(wxIconizeEvent& evt);
     void on_aui_pane_close(wxAuiManagerEvent& evt);
 
+    // Hide the window into the system tray (notification area). The tray icon
+    // stays present whenever Locus runs; this just hides the top-level window.
+    // Restore via the tray icon (left double-click / Show Window). Explicit
+    // user action only -- never triggered by minimize.
+    void hide_to_tray();
+
     // Agent thread events (via WxFrontend) handled by AgentEventRouter.
 
     // S5.R observer callbacks (forwarded from TabProcessObserver via

@@ -42,6 +42,10 @@ public:
         std::function<void(bool show)>              on_toggle_terminal_pane;
         // S5.K -- Memory Bank panel toggle (Ctrl+M).
         std::function<void(bool show)>              on_toggle_memory_bank_pane;
+        // Hide the main window into the system tray (notification area). A
+        // distinct action from minimize -- the latter is plain taskbar
+        // behaviour now. Restore via the tray icon.
+        std::function<void()>                       on_hide_to_tray;
         // S5.Z task 2 -- chat find bar toggle (Ctrl+F). LocusFrame routes to
         // the active tab's ChatPanel.
         std::function<void()>                       on_toggle_find_in_chat;
