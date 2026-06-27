@@ -100,15 +100,22 @@ Locus is for:
 The same interaction model should serve a C++ repo, a PDF folder, and a local wiki.
 This claim needs constant proof through test workspaces and demos, not just philosophy.
 
-### 4. User Control As A Feature
+### 4. Understanding And Control As A Feature
 
-Most tools optimize for "let the AI do it." Locus optimizes for "user decides, AI executes."
-- Every tool call is visible before execution unless the user explicitly changes policy.
-- The user can approve, modify, reject, or auto-approve by workspace policy.
-- Context compaction is visible and user-directed.
+Most tools hide the AI's process and ask you to trust the result. Locus optimizes for
+"the user understands what's happening and shapes how it works." The aim is comprehension
+and tunability.
+
+- Everything the agent does is observable: tool calls, the system prompt and context
+  breakdown, diffs, activity, and metrics are surfaced rather than hidden.
+- You tune behavior in settings: permission presets (auto-run-everything through
+  ask-before-edits), capability toggles, prompt-cost and compaction profiles, and
+  per-model presets.
+- Context compaction is visible and directable.
 - LOCUS.md lets the user permanently shape behavior for a workspace.
 
-This is not a limitation. It is the design goal.
+This is not a limitation. It is the design goal: an agent you can reason about and steer,
+at whatever level of oversight you choose.
 
 ### 5. Token Efficiency As Engineering Discipline
 

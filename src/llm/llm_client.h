@@ -223,6 +223,19 @@ using OnError = std::function<void(const std::string& error)>;
 // Called with token usage from the server (if available in the response).
 using OnUsage = std::function<void(const CompletionUsage& usage)>;
 
+// S6.21 Task 1 -- delivered/dropped tool-call accounting for one stream.
+// `delivered` = calls that passed the JSON-arguments gate and were handed to
+// on_tool_calls; `dropped` = calls the gate rejected as malformed. Fired once
+// per stream IFF at least one tool call was accumulated (delivered+dropped>0),
+// so AgentTurnRunner can distinguish "no tool calls at all" (delivered=0,
+// dropped=0, callback not fired) from "every tool call was malformed"
+// (delivered=0, dropped>=1). `diagnostic` is a compact, already-bounded
+// human-readable summary of WHY the dropped calls failed (which tool, reason,
+// arg size) -- Task 1b folds this into the user-visible error too. Empty =
+// ignored; default-empty so existing callers are unaffected.
+using OnToolCallsAccounting =
+    std::function<void(int delivered, int dropped, const std::string& diagnostic)>;
+
 struct StreamCallbacks {
     OnToken     on_token;
     OnToken     on_reasoning_token;   // chain-of-thought tokens (LM Studio's
@@ -231,6 +244,9 @@ struct StreamCallbacks {
     OnComplete  on_complete;
     OnError     on_error;
     OnUsage     on_usage;
+
+    // S6.21 Task 1 -- see OnToolCallsAccounting above.
+    OnToolCallsAccounting on_tool_calls_accounting;
 
     // S6.20 -- transient-failure status notice. Fired when the transport is
     // about to retry a transient failure (429 / 5xx / empty-200 / stall) after

@@ -34,6 +34,7 @@ public:
     void on_agent_compaction_archived(wxThreadEvent& evt);
     void on_agent_round_progress(wxThreadEvent& evt);
     void on_agent_llm_retry(wxThreadEvent& evt);
+    void on_agent_unverified_success(wxThreadEvent& evt);
     void on_agent_watchdog_tripped(wxThreadEvent& evt);
     void on_agent_watchdog_cleared(wxThreadEvent& evt);
     void on_agent_endpoint_changed(wxThreadEvent& evt);

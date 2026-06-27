@@ -97,11 +97,14 @@ AboutDialog::AboutDialog(wxWindow* parent)
         "models spend less of the prompt guessing and more of it using the "
         "right evidence.");
 
-    add_section(this, content, "Control surface",
-        "File edits, deletes, shell commands, and MCP tool calls can be "
-        "reviewed through approval policies. Inline diffs, activity events, "
-        "terminal output, saved sessions, and undo checkpoints keep the "
-        "workflow legible.");
+    add_section(this, content, "Transparent and tunable",
+        "The point is that you understand what the agent is doing and can "
+        "shape how it works, not that you approve every step. Inline diffs, "
+        "activity events, terminal output, the system-prompt and context "
+        "breakdown, saved sessions, and undo checkpoints keep the workflow "
+        "legible. Capability toggles, permission presets, prompt-cost and "
+        "compaction profiles, and per-model presets let you trade autonomy "
+        "for oversight and tune efficiency to the model you are running.");
 
     add_section(this, content, "Platform and license",
         "Locus is currently developed and tested on Windows 11. The core is "

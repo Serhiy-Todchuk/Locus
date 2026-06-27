@@ -668,6 +668,10 @@ void LMStudioClient::do_stream_completion(
     if (got_tool_calls && !tool_accum.empty() && callbacks.on_tool_calls) {
         std::vector<ToolCallRequest> calls;
         int dropped = 0;
+        // S6.21 Task 1b -- per-call diagnostics folded into the user-visible
+        // error so the Activity panel shows WHAT was wrong (which tool, why),
+        // not just a count. Each entry is one already-bounded clause.
+        std::vector<std::string> drop_diags;
         for (auto& a : tool_accum) {
             // Empty / whitespace arguments => not deliverable.
             std::string args = a.arguments;
@@ -678,25 +682,38 @@ void LMStudioClient::do_stream_completion(
             while (!trimmed.empty() && is_ws(trimmed.front())) trimmed.erase(trimmed.begin());
             while (!trimmed.empty() && is_ws(trimmed.back()))  trimmed.pop_back();
 
-            bool valid = true;
+            bool        valid = true;
+            const char* reason = "";
             if (a.name.empty()) {
-                valid = false;
+                valid  = false;
+                reason = "no tool name in the call";
             } else if (trimmed.empty()) {
                 // Tools that legitimately take no args still expect "{}".
                 // An empty arguments string poisons LM Studio's chat
                 // template on the next round.
-                valid = false;
+                valid  = false;
+                reason = "empty arguments (use {} for a no-arg tool)";
             } else {
                 try { (void)json::parse(trimmed); }
-                catch (const json::exception&) { valid = false; }
+                catch (const json::exception&) {
+                    valid  = false;
+                    reason = "arguments do not parse as JSON";
+                }
             }
 
             if (!valid) {
                 ++dropped;
                 spdlog::warn("LMStudioClient: dropping malformed tool call "
-                             "(name='{}', id='{}', args_len={}): args do not "
-                             "parse as JSON",
-                             a.name, a.id, a.arguments.size());
+                             "(name='{}', id='{}', args_len={}): {}",
+                             a.name, a.id, a.arguments.size(), reason);
+                // One compact clause per dropped call. Name + reason + the arg
+                // byte count (a cheap proxy that distinguishes a truncated
+                // body from a quoting slip) -- no raw arg bytes, so a multi-KB
+                // payload can't dominate the panel.
+                std::string tool_label = a.name.empty() ? "<unnamed>" : a.name;
+                drop_diags.push_back(tool_label + " (" + reason + ", "
+                                     + std::to_string(a.arguments.size())
+                                     + " bytes)");
                 continue;
             }
             calls.push_back({a.id, a.name, a.arguments});
@@ -706,10 +723,24 @@ void LMStudioClient::do_stream_completion(
             std::string err_msg =
                 "Dropped " + std::to_string(dropped) +
                 " malformed tool call(s) from the model response";
+            // S6.21 Task 1b -- append the per-call diagnostics, capped so a
+            // pathological multi-call round stays readable in the panel.
+            if (!drop_diags.empty()) {
+                err_msg += ": ";
+                constexpr std::size_t k_max_diags = 3;
+                for (std::size_t i = 0;
+                     i < drop_diags.size() && i < k_max_diags; ++i) {
+                    if (i) err_msg += "; ";
+                    err_msg += drop_diags[i];
+                }
+                if (drop_diags.size() > k_max_diags)
+                    err_msg += "; +" + std::to_string(drop_diags.size()
+                                                      - k_max_diags) + " more";
+            }
             if (truncated_by_length)
                 err_msg += " (likely caused by max_tokens truncation; "
                            "increase llm.max_tokens to recover)";
-            err_msg += ".";
+            err_msg += ". Re-send the call with a valid JSON object.";
             if (callbacks.on_error)
                 callbacks.on_error(err_msg);
         }
@@ -719,6 +750,20 @@ void LMStudioClient::do_stream_completion(
         for (auto& c : calls)
             spdlog::trace("  tool: {} id={} args={}",
                           c.name, c.id, truncate_for_log(c.arguments));
+
+        // S6.21 Task 1 -- report delivered/dropped accounting so the agent
+        // loop can detect an all-dropped round (the silent-loop case where a
+        // turn produces zero tool results and trips none of the result-keyed
+        // detectors). Fire only when a tool call was actually accumulated.
+        if (callbacks.on_tool_calls_accounting) {
+            std::string diag;
+            for (std::size_t i = 0; i < drop_diags.size(); ++i) {
+                if (i) diag += "; ";
+                diag += drop_diags[i];
+            }
+            callbacks.on_tool_calls_accounting(
+                static_cast<int>(calls.size()), dropped, diag);
+        }
 
         if (!calls.empty())
             callbacks.on_tool_calls(calls);

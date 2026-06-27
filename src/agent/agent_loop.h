@@ -37,6 +37,19 @@ struct AgentStepResult {
     bool        watchdog_tripped       = false;
     bool        watchdog_auto_nudge    = false;
     std::string watchdog_trigger;
+
+    // S6.21 Task 1 -- tool-call delivery accounting for this round, sourced
+    // from the LMStudioClient's malformed-call gate (StreamCallbacks::
+    // on_tool_calls_accounting). `delivered_tool_calls` is how many calls
+    // passed the JSON-arguments gate; `dropped_tool_calls` is how many were
+    // rejected as malformed. The all-dropped case (delivered=0, dropped>=1)
+    // produces zero tool results, so the S6.10 repeated-call monitor and the
+    // S6.20 build-error streak never fire -- AgentTurnRunner reads these to
+    // nudge/abort that otherwise-silent loop. `dropped_diagnostic` carries the
+    // compact per-call reason summary for the activity event.
+    int         delivered_tool_calls   = 0;
+    int         dropped_tool_calls     = 0;
+    std::string dropped_diagnostic;
 };
 
 // S6.18 D.2 -- pure-function watchdog decision. Lifted out of run_step()'s

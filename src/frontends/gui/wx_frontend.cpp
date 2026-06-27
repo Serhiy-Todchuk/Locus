@@ -32,6 +32,7 @@ wxDEFINE_EVENT(EVT_AGENT_HISTORY_MSG_DELETED, wxThreadEvent);
 wxDEFINE_EVENT(EVT_AGENT_PRESET_CHANGED,      wxThreadEvent);
 wxDEFINE_EVENT(EVT_AGENT_ROUND_PROGRESS,      wxThreadEvent);
 wxDEFINE_EVENT(EVT_AGENT_LLM_RETRY,           wxThreadEvent);
+wxDEFINE_EVENT(EVT_AGENT_UNVERIFIED_SUCCESS,  wxThreadEvent);
 wxDEFINE_EVENT(EVT_AGENT_WATCHDOG_TRIPPED,    wxThreadEvent);
 wxDEFINE_EVENT(EVT_AGENT_WATCHDOG_CLEARED,    wxThreadEvent);
 wxDEFINE_EVENT(EVT_AGENT_ENDPOINT_CHANGED,    wxThreadEvent);
@@ -293,6 +294,13 @@ void WxFrontend::on_llm_retry(const std::string& status)
 {
     auto* evt = new_evt(EVT_AGENT_LLM_RETRY, tab_id_);
     evt->SetString(wxString::FromUTF8(status));
+    wxQueueEvent(handler_, evt);
+}
+
+void WxFrontend::on_unverified_success(const std::string& note)
+{
+    auto* evt = new_evt(EVT_AGENT_UNVERIFIED_SUCCESS, tab_id_);
+    evt->SetString(wxString::FromUTF8(note));
     wxQueueEvent(handler_, evt);
 }
 

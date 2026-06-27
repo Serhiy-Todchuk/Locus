@@ -1,8 +1,10 @@
 #include "agent_turn.h"
 
 #include "agent_core.h"
+#include "agent_loop.h"
 #include "build_error_detector.h"
 #include "compaction_pipeline.h"
+#include "convergence_signals.h"
 #include "quality_monitor.h"
 #include "tools/shared.h"
 #include "tools/tool.h"
@@ -140,6 +142,12 @@ AgentTurnRunner::Outcome AgentTurnRunner::run()
         if (core_.ctx_->budget().check_overflow(core_.ctx_->current_tokens()))
             break;
 
+        // S6.21 Task 4 -- if a hard-trim fired this round (either the start-of-
+        // round drained pipeline OR the auto-compact band above), re-inject a
+        // build-loop breadcrumb before the next LLM call so a small-context
+        // model doesn't lose WHICH error it was mid-fixing.
+        maybe_inject_compaction_breadcrumb();
+
         ToolMode tool_mode = ToolMode::agent;
         switch (core_.mode_.load(std::memory_order_acquire)) {
         case AgentMode::chat:    tool_mode = ToolMode::agent;   break;
@@ -158,8 +166,31 @@ AgentTurnRunner::Outcome AgentTurnRunner::run()
         });
 
         if (step.had_error) {
+            // S6.21 Task 1 -- the all-dropped case surfaces here: when every
+            // tool call this round was malformed, LMStudioClient fires on_error
+            // (so had_error is set) and delivers no calls. Treat it as a
+            // steer-or-abort loop rather than a hard turn-ending error, so the
+            // model gets one chance to re-send a well-formed call. Any other
+            // error (network, reserve breach, ...) falls through to the break.
+            if (step.delivered_tool_calls == 0 && step.dropped_tool_calls > 0) {
+                bool should_break = false;
+                check_all_dropped(step, should_break);
+                if (should_break) {
+                    turn_had_error = true;
+                    break;
+                }
+                continue;  // nudge injected; re-enter the round loop
+            }
             turn_had_error = true;
             break;
+        }
+
+        // S6.21 Task 1 -- a successful round with at least one delivered tool
+        // call (or a plain text round) resets the all-dropped streak. Done
+        // unconditionally here so the streak only ever counts CONSECUTIVE
+        // all-dropped rounds.
+        if (step.delivered_tool_calls > 0) {
+            all_dropped_nudged_ = false;
         }
 
         // Skip useless assistant messages -- empty content AND no tool_calls
@@ -264,8 +295,16 @@ AgentTurnRunner::Outcome AgentTurnRunner::run()
             break;  // nothing to do; let the turn complete naturally
         }
 
-        if (step.tool_calls.empty())
+        if (step.tool_calls.empty()) {
+            // S6.21 Task 3 -- a turn-ending text answer. This round dispatched
+            // no tools, so a "build succeeds / frame0 created" claim here is
+            // ungrounded unless a PRIOR round in the turn verified it. We pass
+            // this round's (empty) tool names; the predicate's phrase list is
+            // conservative enough that an honest end-of-turn summary referencing
+            // an earlier successful build won't trip it on a generic word.
+            check_unverified_success(step.assistant_msg.content, {});
             break;
+        }
 
         // S6.10 Task B -- repeated_tool_call detector. Inspect the latest
         // assistant message (just appended) BEFORE dispatching its tool
@@ -312,6 +351,10 @@ AgentTurnRunner::Outcome AgentTurnRunner::run()
             });
             if (!round_tool_output.empty()) round_tool_output += '\n';
             round_tool_output += captured_content;
+            // S6.21 Task 2 -- per-result edit_file ambiguity / not-found loop
+            // detector. Independent of the build-error streak (which keys on
+            // compiler output, not tool errors).
+            check_edit_ambiguity(captured_content);
             core_.observe_plan_tool_result(call, captured_content, captured_success);
         }
 
@@ -425,6 +468,17 @@ void AgentTurnRunner::check_stuck_error(const std::string& tool_output,
 
 void AgentTurnRunner::note_write_call(const ToolCall& call)
 {
+    // S6.21 Task 4 -- remember the last file the model wrote/edited this turn so
+    // the compaction breadcrumb can name it. edit_file uses file_path (canonical)
+    // or path (legacy); write_file / delete_file use path or file_path.
+    if (call.tool_name == "edit_file"
+     || call.tool_name == "write_file"
+     || call.tool_name == "delete_file") {
+        std::string p = call.args.value("file_path", "");
+        if (p.empty()) p = call.args.value("path", "");
+        if (!p.empty()) last_edited_file_ = p;
+    }
+
     // Only a write_file that OVERWRITES a large existing file is the thrash
     // signature. A plain create (overwrite=false) or a small file is fine.
     if (call.tool_name != "write_file") return;
@@ -457,6 +511,163 @@ void AgentTurnRunner::maybe_hint_large_overwrite()
     }
     // If inject_nudge returned false (cap exhausted) we just skip the hint --
     // the stuck-error path will handle the abort.
+}
+
+void AgentTurnRunner::check_all_dropped(const AgentStepResult& step,
+                                        bool& out_break)
+{
+    if (auto* ws = core_.services_.workspace()) {
+        if (!ws->config().agent.quality_monitor_enabled) {
+            // Quality monitor off: don't intercept. The caller already set
+            // turn_had_error and will break on the underlying error.
+            out_break = true;
+            return;
+        }
+    }
+
+    AllDroppedAction action = classify_all_dropped(
+        step.delivered_tool_calls, step.dropped_tool_calls, all_dropped_nudged_);
+
+    // Defensive: classify_all_dropped only returns nudge/abort for the
+    // all-dropped case, which the caller already gated on. `none` shouldn't
+    // happen here, but if it does, fall back to the hard error break.
+    if (action == AllDroppedAction::none) {
+        out_break = true;
+        return;
+    }
+
+    std::string diag = step.dropped_diagnostic.empty()
+        ? std::string("the model's tool call arguments were not valid JSON")
+        : step.dropped_diagnostic;
+
+    if (action == AllDroppedAction::abort) {
+        spdlog::warn("AgentCore: tool calls repeatedly malformed "
+                     "({} dropped, 0 delivered) after a nudge; aborting turn",
+                     step.dropped_tool_calls);
+        core_.frontends_.broadcast([&diag](IFrontend& fe) {
+            fe.on_error("Agent appears stuck (tool calls repeatedly malformed). "
+                        "Last failure: " + diag +
+                        ". Stopping. Try a tighter prompt, a model with cleaner "
+                        "tool-call output, or lower llm.max_tokens pressure.");
+        });
+        out_break = true;
+        return;
+    }
+
+    // First all-dropped round: nudge once.
+    std::string nudge =
+        "[Malformed tool call] Your last tool call's arguments were not valid "
+        "JSON (" + diag + "). Re-send the SAME tool call but with a correctly "
+        "quoted, well-formed JSON object for its arguments -- do not repeat the "
+        "previous malformed call verbatim, and keep the arguments compact so the "
+        "response is not truncated.";
+    if (!core_.inject_nudge(nudge, "all_tool_calls_dropped")) {
+        // Shared nudge cap already exhausted by another detector -> abort now.
+        core_.frontends_.broadcast([](IFrontend& fe) {
+            fe.on_error("Agent appears stuck (tool calls repeatedly malformed; "
+                        "correction cap reached). Stopping.");
+        });
+        out_break = true;
+        return;
+    }
+    all_dropped_nudged_ = true;
+    spdlog::info("AgentCore: nudged after an all-dropped tool-call round "
+                 "({} dropped)", step.dropped_tool_calls);
+}
+
+void AgentTurnRunner::check_edit_ambiguity(const std::string& tool_output)
+{
+    if (auto* ws = core_.services_.workspace()) {
+        if (!ws->config().agent.quality_monitor_enabled) return;
+    }
+
+    if (!is_edit_ambiguity_error(tool_output)) {
+        // A non-ambiguity edit result (or any other tool output) breaks the
+        // streak -- the model either landed the edit or moved on.
+        edit_ambiguity_streak_ = 0;
+        return;
+    }
+
+    ++edit_ambiguity_streak_;
+    if (edit_ambiguity_streak_ < k_edit_ambiguity_nudge) return;
+    if (edit_ambiguity_hinted_) return;  // once per turn
+
+    std::string hint =
+        "[Edit anchor] edit_file keeps failing to locate or uniquely match the "
+        "old_string. Stop re-guessing the anchor. Either: (1) read_file the exact "
+        "region and copy the text VERBATIM including indentation and whitespace; "
+        "(2) if the snippet legitimately appears more than once and you want them "
+        "all changed, set replace_all=true; or (3) for a large or structural "
+        "change, use write_file with overwrite=true to replace the whole file.";
+    if (core_.inject_nudge(hint, "edit_ambiguity")) {
+        edit_ambiguity_hinted_ = true;
+        spdlog::info("AgentCore: hinted edit_file escape hatch after {} "
+                     "ambiguity errors this turn", edit_ambiguity_streak_);
+    }
+    // inject_nudge==false (cap exhausted) -> skip; other detectors own the abort.
+}
+
+void AgentTurnRunner::check_unverified_success(
+    const std::string& assistant_text,
+    const std::vector<std::string>& round_tool_names)
+{
+    if (auto* ws = core_.services_.workspace()) {
+        if (!ws->config().agent.quality_monitor_enabled) return;
+    }
+
+    if (!claims_unverified_success(assistant_text, round_tool_names)) return;
+
+    // Non-blocking visibility tripwire: no nudge, no abort. Surface it on the
+    // activity stream + a footer note so the agentic get_chat_status / activity
+    // scrape (and a human watching) doesn't trust an ungrounded "it builds".
+    std::string note =
+        "Assistant claimed a verified outcome (build / run / artifact) without a "
+        "confirming tool call this turn. Treat the claim as unverified.";
+    spdlog::warn("AgentCore: {}", note);
+    core_.activity_->emit(ActivityKind::warning,
+                          "Unverified success claim", note);
+    core_.frontends_.broadcast([&note](IFrontend& fe) {
+        fe.on_unverified_success(note);
+    });
+}
+
+void AgentTurnRunner::maybe_inject_compaction_breadcrumb()
+{
+    // Read-and-clear the hard-trim flag. Always consume it so a later round
+    // doesn't re-fire on a stale trim.
+    if (!core_.compaction_hard_trimmed_) return;
+    core_.compaction_hard_trimmed_ = false;
+
+    if (auto* ws = core_.services_.workspace()) {
+        if (!ws->config().agent.quality_monitor_enabled) return;
+    }
+
+    // Only meaningful mid-build-loop: drop the breadcrumb if no build error is
+    // live (pure-chat compaction is unaffected).
+    if (last_error_sig_.empty()) return;
+
+    // One-line head of the (possibly multi-line) signature -- enough to remind
+    // the model which failure it was closing without re-bloating the context.
+    std::string sig_head = last_error_sig_.substr(0, last_error_sig_.find('\n'));
+
+    std::string crumb = "[Resuming after context compaction: the last build "
+                        "error was `" + sig_head + "`";
+    if (!last_edited_file_.empty())
+        crumb += "; you were editing `" + last_edited_file_ + "`";
+    crumb += ". Make a minimal, targeted edit to fix this specific error -- do "
+             "not restart from scratch or rewrite unrelated code.]";
+
+    // Inject as a plain user message (does NOT consume the shared nudge cap --
+    // this is context restoration, not a correction). Splices at the tail like
+    // any mid-turn user message so it rides the next LLM call.
+    core_.ctx_->add_message({MessageRole::user, crumb});
+    int tok = core_.ctx_->history().messages().back().token_estimate;
+    core_.activity_->emit(ActivityKind::user_message,
+                          "Compaction breadcrumb (build-loop resume)",
+                          crumb,
+                          /*tokens_in=*/tok);
+    spdlog::info("AgentCore: injected post-compaction build-loop breadcrumb "
+                 "(sig='{}', file='{}')", sig_head, last_edited_file_);
 }
 
 } // namespace locus

@@ -206,6 +206,17 @@ public:
     // Default no-op so CLI / test stubs stay clean.
     virtual void on_llm_retry(const std::string& /*status*/) {}
 
+    // S6.21 Task 3 -- non-blocking unverified-success tripwire. Fired when the
+    // turn-ending assistant message asserts a verifiable build/run outcome
+    // ("builds", "frame0.ppm created", "the exe runs") in a turn that ran no
+    // confirming tool call. `note` is a short human-readable warning. This is a
+    // visibility signal for the watching user / agentic driver, NOT a model
+    // correction -- there is no nudge or abort. Frontends surface it as a footer
+    // note or a chat warning bubble; the agentic get_chat_status / activity
+    // scrape reads it so a driver doesn't trust an ungrounded claim. The same
+    // text is also emitted as an ActivityKind::warning. Default no-op.
+    virtual void on_unverified_success(const std::string& /*note*/) {}
+
     // S6.13 -- reasoning watchdog tripped on the current LLM round.
     // `trigger` is "chars" or "seconds"; `value` is the count that crossed
     // the threshold (combined reasoning+text chars for "chars"; elapsed
