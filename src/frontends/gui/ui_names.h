@@ -96,6 +96,9 @@ inline constexpr const char* kSettingsTabNotifications = "locus.settings.tab.not
 inline constexpr const char* kSettingsTabSessions     = "locus.settings.tab.sessions";
 inline constexpr const char* kSettingsTabAgent        = "locus.settings.tab.agent";
 inline constexpr const char* kSettingsTabEndpoints    = "locus.settings.tab.endpoints";
+// S6.0 / S6.1 -- Security + Web tabs.
+inline constexpr const char* kSettingsTabSecurity     = "locus.settings.tab.security";
+inline constexpr const char* kSettingsTabWeb          = "locus.settings.tab.web";
 // S6.18 C.1 / C.2 -- Settings > Agent tab named chooser widgets.
 inline constexpr const char* kSettingsCompactionAggressiveness =
     "locus.settings.compaction.aggressiveness";
@@ -104,6 +107,23 @@ inline constexpr const char* kSettingsAgentPromptCost =
 inline constexpr const char* kSettingsSessionsRestoreLast      = "locus.settings.sessions.restore_last";
 inline constexpr const char* kSettingsSessionsPersistActivity  = "locus.settings.sessions.persist_activity";
 inline constexpr const char* kSettingsSaveAsGlobalBtn = "locus.settings.save_as_global_btn";
+
+// S6.0 -- Settings > Security tab sub-controls.
+inline constexpr const char* kSettingsSecurityInjectionScan   = "locus.settings.security.injection_scan";
+inline constexpr const char* kSettingsSecurityScanZim         = "locus.settings.security.scan_zim";
+inline constexpr const char* kSettingsSecurityBlockConfidence = "locus.settings.security.block_confidence";
+inline constexpr const char* kSettingsSecurityMaxScanKb       = "locus.settings.security.max_scan_kb";
+
+// S6.1 -- Settings > Web tab sub-controls.
+inline constexpr const char* kSettingsWebEnabled        = "locus.settings.web.enabled";
+inline constexpr const char* kSettingsWebProvider       = "locus.settings.web.provider";
+inline constexpr const char* kSettingsWebApiKey         = "locus.settings.web.api_key";
+inline constexpr const char* kSettingsWebApiUrl         = "locus.settings.web.api_url";
+inline constexpr const char* kSettingsWebMaxResults     = "locus.settings.web.max_results";
+inline constexpr const char* kSettingsWebCacheTtlHours  = "locus.settings.web.cache_ttl_hours";
+inline constexpr const char* kSettingsWebCacheMaxMb     = "locus.settings.web.cache_max_mb";
+inline constexpr const char* kSettingsWebMaxPageKb      = "locus.settings.web.max_web_page_kb";
+inline constexpr const char* kSettingsWebAllowHttp      = "locus.settings.web.allow_http";
 
 // Settings -> LLM tab sub-controls (S5.L Phase A extension).
 inline constexpr const char* kSettingsLlmEndpoint     = "locus.settings.llm.endpoint";
@@ -116,6 +136,8 @@ inline constexpr const char* kSettingsLlmPresetChoice = "locus.settings.llm.pres
 inline constexpr const char* kSettingsLlmPresetApplyBtn = "locus.settings.llm.preset_apply_btn";
 inline constexpr const char* kSettingsLlmToolFormat   = "locus.settings.llm.tool_format";
 inline constexpr const char* kSettingsLlmGrammarMode  = "locus.settings.llm.grammar_mode";
+// S6.14 -- thinking ON/OFF/auto knob.
+inline constexpr const char* kSettingsLlmThinkingMode = "locus.settings.llm.thinking_mode";
 // S6.10 Task H -- "Reset to preset defaults" touches the sampler block only.
 inline constexpr const char* kSettingsLlmSamplerResetBtn =
     "locus.settings.llm.sampler_reset_btn";

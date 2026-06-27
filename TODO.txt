@@ -1,5 +1,4 @@
 - "Build kicked off in the background; harness will notify me when it finishes." - I want this features in Locus for background commands :)
-- Fix "Control surface" section in About window: there approval policies mentioned as something special, but it's common thing for all harnesses. Put there something about flexibility/efficiency/transparency/control as benefits, but keep overall About text consistent. Same fixes in docs (README.md?, other?).
 - This needs to be revisited: Auto-detect loaded model and auto-apply preset
 - Ask user tool with pre-determined answers
 - Ask user auto answer feature
@@ -7,13 +6,5 @@
 - Add image attachment for LLM prompt
 - FastDebug
 - Agentic test of CLI
-- Why read_file treats line numbers as pages for PDFs?
 
-- Claude Blender
 - GoodOldSoftware
-- free nvidia inference
-
-Have you added integration test and UI automation test (if needed)?
-Run full integration suite and then full UIA suite. Fix if anything fails. LLM is running. The PC is yours until done.
-Short commit message?
-Wrap up - update docs/comments, then we're done.

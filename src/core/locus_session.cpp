@@ -50,6 +50,10 @@ void merge_workspace_defaults(LLMConfig& cfg, const WorkspaceConfig& wc)
     // (caller may pass GrammarMode::Off as default; workspace overrides).
     if (!wc.llm.grammar_mode.empty())
         cfg.grammar_mode = grammar_mode_from_string(wc.llm.grammar_mode);
+    // S6.14 -- thinking mode. Same layering: workspace string wins over the
+    // seed default (ThinkingMode::Auto).
+    if (!wc.llm.thinking_mode.empty())
+        cfg.enable_thinking = thinking_mode_from_string(wc.llm.thinking_mode);
 }
 
 } // namespace

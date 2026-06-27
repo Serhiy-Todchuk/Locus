@@ -1,0 +1,41 @@
+{
+  "name": "security_settings",
+  "description": "S6.0 -- open Settings -> Security tab and verify the four prompt-injection-scanner widgets are reachable in the UIA tree (injection_scan checkbox, scan_zim checkbox, block_confidence text, max_scan_kb text). Then toggle injection_scan off and change max_scan_kb to a marker value, click OK, and assert .locus/config.json round-tripped both edits (file-content assertion is the reliable signal -- reading checkbox state back through UIA is flaky). No live LLM needed; this is a deterministic settings-surface + persistence check.",
+  "setup": {
+    "workspace": "tmp"
+  },
+  "steps": [
+    { "op": "launch" },
+    { "op": "wait_for_window", "args": { "title_prefix": "Locus", "timeout_ms": 20000 } },
+    { "op": "find", "args": { "automation_id": "locus.chat.panel", "timeout_ms": 15000 } },
+    { "op": "sleep", "args": { "ms": 400 } },
+
+    { "op": "press_key", "args": { "key": "COMMA", "modifiers": "CTRL" } },
+    { "op": "find", "args": { "automation_id": "locus.settings.notebook", "timeout_ms": 5000 } },
+    { "op": "select_tab", "args": { "parent_aid": "locus.settings.notebook", "index": 7 } },
+    { "op": "sleep", "args": { "ms": 400 } },
+    { "op": "screenshot", "args": { "name": "01_security_tab_open" } },
+
+    { "op": "find", "args": { "automation_id": "locus.settings.security.injection_scan", "timeout_ms": 5000 } },
+    { "op": "find", "args": { "automation_id": "locus.settings.security.scan_zim", "timeout_ms": 5000 } },
+    { "op": "find", "args": { "automation_id": "locus.settings.security.block_confidence", "timeout_ms": 5000 } },
+    { "op": "find", "args": { "automation_id": "locus.settings.security.max_scan_kb", "timeout_ms": 5000 } },
+    { "op": "screenshot", "args": { "name": "02_all_widgets_reachable" } },
+
+    { "op": "click", "args": { "automation_id": "locus.settings.security.injection_scan", "timeout_ms": 5000 } },
+
+    { "op": "click", "args": { "automation_id": "locus.settings.security.max_scan_kb", "timeout_ms": 5000 } },
+    { "op": "press_key", "args": { "key": "A", "modifiers": "CTRL" } },
+    { "op": "type", "args": { "automation_id": "locus.settings.security.max_scan_kb", "text": "129" } },
+    { "op": "screenshot", "args": { "name": "03_edits_made" } },
+
+    { "op": "press_key", "args": { "key": "ENTER" } },
+    { "op": "sleep", "args": { "ms": 600 } },
+
+    { "op": "assert_file_contains", "args": { "path": ".locus/config.json", "substring": "\"injection_scan\": false", "timeout_ms": 5000 } },
+    { "op": "assert_file_contains", "args": { "path": ".locus/config.json", "substring": "\"max_scan_kb\": 129", "timeout_ms": 5000 } },
+    { "op": "screenshot", "args": { "name": "04_config_persisted" } },
+
+    { "op": "quit", "args": { "wait_ms": 5000 } }
+  ]
+}

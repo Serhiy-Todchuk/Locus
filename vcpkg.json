@@ -27,6 +27,7 @@
         "pugixml",
         "dtl",
         "zstd",
-        "liblzma"
+        "liblzma",
+        "gumbo"
     ]
 }

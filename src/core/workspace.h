@@ -25,6 +25,7 @@ class MemoryStore;
 class ProcessRegistry;
 class Reranker;
 class WatcherPump;
+class WebCache;
 class WorkspaceLock;
 
 // Owns all workspace-level resources: config, database, file watcher, LOCUS.md.
@@ -55,6 +56,7 @@ public:
     ProcessRegistry*   processes() override      { return processes_.get(); }
     ProcessSinkBroker* process_sink() override;
     MemoryStore*       memory() override         { return memory_.get(); }
+    WebCache*          web_cache() override       { return web_cache_.get(); }
     Workspace*         workspace() override      { return this; }
 
     // -- Workspace-specific ---------------------------------------------------
@@ -89,6 +91,13 @@ public:
     // Returns true on success, false if model not found or init failed.
     bool enable_semantic_search();
     void disable_semantic_search();
+
+    // S6.1 -- reconcile the web cache with the current config after a Settings
+    // change. Creates the WebCache (+ runs eviction) when web_retrieval is now
+    // on and it doesn't exist yet; drops it when the capability was turned off.
+    // No-op in ZIM mode. Lets enabling web retrieval take effect without a
+    // workspace reopen.
+    void sync_web_cache();
 
     // Process-wide override hook. When set, enable_semantic_search() takes the
     // returned embedder instead of loading a GGUF from disk. The model id
@@ -141,6 +150,10 @@ private:
     // embedder and reranker via raw pointers stored at construction time;
     // hot-toggling those isn't supported (re-open the workspace).
     std::unique_ptr<MemoryStore> memory_;
+    // S6.1 -- ephemeral fetched-web-page cache (web_pages / web_fts /
+    // web_headings in main index.db). Non-null when the web_retrieval
+    // capability is on; the web tools gate on it. Never created in ZIM mode.
+    std::unique_ptr<WebCache> web_cache_;
 };
 
 } // namespace locus

@@ -69,6 +69,15 @@ struct FileEntry {
 
 struct SearchOptions {
     int max_results = 20;
+
+    // S6.1 -- source selection for search_text. `include_files` covers the
+    // workspace index (files_fts); `include_web` adds the ephemeral web cache
+    // (web_fts) so a single search spans local + fetched-web content. Defaults
+    // to files-only (the pre-S6.1 behaviour); the web tool flips include_web on
+    // when the model passes sources="web" / "all". Web rows surface with
+    // origin="web" so the taint marker renders on the snippet.
+    bool include_files = true;
+    bool include_web   = false;
 };
 
 // -- IndexQuery ---------------------------------------------------------------
@@ -128,6 +137,13 @@ public:
                                             const SearchOptions& opts = {}) const;
 
 private:
+    // S6.1 -- query the ephemeral web cache (web_fts JOIN web_pages). Prepared
+    // per-call behind a sqlite_master probe so it's a clean no-op on workspaces
+    // that never enabled web retrieval. Returns rows with origin="web" +
+    // injection_flags set for the taint surface.
+    std::vector<SearchResult> search_web_fts(const std::string& sanitised_query,
+                                             int max_results) const;
+
     Database& main_db_;
     Database* vectors_db_;  // null when semantic search disabled
 

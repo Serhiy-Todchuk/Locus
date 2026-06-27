@@ -48,12 +48,15 @@ public:
                "  search_text({\"query\": \"WorkspaceConfig\"})";
     }
     std::string short_description() const override {
-        return "search_text(query, max_results=8) -- FTS5 keyword search.";
+        return "search_text(query, max_results=8, sources?) -- FTS5 keyword search.";
     }
     std::vector<ToolParam> params() const override {
         return {
             {"query",       "string",  "Keyword search query (FTS5 syntax supported).", true},
             {"max_results", "integer", "Maximum results (default 8).", false},
+            {"sources",     "string",  "Which corpora to search: \"files\" "
+                                       "(default, workspace index), \"web\" "
+                                       "(fetched web pages), or \"all\" for both.", false},
         };
     }
     ToolApprovalPolicy approval_policy() const override { return ToolApprovalPolicy::auto_approve; }

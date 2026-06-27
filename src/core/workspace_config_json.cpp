@@ -72,6 +72,9 @@ WorkspaceConfig workspace_config_from_json(const json& j)
         // S6.10 Task D -- grammar-constrained decoding for tool calls.
         if (llm.contains("grammar_mode"))
             cfg.llm.grammar_mode = llm["grammar_mode"].get<std::string>();
+        // S6.14 -- thinking ON/OFF/auto knob.
+        if (llm.contains("thinking_mode") && llm["thinking_mode"].is_string())
+            cfg.llm.thinking_mode = llm["thinking_mode"].get<std::string>();
         // S6.10 Task F -- auto-detect model and apply preset
         if (llm.contains("auto_detect_preset"))
             cfg.llm.auto_detect_preset = llm["auto_detect_preset"].get<bool>();
@@ -296,6 +299,28 @@ WorkspaceConfig workspace_config_from_json(const json& j)
             cfg.security.max_scan_kb = s["max_scan_kb"].get<int>();
     }
 
+    if (j.contains("web") && j["web"].is_object()) {
+        auto& w = j["web"];
+        if (w.contains("enabled"))
+            cfg.web.enabled = w["enabled"].get<bool>();
+        if (w.contains("search_provider") && w["search_provider"].is_string())
+            cfg.web.search_provider = w["search_provider"].get<std::string>();
+        if (w.contains("api_key") && w["api_key"].is_string())
+            cfg.web.api_key = w["api_key"].get<std::string>();
+        if (w.contains("api_url") && w["api_url"].is_string())
+            cfg.web.api_url = w["api_url"].get<std::string>();
+        if (w.contains("max_results") && w["max_results"].is_number_integer())
+            cfg.web.max_results = w["max_results"].get<int>();
+        if (w.contains("cache_ttl_hours") && w["cache_ttl_hours"].is_number_integer())
+            cfg.web.cache_ttl_hours = w["cache_ttl_hours"].get<int>();
+        if (w.contains("cache_max_mb") && w["cache_max_mb"].is_number_integer())
+            cfg.web.cache_max_mb = w["cache_max_mb"].get<int>();
+        if (w.contains("max_web_page_kb") && w["max_web_page_kb"].is_number_integer())
+            cfg.web.max_web_page_kb = w["max_web_page_kb"].get<int>();
+        if (w.contains("allow_http"))
+            cfg.web.allow_http = w["allow_http"].get<bool>();
+    }
+
     if (j.contains("tool_approvals") && j["tool_approvals"].is_object()) {
         for (auto it = j["tool_approvals"].begin();
              it != j["tool_approvals"].end(); ++it) {
@@ -351,6 +376,7 @@ json workspace_config_to_json(const WorkspaceConfig& cfg)
             {"frequency_penalty", cfg.llm.frequency_penalty},
             {"presence_penalty",  cfg.llm.presence_penalty},
             {"grammar_mode",      cfg.llm.grammar_mode},
+            {"thinking_mode",     cfg.llm.thinking_mode},
             {"auto_detect_preset", cfg.llm.auto_detect_preset},
             {"preset_name",       cfg.llm.preset_name},
             {"active_endpoint",   cfg.llm.active_endpoint}
@@ -445,6 +471,17 @@ json workspace_config_to_json(const WorkspaceConfig& cfg)
             {"scan_zim",         cfg.security.scan_zim},
             {"block_confidence", cfg.security.block_confidence},
             {"max_scan_kb",      cfg.security.max_scan_kb}
+        }},
+        {"web", {
+            {"enabled",         cfg.web.enabled},
+            {"search_provider", cfg.web.search_provider},
+            {"api_key",         cfg.web.api_key},
+            {"api_url",         cfg.web.api_url},
+            {"max_results",     cfg.web.max_results},
+            {"cache_ttl_hours", cfg.web.cache_ttl_hours},
+            {"cache_max_mb",    cfg.web.cache_max_mb},
+            {"max_web_page_kb", cfg.web.max_web_page_kb},
+            {"allow_http",      cfg.web.allow_http}
         }}
     };
 }

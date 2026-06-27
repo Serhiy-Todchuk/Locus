@@ -59,7 +59,9 @@ TEST_CASE("ToolRegistry: build_schema_json produces valid OpenAI schema", "[s0.6
     // S6.17 Task G: +5 -- the unified `search` tool re-split into six per-mode
     //                     tools (search_text/regex/symbols/semantic/hybrid/ast).
     // ADR-0009: -1 `search_hybrid` retired (corpus-dependent vs semantic).
-    REQUIRE(schema.size() == 22);
+    // S6.1: +3 `web_search`, `web_fetch`, `web_read` (always registered;
+    //          gated out of the per-turn manifest by available()).
+    REQUIRE(schema.size() == 25);
 
     // No bare `search` entry; five per-mode search_* tools (hybrid retired).
     int search_count = 0;
@@ -108,12 +110,13 @@ TEST_CASE("ToolRegistry: all returns all tools", "[s0.6]")
     locus::register_builtin_tools(registry);
 
     auto all = registry.all();
-    REQUIRE(all.size() == 22);  // S4.D adds propose_plan + mark_step_done;
+    REQUIRE(all.size() == 25);  // S4.D adds propose_plan + mark_step_done;
                                 // S4.R adds add_memory + search_memory;
                                 // S6.11 adds describe_tool;
                                 // S6.17 Task A removed filter_output;
                                 // S6.17 Task G re-split `search` into 6 per-mode tools.
                                 // ADR-0009 retired search_hybrid (6 -> 5 search_* tools).
+                                // S6.1 adds web_search + web_fetch + web_read.
 }
 
 TEST_CASE("ToolRegistry: parse_tool_call handles valid and empty JSON", "[s0.6]")

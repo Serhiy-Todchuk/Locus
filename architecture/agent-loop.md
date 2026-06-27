@@ -483,6 +483,34 @@ breaks cleanly. The round loop in `AgentCore` then:
 the chat-footer Commit-now button and by future agentic-mode harness ops);
 it sets both flags atomically so the round loop sees them as a consistent pair.
 
+### Thinking mode injection (S6.14)
+
+Companion to the watchdog above: the watchdog *caps* a runaway reasoning
+stream; this *prevents it from starting*. `WorkspaceConfig::Llm::thinking_mode`
+("auto" / "on" / "off") maps to `LLMConfig::enable_thinking` at `LocusSession`
+construction. When it is not `Auto`, `LMStudioClient::build_request_body` calls
+the pure `apply_thinking_mode(request, messages, mode, model_id)`
+([llm/thinking_injection.h](../src/llm/thinking_injection.h)), which augments
+the request per the loaded model's family -- detected by
+`classify_thinking_family(model_id)`:
+
+| Family | Off | On |
+|---|---|---|
+| Qwen 3.x hybrid (`qwen3*`, `*-thinking-*`) | `chat_template_kwargs.enable_thinking = false` | `= true` |
+| Qwen 2.x / legacy (`qwen2*`, `qwen-*`) | append `\n/no_think` to last user message | `\n/think` |
+| o1 / DeepSeek-R1 (`o1-*`, `deepseek-r1-*`) | `reasoning_effort = "low"` | `"high"` |
+| Unknown | no-op + one warn per process | same |
+
+`Auto` always no-ops -- the server-default behaviour runs. The Qwen 2.x path
+mutates the *last user message* per request, which breaks byte-stable
+prefix-cache reuse on that message but NOT on `messages[0]` (system) -- the S4.F
+byte-stable system-prompt invariant is preserved. Preserving KV cache for the
+user message is out of scope: thinking-mode toggles are explicit user actions.
+The read-side reasoning handling (separate DOM channel, Layer 3 compaction
+stripping leaked `<think>` blocks) is unchanged. Applied at client construction,
+so a change takes effect after a restart (LLM settings, like endpoint/model, are
+resolved on workspace open, not hot-swapped mid-session).
+
 ---
 
 ## 7. Activity events

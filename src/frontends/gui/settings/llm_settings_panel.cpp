@@ -92,6 +92,17 @@ LlmSettingsPanel::LlmSettingsPanel(wxWindow* parent, const WorkspaceConfig& conf
         "Locus's JSON repair pre-pass remains the universal fallback. "
         "Strict is reserved for a future server-probe gate (today treats "
         "like best_effort). Off preserves pre-S6.10 behaviour.";
+    static constexpr const char* kTipThinkingMode =
+        "Force the model's chain-of-thought reasoning on or off at the source "
+        "for the next request. Auto uses the model's default behaviour. The "
+        "mechanism is injected per model family: Qwen 3.x hybrid -> "
+        "chat_template_kwargs.enable_thinking; Qwen 2.x -> a /think or "
+        "/no_think suffix on your message; o1 / DeepSeek-R1 -> "
+        "reasoning_effort high/low. Unknown families are left untouched (a "
+        "warning is logged). Turn Off when a task doesn't need reasoning and "
+        "the model wastes time thinking; turn On to force it for a model that "
+        "skips it. Takes effect after a restart (LLM settings are applied on "
+        "workspace open).";
     static constexpr const char* kTipTimeoutSeconds =
         "Stream-stall watchdog (seconds). Aborts the request if NO bytes flow "
         "from the LLM for this long. Not a total-request cap -- long thinking "
@@ -250,6 +261,30 @@ LlmSettingsPanel::LlmSettingsPanel(wxWindow* parent, const WorkspaceConfig& conf
     grammar_mode_ctrl_->SetName(ui_names::kSettingsLlmGrammarMode);
     gui::apply_locus_accessible_name(grammar_mode_ctrl_);
     grid->Add(grammar_mode_ctrl_, 0);
+
+    // S6.14 -- thinking ON/OFF/auto. Sits below grammar_mode; the three options
+    // map to ThinkingMode {Auto, On, Off}.
+    auto* lbl_think = new wxStaticText(this, wxID_ANY, "Thinking:");
+    lbl_think->SetToolTip(kTipThinkingMode);
+    grid->Add(lbl_think, 0, wxALIGN_CENTER_VERTICAL);
+    thinking_mode_ctrl_ = new wxChoice(this, wxID_ANY);
+    thinking_mode_ctrl_->Append("Auto");
+    thinking_mode_ctrl_->Append("On");
+    thinking_mode_ctrl_->Append("Off");
+    {
+        ThinkingMode tm = thinking_mode_from_string(config.llm.thinking_mode);
+        int sel = 0;
+        switch (tm) {
+            case ThinkingMode::Auto: sel = 0; break;
+            case ThinkingMode::On:   sel = 1; break;
+            case ThinkingMode::Off:  sel = 2; break;
+        }
+        thinking_mode_ctrl_->SetSelection(sel);
+    }
+    thinking_mode_ctrl_->SetToolTip(kTipThinkingMode);
+    thinking_mode_ctrl_->SetName(ui_names::kSettingsLlmThinkingMode);
+    gui::apply_locus_accessible_name(thinking_mode_ctrl_);
+    grid->Add(thinking_mode_ctrl_, 0);
 
     auto* lbl_top_p = new wxStaticText(this, wxID_ANY, "top_p:");
     lbl_top_p->SetToolTip(kTipTopP);
@@ -513,6 +548,17 @@ void LlmSettingsPanel::load_from_config(const WorkspaceConfig& cfg)
         grammar_mode_ctrl_->SetSelection(sel);
     }
 
+    if (thinking_mode_ctrl_) {
+        ThinkingMode tm = thinking_mode_from_string(cfg.llm.thinking_mode);
+        int sel = 0;
+        switch (tm) {
+            case ThinkingMode::Auto: sel = 0; break;
+            case ThinkingMode::On:   sel = 1; break;
+            case ThinkingMode::Off:  sel = 2; break;
+        }
+        thinking_mode_ctrl_->SetSelection(sel);
+    }
+
     if (top_p_ctrl_)             top_p_ctrl_->SetValue(cfg.llm.top_p);
     if (top_k_ctrl_)             top_k_ctrl_->SetValue(cfg.llm.top_k);
     if (min_p_ctrl_)             min_p_ctrl_->SetValue(cfg.llm.min_p);
@@ -558,6 +604,14 @@ void LlmSettingsPanel::commit_to_config(WorkspaceConfig& cfg) const
             case 0: cfg.llm.grammar_mode = "off";         break;
             case 1: cfg.llm.grammar_mode = "best_effort"; break;
             case 2: cfg.llm.grammar_mode = "strict";      break;
+        }
+    }
+
+    if (thinking_mode_ctrl_) {
+        switch (thinking_mode_ctrl_->GetSelection()) {
+            case 0: cfg.llm.thinking_mode = "auto"; break;
+            case 1: cfg.llm.thinking_mode = "on";   break;
+            case 2: cfg.llm.thinking_mode = "off";  break;
         }
     }
 

@@ -137,6 +137,29 @@ enum class GrammarMode {
 const char* to_string(GrammarMode m);
 GrammarMode grammar_mode_from_string(const std::string& s);
 
+// ---- Thinking mode (S6.14) --------------------------------------------------
+//
+// Tri-state knob to force the model's chain-of-thought reasoning on or off AT
+// THE SOURCE for the next request (the read-side reasoning handling is
+// unchanged). The mechanism differs per model family -- see
+// llm/thinking_injection.h for the matrix. This complements the S6.13
+// reasoning watchdog: the watchdog caps a runaway reasoning stream; this
+// prevents it from starting.
+//
+//   Auto -- server-default behaviour. The request is never augmented. Default.
+//   On   -- force thinking on (Qwen3 enable_thinking=true / Qwen2 /think /
+//           reasoning_effort=high).
+//   Off  -- force thinking off (Qwen3 enable_thinking=false / Qwen2 /no_think /
+//           reasoning_effort=low).
+enum class ThinkingMode {
+    Auto,
+    On,
+    Off
+};
+
+const char*  to_string(ThinkingMode m);
+ThinkingMode thinking_mode_from_string(const std::string& s);
+
 // ---- Config -----------------------------------------------------------------
 
 struct LLMConfig {
@@ -179,6 +202,11 @@ struct LLMConfig {
     // (compatible with LM Studio / llama.cpp / vLLM; ignored by servers that
     // don't honour the field).
     GrammarMode grammar_mode = GrammarMode::Off;
+
+    // S6.14 -- force the model's chain-of-thought reasoning on/off at the
+    // source. Auto (default) never augments the request. On/Off inject the
+    // per-family mechanism via apply_thinking_mode (llm/thinking_injection.h).
+    ThinkingMode enable_thinking = ThinkingMode::Auto;
 
     // S6.16 -- endpoint-profile auth. `api_key` (when non-empty) becomes an
     // `Authorization: Bearer <key>` header; empty = no Authorization header

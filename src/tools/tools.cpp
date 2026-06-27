@@ -42,6 +42,11 @@ void register_builtin_tools(IToolRegistry& registry)
     // when the workspace has no MemoryStore (memory_enabled=false).
     registry.register_tool(std::make_unique<AddMemoryTool>());
     registry.register_tool(std::make_unique<SearchMemoryTool>());
+    // S6.1 -- web retrieval. All three gate on `capabilities.web_retrieval`
+    // via available(), so they drop from the manifest when web is off.
+    registry.register_tool(std::make_unique<WebSearchTool>());
+    registry.register_tool(std::make_unique<WebFetchTool>());
+    registry.register_tool(std::make_unique<WebReadTool>());
     // S6.11 -- lazy-manifest meta-tool. Always registered; hides itself from
     // the LLM manifest when `WorkspaceConfig::Agent::lazy_tool_manifest` is false.
     registry.register_tool(std::make_unique<DescribeTool>(registry));

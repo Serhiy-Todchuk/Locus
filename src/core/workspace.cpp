@@ -23,6 +23,7 @@
 #include "../index/reranker.h"
 #include "security/injection_policy.h"
 #include "security/injection_scanner.h"
+#include "web/web_cache.h"
 #include "zim/zim_archive.h"
 
 #include <nlohmann/json.hpp>
@@ -183,6 +184,17 @@ Workspace::Workspace(const fs::path& root)
             embedding_worker_.get(),
             reranker_.get(),
             config_);
+    }
+
+    // S6.1 web retrieval cache. Created when the capability is on (the master
+    // gate that drops the web tools from the manifest) and never in ZIM mode
+    // (a read-only archive view doesn't fetch the live web). Eager TTL +
+    // size-cap eviction on open keeps the cache within budget across sessions.
+    if (!zim && config_.capabilities.web_retrieval) {
+        web_cache_ = std::make_unique<WebCache>(*main_db_);
+        web_cache_->evict_expired(config_.web.cache_ttl_hours);
+        web_cache_->evict_over_size(
+            static_cast<int64_t>(config_.web.cache_max_mb) * 1024 * 1024);
     }
 
     spdlog::info("Workspace opened: {}", root_.string());
@@ -438,6 +450,29 @@ void Workspace::disable_semantic_search()
         indexer_->on_chunks_created = nullptr;
 
     spdlog::info("Semantic search disabled");
+}
+
+void Workspace::sync_web_cache()
+{
+    if (zim_archive_) return;  // never in ZIM mode
+
+    const bool want = config_.capabilities.web_retrieval;
+    if (want && !web_cache_) {
+        web_cache_ = std::make_unique<WebCache>(*main_db_);
+        web_cache_->evict_expired(config_.web.cache_ttl_hours);
+        web_cache_->evict_over_size(
+            static_cast<int64_t>(config_.web.cache_max_mb) * 1024 * 1024);
+        spdlog::info("Web cache created (web_retrieval enabled at runtime)");
+    } else if (!want && web_cache_) {
+        web_cache_.reset();
+        spdlog::info("Web cache dropped (web_retrieval disabled at runtime)");
+    } else if (web_cache_) {
+        // Capability unchanged but the size/TTL knobs may have moved -- re-run
+        // eviction against the new budget.
+        web_cache_->evict_expired(config_.web.cache_ttl_hours);
+        web_cache_->evict_over_size(
+            static_cast<int64_t>(config_.web.cache_max_mb) * 1024 * 1024);
+    }
 }
 
 // -- Config -------------------------------------------------------------------

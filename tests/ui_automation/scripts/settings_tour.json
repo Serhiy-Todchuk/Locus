@@ -1,6 +1,6 @@
 {
   "name": "settings_tour",
-  "description": "Open the Settings dialog via Ctrl+, click through each of the five tabs by index, screenshot each, then close. Tabs are addressed by index because wxNotebook on Windows wraps SysTabControl32, which doesn't propagate labels to UIA Name (see tests/ui_automation/README.md). Tab order: LLM, Index, Capabilities (S5.A), Tool Approvals, MCP Servers.",
+  "description": "Open the Settings dialog via Ctrl+, click through several tabs by index, screenshot each, then close. Also asserts the S6.14 Thinking ON/OFF/auto dropdown is reachable on the LLM tab. Tabs are addressed by index because wxNotebook on Windows wraps SysTabControl32, which doesn't propagate labels to UIA Name (see tests/ui_automation/README.md). Page order: LLM(0), Endpoints(1), Index(2), Agent(3), Capabilities(4), Tool Approvals(5), MCP(6), Security(7), Web(8), Notifications(9), Sessions(10). Actually toggling the Thinking dropdown + asserting config.json persistence is deferred to tests/manual/llm-settings.md because wxChoice selection-by-key is unreliable under UIA (README caveat).",
   "setup": {
     "workspace": "tmp"
   },
@@ -30,6 +30,14 @@
       "args": { "parent_aid": "locus.settings.notebook", "index": 0 }
     },
     { "op": "sleep", "args": { "ms": 300 } },
+    {
+      "op": "find",
+      "args": { "automation_id": "locus.settings.llm.thinking_mode", "timeout_ms": 5000 }
+    },
+    {
+      "op": "assert_visible",
+      "args": { "automation_id": "locus.settings.llm.thinking_mode" }
+    },
     { "op": "screenshot", "args": { "name": "tab_llm" } },
 
     {

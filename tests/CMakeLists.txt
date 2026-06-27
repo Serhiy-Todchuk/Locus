@@ -59,6 +59,7 @@ add_executable(locus_tests
     test_tool_call_grammar.cpp
     test_truncation_detector.cpp
     test_thinking_strip.cpp
+    test_thinking_injection.cpp
     test_quality_monitor.cpp
     test_build_error_detector.cpp
     test_convergence_signals.cpp
@@ -71,6 +72,7 @@ add_executable(locus_tests
     test_endpoint_profile.cpp
     test_injection_scanner.cpp
     test_zim_archive.cpp
+    test_web_retrieval.cpp
     retrieval_eval/metrics.cpp
     support/shared_embedder.cpp
 )

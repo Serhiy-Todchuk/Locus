@@ -115,7 +115,7 @@ ToolResult SearchTextTool::execute(const ToolCall& call, IWorkspaceServices& ws,
                                     const std::atomic<bool>* /*cancel_flag*/)
 {
     if (auto err = tools::reject_unknown_keys(call,
-            {"query", "max_results"}, this))
+            {"query", "max_results", "sources"}, this))
         return *err;
 
     std::string query = tools::coerce_string(call.args, "query");
@@ -131,6 +131,22 @@ ToolResult SearchTextTool::execute(const ToolCall& call, IWorkspaceServices& ws,
 
     SearchOptions opts;
     opts.max_results = max_results;
+
+    // S6.1 -- optional `sources` selector. "files" (default) / "web" / "all".
+    // Web is only meaningful when the capability is on; if the model asks for
+    // web on a web-disabled workspace, search_web_fts no-ops (table absent), so
+    // we just honour the request without erroring.
+    std::string sources = tools::coerce_string(call.args, "sources", "files");
+    std::transform(sources.begin(), sources.end(), sources.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    if (sources == "web") {
+        opts.include_files = false;
+        opts.include_web   = true;
+    } else if (sources == "all" || sources == "both" ||
+               sources == "files,web" || sources == "files+web") {
+        opts.include_files = true;
+        opts.include_web   = true;
+    }  // else: "files" / unrecognised -> default files-only
 
     auto results = idx->search_text(query, opts);
 

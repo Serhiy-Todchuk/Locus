@@ -118,6 +118,15 @@ struct WorkspaceConfig {
         // best_effort.
         std::string grammar_mode = "off";
 
+        // S6.14 -- force the model's chain-of-thought reasoning on/off at the
+        // source. String for natural-reading config.json; parsed via
+        // thinking_mode_from_string. "auto" (default) never augments the
+        // request -- the server-default behaviour runs. "off" injects the
+        // per-family no-think mechanism (Qwen3 enable_thinking=false / Qwen2
+        // /no_think / reasoning_effort=low); "on" forces it on. See
+        // llm/thinking_injection.h for the per-family matrix.
+        std::string thinking_mode = "auto";
+
         // S6.10 Task F -- auto-apply matching preset at workspace open when
         // `preset_name` is empty or "auto" (the new default). Set false to
         // skip the detect entirely. The current preset is otherwise untouched
@@ -498,6 +507,28 @@ struct WorkspaceConfig {
         bool web_retrieval        = false;
     };
 
+    // S6.1 -- web retrieval (RAG). Opt-in per workspace; the `web_retrieval`
+    // capability flag is the master gate (it drops the three web tools from the
+    // manifest), and `enabled` here is the runtime switch the tools check before
+    // touching the network. The split exists so a user can keep the tools in the
+    // manifest but temporarily kill network access by flipping `enabled` off.
+    // Fetched pages live in the ephemeral web_pages / web_fts / web_headings
+    // tables (separate from the workspace index) with TTL + size-cap eviction.
+    // api_key is workspace-local (.locus/config.json is gitignored). See
+    // architecture/web-retrieval.md for the full pipeline.
+    struct Web {
+        bool        enabled         = false;
+        std::string search_provider = "brave";   // "brave" | "searxng"
+        std::string api_key;
+        std::string api_url = "https://api.search.brave.com/res/v1/web/search";
+        int         max_results     = 5;
+        int         cache_ttl_hours = 24;
+        int         cache_max_mb    = 50;
+        int         max_web_page_kb = 512;        // cap on extracted text per page
+        // HTTPS only by default; the rare http-only intranet endpoint flips this.
+        bool        allow_http      = false;
+    };
+
     // S6.0 -- prompt-injection scanner + taint policy over UNTRUSTED external
     // ingress (web / ZIM / MCP). Workspace files are trusted and never scanned.
     // The scanner is a transparency tripwire, not a security boundary (the
@@ -533,6 +564,7 @@ struct WorkspaceConfig {
     Notifications notifications;
     Capabilities  capabilities;
     Security      security;
+    Web           web;
 };
 
 // S6.17 Task H -- apply the `agent.prompt_cost` preset (if non-empty) onto

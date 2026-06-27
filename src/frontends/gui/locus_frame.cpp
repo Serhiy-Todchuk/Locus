@@ -1216,6 +1216,12 @@ void LocusFrame::show_settings_dialog(const char* select_tab)
                 }
             }
         }
+        // S6.1 -- reconcile the web cache with the new config (handles enabling
+        // web_retrieval mid-session, dropping it, or moving the cache budget)
+        // without requiring a workspace reopen.
+        if (dlg.web_changed() || dlg.capabilities_changed())
+            workspace_.sync_web_cache();
+
         for (auto& [tid, ui] : tabs_ui_) {
             ui.chat->set_diff_options(workspace_.config().chat.show_diffs,
                                        workspace_.config().chat.diff_max_lines,

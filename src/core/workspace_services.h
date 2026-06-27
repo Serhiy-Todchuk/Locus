@@ -10,6 +10,7 @@ class MemoryStore;
 class ProcessRegistry;
 class ProcessSinkBroker;
 class Reranker;
+class WebCache;
 class Workspace;
 
 // Services surface that tools and the agent loop see.
@@ -31,6 +32,7 @@ public:
     virtual ProcessRegistry*    processes()     { return nullptr; }
     virtual ProcessSinkBroker*  process_sink()  { return nullptr; }
     virtual MemoryStore*        memory()        { return nullptr; }
+    virtual WebCache*           web_cache()     { return nullptr; }
     virtual Workspace*          workspace()     { return nullptr; }
 };
 

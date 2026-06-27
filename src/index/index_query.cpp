@@ -226,15 +226,12 @@ static std::string sanitise_fts_query(const std::string& q)
 std::vector<SearchResult> IndexQuery::search_text(const std::string& query,
                                                   const SearchOptions& opts) const
 {
-    log_fs()->trace("search_text: query='{}', max_results={}", query, opts.max_results);
+    log_fs()->trace("search_text: query='{}', max_results={}, files={}, web={}",
+                    query, opts.max_results, opts.include_files, opts.include_web);
 
     std::vector<SearchResult> results;
 
     const std::string sanitised = sanitise_fts_query(query);
-
-    sqlite3_reset(stmt_search_text_);
-    sqlite3_bind_text(stmt_search_text_, 1, sanitised.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_int(stmt_search_text_, 2, opts.max_results);
 
     // Pull the first query term for line-number recovery. Strip FTS5
     // operators the user might have included (NOT/OR, parens, quotes).
@@ -251,46 +248,103 @@ std::vector<SearchResult> IndexQuery::search_text(const std::string& query,
         }
     }
 
-    while (sqlite3_step(stmt_search_text_) == SQLITE_ROW) {
-        SearchResult r;
-        r.path = col_text(stmt_search_text_, 0);
-        r.score = sqlite3_column_double(stmt_search_text_, 1);
-        r.snippet = col_text(stmt_search_text_, 2);
-        r.line = 0;
-        r.origin = col_text(stmt_search_text_, 4);
-        r.injection_flags = static_cast<uint32_t>(
-            sqlite3_column_int64(stmt_search_text_, 5));
+    if (opts.include_files) {
+        sqlite3_reset(stmt_search_text_);
+        sqlite3_bind_text(stmt_search_text_, 1, sanitised.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_int(stmt_search_text_, 2, opts.max_results);
 
-        // Best-effort line recovery: search for the first query term in
-        // the raw file. Works for code-like files (raw == extracted) and
-        // gives a useful line. For doc files (HTML/PDF/DOCX) the raw file
-        // is markup -- the term still tends to appear somewhere, but the
-        // line points at raw bytes rather than the clean snippet. The
-        // search tool formatter omits the `:line` suffix when line==0,
-        // so files where the term is genuinely absent from raw bytes
-        // (extractor produced text that doesn't appear in source, e.g.
-        // PDFium decoding hex-encoded strings) stay clean.
-        // Line recovery reads the raw file from disk -- only meaningful for
-        // trusted workspace files. Virtual-origin rows (ZIM articles, web
-        // pages) have a pseudo abs_path that isn't on disk, so skip them and
-        // leave line==0 (the formatter omits the :line suffix then).
-        if (!first_term.empty() && r.origin.empty()) {
-            std::string abs_path = col_text(stmt_search_text_, 3);
-            if (!abs_path.empty()) {
-                std::ifstream f(abs_path, std::ios::binary);
-                if (f.is_open()) {
-                    std::string content(65536, '\0');
-                    f.read(content.data(), static_cast<std::streamsize>(content.size()));
-                    content.resize(static_cast<size_t>(f.gcount()));
-                    r.line = find_match_line(content, first_term);
+        while (sqlite3_step(stmt_search_text_) == SQLITE_ROW) {
+            SearchResult r;
+            r.path = col_text(stmt_search_text_, 0);
+            r.score = sqlite3_column_double(stmt_search_text_, 1);
+            r.snippet = col_text(stmt_search_text_, 2);
+            r.line = 0;
+            r.origin = col_text(stmt_search_text_, 4);
+            r.injection_flags = static_cast<uint32_t>(
+                sqlite3_column_int64(stmt_search_text_, 5));
+
+            // Best-effort line recovery: search for the first query term in
+            // the raw file. Works for code-like files (raw == extracted) and
+            // gives a useful line. For doc files (HTML/PDF/DOCX) the raw file
+            // is markup -- the term still tends to appear somewhere, but the
+            // line points at raw bytes rather than the clean snippet. The
+            // search tool formatter omits the `:line` suffix when line==0,
+            // so files where the term is genuinely absent from raw bytes
+            // (extractor produced text that doesn't appear in source, e.g.
+            // PDFium decoding hex-encoded strings) stay clean.
+            // Line recovery reads the raw file from disk -- only meaningful for
+            // trusted workspace files. Virtual-origin rows (ZIM articles, web
+            // pages) have a pseudo abs_path that isn't on disk, so skip them and
+            // leave line==0 (the formatter omits the :line suffix then).
+            if (!first_term.empty() && r.origin.empty()) {
+                std::string abs_path = col_text(stmt_search_text_, 3);
+                if (!abs_path.empty()) {
+                    std::ifstream f(abs_path, std::ios::binary);
+                    if (f.is_open()) {
+                        std::string content(65536, '\0');
+                        f.read(content.data(), static_cast<std::streamsize>(content.size()));
+                        content.resize(static_cast<size_t>(f.gcount()));
+                        r.line = find_match_line(content, first_term);
+                    }
                 }
             }
-        }
 
-        results.push_back(std::move(r));
+            results.push_back(std::move(r));
+        }
+    }
+
+    // S6.1 -- include the ephemeral web cache (web_fts) when requested. The
+    // table only exists once the web_retrieval capability has been on, so the
+    // query is prepared per-call behind a sqlite_master probe (no member
+    // statement, no breakage on web-disabled workspaces). web_pages carries the
+    // taint columns; the JOIN surfaces origin="web" + injection_flags so the
+    // search tool stamps the marker exactly like ZIM / file rows.
+    if (opts.include_web) {
+        auto web_hits = search_web_fts(sanitised, opts.max_results);
+        results.insert(results.end(),
+                       std::make_move_iterator(web_hits.begin()),
+                       std::make_move_iterator(web_hits.end()));
     }
 
     log_fs()->trace("search_text: {} results", results.size());
+    return results;
+}
+
+std::vector<SearchResult> IndexQuery::search_web_fts(const std::string& sanitised,
+                                                     int max_results) const
+{
+    std::vector<SearchResult> results;
+
+    // Probe: skip cleanly when the web cache was never created in this workspace.
+    sqlite3_stmt* probe = main_db_.prepare(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='web_fts'");
+    bool have_web = (sqlite3_step(probe) == SQLITE_ROW);
+    sqlite3_finalize(probe);
+    if (!have_web) return results;
+
+    sqlite3_stmt* stmt = main_db_.prepare(R"(
+        SELECT p.url, bm25(web_fts) AS rank,
+               snippet(web_fts, 1, '', '', '...', 24),
+               p.origin, p.injection_flags
+        FROM web_fts
+        JOIN web_pages p ON p.url = web_fts.url
+        WHERE web_fts MATCH ?1
+        ORDER BY rank
+        LIMIT ?2
+    )");
+    sqlite3_bind_text(stmt, 1, sanitised.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int(stmt, 2, max_results);
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        SearchResult r;
+        r.path    = col_text(stmt, 0);   // the URL is the "path" for web rows
+        r.score   = sqlite3_column_double(stmt, 1);
+        r.snippet = col_text(stmt, 2);
+        r.line    = 0;                    // no line recovery for web pages
+        r.origin  = col_text(stmt, 3);    // "web"
+        r.injection_flags = static_cast<uint32_t>(sqlite3_column_int64(stmt, 4));
+        results.push_back(std::move(r));
+    }
+    sqlite3_finalize(stmt);
     return results;
 }
 

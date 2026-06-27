@@ -10,6 +10,8 @@
 #include "settings/sessions_settings_panel.h"
 #include "settings/agent_settings_panel.h"
 #include "settings/endpoints_settings_panel.h"
+#include "settings/security_settings_panel.h"
+#include "settings/web_settings_panel.h"
 #include "settings/tool_approvals_settings_panel.h"
 #include "../../core/global_config.h"
 #include "../../core/global_paths.h"
@@ -44,6 +46,8 @@ SettingsDialog::SettingsDialog(wxWindow* parent, WorkspaceConfig& config,
     sessions_panel_      = new SessionsSettingsPanel(notebook, config);
     agent_panel_         = new AgentSettingsPanel(notebook, config);
     endpoints_panel_     = new EndpointsSettingsPanel(notebook, config);
+    security_panel_      = new SecuritySettingsPanel(notebook, config);
+    web_panel_           = new WebSettingsPanel(notebook, config);
 
     llm_panel_->SetName(ui_names::kSettingsTabLlm);
     index_panel_->SetName(ui_names::kSettingsTabIndex);
@@ -54,6 +58,8 @@ SettingsDialog::SettingsDialog(wxWindow* parent, WorkspaceConfig& config,
     sessions_panel_->SetName(ui_names::kSettingsTabSessions);
     agent_panel_->SetName(ui_names::kSettingsTabAgent);
     endpoints_panel_->SetName(ui_names::kSettingsTabEndpoints);
+    security_panel_->SetName(ui_names::kSettingsTabSecurity);
+    web_panel_->SetName(ui_names::kSettingsTabWeb);
     gui::apply_locus_accessible_name(llm_panel_);
     gui::apply_locus_accessible_name(index_panel_);
     gui::apply_locus_accessible_name(capabilities_panel_);
@@ -63,6 +69,8 @@ SettingsDialog::SettingsDialog(wxWindow* parent, WorkspaceConfig& config,
     gui::apply_locus_accessible_name(sessions_panel_);
     gui::apply_locus_accessible_name(agent_panel_);
     gui::apply_locus_accessible_name(endpoints_panel_);
+    gui::apply_locus_accessible_name(security_panel_);
+    gui::apply_locus_accessible_name(web_panel_);
 
     notebook->AddPage(llm_panel_,           "LLM");
     notebook->AddPage(endpoints_panel_,     "Endpoints");
@@ -71,6 +79,8 @@ SettingsDialog::SettingsDialog(wxWindow* parent, WorkspaceConfig& config,
     notebook->AddPage(capabilities_panel_,  "Capabilities");
     notebook->AddPage(approvals_panel_,     "Tool Approvals");
     notebook->AddPage(mcp_panel_,           "MCP Servers");
+    notebook->AddPage(security_panel_,      "Security");
+    notebook->AddPage(web_panel_,           "Web");
     notebook->AddPage(notifications_panel_, "Notifications");
     notebook->AddPage(sessions_panel_,      "Sessions");
 
@@ -121,7 +131,9 @@ void SettingsDialog::on_ok(wxCommandEvent& evt)
         !notifications_panel_->validate(err) ||
         !sessions_panel_->validate(err)      ||
         !agent_panel_->validate(err)         ||
-        !endpoints_panel_->validate(err))
+        !endpoints_panel_->validate(err)     ||
+        !security_panel_->validate(err)      ||
+        !web_panel_->validate(err))
     {
         wxMessageBox(err, "Settings", wxOK | wxICON_ERROR, this);
         return;
@@ -142,6 +154,8 @@ void SettingsDialog::on_ok(wxCommandEvent& evt)
     sessions_panel_->commit_to_config(new_cfg);
     agent_panel_->commit_to_config(new_cfg);
     endpoints_panel_->commit_to_config(new_cfg);   // persists the global store
+    security_panel_->commit_to_config(new_cfg);
+    web_panel_->commit_to_config(new_cfg);
 
     // Cross-tab reconciliation: the Capabilities tab's semantic toggle is the
     // canonical authority. When the two differ, capabilities wins and we force
@@ -157,6 +171,7 @@ void SettingsDialog::on_ok(wxCommandEvent& evt)
                     new_cfg.llm.context_limit   != baseline.llm.context_limit  ||
                     new_cfg.llm.max_tokens      != baseline.llm.max_tokens     ||
                     new_cfg.llm.tool_format     != baseline.llm.tool_format    ||
+                    new_cfg.llm.thinking_mode   != baseline.llm.thinking_mode  ||
                     new_cfg.llm.top_p           != baseline.llm.top_p          ||
                     new_cfg.llm.top_k           != baseline.llm.top_k          ||
                     new_cfg.llm.min_p           != baseline.llm.min_p          ||
@@ -185,8 +200,26 @@ void SettingsDialog::on_ok(wxCommandEvent& evt)
     endpoints_changed_ = endpoints_panel_->dirty()
             || (new_cfg.llm.active_endpoint != baseline.llm.active_endpoint);
 
+    security_changed_ = (
+        new_cfg.security.injection_scan   != baseline.security.injection_scan   ||
+        new_cfg.security.scan_zim         != baseline.security.scan_zim         ||
+        new_cfg.security.block_confidence != baseline.security.block_confidence ||
+        new_cfg.security.max_scan_kb      != baseline.security.max_scan_kb);
+
+    web_changed_ = (
+        new_cfg.web.enabled         != baseline.web.enabled         ||
+        new_cfg.web.search_provider != baseline.web.search_provider ||
+        new_cfg.web.api_key         != baseline.web.api_key         ||
+        new_cfg.web.api_url         != baseline.web.api_url         ||
+        new_cfg.web.max_results     != baseline.web.max_results     ||
+        new_cfg.web.cache_ttl_hours != baseline.web.cache_ttl_hours ||
+        new_cfg.web.cache_max_mb    != baseline.web.cache_max_mb    ||
+        new_cfg.web.max_web_page_kb != baseline.web.max_web_page_kb ||
+        new_cfg.web.allow_http      != baseline.web.allow_http);
+
     changed_ = llm_changed_ || index_changed_ || semantic_changed_
-            || approvals_changed || capabilities_changed_ || endpoints_changed_;
+            || approvals_changed || capabilities_changed_ || endpoints_changed_
+            || security_changed_ || web_changed_;
 
     if (changed_) {
         // Keep the legacy mirror in sync with the canonical capabilities bool.
@@ -216,6 +249,8 @@ WorkspaceConfig SettingsDialog::snapshot_dialog_state() const
     notifications_panel_->commit_to_config(out);
     sessions_panel_->commit_to_config(out);
     agent_panel_->commit_to_config(out);
+    security_panel_->commit_to_config(out);
+    web_panel_->commit_to_config(out);
     // MCP panel deliberately excluded: trust keys are workspace-specific and
     // save_global_config filters them out anyway.
 

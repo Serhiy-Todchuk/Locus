@@ -34,6 +34,10 @@ find_package(pugixml CONFIG REQUIRED)
 # domain) so they don't compromise Locus's MIT licence the way GPL libzim would.
 find_package(zstd CONFIG REQUIRED)
 find_package(liblzma CONFIG REQUIRED)
+# S6.1 Web Retrieval -- gumbo-parser (Apache-2.0, pure C HTML5 parser) drives
+# the fetched-page HTML -> plain text extraction (reader-mode quality, handles
+# malformed markup the regex stripper couldn't).
+find_package(unofficial-gumbo CONFIG REQUIRED)
 
 # llama-cpp / ggml upstream CMake configs use find_library with a single
 # IMPORTED_LOCATION, which breaks multi-config generators (VS picks the
@@ -382,6 +386,7 @@ add_library(locus_core STATIC
     src/llm/sse_parser.cpp
     src/llm/json_repair.cpp
     src/llm/tool_call_grammar.cpp
+    src/llm/thinking_injection.cpp
     src/llm/llm_client.cpp
     src/llm/endpoint_profile.cpp
     src/llm/openai_transport.cpp
@@ -454,6 +459,9 @@ add_library(locus_core STATIC
     src/extractors/zip_reader.cpp
     src/extractors/json_extractor.cpp
     src/extractors/yaml_extractor.cpp
+    src/web/web_cache.cpp
+    src/web/web_search_provider.cpp
+    src/tools/web_tools.cpp
 )
 
 target_include_directories(locus_core PUBLIC src third_party/sqlite-vec)
@@ -473,6 +481,7 @@ target_link_libraries(locus_core PUBLIC
     pugixml::pugixml
     zstd::libzstd
     liblzma::liblzma
+    unofficial::gumbo::gumbo
 )
 
 # S5.P source-encoding lint -- fail the build if em-dashes or other prohibited
@@ -562,6 +571,8 @@ add_executable(locus_gui WIN32
     src/frontends/gui/settings/sessions_settings_panel.cpp
     src/frontends/gui/settings/agent_settings_panel.cpp
     src/frontends/gui/settings/endpoints_settings_panel.cpp
+    src/frontends/gui/settings/security_settings_panel.cpp
+    src/frontends/gui/settings/web_settings_panel.cpp
     src/frontends/gui/notification_sounds.cpp
     src/frontends/gui/markdown.cpp
     src/frontends/gui/autostart.cpp

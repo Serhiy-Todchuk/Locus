@@ -32,6 +32,8 @@ private:
     wxStaticText*      preset_hint_      = nullptr;
     wxChoice*          tool_format_ctrl_  = nullptr;
     wxChoice*          grammar_mode_ctrl_ = nullptr;
+    // S6.14 -- thinking ON/OFF/auto knob.
+    wxChoice*          thinking_mode_ctrl_ = nullptr;
     wxSpinCtrlDouble*  top_p_ctrl_           = nullptr;
     wxSpinCtrl*        top_k_ctrl_           = nullptr;
     wxSpinCtrlDouble*  min_p_ctrl_           = nullptr;

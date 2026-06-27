@@ -1,0 +1,50 @@
+{
+  "name": "web_settings",
+  "description": "S6.1 -- open Settings -> Web tab and verify the web-retrieval widgets are reachable in the UIA tree (enabled checkbox, provider choice, api_key/api_url text, max_results / cache_ttl_hours / cache_max_mb / max_web_page_kb text, allow_http checkbox). Then enable web retrieval, set an api_url marker + a cache_max_mb marker, click OK, and assert .locus/config.json round-tripped the edits. wxChoice selection-by-key is unreliable under UIA (see README), so the provider choice is only asserted reachable, not changed. No live LLM / network needed.",
+  "setup": {
+    "workspace": "tmp"
+  },
+  "steps": [
+    { "op": "launch" },
+    { "op": "wait_for_window", "args": { "title_prefix": "Locus", "timeout_ms": 20000 } },
+    { "op": "find", "args": { "automation_id": "locus.chat.panel", "timeout_ms": 15000 } },
+    { "op": "sleep", "args": { "ms": 400 } },
+
+    { "op": "press_key", "args": { "key": "COMMA", "modifiers": "CTRL" } },
+    { "op": "find", "args": { "automation_id": "locus.settings.notebook", "timeout_ms": 5000 } },
+    { "op": "select_tab", "args": { "parent_aid": "locus.settings.notebook", "index": 8 } },
+    { "op": "sleep", "args": { "ms": 400 } },
+    { "op": "screenshot", "args": { "name": "01_web_tab_open" } },
+
+    { "op": "find", "args": { "automation_id": "locus.settings.web.enabled", "timeout_ms": 5000 } },
+    { "op": "find", "args": { "automation_id": "locus.settings.web.provider", "timeout_ms": 5000 } },
+    { "op": "find", "args": { "automation_id": "locus.settings.web.api_key", "timeout_ms": 5000 } },
+    { "op": "find", "args": { "automation_id": "locus.settings.web.api_url", "timeout_ms": 5000 } },
+    { "op": "find", "args": { "automation_id": "locus.settings.web.max_results", "timeout_ms": 5000 } },
+    { "op": "find", "args": { "automation_id": "locus.settings.web.cache_ttl_hours", "timeout_ms": 5000 } },
+    { "op": "find", "args": { "automation_id": "locus.settings.web.cache_max_mb", "timeout_ms": 5000 } },
+    { "op": "find", "args": { "automation_id": "locus.settings.web.max_web_page_kb", "timeout_ms": 5000 } },
+    { "op": "find", "args": { "automation_id": "locus.settings.web.allow_http", "timeout_ms": 5000 } },
+    { "op": "screenshot", "args": { "name": "02_all_widgets_reachable" } },
+
+    { "op": "click", "args": { "automation_id": "locus.settings.web.enabled", "timeout_ms": 5000 } },
+
+    { "op": "click", "args": { "automation_id": "locus.settings.web.api_url", "timeout_ms": 5000 } },
+    { "op": "press_key", "args": { "key": "A", "modifiers": "CTRL" } },
+    { "op": "type", "args": { "automation_id": "locus.settings.web.api_url", "text": "https://uia-web-marker.test/search" } },
+
+    { "op": "click", "args": { "automation_id": "locus.settings.web.cache_max_mb", "timeout_ms": 5000 } },
+    { "op": "press_key", "args": { "key": "A", "modifiers": "CTRL" } },
+    { "op": "type", "args": { "automation_id": "locus.settings.web.cache_max_mb", "text": "77" } },
+    { "op": "screenshot", "args": { "name": "03_edits_made" } },
+
+    { "op": "press_key", "args": { "key": "ENTER" } },
+    { "op": "sleep", "args": { "ms": 600 } },
+
+    { "op": "assert_file_contains", "args": { "path": ".locus/config.json", "substring": "uia-web-marker.test", "timeout_ms": 5000 } },
+    { "op": "assert_file_contains", "args": { "path": ".locus/config.json", "substring": "\"cache_max_mb\": 77", "timeout_ms": 5000 } },
+    { "op": "screenshot", "args": { "name": "04_config_persisted" } },
+
+    { "op": "quit", "args": { "wait_ms": 5000 } }
+  ]
+}

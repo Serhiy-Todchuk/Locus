@@ -6,6 +6,7 @@
 #include "llm/stream_decoders/claude_xml_decoder.h"
 #include "llm/stream_decoders/auto_decoder.h"
 #include "llm/tool_call_grammar.h"
+#include "llm/thinking_injection.h"
 
 #include "core/log_channels.h"
 
@@ -73,6 +74,33 @@ GrammarMode grammar_mode_from_string(const std::string& s)
         return GrammarMode::Strict;
     // "off" / "none" / "disabled" / unknown all map to Off.
     return GrammarMode::Off;
+}
+
+// ---- ThinkingMode string conversion (S6.14) ---------------------------------
+
+const char* to_string(ThinkingMode m)
+{
+    switch (m) {
+    case ThinkingMode::Auto: return "auto";
+    case ThinkingMode::On:   return "on";
+    case ThinkingMode::Off:  return "off";
+    }
+    return "auto";
+}
+
+ThinkingMode thinking_mode_from_string(const std::string& s)
+{
+    std::string l;
+    l.reserve(s.size());
+    for (char c : s) l.push_back(static_cast<char>(std::tolower(
+        static_cast<unsigned char>(c))));
+    if (l == "on" || l == "true" || l == "enabled" || l == "force")
+        return ThinkingMode::On;
+    if (l == "off" || l == "false" || l == "disabled" || l == "no" ||
+        l == "none")
+        return ThinkingMode::Off;
+    // "auto" / unknown -> server default.
+    return ThinkingMode::Auto;
 }
 
 namespace {
@@ -229,13 +257,14 @@ LMStudioClient::LMStudioClient(LLMConfig config)
         config_.base_url.pop_back();
 
     spdlog::info("LLM client: endpoint={} model={} temp={} max_tokens={} "
-                 "tool_format={} grammar_mode={}",
+                 "tool_format={} grammar_mode={} thinking={}",
                  config_.base_url,
                  config_.model.empty() ? "(server default)" : config_.model,
                  config_.temperature,
                  config_.max_tokens,
                  to_string(config_.tool_format),
-                 to_string(config_.grammar_mode));
+                 to_string(config_.grammar_mode),
+                 to_string(config_.enable_thinking));
 }
 
 // Helper: extract context length from a model JSON object using known field names.
@@ -370,6 +399,18 @@ json LMStudioClient::build_request_body(
     for (auto& m : messages)
         msgs.push_back(m.to_json());
     body["messages"] = std::move(msgs);
+
+    // S6.14 -- force thinking on/off at the source per the loaded model's
+    // family. Auto (the default) no-ops, so the local message copy + helper
+    // call only run when the user has explicitly toggled the knob. The Qwen 2.x
+    // path appends /think /no_think to the last user message and re-publishes
+    // body["messages"]; the Qwen3 / reasoning-effort paths add a top-level
+    // request field. See llm/thinking_injection.h for the per-family matrix.
+    if (config_.enable_thinking != ThinkingMode::Auto) {
+        std::vector<ChatMessage> mut_messages(messages.begin(), messages.end());
+        apply_thinking_mode(body, mut_messages, config_.enable_thinking,
+                            config_.model);
+    }
 
     body["stream"] = true;
     body["stream_options"] = {{"include_usage", true}};

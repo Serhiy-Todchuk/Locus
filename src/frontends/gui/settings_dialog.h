@@ -18,6 +18,8 @@ class NotificationsSettingsPanel;
 class SessionsSettingsPanel;
 class AgentSettingsPanel;
 class EndpointsSettingsPanel;
+class SecuritySettingsPanel;
+class WebSettingsPanel;
 
 // Modal dialog for editing workspace + LLM settings.
 // Thin shell: owns a wxNotebook and one per-tab ISettingsPanel. On OK, calls
@@ -44,6 +46,10 @@ public:
     // Distinct from llm_changed_ (workspace LLM fields); the caller re-broadcasts
     // the active endpoint to open chat tabs.
     bool endpoints_changed()    const { return endpoints_changed_; }
+    // S6.0 / S6.1 -- security / web sub-struct changed. web_changed_ in
+    // particular lets the caller (re)build the WebCache when web settings move.
+    bool security_changed()     const { return security_changed_; }
+    bool web_changed()          const { return web_changed_; }
 
 private:
     void on_ok(wxCommandEvent& evt);
@@ -67,6 +73,8 @@ private:
     SessionsSettingsPanel*      sessions_panel_      = nullptr;
     AgentSettingsPanel*         agent_panel_         = nullptr;
     EndpointsSettingsPanel*     endpoints_panel_     = nullptr;
+    SecuritySettingsPanel*      security_panel_      = nullptr;
+    WebSettingsPanel*           web_panel_           = nullptr;
 
     bool changed_              = false;
     bool llm_changed_          = false;
@@ -74,6 +82,8 @@ private:
     bool semantic_changed_     = false;
     bool capabilities_changed_ = false;
     bool endpoints_changed_    = false;
+    bool security_changed_     = false;
+    bool web_changed_          = false;
 };
 
 } // namespace locus
