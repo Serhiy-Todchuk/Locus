@@ -61,7 +61,7 @@ responsibilities, split off a collaborator rather than adding more methods or li
 `Renderer` that also loads assets, owns the window, and caches shaders should compose a
 `ShaderCache` + `AssetLoader` instead of doing all three. Watch the smell: a class whose name
 needs "and" to describe it, or whose members cluster into groups that don't touch each other.
-Keeping both small means a change means reading the relevant part, not 3000 lines - which
+Keeping both small means a change touches the relevant part, not 3000 lines - which
 matters most under AI edits, where "add one more method to what's here" is the default drift.
 
 ### D6. Pure functions for decisions; side effects at the edge
@@ -163,9 +163,11 @@ rejected-alternatives line is what pays off later.
 ## THE SHORT VERSION
 
 Simplicity first: minimum code, no interface without a real second implementation (in C++ a
-virtual base is a cost you pay deliberately), delete rather than accumulate. One clear ownership tree, RAII on every resource, composition over inheritance,
-one responsibility per file, hard logic in pure testable functions, self-explanatory code over
-comments, reuse before writing, fail loud never silently. Think before coding when the
+virtual base is a cost you pay deliberately), delete rather than accumulate, and prefer a
+data-driven design where it fits better than a class hierarchy. One clear ownership tree, RAII
+on every resource, composition over inheritance, one responsibility per class and file, hard
+logic in pure testable functions, self-explanatory code over comments, reuse before writing,
+fail loud never silently. Think before coding when the
 requirement is ambiguous; make surgical changes that match house style; loop until a verifiable
 goal is met. Keep a laconic shared `CLAUDE.md` with a Code Map and a standing "Key Invariants"
 list of cross-file tripwires anyone can append to, and ship each behavior change with its test.
