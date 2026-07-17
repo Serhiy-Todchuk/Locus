@@ -636,6 +636,28 @@ bool UiaSession::type_text(const Element& el, const std::string& text)
 
     std::wstring w = utf8_to_wide(text);
     if (target) {
+        // Multi-line or long payloads: per-char WM_CHAR cannot produce a
+        // line break in a wxTE_RICH2 chat input (the Enter path is a
+        // keydown-level submit, and bare '\r'/'\n' chars are swallowed), and
+        // the first posted char can race the focus transition and vanish
+        // (2026-07-04 agentic finding: multi-line prompts arrived as one
+        // line, occasionally missing their first character). Bulk-set the
+        // text instead -- WM_SETTEXT preserves line breaks and fires
+        // EN_CHANGE so the wx backing model stays in sync.
+        if (w.find(L'\n') != std::wstring::npos || w.size() > 200) {
+            std::wstring crlf;
+            crlf.reserve(w.size() + 16);
+            for (size_t i = 0; i < w.size(); ++i) {
+                if (w[i] == L'\r') continue;           // re-emitted below
+                if (w[i] == L'\n') crlf += L"\r\n";
+                else               crlf += w[i];
+            }
+            if (SendMessageW(target, WM_SETTEXT, 0,
+                             reinterpret_cast<LPARAM>(crlf.c_str()))) {
+                return true;
+            }
+            // fall through to per-char on WM_SETTEXT failure
+        }
         // PostMessage path -- delivers WM_CHAR directly to the focused
         // control. Reliable when SendInput's foreground-window heuristic
         // misses (e.g. if another app's window stole focus mid-script).

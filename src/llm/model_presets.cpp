@@ -54,10 +54,10 @@ const std::vector<ModelPreset>& presets_table()
         },
         {
             "LM Studio -- Qwen family",
-            "Qwen 2.5 / 3 instruct via LM Studio. Pins Qwen XML extraction so <tool_call> markers in the text channel are recovered if LM Studio's chat template lets them through. Samplers follow Qwen's published recommendations.",
+            "Qwen 2.5 / 3 instruct via LM Studio. Pins Qwen XML extraction so <tool_call> markers in the text channel are recovered if LM Studio's chat template lets them through. Samplers follow Qwen's published thinking-mode recommendations (temp 0.6, top_p 0.95) -- hybrid Qwen 3.x models default to thinking, where the non-thinking values (0.7 / 0.8) drive quantized models into degenerate repetition loops.",
             "http://127.0.0.1:1234",
-            0.7, 8192, ToolFormat::Qwen,
-            0.8, 20, 0.05, 0.0,
+            0.6, 8192, ToolFormat::Qwen,
+            0.95, 20, 0.0, 0.0,
             GrammarMode::BestEffort,
         },
         {
