@@ -1120,6 +1120,27 @@ StepResult OpDispatcher::op_wait_for_agent_idle(const Json& args)
         std::string label = read_action_label();
         const bool busy = is_busy_label(label);
 
+        // Awaiting user: the tool-approval / ask_user panel is up. The agent
+        // thread is parked on the decision condvar, so the log goes silent
+        // and the busy button stays -- indistinguishable from "stuck" by the
+        // two signals below. Report it as its own status so the QA driver can
+        // answer the dialog instead of burning stuck_after_quiet_ms
+        // (2026-07-04 agentic finding: ask_user mid-turn read as stuck).
+        if (busy) {
+            Element dlg = find_named("locus.tool_approval.dialog", 150);
+            if (dlg.valid()) {
+                Json data;
+                data["status"]       = "awaiting_user";
+                data["action_label"] = label;
+                data["log_quiet_ms"] = log_quiet_ms;
+                data["elapsed_ms"]   = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                           std::chrono::steady_clock::now() - t_start).count();
+                Element name_lbl = find_named("locus.tool_approval.name_label", 100);
+                if (name_lbl.valid()) data["pending_tool"] = name_lbl.value();
+                return { true, {}, "agent awaiting user decision", std::move(data) };
+            }
+        }
+
         // Idle: not busy AND log has been quiet for quiet_ms
         if (!busy && log_quiet_ms >= quiet_ms) {
             Json data;

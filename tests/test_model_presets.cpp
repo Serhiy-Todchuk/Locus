@@ -103,17 +103,22 @@ TEST_CASE("non-tool-trained preset pins ToolFormat::None",
 TEST_CASE("sampler defaults: Qwen preset carries Qwen's published values",
           "[s4.v][presets][samplers]")
 {
-    // Qwen 2.5 / 3 docs recommend top_p 0.8, top_k 20, min_p 0.05. If the
-    // table ever drifts from those, retune deliberately rather than by
-    // accident -- this guard catches the accident.
+    // Retuned 2026-07-17 to Qwen's THINKING-mode recommendations (temp 0.6,
+    // top_p 0.95, no min_p) after the agentic gl_cube run: hybrid Qwen 3.x
+    // models default to thinking, where the old non-thinking values
+    // (0.7 / 0.8 / min_p 0.05) drove quantized models into degenerate
+    // repetition loops that blew the max_tokens cap before a tool call.
+    // If the table drifts again, retune deliberately -- this guard catches
+    // the accident.
     const locus::ModelPreset* p = nullptr;
     for (const auto& q : builtin_presets()) {
         if (q.name.find("Qwen") != std::string::npos) { p = &q; break; }
     }
     REQUIRE(p != nullptr);
-    REQUIRE(p->top_p == 0.8);
+    REQUIRE(p->temperature == 0.6);
+    REQUIRE(p->top_p == 0.95);
     REQUIRE(p->top_k == 20);
-    REQUIRE(p->min_p == 0.05);
+    REQUIRE(p->min_p == 0.0);
     REQUIRE(p->repeat_penalty == 0.0);  // Qwen doesn't recommend one
 }
 

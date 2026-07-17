@@ -401,12 +401,23 @@ void AgentTurnRunner::check_stuck_error(const std::string& tool_output,
 
     std::string sig = extract_error_signature(tool_output);
     if (sig.empty()) {
-        // A round with no build error breaks the streak -- the model made
-        // progress (or didn't build this round). Reset so an unrelated error
-        // later doesn't inherit a stale count.
-        last_error_sig_.clear();
-        same_error_streak_ = 0;
-        stuck_nudge_fired_ = false;
+        // Reset ONLY when the round shows a command that actually succeeded
+        // ([exit code: 0] from run_command) -- genuine progress. The canonical
+        // thrash pattern alternates edit_file (clean round) with a failing
+        // build (error round); resetting on every clean round kept the streak
+        // pinned at 1 so the detector never fired on exactly the loop it was
+        // built for (2026-07-04 agentic gl_cube finding). Pure edit / read
+        // rounds leave the streak frozen; an unrelated later error still
+        // replaces the signature via the sig != last branch below.
+        // Line-anchored so a read_file result that merely quotes the string
+        // "[exit code: 0]" from some log file doesn't spuriously reset the
+        // streak -- run_command emits it as its own line (process_tools.cpp).
+        if (tool_output.rfind("[exit code: 0]", 0) == 0 ||
+            tool_output.find("\n[exit code: 0]") != std::string::npos) {
+            last_error_sig_.clear();
+            same_error_streak_ = 0;
+            stuck_nudge_fired_ = false;
+        }
         return;
     }
 
