@@ -63,10 +63,34 @@ Note: M3 = Refactoring (not Agent Quality) due to renumbering -- see [roadmap.md
 
 Cross-cutting constraints that no single file owns. Easy to break silently by a refactor in a neighbouring file.
 
+**Quick index -- editing a file on the left? Re-read the matching invariant bullets below before committing.** You do not need to hold all of these in mind; check the rows for the files in your diff.
+
+| Files in your diff | Invariants to re-read |
+|---|---|
+| `agent/system_prompt*`, `agent/llm_context.*`, `llm/thinking_injection.*` | Byte-stable system prompt; Single-writer history |
+| `agent/agent_core.cpp`, `agent/agent_turn.cpp` | Single-writer history; Build-error stuck detection; Convergence/honesty decisions; Session save/load parity |
+| `agent/agent_loop.cpp` | Watchdog pure function; Byte-stable system prompt (sys_hash canary); Convergence (tool-call accounting) |
+| `agent/tool_dispatcher.cpp` | Single-writer history; Tool-arg coercion (`preview()` backstop) |
+| `agent/conversation.cpp`, `agent/session_manager.*`, `agent/activity_log.*` | Session save/load parity |
+| `llm/openai_transport.cpp` | LLM stream heartbeat; Transient-failure retry (`classify_retry`); `join_api_url` + api-key-never-logged |
+| `llm/llm_client.cpp` | `join_api_url`; Byte-stable system prompt (thinking injection touches last user msg only) |
+| `core/locus_session.*`, `core/workspace.*` | Workspace teardown order (incl. `on_activity` nulling); ZIM mode; Web RAG |
+| `core/database.cpp` | Lazy vec0 tables; `log_db()` channel |
+| `index/indexer.cpp`, `index/embedding_worker.*`, `core/memory_store.*`, `index/prepared_statements.*` | Lazy vec0 + rowid reuse (delete-then-insert); Index never written by LLM; `log_fs()` channel; ZIM (virtual rows, reconcile skip) |
+| `index/index_query.cpp` | FTS5 query sanitization; Lazy vec0 read gating; Web RAG (`search_web_fts`) |
+| any `tools/*_tools.cpp`, `tools/shared.*` | Tool-arg coercion (never throw); Atomic mutating writes; Index never written by LLM; FTS5 sanitization (new MATCH binders); Injection scanning (new untrusted ingress); ZIM branch in read/list |
+| `security/*`, `mcp/mcp_tool.cpp`, `web/*` | Untrusted-ingress scanning + taint columns; Web RAG (index, don't inject) |
+| `zim/*` | ZIM read-only mode (MIT reader, no libzim) |
+| `frontends/gui/chat_html_template.cpp`, `frontends/gui/chat_panel.cpp` | Chat WebView readiness (`locus://ready`); Session save/load parity (`render_loaded_history`) |
+| `frontends/gui/locus_frame.cpp`, ui-state files | Per-workspace AUI perspective |
+| `tools/process_registry.cpp`, `mcp/stdio_transport.cpp` | macOS process groups (killpg, not pid); Workspace teardown order |
+| `CMakeLists.txt`, `vcpkg.json`, `cmake/` | macOS build invariant; Static CRT flag (both places) |
+| `tests/integration/harness_fixture.cpp`, `tests/ui_automation/script_runner.cpp` | Prompt-cost tuning (pinned lazy=true + profile=full combo) |
+
 - **Byte-stable system prompt** (S4.F). `messages[0]` is byte-identical across a session so LM Studio / llama.cpp prefix-cache survives. Attached files + file-change notes prepend to the user message per turn, never splice into system. `SystemPromptAssembly` enforces immutability at the type level. Canary: per-round `LLM POST: sys_hash=<hex>` log.
 - **Single-writer history** (S3.I, S5.J). Only the agent thread writes `LLMContext::history()`. `AgentLoop` returns appendable results; `ToolDispatcher` appends via a callback running on the agent thread. `ConversationOwnerScope` is the RAII fence.
 - **Index is never written by the LLM.** Index updates flow only from the file watcher into `Indexer`. No tool mutates `index.db` / `vectors.db`. Adding a tool that touches the index breaks a core principle.
-- **Workspace teardown order.** `LocusSession` member declaration order matters: `mcp_` declared after `tools_` so `tools_` (which holds `McpTool` entries) destructs first, before the `McpClient` instances those entries borrow. `Workspace` dtor terminates `ProcessRegistry` before closing the watcher. Adding a subsystem requires checking these dependencies. Sibling rule for the **`indexer().on_activity` / `embedding_worker().on_activity` callbacks** -- they capture the agent by raw pointer, and `Workspace::~` runs `WatcherPump::stop()` which does a final synchronous flush that can fire `on_activity`. Any owner of (workspace + agent) MUST null those callbacks before the agent destructs (see `LocusSession::~LocusSession` and `IntegrationHarness::~IntegrationHarness`); otherwise the flush dereferences a freed agent.
+- **Workspace teardown order.** `LocusSession` member declaration order matters: `mcp_` declared after `tools_` so `~McpManager` runs FIRST (reverse declaration order) and unregisters its `McpTool` entries from the still-alive `ToolRegistry` before destroying the `McpClient` instances those entries borrow -- `tools_` must outlive `mcp_`. `Workspace` dtor terminates `ProcessRegistry` before closing the watcher. Adding a subsystem requires checking these dependencies. Sibling rule for the **`indexer().on_activity` / `embedding_worker().on_activity` callbacks** -- they capture the agent by raw pointer, and `Workspace::~` runs `WatcherPump::stop()` which does a final synchronous flush that can fire `on_activity`. Any owner of (workspace + agent) MUST null those callbacks before the agent destructs (see `LocusSession::~LocusSession` and `IntegrationHarness::~IntegrationHarness`); otherwise the flush dereferences a freed agent.
 - **Atomic mutating writes** (S5.O). `edit_file` / `write_file` route through `write_atomic` (temp file + rename, copy fallback for cross-volume). Direct `std::ofstream` to the target reintroduces the half-written-file bug on process kill.
 - **FTS5 query sanitization on the production path** (S5.N). User-typed search queries hit FTS5's strict grammar -- punctuation like `/`, `.`, `,` raise `fts5: syntax error near X` and return zero rows silently. `IndexQuery::search_text` routes the query through `sanitise_fts_query` before binding (strip set: `"'():*-^!/.,;?+=<>{}[]|&#@~\$%`` plus backtick and backslash). The eval harness at [tests/retrieval_eval/eval_runner.cpp](tests/retrieval_eval/eval_runner.cpp) keeps a matching `sanitise_for_fts` -- the two strip sets must stay in sync. Any new tool that binds a user-supplied string to an FTS5 `MATCH` must either go through `search_text` or replicate the strip.
 - **Info-level LLM stream heartbeat** (S5.Z TestLocalVibe follow-up). [src/llm/openai_transport.cpp](src/llm/openai_transport.cpp)'s `WriteCallback` MUST emit an info-level `"LLM stream: chunk #N (+B B, gap G ms, total T B)"` line every 32 chunks OR every 10 s (whichever first). Trace level is wrong -- `--agentic-mute-noise` drops the spdlog flush threshold to info, so trace lines stay in the buffer for tens of minutes during long reasoning rounds. `wait_for_agent_idle` (op_dispatcher.cpp) reads log mtime as its "agent alive" signal; without the heartbeat it false-positive-reports `status:"stuck"` on any reasoning-heavy local model. Don't demote this back to trace, and don't widen the 10s wall-clock fallback past ~15 s -- both regressions reintroduce the TestLocalVibe finding.
@@ -152,6 +176,13 @@ file events, and diagnostic detail (visible under `-verbose`). `spdlog::warn`/`e
 
 **Tests**: Catch2. One `test_<topic>.cpp` per subsystem. Tag tests with stage: `[s0.2]`, `[s0.3]`.
 Test names use ASCII only (no Unicode - CTest mangles it on Windows).
+
+**Pure decision, thin shell**: any new cross-cutting agent behaviour (retry rules, budget/watchdog
+trips, stuck/convergence detection, scan heuristics) lands as a pure unit-testable function in its
+own file; the caller (`AgentTurnRunner`, transport loop, in-line closures) does only side effects.
+Precedents: `evaluate_watchdog`, `classify_retry`, `extract_error_signature`, `convergence_signals`,
+`scan_for_injection`. New rules go into the pure function, never the call site -- this is the
+established house pattern, follow it by default.
 
 **No em-dashes anywhere.** Use ASCII `-` (or `--`) in code, comments, commit messages, docs,
 test names, and log strings. Em-dashes (`--`, U+2014) break ctest test-name dispatch on Windows
